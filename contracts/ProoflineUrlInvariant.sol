@@ -69,6 +69,7 @@ library ProoflineUrlInvariant {
         if (cursor == url.length) revert QueryValueMismatch();
         unchecked { ++cursor; }
 
+        bool found;
         while (cursor <= url.length) {
             uint256 pairEnd = cursor;
             uint256 equalsAt = type(uint256).max;
@@ -76,17 +77,23 @@ library ProoflineUrlInvariant {
                 if (url[pairEnd] == "=" && equalsAt == type(uint256).max) equalsAt = pairEnd;
                 unchecked { ++pairEnd; }
             }
+            uint256 keyEnd = equalsAt == type(uint256).max ? pairEnd : equalsAt;
             if (
-                equalsAt != type(uint256).max &&
-                equalsAt - cursor == key.length &&
-                pairEnd - equalsAt - 1 == value.length &&
-                _equalsAt(url, cursor, key) &&
-                _equalsAt(url, equalsAt + 1, value)
-            ) return;
+                keyEnd - cursor == key.length &&
+                _equalsAt(url, cursor, key)
+            ) {
+                if (
+                    found ||
+                    equalsAt == type(uint256).max ||
+                    pairEnd - equalsAt - 1 != value.length ||
+                    !_equalsAt(url, equalsAt + 1, value)
+                ) revert QueryValueMismatch();
+                found = true;
+            }
             if (pairEnd >= url.length || url[pairEnd] == "#") break;
             cursor = pairEnd + 1;
         }
-        revert QueryValueMismatch();
+        if (!found) revert QueryValueMismatch();
     }
 
     function _authorityStart(bytes memory url) private pure returns (uint256 start) {
