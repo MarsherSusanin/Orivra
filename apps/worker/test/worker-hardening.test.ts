@@ -64,12 +64,13 @@ describe("worker command failure boundaries", () => {
     expect(repository.retryCommand).toHaveBeenCalledWith(
       "command_1",
       "claim_1",
-      {
+      expect.objectContaining({
         category: "configuration",
         retryable: false,
+        terminal: true,
         message: "No handler registered for command",
         commandId: "command_1",
-      },
+      }),
     );
     expect(repository.completeCommand).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith(
