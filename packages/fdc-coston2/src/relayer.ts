@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { redactEvidence } from "./errors";
 
 export interface RelayerSubmission {
@@ -48,6 +49,7 @@ interface PersistedRelayerTransaction {
   nonce: bigint;
   rawTransaction: string;
   transactionHash: string;
+  commandFingerprint?: string;
 }
 
 interface RelayerRepository {
@@ -57,7 +59,25 @@ interface RelayerRepository {
     key: string,
     value: PersistedRelayerTransaction,
   ): Promise<void>;
-  markBroadcast(key: string, transactionHash: string): Promise<void>;
+  markBroadcast(
+    key: string,
+    transactionHash: string,
+    evidence?: { recovered: boolean },
+  ): Promise<void>;
+}
+
+function commandFingerprint(command: RelayerSubmission): string {
+  const canonical = JSON.stringify(
+    Object.fromEntries(
+      Object.entries(command)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, value]) => [
+          key,
+          typeof value === "bigint" ? value.toString() : value,
+        ]),
+    ),
+  );
+  return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
 }
 
 export function createRelayerExecutor(input: {
@@ -78,12 +98,11 @@ export function createRelayerExecutor(input: {
     if (reportedHash.toLowerCase() !== persisted.transactionHash.toLowerCase()) {
       throw new Error("Broadcast transaction hash mismatch");
     }
-    if (!reused) {
-      await input.repository.markBroadcast(
-        command.idempotencyKey,
-        persisted.transactionHash,
-      );
-    }
+    await input.repository.markBroadcast(
+      command.idempotencyKey,
+      persisted.transactionHash,
+      { recovered: reused },
+    );
     return { ...persisted, reused };
   }
 
@@ -93,11 +112,20 @@ export function createRelayerExecutor(input: {
       const existing = await input.repository.findByIdempotencyKey(
         command.idempotencyKey,
       );
+      const fingerprint = commandFingerprint(command);
+      if (
+        existing?.commandFingerprint &&
+        existing.commandFingerprint !== fingerprint
+      ) {
+        throw new Error(
+          "Persisted relayer command fingerprint mismatch; refusing signed transaction reuse",
+        );
+      }
       if (existing) return broadcast(command, existing, true);
 
       const nonce = await input.repository.reserveNonce(command);
       const signed = await input.signer.sign({ ...command, nonce });
-      const persisted = { nonce, ...signed };
+      const persisted = { nonce, ...signed, commandFingerprint: fingerprint };
       await input.repository.persistSignedTransaction(
         command.idempotencyKey,
         persisted,

@@ -83,11 +83,29 @@ export async function runWeb2JsonPreflight(
       { sampleCount: input.samples },
     );
   }
-  const { requestBytes } = await input.verifier.prepareRequest(input.manifest);
+  const canonicalManifest: Web2JsonManifestV1 = {
+    ...input.manifest,
+    request: { ...input.manifest.request, url: canonicalUrl },
+  };
+  const { requestBytes } = await input.verifier.prepareRequest(canonicalManifest);
   const quotedFeeWei = await input.feeOracle.quote({
     fdcHub: input.fdcHub,
     requestBytes,
   });
+  const feeCapWei = BigInt(input.manifest.submission.feeCapWei);
+  if (quotedFeeWei < 0n || quotedFeeWei > feeCapWei) {
+    throw createFdcError(
+      "configuration",
+      "FEE_QUOTE_OUT_OF_BOUNDS",
+      "The registry fee quote is outside the manifest fee envelope",
+      false,
+      {
+        submissionMode: input.manifest.submission.mode,
+        quotedFeeWei: quotedFeeWei.toString(),
+        feeCapWei: feeCapWei.toString(),
+      },
+    );
+  }
   return {
     canonicalUrl,
     sampleCount: input.samples,

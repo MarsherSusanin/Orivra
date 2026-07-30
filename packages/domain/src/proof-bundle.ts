@@ -5,6 +5,7 @@ import {
   type ProofBundleV1,
 } from "@proofline/contracts";
 import { canonicalJson } from "./canonical-json";
+import { projectRun } from "./run-lifecycle";
 import { sha256Hex } from "./sha256";
 
 function checksumContent(content: unknown): string {
@@ -51,5 +52,74 @@ export function replayProofBundle(serialized: string): ProofBundleV1 {
   if (!verifyProofBundleChecksum(decoded)) {
     throw new Error("Proof bundle checksum mismatch");
   }
-  return ProofBundleV1Schema.parse(decoded);
+  const bundle = ProofBundleV1Schema.parse(decoded);
+  assertSemanticIntegrity(bundle);
+  return bundle;
+}
+
+function assertSemanticIntegrity(bundle: ProofBundleV1): void {
+  projectRun(bundle.events);
+
+  if (bundle.events.some((event) => event.runId !== bundle.runId)) {
+    throw new Error("Proof bundle run identity does not match its event journal");
+  }
+
+  const created = bundle.events.find((event) => event.type === "RUN_CREATED");
+  if (
+    created?.type !== "RUN_CREATED" ||
+    canonicalJson(created.payload.manifest) !== canonicalJson(bundle.manifest)
+  ) {
+    throw new Error("Proof bundle manifest does not match RUN_CREATED");
+  }
+
+  const preflight = bundle.events.find(
+    (event) => event.type === "PREFLIGHT_ACCEPTED",
+  );
+  if (
+    preflight?.type !== "PREFLIGHT_ACCEPTED" ||
+    preflight.payload.requestBytes.toLowerCase() !==
+      bundle.requestBytes.toLowerCase()
+  ) {
+    throw new Error("Proof bundle request bytes do not match preflight evidence");
+  }
+
+  const round = bundle.events.find((event) => event.type === "ROUND_FINALIZED");
+  if (
+    round?.type !== "ROUND_FINALIZED" ||
+    round.payload.votingRound !== bundle.proof.votingRound
+  ) {
+    throw new Error("Proof bundle voting round does not match lifecycle evidence");
+  }
+
+  const proofVerification = bundle.events.find(
+    (event) => event.type === "PROOF_VERIFIED",
+  );
+  if (
+    proofVerification?.type !== "PROOF_VERIFIED" ||
+    proofVerification.payload.verificationContract.toLowerCase() !==
+      bundle.network.resolvedContracts.FdcVerification.toLowerCase()
+  ) {
+    throw new Error(
+      "Proof bundle verification contract does not match the network snapshot",
+    );
+  }
+  if (bundle.verification.proofVerified !== true) {
+    throw new Error(
+      "Proof verification result contradicts the PROOF_VERIFIED lifecycle event",
+    );
+  }
+
+  const consumer = bundle.events.find(
+    (event) => event.type === "CONSUMER_VERIFIED",
+  );
+  if (
+    consumer?.type !== "CONSUMER_VERIFIED" ||
+    consumer.payload.passed !== bundle.verification.consumerVerified ||
+    canonicalJson(consumer.payload.diagnostics) !==
+      canonicalJson(bundle.verification.diagnostics)
+  ) {
+    throw new Error(
+      "Consumer verification result does not match lifecycle evidence",
+    );
+  }
 }

@@ -80,29 +80,83 @@ function denyIpv4(address: string): boolean {
 }
 
 function denyIpv6(address: string): boolean {
-  const lower = address.toLowerCase();
-  if (lower === "::" || lower === "::1") return true;
-  if (lower.startsWith("::ffff:")) {
-    const mapped = lower.slice(7);
-    if (isIP(mapped) === 4) return denyIpv4(mapped);
-    const parts = mapped.split(":");
-    if (parts.length === 2) {
-      const high = Number.parseInt(parts[0], 16);
-      const low = Number.parseInt(parts[1], 16);
-      return denyIpv4(
-        `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`,
-      );
-    }
+  const words = expandIpv6(address);
+  if (!words) return true;
+
+  const [first, second, third, fourth, fifth, sixth, seventh, eighth] = words;
+  const allZeroBeforeLast = words.slice(0, 7).every((word) => word === 0);
+  if (words.every((word) => word === 0) || (allZeroBeforeLast && eighth === 1)) {
     return true;
   }
-  const first = Number.parseInt(lower.split(":")[0] || "0", 16);
+
+  // Reject IPv4 compatibility, mapping, and translation mechanisms. These
+  // encodings are easy to reinterpret differently between DNS, policy, and
+  // socket layers, so the safe subset accepts native global IPv6 only.
+  const firstFiveZero = [first, second, third, fourth, fifth].every(
+    (word) => word === 0,
+  );
+  if (
+    (firstFiveZero && (sixth === 0 || sixth === 0xffff)) ||
+    (first === 0 && second === 0 && third === 0 && fourth === 0 && fifth === 0xffff) ||
+    first === 0x0064 && second === 0xff9b ||
+    first === 0x2002 ||
+    (first === 0x2001 && second === 0)
+  ) {
+    return true;
+  }
+
+  // Only native global-unicast space is eligible, with documentation,
+  // benchmarking, unique-local, link-local, site-local, and multicast denied.
+  if ((first & 0xe000) !== 0x2000) return true;
   return (
+    (first === 0x2001 && second === 0x0db8) ||
+    (first === 0x2001 && (second & 0xfff0) === 0x0010) ||
     (first & 0xfe00) === 0xfc00 ||
     (first & 0xffc0) === 0xfe80 ||
     (first & 0xffc0) === 0xfec0 ||
     (first & 0xff00) === 0xff00 ||
-    lower.startsWith("2001:db8:")
+    (first === 0x0100 && second === 0 && third === 0 && fourth === 0)
   );
+}
+
+function expandIpv6(address: string): number[] | null {
+  const lower = address.toLowerCase();
+  const dottedAt = lower.lastIndexOf(":");
+  let normalized = lower;
+  if (lower.includes(".")) {
+    if (dottedAt < 0) return null;
+    const ipv4 = lower.slice(dottedAt + 1);
+    if (isIP(ipv4) !== 4) return null;
+    const octets = ipv4.split(".").map(Number);
+    normalized = `${lower.slice(0, dottedAt)}:${(
+      octets[0] * 256 +
+      octets[1]
+    ).toString(16)}:${(octets[2] * 256 + octets[3]).toString(16)}`;
+  }
+  if (normalized.split("::").length > 2) return null;
+  const [leftRaw, rightRaw = ""] = normalized.split("::");
+  const left = leftRaw ? leftRaw.split(":") : [];
+  const right = rightRaw ? rightRaw.split(":") : [];
+  const missing = 8 - left.length - right.length;
+  if (
+    missing < 0 ||
+    (!normalized.includes("::") && missing !== 0) ||
+    (normalized.includes("::") && missing < 1)
+  ) {
+    return null;
+  }
+  const words = [
+    ...left,
+    ...Array.from({ length: missing }, () => "0"),
+    ...right,
+  ].map((word) => Number.parseInt(word, 16));
+  if (
+    words.length !== 8 ||
+    words.some((word) => !Number.isInteger(word) || word < 0 || word > 0xffff)
+  ) {
+    return null;
+  }
+  return words;
 }
 
 export function assertPublicIpAddress(address: string): string {
@@ -134,8 +188,9 @@ export function createSafeHttpFetcher(options: SafeHttpFetcherOptions) {
         options.timeoutMs,
       );
       let response: SafeDispatchResponse;
+      let deadline: ReturnType<typeof setTimeout> | undefined;
       try {
-        response = await options.dispatch({
+        const dispatch = options.dispatch({
           url,
           method: "GET",
           redirect: "error",
@@ -143,6 +198,16 @@ export function createSafeHttpFetcher(options: SafeHttpFetcherOptions) {
           signal: controller.signal,
           maxResponseBytes: options.maxResponseBytes,
         });
+        const timeoutFailure = new Promise<never>((_resolve, reject) => {
+          deadline = setTimeout(() => {
+            const failure = new Error(
+              `Request timeout after ${options.timeoutMs}ms`,
+            );
+            controller.abort(failure);
+            reject(failure);
+          }, options.timeoutMs);
+        });
+        response = await Promise.race([dispatch, timeoutFailure]);
       } catch (error) {
         if (controller.signal.aborted) {
           throw new Error(`Request timeout after ${options.timeoutMs}ms`, { cause: error });
@@ -150,6 +215,7 @@ export function createSafeHttpFetcher(options: SafeHttpFetcherOptions) {
         throw error;
       } finally {
         clearTimeout(timeout);
+        if (deadline) clearTimeout(deadline);
       }
 
       if (response.connectedAddress !== pinnedAddress) {
