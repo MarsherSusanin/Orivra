@@ -36,7 +36,53 @@ function safeMessage(error: unknown): string {
     .replace(/0x[a-f0-9]{16,}/gi, "[REDACTED]");
 }
 
+const rootHelp = [
+  "Proofline Web2Json release client",
+  "",
+  "Usage: proofline <command> [options]",
+  "",
+  "Commands:",
+  "  run create       Create a replay, wallet, or relayer run",
+  "  run watch        Wait for terminal run evidence",
+  "  run verify       Verify the canonical safe consumer",
+  "  bundle export    Export a ProofBundleV1",
+  "  replay           Replay a bundle",
+  "",
+  "Run proofline <command> --help for command options.",
+].join("\n");
+
+export function prooflineHelp(argv: readonly string[]): string | null {
+  if (argv[0] === "help" || argv[0] === "--help" || argv.length === 0) {
+    return rootHelp;
+  }
+  if (!argv.includes("--help")) return null;
+  if (argv[0] === "run" && argv[1] === "create") {
+    return [
+      "Usage: proofline run create --manifest <path> [--mode replay|wallet|relayer]",
+      "Creates one persisted Web2Json run. Wallet secrets stay local.",
+    ].join("\n");
+  }
+  if (argv[0] === "run") {
+    return [
+      "Usage: proofline run <create|watch|verify> [options]",
+      "Commands: create, watch, verify",
+    ].join("\n");
+  }
+  if (argv[0] === "bundle" && argv[1] === "export") {
+    return "Usage: proofline bundle export <run-id> --out <path>";
+  }
+  if (argv[0] === "replay") {
+    return "Usage: proofline replay <bundle-path>";
+  }
+  return rootHelp;
+}
+
 export async function runProoflineCli(input: CliDependencies): Promise<number> {
+  const help = prooflineHelp(input.argv);
+  if (help !== null) {
+    input.io.stdout(help);
+    return 0;
+  }
   const [group, command, positional] = input.argv;
   try {
     if (group === "run" && command === "create") {
@@ -254,7 +300,10 @@ export function createProductionCliDependencies(input: {
     async verifyRun(input: { runId: string }) {
       return api(
         `/v1/runs/${encodeURIComponent(input.runId)}/consumer-verifications`,
-        { method: "POST", body: "{}" },
+        {
+          method: "POST",
+          body: JSON.stringify({ consumer: "canonical-safe" }),
+        },
       ).then((response) => response.json());
     },
     async exportBundle(input: { runId: string }) {
