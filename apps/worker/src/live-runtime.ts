@@ -9,6 +9,8 @@ import {
   createSafeHttpFetcher,
   pollRelayFinalization,
   runWeb2JsonPreflight,
+  validateRelayerSubmission,
+  type PreflightPorts,
   type RawDaProof,
 } from "@proofline/fdc-coston2";
 import { diagnoseConsumerRequest } from "@proofline/domain";
@@ -224,6 +226,439 @@ function consumerAbi(): Abi {
       outputs: [{ name: "", type: "bytes" }],
     },
   ] as Abi;
+}
+
+const PIPELINE_CONTRACT_NAMES = [
+  "FdcHub",
+  "FdcRequestFeeConfigurations",
+  "FlareSystemsManager",
+  "Relay",
+  "FdcVerification",
+] as const;
+
+type PipelineContractName = (typeof PIPELINE_CONTRACT_NAMES)[number];
+type PipelineContracts = Record<PipelineContractName, Address>;
+
+function positiveBigInt(environment: LiveEnvironment, name: string): bigint {
+  const value = required(environment, name);
+  if (!/^[0-9]+$/.test(value)) {
+    throw Object.assign(new Error(`${name} must be an unsigned integer`), {
+      kind: "configuration",
+    });
+  }
+  return BigInt(value);
+}
+
+function recordValue(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw createFdcError(
+      "schema-invalid",
+      "PERSISTED_EVIDENCE_INVALID",
+      `${label} is not a persisted evidence object`,
+      false,
+      { label },
+    );
+  }
+  return value as Record<string, unknown>;
+}
+
+function rawProofFromEvidence(value: unknown): RawDaProof {
+  const evidence = recordValue(value, "proof evidence");
+  const proof = recordValue(evidence.proof, "proof payload");
+  const response = proof.response;
+  const merkleProof = proof.merkleProof;
+  const attestationType = evidence.attestationType;
+  if (
+    typeof response !== "string" ||
+    !/^0x(?:[0-9a-fA-F]{2})*$/.test(response) ||
+    !Array.isArray(merkleProof) ||
+    !merkleProof.every(
+      (item) => typeof item === "string" && /^0x[0-9a-fA-F]{64}$/.test(item),
+    ) ||
+    typeof attestationType !== "string"
+  ) {
+    throw createFdcError(
+      "schema-invalid",
+      "PERSISTED_PROOF_INVALID",
+      "Persisted proof evidence is not a canonical raw DA proof",
+      false,
+      {},
+    );
+  }
+  return {
+    response_hex: response,
+    proof: merkleProof as string[],
+    attestation_type: attestationType,
+  };
+}
+
+function relayerFingerprint(value: {
+  runId: string;
+  idempotencyKey: string;
+  target: string;
+  calldata: string;
+  valueWei: bigint;
+}): string {
+  const canonical = JSON.stringify({
+    runId: value.runId,
+    idempotencyKey: value.idempotencyKey,
+    chainId: 114,
+    target: value.target.toLowerCase(),
+    calldata: value.calldata.toLowerCase(),
+    valueWei: value.valueWei.toString(),
+  });
+  return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
+}
+
+/**
+ * Live, restart-safe ports for the persisted command graph. Every operation is
+ * independently reconstructible from the command plus durable run evidence;
+ * no in-memory result is required by a later worker lease.
+ */
+export function createLiveCoston2PipelinePorts(input: {
+  environment: LiveEnvironment;
+  verifier: PreflightPorts["verifier"];
+}) {
+  const environment = input.environment;
+  const rpcUrl = environment.PROOFLINE_COSTON2_RPC_URL ?? DEFAULT_RPC;
+  const daEndpoint = environment.PROOFLINE_COSTON2_DA_URL ?? DEFAULT_DA;
+  const account = privateKeyToAccount(
+    required(environment, "PROOFLINE_COSTON2_PRIVATE_KEY") as Hex,
+  );
+  const globalFeeCapWei = positiveBigInt(
+    environment,
+    "PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI",
+  );
+  const balanceFloorWei = positiveBigInt(
+    environment,
+    "PROOFLINE_RELAYER_BALANCE_FLOOR_WEI",
+  );
+  const publicClient = createPublicClient({
+    chain: coston2,
+    transport: http(rpcUrl, { timeout: 30_000, retryCount: 0 }),
+  });
+  const walletClient = createWalletClient({
+    account,
+    chain: coston2,
+    transport: http(rpcUrl, { timeout: 30_000, retryCount: 0 }),
+  });
+  const da = createDaClient({ endpoint: daEndpoint });
+  const read = (
+    address: Address,
+    abi: Abi,
+    functionName: string,
+    args: readonly unknown[] = [],
+  ) =>
+    publicClient.readContract({
+      address,
+      abi,
+      functionName,
+      args,
+    } as never);
+  const resolveContracts = async (): Promise<PipelineContracts> =>
+    Object.fromEntries(
+      await Promise.all(
+        PIPELINE_CONTRACT_NAMES.map(async (name) => [
+          name,
+          getAddress(
+            String(
+              await read(
+                REGISTRY_ADDRESS,
+                registryAbi as Abi,
+                "getContractAddressByName",
+                [name],
+              ),
+            ),
+          ),
+        ]),
+      ),
+    ) as PipelineContracts;
+
+  return {
+    async preflight({ manifest }: { manifest: Web2JsonManifestV1; runId: string }) {
+      const addresses = await resolveContracts();
+      const safeFetcher = createSafeHttpFetcher({
+        lookup: async (hostname) =>
+          (await lookup(hostname, { all: true, verbatim: true })).map(
+            (answer) => ({
+              address: answer.address,
+              family: answer.family as 4 | 6,
+            }),
+          ),
+        dispatch: (request) => httpsDispatch(request),
+        timeoutMs: 15_000,
+        maxResponseBytes: ONE_MIB,
+      });
+      const prepared = await runWeb2JsonPreflight({
+        manifest,
+        samples: 5,
+        fdcHub: addresses.FdcHub,
+        safeFetcher,
+        transformJq: async (value, query) => jqFirst(value as never, query),
+        abiEncode: (value, signature) =>
+          encodeAbiParameters(canonicalAbiParameters(signature), [value]),
+        verifier: input.verifier,
+        feeOracle: {
+          quote: async ({ requestBytes }) =>
+            (await read(
+              addresses.FdcRequestFeeConfigurations,
+              feeConfigurationsAbi as Abi,
+              "getRequestFee",
+              [requestBytes],
+            )) as bigint,
+        },
+      });
+      const requestCalldata = encodeFunctionData({
+        abi: fdcHubAbi as Abi,
+        functionName: "requestAttestation",
+        args: [prepared.requestBytes as Hex],
+      });
+      return {
+        canonicalUrl: prepared.canonicalUrl,
+        requestBytes: prepared.requestBytes,
+        requestCalldata,
+        quotedFeeWei: prepared.quotedFeeWei,
+        network: {
+          chainId: 114 as const,
+          registryAddress: REGISTRY_ADDRESS,
+          resolvedContracts: {
+            FdcHub: addresses.FdcHub,
+            FdcVerification: addresses.FdcVerification,
+            Relay: addresses.Relay,
+          },
+        },
+      };
+    },
+
+    async signRelayerTransaction(value: Record<string, unknown>) {
+      const addresses = await resolveContracts();
+      const manifest = value.manifest as Web2JsonManifestV1;
+      const runId = String(value.runId ?? "");
+      const idempotencyKey = String(value.idempotencyKey ?? "");
+      const target = getAddress(String(value.target ?? ""));
+      const calldata = String(value.calldata ?? "") as Hex;
+      const valueWei = BigInt(String(value.valueWei ?? "-1"));
+      const balanceWei = await publicClient.getBalance({ address: account.address });
+      validateRelayerSubmission({
+        idempotencyKey,
+        chainId: Number(value.chainId),
+        target,
+        expectedTarget: addresses.FdcHub,
+        calldata,
+        expectedCalldata: calldata,
+        valueWei,
+        quotedFeeWei: valueWei,
+        projectFeeCapWei: BigInt(manifest.submission.feeCapWei),
+        globalFeeCapWei,
+        quotaRemaining: 1,
+        balanceWei,
+        balanceFloorWei,
+      });
+      const nonce = await publicClient.getTransactionCount({
+        address: account.address,
+        blockTag: "pending",
+      });
+      const prepared = await publicClient.prepareTransactionRequest({
+        account,
+        chain: coston2,
+        to: target,
+        data: calldata,
+        value: valueWei,
+        nonce,
+      });
+      const rawTransaction = await walletClient.signTransaction(prepared);
+      return {
+        projectId: String(value.projectId ?? ""),
+        runId,
+        idempotencyKey,
+        nonce: BigInt(nonce),
+        rawTransaction,
+        transactionHash: keccak256(rawTransaction),
+        commandFingerprint: relayerFingerprint({
+          runId,
+          idempotencyKey,
+          target,
+          calldata,
+          valueWei,
+        }),
+        chainId: 114,
+        target,
+        calldata,
+        valueWei,
+        fromAddress: account.address,
+        broadcastAt: null,
+      };
+    },
+
+    async broadcastRawTransaction(rawTransaction: string) {
+      return publicClient.sendRawTransaction({
+        serializedTransaction: rawTransaction as Hex,
+      });
+    },
+
+    async observeWalletTransaction(value: Record<string, unknown>) {
+      const transactionHash = String(value.transactionHash ?? "") as Hex;
+      const [transaction, chainId] = await Promise.all([
+        publicClient.getTransaction({ hash: transactionHash }),
+        publicClient.getChainId(),
+      ]);
+      if (!transaction.to) throw new Error("Wallet transaction target is required");
+      return {
+        transactionHash,
+        chainId,
+        target: transaction.to,
+        calldata: transaction.input,
+        valueWei: transaction.value,
+      };
+    },
+
+    async getTransactionReceipt(value: Record<string, unknown>) {
+      const transactionHash = String(value.transactionHash ?? "") as Hex;
+      try {
+        const receipt = await publicClient.getTransactionReceipt({
+          hash: transactionHash,
+        });
+        if (receipt.status !== "success") {
+          throw createFdcError(
+            "transport",
+            "REQUEST_TRANSACTION_REVERTED",
+            "FdcHub requestAttestation transaction reverted",
+            false,
+            { transactionHash },
+          );
+        }
+        const block = await publicClient.getBlock({ blockHash: receipt.blockHash });
+        return {
+          transactionHash,
+          blockHash: receipt.blockHash,
+          blockTimestamp: block.timestamp,
+        };
+      } catch (cause) {
+        if (cause && typeof cause === "object" && "category" in cause) throw cause;
+        throw createFdcError(
+          "not-finalized",
+          "REQUEST_RECEIPT_PENDING",
+          "FdcHub request transaction receipt is not available yet",
+          true,
+          { transactionHash },
+        );
+      }
+    },
+
+    async getVotingConfiguration() {
+      const addresses = await resolveContracts();
+      const [firstVotingRoundStartTs, votingEpochDurationSeconds, protocolId] =
+        await Promise.all([
+          read(
+            addresses.FlareSystemsManager,
+            flareSystemsManagerAbi as Abi,
+            "firstVotingRoundStartTs",
+          ) as Promise<bigint>,
+          read(
+            addresses.FlareSystemsManager,
+            flareSystemsManagerAbi as Abi,
+            "votingEpochDurationSeconds",
+          ) as Promise<bigint>,
+          read(
+            addresses.FdcVerification,
+            fdcVerificationAbi as Abi,
+            "fdcProtocolId",
+          ) as Promise<number>,
+        ]);
+      return {
+        firstVotingRoundStartTs,
+        votingEpochDurationSeconds,
+        protocolId: Number(protocolId),
+      };
+    },
+
+    async isRelayFinalized(value: Record<string, unknown>) {
+      const addresses = await resolveContracts();
+      return Boolean(
+        await read(addresses.Relay, relayAbi as Abi, "isFinalized", [
+          BigInt(String(value.protocolId)),
+          BigInt(String(value.votingRound)),
+        ]),
+      );
+    },
+
+    async getRelayRoot(value: Record<string, unknown>) {
+      const addresses = await resolveContracts();
+      return String(
+        await read(addresses.Relay, relayAbi as Abi, "merkleRoots", [
+          BigInt(String(value.protocolId)),
+          BigInt(String(value.votingRound)),
+        ]),
+      );
+    },
+
+    async fetchDaProof(value: Record<string, unknown>) {
+      return da.getProof(
+        BigInt(String(value.votingRound)),
+        String(value.requestBytes),
+      );
+    },
+
+    async verifyProof(value: Record<string, unknown>) {
+      const proof = rawProofFromEvidence(value.proof);
+      const evidence = recordValue(value.proof, "proof evidence");
+      const relayRoot = String(evidence.relayRoot ?? "") as Hex;
+      if (calculateMerkleRoot(proof).toLowerCase() !== relayRoot.toLowerCase()) {
+        return {
+          verified: false,
+          verificationContract: String(value.fdcVerification),
+        };
+      }
+      const verificationContract = getAddress(String(value.fdcVerification));
+      const verified = Boolean(
+        await read(
+          verificationContract,
+          fdcVerificationAbi as Abi,
+          "verifyWeb2Json",
+          [decodeProof(proof)],
+        ),
+      );
+      return { verified, verificationContract };
+    },
+
+    async verifyConsumer(value: Record<string, unknown>) {
+      const proof = rawProofFromEvidence(value.proof);
+      const decoded = decodeProof(proof);
+      const manifest = value.manifest as Web2JsonManifestV1;
+      const requestUrl = String(
+        (decoded.data as { requestBody: { url: string } }).requestBody.url,
+      );
+      const diagnostics = diagnoseConsumerRequest(manifest, requestUrl);
+      if (diagnostics.length > 0) return { passed: false, diagnostics };
+      if (value.consumer === "canonical-vulnerable") {
+        return {
+          passed: false,
+          diagnostics: [
+            {
+              version: "1" as const,
+              code: "MISSING_CONSUMER_HOST_INVARIANT",
+              severity: "warning" as const,
+              confidence: "high" as const,
+              summary:
+                "The canonical vulnerable consumer verifies the proof but does not enforce the expected source URL.",
+              evidence: {
+                consumer: "canonical-vulnerable",
+                missingChecks: ["scheme", "host", "path", "query"],
+                requestUrl,
+              },
+              remediation:
+                "Use the generated safe consumer and enforce scheme, host, path, and query before trusting response data.",
+            },
+          ],
+        };
+      }
+      const safeConsumer = getAddress(
+        required(environment, "PROOFLINE_SAFE_CONSUMER_ADDRESS"),
+      );
+      await read(safeConsumer, consumerAbi(), "consume", [decoded]);
+      return { passed: true, diagnostics: [] };
+    },
+  };
 }
 
 export function createLiveCoston2Runtime(input: {

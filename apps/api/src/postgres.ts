@@ -221,6 +221,7 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
     },
 
     async persistRelayerTransaction(value: {
+      projectId?: string;
       runId?: string;
       idempotencyKey: string;
       chainId: number;
@@ -233,7 +234,12 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
       transactionHash: string;
       commandFingerprint?: string;
     }): Promise<void> {
-      if (!value.runId || !value.fromAddress || !value.commandFingerprint) {
+      if (
+        !value.projectId ||
+        !value.runId ||
+        !value.fromAddress ||
+        !value.commandFingerprint
+      ) {
         throw new Error("Persisted relayer identity is incomplete");
       }
       if (value.chainId !== 114 || value.valueWei < 0n || value.nonce < 0n) {
@@ -245,6 +251,7 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
       }
       const client = await input.pool.connect();
       try {
+        await client.query("BEGIN");
         const inserted = await client.query(
           `INSERT INTO proofline_private.relayer_transactions
             (id, run_id, idempotency_key, chain_id, from_address, nonce,
@@ -298,7 +305,35 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
           if (!same) {
             throw new Error("Persisted relayer idempotency identity conflict");
           }
+        } else {
+          await client.query(
+            `INSERT INTO proofline_private.relayer_audit_events
+              (id, project_id, run_id, event_type, evidence)
+             VALUES ($1, $2, $3, 'RELAYER_TRANSACTION_SIGNED', $4::jsonb)`,
+            [
+              randomUUID(),
+              value.projectId,
+              value.runId,
+              JSON.stringify({
+                idempotencyKey: value.idempotencyKey,
+                chainId: value.chainId,
+                fromAddress: value.fromAddress,
+                nonce: value.nonce.toString(),
+                target: value.target,
+                calldataHash: Buffer.from(digestHexBytes(value.calldata)).toString(
+                  "hex",
+                ),
+                valueWei: value.valueWei.toString(),
+                transactionHash: value.transactionHash,
+                commandFingerprint: value.commandFingerprint,
+              }),
+            ],
+          );
         }
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
       } finally {
         client.release();
       }
@@ -310,6 +345,7 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
     ): Promise<void> {
       const client = await input.pool.connect();
       try {
+        await client.query("BEGIN");
         const result = await client.query(
           `UPDATE proofline_private.relayer_transactions
            SET broadcast_at = now()
@@ -334,7 +370,26 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
           ) {
             throw new Error("Relayer broadcast marker identity conflict");
           }
+        } else {
+          await client.query(
+            `INSERT INTO proofline_private.relayer_audit_events
+              (id, project_id, run_id, event_type, evidence)
+             SELECT $1, run.project_id, relayer.run_id,
+                    'RELAYER_TRANSACTION_BROADCAST', $3::jsonb
+             FROM proofline_private.relayer_transactions AS relayer
+             JOIN proofline_private.runs AS run ON run.id = relayer.run_id
+             WHERE relayer.idempotency_key = $2`,
+            [
+              randomUUID(),
+              idempotencyKey,
+              JSON.stringify({ idempotencyKey, transactionHash }),
+            ],
+          );
         }
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
       } finally {
         client.release();
       }
@@ -367,14 +422,15 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
         );
         await client.query("COMMIT");
         const row = run.rows[0];
+        const journal = events.rows.map((item) =>
+          RunEventV1Schema.parse(item.event_payload),
+        );
         return {
           runId: String(row.id),
           projectId: String(row.project_id),
           manifest: Web2JsonManifestV1Schema.parse(row.manifest),
-          projection: row.projection,
-          events: events.rows.map((item) =>
-            RunEventV1Schema.parse(item.event_payload),
-          ),
+          projection: projectRun(journal),
+          events: journal,
           artifacts: artifacts.rows.map((item) => ({
             id: String(item.id),
             runId: String(item.run_id),

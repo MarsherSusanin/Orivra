@@ -13,15 +13,17 @@ import {
 import { calculateVotingRoundId } from "@proofline/fdc-coston2";
 import { normalizeFdcError, redactEvidence } from "@proofline/fdc-coston2";
 
+export interface WorkerCommand {
+  id: string;
+  kind: string;
+  runId?: string;
+  attempts?: number;
+  payload: Record<string, unknown>;
+}
+
 interface ClaimedCommand {
   claimToken: string;
-  command: {
-    id: string;
-    kind: string;
-    runId?: string;
-    attempts?: number;
-    payload: Record<string, unknown>;
-  };
+  command: WorkerCommand;
 }
 
 interface WorkerRepository {
@@ -182,6 +184,7 @@ interface PersistedRelayerTransaction {
   calldataHash?: string;
   valueWei: bigint;
   fromAddress?: string;
+  projectId?: string;
   runId?: string;
   broadcastAt?: string | null;
 }
@@ -570,6 +573,7 @@ export function createProductionCommandHandlers(input: {
         assertRelayerIdentity(persisted, expected);
         await input.repository.persistRelayerTransaction({
           ...persisted,
+          projectId: context.projectId,
           runId: context.runId,
           idempotencyKey,
         });
@@ -873,7 +877,7 @@ export function createProductionCommandHandlers(input: {
             runId: context.runId,
             kind: "safe-consumer",
             canonicalBytes: safeBytes,
-            sha256: sha256Hex(safeBytes),
+            sha256: sha256Bytes(safeBytes),
             metadata: { compiler: "solc-0.8.36" },
           },
         ],
