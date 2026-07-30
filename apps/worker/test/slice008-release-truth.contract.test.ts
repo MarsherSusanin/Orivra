@@ -15,6 +15,10 @@ const FDC_HUB = "0x3333333333333333333333333333333333333333";
 const FDC_VERIFICATION = "0x1111111111111111111111111111111111111111";
 const TRANSACTION_HASH = `0x${"9".repeat(64)}`;
 const encoder = new TextEncoder();
+const relayerManifest = {
+  ...validManifest,
+  submission: { ...validManifest.submission, mode: "relayer" as const },
+};
 
 function artifact(kind: string, value: unknown) {
   return { kind, canonicalBytes: encoder.encode(JSON.stringify(value)) };
@@ -48,12 +52,19 @@ const proofArtifact = artifact("proof-evidence", {
   relayRoot: `0x${"b".repeat(64)}`,
 });
 
-function executionContext(eventCount: number) {
-  const events = makeRunEvents().slice(0, eventCount);
+function executionContext(
+  eventCount: number,
+  manifest = validManifest as typeof validManifest | typeof relayerManifest,
+) {
+  const events = makeRunEvents().slice(0, eventCount).map((event) =>
+    event.type === "RUN_CREATED"
+      ? { ...event, payload: { manifest } }
+      : event,
+  );
   return {
     runId: RUN_ID,
     projectId: PROJECT_ID,
-    manifest: validManifest,
+    manifest,
     events,
     projection: projectRun(events),
     artifacts: [preflightArtifact, proofArtifact],
@@ -148,7 +159,7 @@ describe("Slice 008 durable relayer attempt boundary", () => {
     let attemptedAt: string | null = null;
     let markCalls = 0;
     const repository = {
-      ...baseRepository(executionContext(2)),
+      ...baseRepository(executionContext(2, relayerManifest)),
       findRelayerTransaction: vi.fn(async () =>
         persistedRelayer(attemptedAt),
       ),

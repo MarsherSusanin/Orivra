@@ -58,3 +58,41 @@ npm run typecheck
 Result: **PASS**.
 
 The production implementation and all previously frozen tests remain unchanged.
+
+## Superseded-fixture reconciliation
+
+The frozen production candidate for reconciliation was:
+
+- Commit: `cd5f20b68cfae78735935396f5ad17651518892b`
+- Tree: `bc6c7adebe0ea076b4a014370de36ddf29fe4757`
+
+The candidate satisfies the frozen Slice 011 handler contract. Two older
+positive relayer controls still supplied the default wallet manifest and were
+therefore stopped by the new authorization boundary before reaching the safety
+behavior they were intended to test. The test-only reconciliation changes only
+those fixtures:
+
+- the Slice 005 raw-signed-bytes control now loads its existing explicit
+  `relayerManifest`, preserving the hash-identity rejection and zero-broadcast
+  assertion;
+- the Slice 008 durable-attempt control now keeps the loaded manifest and
+  `RUN_CREATED` payload on the same explicit relayer manifest, preserving the
+  attempt-before-I/O and no-rebroadcast crash recovery assertions.
+
+No production source or frozen Slice 011 expectation changed.
+
+Focused affected controls plus frozen Slice 011:
+
+```text
+Test Files  3 passed (3)
+Tests       14 passed (14)
+```
+
+Full worker suite:
+
+```text
+Test Files  19 passed (19)
+Tests       116 passed (116)
+```
+
+`npm run typecheck` — **PASS**.

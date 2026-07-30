@@ -401,7 +401,11 @@ describe("Slice 005 persisted relayer policy and identity", () => {
     };
     const broadcast = vi.fn().mockResolvedValue(transactionHash);
     const fixture = handlers({
-      executionContext: context(2, [preflightArtifact, policyArtifact]),
+      executionContext: context(
+        2,
+        [preflightArtifact, policyArtifact],
+        relayerManifest,
+      ),
       persisted,
       portOverrides: {
         deriveTransactionHash: vi.fn().mockReturnValue(`0x${"8".repeat(64)}`),
