@@ -55,12 +55,12 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
     return 0;
   }
 
-  const legacyPrivateKeyPresent = Object.entries(input.env).some(
-    ([name, value]) => name.endsWith("PRIVATE_KEY") && Boolean(value),
-  );
   if (
     !input.env.PROOFLINE_PROJECT_TOKEN ||
-    (process.env.NODE_ENV === "test" && !legacyPrivateKeyPresent)
+    (process.env.NODE_ENV === "test" &&
+      !Object.entries(input.env).some(
+        ([name, value]) => name.endsWith("PRIVATE_KEY") && Boolean(value),
+      ))
   ) {
     await input.artifacts.writeSummary(
       "Proofline live Coston2 gate failed: required live credentials are missing.",
