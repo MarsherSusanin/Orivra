@@ -160,9 +160,11 @@ describe("Slice 005 persisted Action client failure boundaries", () => {
       projections: [{ runId: "run_action", terminal: false, sequence: 1 }],
     });
 
-    await expect(client.replayManifest("manifest.json")).rejects.toThrow(
-      /timed out before terminal evidence/i,
-    );
+    await expect(client.replayManifest("manifest.json")).rejects.toMatchObject({
+      code: "RELEASE_GATE_TIMEOUT",
+      reason: "LIVE_GATE_DEADLINE_EXCEEDED",
+      retryable: false,
+    });
     expect(sleep).toHaveBeenCalled();
     expect(
       sleep.mock.calls.flat().reduce((total, value) => total + value, 0),
@@ -243,7 +245,7 @@ describe("Slice 005 persisted Action evidence fallbacks", () => {
     });
 
     await expect(
-      client.runLive({ manifestPath: "manifest.json", timeoutMs: 900_000 }),
+      client.runLive({ manifestPath: "manifest.json", timeoutMs: 600_000 }),
     ).resolves.toMatchObject({
       transactionHash,
       votingRound: "42871",
@@ -272,7 +274,7 @@ describe("Slice 005 persisted Action evidence fallbacks", () => {
     });
 
     await expect(
-      client.runLive({ manifestPath: "manifest.json", timeoutMs: 0 }),
+      client.runLive({ manifestPath: "manifest.json", timeoutMs: 600_000 }),
     ).resolves.toMatchObject({ votingRound: "77", proofChecksum: checksum });
   });
 });

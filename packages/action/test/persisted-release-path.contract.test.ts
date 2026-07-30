@@ -102,6 +102,8 @@ describe("Action persisted release path", () => {
       environment: {
         PROOFLINE_API_URL: "https://proofline.invalid",
         PROOFLINE_PROJECT_TOKEN: `project_${"5".repeat(64)}`,
+        GITHUB_SHA: "a".repeat(40),
+        PROOFLINE_TREE_HASH: "b".repeat(40),
       },
       fetch: vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const request = new Request(input, init);
@@ -206,6 +208,8 @@ describe("Action persisted release path", () => {
         env: {
           PROOFLINE_PROJECT_TOKEN: `project_${"d".repeat(64)}`,
           PROOFLINE_COSTON2_PRIVATE_KEY: `0x${"e".repeat(64)}`,
+          GITHUB_SHA: "f".repeat(40),
+          PROOFLINE_TREE_HASH: "1".repeat(40),
         },
         client: {
           replayManifest: vi.fn(),

@@ -8,6 +8,64 @@ import { runProoflineAction } from "./index";
 
 type Environment = Record<string, string | undefined>;
 
+const MAX_LIVE_TIMEOUT_MS = 600_000;
+
+type LiveDeadline = {
+  expiresAt: number;
+  maxAttempts: number;
+};
+
+type ReleaseGateTimeoutError = Error & {
+  code: "RELEASE_GATE_TIMEOUT";
+  reason: "LIVE_GATE_DEADLINE_EXCEEDED";
+  retryable: false;
+};
+
+function releaseGateTimeout(): ReleaseGateTimeoutError {
+  return Object.assign(
+    new Error(
+      "Proofline live release gate timed out (LIVE_GATE_DEADLINE_EXCEEDED)",
+    ),
+    {
+      code: "RELEASE_GATE_TIMEOUT" as const,
+      reason: "LIVE_GATE_DEADLINE_EXCEEDED" as const,
+      retryable: false as const,
+    },
+  );
+}
+
+function isReleaseGateTimeout(cause: unknown): cause is ReleaseGateTimeoutError {
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    (cause as { code?: unknown }).code === "RELEASE_GATE_TIMEOUT"
+  );
+}
+
+function validateLiveTimeout(timeoutMs: number): number {
+  if (
+    !Number.isFinite(timeoutMs) ||
+    timeoutMs <= 0 ||
+    timeoutMs > MAX_LIVE_TIMEOUT_MS
+  ) {
+    throw new Error(
+      `Invalid live timeout: expected a finite positive value in the range 1..${MAX_LIVE_TIMEOUT_MS} ms`,
+    );
+  }
+  return timeoutMs;
+}
+
+function requiredGitIdentity(
+  environment: Environment,
+  name: "GITHUB_SHA" | "PROOFLINE_TREE_HASH",
+): string {
+  const value = environment[name];
+  if (typeof value !== "string" || !/^[0-9a-fA-F]{40}$/.test(value)) {
+    throw new Error(`${name} must be exactly 40 hexadecimal characters`);
+  }
+  return value;
+}
+
 export function observerActionEnvironment(
   environment: Environment,
 ): Environment {
@@ -105,37 +163,114 @@ export function createPersistedActionRunClient(input: {
     apiConfiguration();
   }
 
+  function remainingTime(deadline: LiveDeadline): number {
+    return deadline.expiresAt - input.clock.now();
+  }
+
+  function createDeadline(timeoutMs: number): LiveDeadline {
+    const startedAt = input.clock.now();
+    if (!Number.isFinite(startedAt)) {
+      throw new Error("Proofline live monotonic clock returned an invalid value");
+    }
+    return {
+      expiresAt: startedAt + timeoutMs,
+      maxAttempts: Math.ceil(timeoutMs / 2_000) + 1,
+    };
+  }
+
+  function assertDeadline(deadline: LiveDeadline): number {
+    const remainingMs = remainingTime(deadline);
+    if (!(remainingMs > 0)) throw releaseGateTimeout();
+    return remainingMs;
+  }
+
+  const responseControllers = new WeakMap<Response, AbortController>();
+
+  async function withinDeadline<T>(
+    deadline: LiveDeadline,
+    operation: (signal: AbortSignal) => Promise<T> | T,
+    controller = new AbortController(),
+  ): Promise<T> {
+    const remainingMs = assertDeadline(deadline);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        const error = releaseGateTimeout();
+        reject(error);
+        controller.abort(error);
+      }, remainingMs);
+    });
+
+    try {
+      const value = await Promise.race([
+        Promise.resolve().then(() => operation(controller.signal)),
+        timeout,
+      ]);
+      assertDeadline(deadline);
+      return value;
+    } catch (cause) {
+      if (isReleaseGateTimeout(cause) || remainingTime(deadline) <= 0) {
+        throw releaseGateTimeout();
+      }
+      throw cause;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
+  async function sleepWithinDeadline(
+    deadline: LiveDeadline,
+    milliseconds: number,
+  ): Promise<void> {
+    const delay = Math.min(milliseconds, assertDeadline(deadline));
+    await withinDeadline(deadline, () =>
+      Promise.resolve(input.clock.sleep(delay)),
+    );
+  }
+
   async function request(
     path: string,
     init: RequestInit = {},
     command?: { mode: "replay" | "relayer"; operation: string },
+    deadline?: LiveDeadline,
   ) {
     const { apiOrigin, projectToken } = apiConfiguration();
     const method = init.method ?? "GET";
-    const response = await input.fetch(`${apiOrigin}${path}`, {
-      ...init,
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${projectToken}`,
-        ...(method === "POST"
-          ? {
-              "content-type": "application/json",
-              "idempotency-key": actionCommandKey(
-                environment,
-                command?.mode ?? "replay",
-                command?.operation ?? path,
-              ),
-            }
-          : {}),
-        ...Object.fromEntries(new Headers(init.headers)),
-      },
-    });
+    const fetchRequest = (signal?: AbortSignal) =>
+      input.fetch(`${apiOrigin}${path}`, {
+        ...init,
+        ...(signal ? { signal } : {}),
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${projectToken}`,
+          ...(method === "POST"
+            ? {
+                "content-type": "application/json",
+                "idempotency-key": actionCommandKey(
+                  environment,
+                  command?.mode ?? "replay",
+                  command?.operation ?? path,
+                ),
+              }
+            : {}),
+          ...Object.fromEntries(new Headers(init.headers)),
+        },
+      });
+    let response: Response;
+    if (deadline) {
+      const controller = new AbortController();
+      response = await withinDeadline(deadline, fetchRequest, controller);
+      responseControllers.set(response, controller);
+    } else {
+      response = await fetchRequest(init.signal ?? undefined);
+    }
     if (!response.ok) {
       let code = "";
       try {
-        const body = (await response.json()) as Record<string, any>;
+        const body = await responseJson(response, deadline);
         code = String(body.error?.code ?? body.code ?? "");
-      } catch {
+      } catch (cause) {
+        if (isReleaseGateTimeout(cause)) throw cause;
         // The public error remains generic when an adapter returns non-JSON.
       }
       throw Object.assign(
@@ -148,50 +283,111 @@ export function createPersistedActionRunClient(input: {
     return response;
   }
 
-  async function createRun(manifestPath: string, mode: "replay" | "relayer") {
+  async function responseJson(
+    response: Response,
+    deadline?: LiveDeadline,
+  ): Promise<Record<string, any>> {
+    if (!deadline) return (await response.json()) as Record<string, any>;
+    const controller = responseControllers.get(response);
+    try {
+      return (await withinDeadline(
+        deadline,
+        () => response.json(),
+        controller,
+      )) as Record<string, any>;
+    } finally {
+      responseControllers.delete(response);
+    }
+  }
+
+  async function responseText(
+    response: Response,
+    deadline?: LiveDeadline,
+  ): Promise<string> {
+    if (!deadline) return response.text();
+    const controller = responseControllers.get(response);
+    try {
+      return await withinDeadline(
+        deadline,
+        () => response.text(),
+        controller,
+      );
+    } finally {
+      responseControllers.delete(response);
+    }
+  }
+
+  async function createRun(
+    manifestPath: string,
+    mode: "replay" | "relayer",
+    deadline?: LiveDeadline,
+  ) {
+    const manifestSource = deadline
+      ? await withinDeadline(deadline, () => input.files.readText(manifestPath))
+      : await input.files.readText(manifestPath);
     const source = Web2JsonManifestV1Schema.parse(
-      JSON.parse(await input.files.readText(manifestPath)),
+      JSON.parse(manifestSource),
     );
+    if (deadline) assertDeadline(deadline);
     const manifest = Web2JsonManifestV1Schema.parse({
       ...source,
       submission: { ...source.submission, mode },
     });
-    const created = (await request("/v1/runs", {
-      method: "POST",
-      body: JSON.stringify({ manifest }),
-    }, { mode, operation: "create-run" }).then((response) =>
-      response.json(),
+    const createdResponse = await request(
+      "/v1/runs",
+      {
+        method: "POST",
+        body: JSON.stringify({ manifest }),
+      },
+      { mode, operation: "create-run" },
+      deadline,
+    );
+    const created = (await responseJson(
+      createdResponse,
+      deadline,
     )) as Record<string, unknown>;
     const runId = String(created.runId ?? "");
     if (!runId) throw new Error("Proofline API did not persist a run identity");
     return { runId, manifest };
   }
 
-  async function waitForTerminalRun(runId: string, timeoutMs: number) {
-    const startedAt = input.clock.now();
-    const maxAttempts = Math.ceil(timeoutMs / 2_000) + 1;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const projection = (await request(
+  async function waitForTerminalRun(
+    runId: string,
+    deadline: LiveDeadline,
+    timeoutError: () => Error = releaseGateTimeout,
+  ) {
+    for (let attempt = 0; attempt < deadline.maxAttempts; attempt += 1) {
+      const projectionResponse = await request(
         `/v1/runs/${encodeURIComponent(runId)}`,
-      ).then((response) => response.json())) as Record<string, unknown>;
+        {},
+        undefined,
+        deadline,
+      );
+      const projection = (await responseJson(
+        projectionResponse,
+        deadline,
+      )) as Record<string, unknown>;
       if (String(projection.runId ?? "") !== runId) {
         throw new Error("Persisted run projection identity mismatch");
       }
       if (projection.terminal === true) return projection;
-      const remainingMs = timeoutMs - (input.clock.now() - startedAt);
-      if (remainingMs <= 0) break;
-      await input.clock.sleep(Math.min(2_000, remainingMs));
+      await sleepWithinDeadline(deadline, 2_000);
     }
-    throw new Error("Persisted Proofline run timed out before terminal evidence");
+    throw timeoutError();
   }
 
-  async function waitForProofBoundary(runId: string, timeoutMs: number) {
-    const startedAt = input.clock.now();
-    const maxAttempts = Math.ceil(timeoutMs / 2_000) + 1;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const projection = (await request(
+  async function waitForProofBoundary(runId: string, deadline: LiveDeadline) {
+    for (let attempt = 0; attempt < deadline.maxAttempts; attempt += 1) {
+      const projectionResponse = await request(
         `/v1/runs/${encodeURIComponent(runId)}`,
-      ).then((response) => response.json())) as Record<string, any>;
+        {},
+        undefined,
+        deadline,
+      );
+      const projection = (await responseJson(
+        projectionResponse,
+        deadline,
+      )) as Record<string, any>;
       if (String(projection.runId ?? "") !== runId) {
         throw new Error("Persisted run projection identity mismatch");
       }
@@ -202,26 +398,24 @@ export function createPersistedActionRunClient(input: {
       if (projection.terminal === true) {
         return projection;
       }
-      const remainingMs = timeoutMs - (input.clock.now() - startedAt);
-      if (remainingMs <= 0) break;
-      await input.clock.sleep(Math.min(2_000, remainingMs));
+      await sleepWithinDeadline(deadline, 2_000);
     }
-    throw new Error("Persisted Proofline run timed out before proof verification");
+    throw releaseGateTimeout();
   }
 
-  async function submitRelayerWhenReady(runId: string, timeoutMs: number) {
-    const startedAt = input.clock.now();
-    const readinessTimeoutMs = Math.min(60_000, Math.max(1, timeoutMs));
-    for (;;) {
+  async function submitRelayerWhenReady(runId: string, deadline: LiveDeadline) {
+    for (let attempt = 0; attempt < deadline.maxAttempts; attempt += 1) {
       try {
-        await request(
+        const response = await request(
           `/v1/runs/${encodeURIComponent(runId)}/submissions`,
           {
             method: "POST",
             body: JSON.stringify({ mode: "relayer" }),
           },
           { mode: "relayer", operation: "submit-relayer" },
+          deadline,
         );
+        await responseText(response, deadline);
         return;
       } catch (cause) {
         if (
@@ -231,30 +425,38 @@ export function createPersistedActionRunClient(input: {
         ) {
           throw cause;
         }
-        const remaining =
-          readinessTimeoutMs - (input.clock.now() - startedAt);
-        if (remaining <= 0) throw cause;
-        await input.clock.sleep(Math.min(2_000, remaining));
+        await sleepWithinDeadline(deadline, 2_000);
       }
     }
+    throw releaseGateTimeout();
   }
 
   async function replayPersistedBundle(
     runId: string,
     mode: "replay" | "relayer",
     projection: Record<string, unknown>,
+    deadline?: LiveDeadline,
   ) {
-    const bundle = await request(
+    const bundleResponse = await request(
       `/v1/runs/${encodeURIComponent(runId)}/bundle`,
-    ).then((response) => response.text());
-    const replay = (await request(
+      {},
+      undefined,
+      deadline,
+    );
+    const bundle = await responseText(bundleResponse, deadline);
+    const replayResponse = await request(
       "/v1/replays",
       {
         method: "POST",
         body: JSON.stringify({ bundle }),
       },
       { mode, operation: "replay-bundle" },
-    ).then((response) => response.json())) as Record<string, unknown>;
+      deadline,
+    );
+    const replay = (await responseJson(
+      replayResponse,
+      deadline,
+    )) as Record<string, unknown>;
     if (String(replay.runId ?? "") !== runId || replay.byteIdentical !== true) {
       throw new Error("Persisted bundle replay identity is not byte-identical");
     }
@@ -310,7 +512,14 @@ export function createPersistedActionRunClient(input: {
         return replayLocalManifest(manifestPath);
       }
       const created = await createRun(manifestPath, "replay");
-      const projection = await waitForTerminalRun(created.runId, 60_000);
+      const projection = await waitForTerminalRun(
+        created.runId,
+        createDeadline(60_000),
+        () =>
+          new Error(
+            "Persisted Proofline run timed out before terminal evidence",
+          ),
+      );
       const identity = persistedIdentity(projection);
       const replayed = await replayPersistedBundle(
         created.runId,
@@ -329,34 +538,39 @@ export function createPersistedActionRunClient(input: {
       manifestPath: string;
       timeoutMs: number;
     }) {
-      const created = await createRun(requestInput.manifestPath, "relayer");
-      await submitRelayerWhenReady(
-        created.runId,
-        Math.min(600_000, Math.max(1, requestInput.timeoutMs)),
+      const timeoutMs = validateLiveTimeout(requestInput.timeoutMs);
+      const commitHash = requiredGitIdentity(environment, "GITHUB_SHA");
+      const treeHash = requiredGitIdentity(environment, "PROOFLINE_TREE_HASH");
+      const deadline = createDeadline(timeoutMs);
+      const created = await createRun(
+        requestInput.manifestPath,
+        "relayer",
+        deadline,
       );
+      await submitRelayerWhenReady(created.runId, deadline);
       const proofProjection = await waitForProofBoundary(
         created.runId,
-        Math.min(600_000, Math.max(1, requestInput.timeoutMs)),
+        deadline,
       );
       if (proofProjection.terminal !== true) {
-        await request(
+        const response = await request(
           `/v1/runs/${encodeURIComponent(created.runId)}/consumer-verifications`,
           {
             method: "POST",
             body: JSON.stringify({ consumer: "canonical-safe" }),
           },
           { mode: "relayer", operation: "verify-canonical-safe" },
+          deadline,
         );
+        await responseText(response, deadline);
       }
-      const projection = await waitForTerminalRun(
-        created.runId,
-        Math.min(600_000, Math.max(1, requestInput.timeoutMs)),
-      );
+      const projection = await waitForTerminalRun(created.runId, deadline);
       const identity = persistedIdentity(projection);
       const replayed = await replayPersistedBundle(
         created.runId,
         "relayer",
         projection,
+        deadline,
       );
       const submitted = replayed.decoded.events?.find(
         (event: any) => event?.type === "REQUEST_SUBMITTED",
@@ -366,8 +580,8 @@ export function createPersistedActionRunClient(input: {
       );
       return {
         ...projection,
-        commitHash: environment.GITHUB_SHA,
-        treeHash: environment.PROOFLINE_TREE_HASH,
+        commitHash,
+        treeHash,
         runId: created.runId,
         transactionHash:
           submitted?.payload?.transactionHash ?? projection.transactionHash,

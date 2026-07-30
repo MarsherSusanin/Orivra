@@ -243,8 +243,9 @@ describe("Slice 007 Action readiness mapping coverage", () => {
         timeoutMs: 1,
       }),
     ).rejects.toMatchObject({
-      status: 404,
-      code: "PREFLIGHT_NOT_READY",
+      code: "RELEASE_GATE_TIMEOUT",
+      reason: "LIVE_GATE_DEADLINE_EXCEEDED",
+      retryable: false,
     });
     expect(fixture.sleep).toHaveBeenCalledExactlyOnceWith(1);
   });

@@ -28,6 +28,8 @@ function actionHarness(result = completeEvidence()) {
     env: {
       PROOFLINE_PROJECT_TOKEN: `project_${"e".repeat(64)}`,
       PROOFLINE_COSTON2_PRIVATE_KEY: `0x${"f".repeat(64)}`,
+      GITHUB_SHA: "a".repeat(40),
+      PROOFLINE_TREE_HASH: "b".repeat(40),
     },
     client: {
       replayManifest: vi.fn(),

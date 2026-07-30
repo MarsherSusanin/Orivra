@@ -74,9 +74,11 @@ describe("GitHub Action release evidence", () => {
   it("publishes complete immutable live evidence and proves no recovery rebroadcast", async () => {
     const writeSummary = vi.fn();
     const upload = vi.fn();
+    const commitHash = "c".repeat(40);
+    const treeHash = "d".repeat(40);
     const evidence = {
-      commitHash: "commit-a",
-      treeHash: "tree-a",
+      commitHash,
+      treeHash,
       runId: "run_live",
       transactionHash: `0x${"a".repeat(64)}`,
       votingRound: "42871",
@@ -91,13 +93,17 @@ describe("GitHub Action release evidence", () => {
         env: {
           PROOFLINE_PROJECT_TOKEN: "project-token",
           PROOFLINE_COSTON2_PRIVATE_KEY: "private-key",
+          GITHUB_SHA: commitHash,
+          PROOFLINE_TREE_HASH: treeHash,
         },
         client: { replayManifest: vi.fn(), runLive: vi.fn().mockResolvedValue(evidence) },
         artifacts: { writeSummary, upload },
       } as Parameters<typeof runProoflineAction>[0]),
     ).resolves.toBe(0);
     expect(writeSummary).toHaveBeenCalledWith(
-      expect.stringMatching(/commit-a[\s\S]+tree-a[\s\S]+no rebroadcast/i),
+      expect.stringMatching(
+        new RegExp(`${commitHash}[\\s\\S]+${treeHash}[\\s\\S]+no rebroadcast`, "i"),
+      ),
     );
     expect(upload).toHaveBeenCalledWith("proofline-live-evidence", evidence);
   });

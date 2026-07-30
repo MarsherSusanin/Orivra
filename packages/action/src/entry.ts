@@ -22,7 +22,7 @@ await runActionEntry({
       environment,
       fetch: globalThis.fetch,
       clock: {
-        now: Date.now,
+        now: () => performance.now(),
         sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       },
       files: { readText: (path) => readFile(path, "utf8") },

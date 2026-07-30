@@ -33,6 +33,10 @@ interface ActionInput {
   };
 }
 
+function isExactGitHash(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-fA-F]{40}$/.test(value);
+}
+
 export async function runProoflineAction(input: ActionInput): Promise<number> {
   if (input.eventName !== "merge_group") {
     const result = await input.client.replayManifest(input.inputs.manifest);
@@ -68,6 +72,18 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
     return 1;
   }
 
+  const expectedCommitHash = input.env.GITHUB_SHA;
+  const expectedTreeHash = input.env.PROOFLINE_TREE_HASH;
+  if (
+    !isExactGitHash(expectedCommitHash) ||
+    !isExactGitHash(expectedTreeHash)
+  ) {
+    await input.artifacts.writeSummary(
+      "Proofline live Coston2 gate failed: commit/tree identity must contain exact 40-hex Git hashes.",
+    );
+    return 1;
+  }
+
   try {
     const result = await input.client.runLive({
       manifestPath: input.inputs.manifest,
@@ -83,10 +99,12 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
       Number.isSafeInteger(result.persistedRun.lastSequence) &&
       result.persistedRun.lastSequence > 0;
     if (
+      !isExactGitHash(result.commitHash) ||
+      !isExactGitHash(result.treeHash) ||
+      result.commitHash !== expectedCommitHash ||
+      result.treeHash !== expectedTreeHash ||
       (immutableEvidenceRequired &&
-        (!result.commitHash ||
-          !result.treeHash ||
-          result.broadcastCountAfterRecordedHash !== 0)) ||
+        result.broadcastCountAfterRecordedHash !== 0) ||
       ((process.env.NODE_ENV !== "test" || result.persistedRun !== undefined) &&
         !persistedValid) ||
       !result.transactionHash ||

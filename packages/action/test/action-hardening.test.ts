@@ -3,6 +3,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { runProoflineAction } from "../src/index";
 
+const COMMIT_HASH = "d".repeat(40);
+const TREE_HASH = "e".repeat(40);
+
 function harness() {
   return {
     client: {
@@ -11,6 +14,8 @@ function harness() {
         checksum: `sha256:${"a".repeat(64)}`,
       }),
       runLive: vi.fn().mockResolvedValue({
+        commitHash: COMMIT_HASH,
+        treeHash: TREE_HASH,
         runId: "run_live",
         transactionHash: `0x${"b".repeat(64)}`,
         votingRound: "42871",
@@ -32,6 +37,8 @@ function liveInput(deps: ReturnType<typeof harness>) {
     env: {
       PROOFLINE_PROJECT_TOKEN: `project_${"a".repeat(64)}`,
       PROOFLINE_COSTON2_PRIVATE_KEY: "0xlocal-secret",
+      GITHUB_SHA: COMMIT_HASH,
+      PROOFLINE_TREE_HASH: TREE_HASH,
     },
     ...deps,
   };
