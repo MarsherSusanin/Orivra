@@ -1,5 +1,6 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
+  DiagnosticV1Schema,
   RunEventV1Schema,
   Web2JsonManifestV1Schema,
   type RunEventV1,
@@ -124,7 +125,7 @@ export function createProductionProoflineService(input: {
     kind: string,
     payload: Record<string, unknown> = {},
   ) {
-    const owned = await loadMutableOwnedRun(context);
+    const owned = await loadOwnedRun(context);
     const runId = String(owned.id);
     const existing = await findCommandIntent(
       context.projectId,
@@ -138,6 +139,7 @@ export function createProductionProoflineService(input: {
       }
       return { accepted: true, runId };
     }
+    assertMutableProjection(owned.projection);
 
     if (kind === "SUBMIT_RELAYER") {
       const priorRelayerCommand = await findRelayerCommandByRun(runId);
@@ -190,6 +192,60 @@ export function createProductionProoflineService(input: {
       }
     }
     return { accepted: true, runId };
+  }
+
+  async function persistCompletedIntent(
+    context: Record<string, unknown>,
+    runId: string,
+    kind: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    if (
+      typeof context.idempotencyKey !== "string" ||
+      context.idempotencyKey.length === 0
+    ) {
+      return;
+    }
+    const existing = await findCommandIntent(
+      context.projectId,
+      context.idempotencyKey,
+    );
+    if (existing) {
+      if (!sameIntent(existing, runId, kind, payload)) {
+        throw Object.assign(
+          new Error("Idempotency key derived-product intent conflict"),
+          { status: 409 },
+        );
+      }
+      return;
+    }
+    const inserted = await input.pool.query(
+      `INSERT INTO proofline_private.run_commands
+        (id, project_id, run_id, idempotency_key, kind, payload, status)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'succeeded')
+       ON CONFLICT (project_id, idempotency_key) DO NOTHING
+       RETURNING project_id, run_id, idempotency_key, kind, payload`,
+      [
+        randomUUID(),
+        context.projectId,
+        runId,
+        context.idempotencyKey,
+        kind,
+        JSON.stringify(payload),
+      ],
+    );
+    if (!inserted.rowCount) {
+      const raced = await findCommandIntent(
+        context.projectId,
+        context.idempotencyKey,
+      );
+      if (!raced || !sameIntent(raced, runId, kind, payload)) {
+        throw Object.assign(
+          new Error("Idempotency key derived-product intent conflict"),
+          { status: 409 },
+        );
+      }
+    }
   }
 
   return {
@@ -327,12 +383,25 @@ export function createProductionProoflineService(input: {
                   LIMIT 1
                 ) AS consumer_verified,
                 (
+                  SELECT event_payload->'payload'->'diagnostics'
+                  FROM proofline_private.run_events
+                  WHERE run_id = run.id AND event_type = 'CONSUMER_VERIFIED'
+                  ORDER BY sequence DESC
+                  LIMIT 1
+                ) AS consumer_diagnostics,
+                (
                   SELECT metadata->>'checksum'
                   FROM proofline_private.run_artifacts
                   WHERE run_id = run.id AND kind = 'proof-bundle'
                   ORDER BY created_at DESC
                   LIMIT 1
                 ) AS proof_checksum,
+                (
+                  SELECT count(*)::integer
+                  FROM proofline_private.relayer_audit_events
+                  WHERE run_id = run.id
+                    AND event_type = 'RELAYER_TRANSACTION_BROADCAST_ATTEMPT'
+                ) AS broadcast_attempt_count,
                 CASE WHEN EXISTS (
                   SELECT 1
                   FROM proofline_private.relayer_transactions
@@ -351,6 +420,24 @@ export function createProductionProoflineService(input: {
         throw Object.assign(new Error("Run not found"), { status: 404 });
       }
       const row = result.rows[0];
+      let diagnostics: unknown;
+      if (typeof row.consumer_verified === "boolean") {
+        const parsed = DiagnosticV1Schema.array().safeParse(
+          row.consumer_diagnostics,
+        );
+        if (
+          !parsed.success ||
+          (row.consumer_verified === false && parsed.data.length === 0)
+        ) {
+          throw Object.assign(
+            new Error(
+              "Consumer result is missing valid versioned diagnostic evidence",
+            ),
+            { status: 500, code: "CONSUMER_DIAGNOSTICS_MISSING" },
+          );
+        }
+        diagnostics = parsed.data;
+      }
       const releaseEvidence = {
         ...(typeof row.transaction_hash === "string"
           ? { transactionHash: row.transaction_hash }
@@ -359,7 +446,7 @@ export function createProductionProoflineService(input: {
           ? { votingRound: String(row.voting_round) }
           : {}),
         ...(typeof row.consumer_verified === "boolean"
-          ? { consumerVerified: row.consumer_verified }
+          ? { consumerVerified: row.consumer_verified, diagnostics }
           : {}),
         ...(typeof row.proof_checksum === "string"
           ? { proofChecksum: row.proof_checksum }
@@ -369,6 +456,9 @@ export function createProductionProoflineService(input: {
               broadcastCountAfterRecordedHash:
                 row.broadcast_count_after_recorded_hash,
             }
+          : {}),
+        ...(Number.isInteger(row.broadcast_attempt_count)
+          ? { broadcastAttemptCount: row.broadcast_attempt_count }
           : {}),
       };
       return { ...row.projection, ...releaseEvidence };
@@ -497,13 +587,18 @@ export function createProductionProoflineService(input: {
     },
 
     async generateConsumer(context: Record<string, unknown>) {
-      const owned = await loadMutableOwnedRun(context);
+      const owned = await loadOwnedRun(context);
+      const runId = String(owned.id);
+      const contractName =
+        typeof context.contractName === "string"
+          ? context.contractName
+          : "ProoflineSafeWeb2JsonConsumer";
+      await persistCompletedIntent(context, runId, "GENERATE_CONSUMER", {
+        contractName,
+      });
       return {
         source: generateSafeWeb2JsonConsumer(owned.manifest, {
-          contractName:
-            typeof context.contractName === "string"
-              ? context.contractName
-              : "ProoflineSafeWeb2JsonConsumer",
+          contractName,
         }),
       };
     },
@@ -539,13 +634,34 @@ export function createProductionProoflineService(input: {
     },
 
     async createShare(context: Record<string, unknown>) {
-      const owned = await loadMutableOwnedRun(context);
+      const owned = await loadOwnedRun(context);
       const runId = String(owned.id);
-      const raw = `share_${randomBytes(32).toString("hex")}`;
+      const payload = {
+        ...(typeof context.expiresAt === "string"
+          ? { expiresAt: context.expiresAt }
+          : {}),
+      };
+      await persistCompletedIntent(context, runId, "CREATE_SHARE", payload);
+      const raw =
+        typeof context.idempotencyKey === "string" &&
+        context.idempotencyKey.length > 0
+          ? `share_${createHmac("sha256", input.tokenDigestKey)
+              .update(
+                JSON.stringify({
+                  version: "1",
+                  projectId: context.projectId,
+                  runId,
+                  idempotencyKey: context.idempotencyKey,
+                  payload,
+                }),
+              )
+              .digest("hex")}`
+          : `share_${randomBytes(32).toString("hex")}`;
       await input.pool.query(
         `INSERT INTO proofline_private.share_tokens
           (id, project_id, run_id, token_digest, expires_at)
-         VALUES ($1, $2, $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (token_digest) DO NOTHING`,
         [
           randomUUID(),
           context.projectId,
