@@ -3,9 +3,12 @@ import { readFileSync } from "node:fs";
 
 const styles = readFileSync("src/styles.css", "utf8");
 const originalInnerWidth = window.innerWidth;
+const browserWindow = window as typeof window & {
+  happyDOM: { setViewport(viewport: { width: number; height: number }): void };
+};
 
 function computedMobileLayout(width: number) {
-  window.happyDOM.setViewport({ width, height: 844 });
+  browserWindow.happyDOM.setViewport({ width, height: 844 });
   document.head.innerHTML = `<style>${styles}</style>`;
   document.body.innerHTML = `
     <div class="app-shell">
@@ -33,7 +36,7 @@ function computedMobileLayout(width: number) {
 }
 
 afterEach(() => {
-  window.happyDOM.setViewport({ width: originalInnerWidth, height: 768 });
+  browserWindow.happyDOM.setViewport({ width: originalInnerWidth, height: 768 });
   document.head.innerHTML = "";
   document.body.innerHTML = "";
 });
