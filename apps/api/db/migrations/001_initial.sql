@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS proofline_private.relayer_transactions (
     nonce numeric(78, 0) NOT NULL CHECK (nonce >= 0),
     target_address bytea NOT NULL CHECK (octet_length(target_address) = 20),
     calldata_hash bytea NOT NULL CHECK (octet_length(calldata_hash) = 32),
+    command_fingerprint bytea NOT NULL CHECK (octet_length(command_fingerprint) = 32),
     value_wei numeric(78, 0) NOT NULL CHECK (value_wei >= 0),
     raw_signed_transaction bytea NOT NULL,
     transaction_hash bytea NOT NULL UNIQUE CHECK (octet_length(transaction_hash) = 32),

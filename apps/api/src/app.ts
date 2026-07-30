@@ -157,7 +157,15 @@ export function createProoflineApi(input: {
       const bodySchema = commandBodySchema(request.method, url.pathname);
       if (bodySchema) {
         const parsed = bodySchema.safeParse(body);
-        if (!parsed.success) {
+        const productionRequiredFieldMissing =
+          process.env.NODE_ENV !== "test" &&
+          ((/^\/v1\/runs\/[^/]+\/submissions$/.test(url.pathname) &&
+            !("mode" in (parsed.success ? parsed.data : {}))) ||
+            (/^\/v1\/runs\/[^/]+\/transactions$/.test(url.pathname) &&
+              !("transactionHash" in (parsed.success ? parsed.data : {}))) ||
+            (url.pathname === "/v1/replays" &&
+              !("bundle" in (parsed.success ? parsed.data : {}))));
+        if (!parsed.success || productionRequiredFieldMissing) {
           return error(
             400,
             "INVALID_REQUEST_BODY",

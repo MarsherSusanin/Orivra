@@ -3,8 +3,22 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "./dist/worker.js",
+  "scripts": {
+    "build": "../../node_modules/.bin/esbuild src/entry.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/worker.js --external:pg",
+    "start": "node dist/worker.js"
+  },
+  "engines": {
+    "node": "22.x"
+  },
   "dependencies": {
+    "@flarenetwork/flare-periphery-contract-artifacts": "^0.1.52",
+    "@proofline/api": "0.0.0",
     "@proofline/contracts": "0.1.0",
-    "@proofline/fdc-coston2": "0.0.0"
+    "@proofline/domain": "0.1.0",
+    "@proofline/fdc-coston2": "0.0.0",
+    "jq-wasm": "^3.0.0-jq-1.8.2",
+    "pg": "^8.22.0",
+    "viem": "^2.55.10"
   }
 }

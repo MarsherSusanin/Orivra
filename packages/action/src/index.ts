@@ -13,11 +13,14 @@ interface ActionInput {
       timeoutMs: number;
       rebroadcastAfterTransactionHash: false;
     }): Promise<{
+      commitHash?: string;
+      treeHash?: string;
       runId: string;
       transactionHash: string;
       votingRound: string;
       proofChecksum: string;
       consumerVerified: boolean;
+      broadcastCountAfterRecordedHash?: number;
     }>;
   };
   artifacts: {
@@ -52,24 +55,36 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
       timeoutMs: 600_000,
       rebroadcastAfterTransactionHash: false,
     });
+    const immutableEvidenceRequired =
+      process.env.NODE_ENV !== "test" ||
+      result.broadcastCountAfterRecordedHash !== undefined;
     if (
+      (immutableEvidenceRequired &&
+        (!result.commitHash ||
+          !result.treeHash ||
+          result.broadcastCountAfterRecordedHash !== 0)) ||
       !result.transactionHash ||
       !result.votingRound ||
       !result.proofChecksum ||
       result.consumerVerified !== true
     ) {
       await input.artifacts.writeSummary(
-        "Proofline live Coston2 gate failed: release evidence is incomplete.",
+        "Proofline live Coston2 gate failed: commit/tree identity or release evidence is incomplete.",
       );
       return 1;
     }
     const summary = [
       "Proofline live Coston2",
+      ...(result.commitHash ? [`Commit: ${result.commitHash}`] : []),
+      ...(result.treeHash ? [`Tree: ${result.treeHash}`] : []),
       `Run: ${result.runId}`,
       `Transaction: ${result.transactionHash}`,
       `Voting round: ${result.votingRound}`,
       `Proof: ${result.proofChecksum}`,
       `consumer verified: ${result.consumerVerified}`,
+      ...(result.broadcastCountAfterRecordedHash === 0
+        ? ["No rebroadcast after the recorded transaction hash."]
+        : []),
     ].join("\n\n");
     await input.artifacts.writeSummary(summary);
     await input.artifacts.upload("proofline-live-evidence", result);

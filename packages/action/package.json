@@ -3,5 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts"
+  "main": "./dist/index.js",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "build": "../../node_modules/.bin/esbuild src/entry.ts --bundle --minify --platform=node --format=esm --target=node20 --outfile=dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@actions/artifact": "^2.3.2",
+    "@actions/core": "^1.11.1",
+    "@proofline/domain": "0.1.0",
+    "@proofline/worker": "0.0.0"
+  }
 }

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { Web2JsonManifestV1Schema } from "@proofline/contracts";
 import { createWeb2JsonVerifierClient } from "@proofline/fdc-coston2";
+import { createLiveCoston2Runtime } from "./live-runtime";
 
 export interface LiveGateInput {
   projectToken: string;
@@ -9,6 +10,9 @@ export interface LiveGateInput {
   manifestPath: string;
   timeoutMs: number;
   runtime?: LiveGateRuntime;
+  runtimeFactory?(input: {
+    environment: Record<string, string | undefined>;
+  }): LiveGateRuntime;
 }
 
 export interface LiveGateEvidence {
@@ -55,11 +59,14 @@ export async function runLiveCoston2Gate(
   const manifest = Web2JsonManifestV1Schema.parse(
     JSON.parse(await readFile(input.manifestPath, "utf8")),
   );
-  if (!input.runtime || input.runtime.kind !== "live") {
+  const runtime =
+    input.runtime ??
+    (input.runtimeFactory ?? createLiveCoston2Runtime)({
+      environment: process.env,
+    });
+  if (runtime.kind !== "live") {
     throw Object.assign(
-      new Error(
-        "Live Coston2 runtime is not configured; replay/simulator adapters are forbidden",
-      ),
+      new Error("Replay/simulator adapters are forbidden in the live runtime"),
       { kind: "configuration" },
     );
   }
@@ -67,7 +74,7 @@ export async function runLiveCoston2Gate(
     endpoint: "https://fdc-verifiers-testnet.flare.network",
     apiKey: input.verifierApiKey,
   });
-  return input.runtime.execute({
+  return runtime.execute({
     manifest,
     projectToken: input.projectToken,
     privateKey: input.privateKey,

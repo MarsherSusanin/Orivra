@@ -3,9 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "./dist/server.js",
+  "scripts": {
+    "build": "../../node_modules/.bin/esbuild src/server.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/server.js --external:pg",
+    "start": "node dist/server.js"
+  },
+  "engines": {
+    "node": "22.x"
+  },
   "dependencies": {
     "@proofline/contracts": "0.1.0",
     "@proofline/domain": "0.1.0",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "zod": "^4.3.5"
   }
 }
