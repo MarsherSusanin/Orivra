@@ -15,6 +15,8 @@ export interface RelayerSubmission {
   quotaRemaining: number;
   balanceWei: bigint;
   balanceFloorWei: bigint;
+  gasLimit: bigint;
+  maxFeePerGasWei: bigint;
 }
 
 export function validateRelayerSubmission<T extends RelayerSubmission>(input: T): T {
@@ -35,8 +37,23 @@ export function validateRelayerSubmission<T extends RelayerSubmission>(input: T)
     throw new Error("Relayer fee exceeds the global fee cap");
   }
   if (input.quotaRemaining <= 0) throw new Error("Relayer quota is exhausted");
-  if (input.balanceWei - input.valueWei < input.balanceFloorWei) {
-    throw new Error("Insufficient relayer balance to preserve the balance floor");
+  if (typeof input.gasLimit !== "bigint" || input.gasLimit <= 0n) {
+    throw new Error("Positive relayer gas limit evidence is required");
+  }
+  if (
+    typeof input.maxFeePerGasWei !== "bigint" ||
+    input.maxFeePerGasWei <= 0n
+  ) {
+    throw new Error("Positive relayer gas price evidence is required");
+  }
+  const worstCaseGasWei = input.gasLimit * input.maxFeePerGasWei;
+  if (
+    input.balanceWei - input.valueWei - worstCaseGasWei <
+    input.balanceFloorWei
+  ) {
+    throw new Error(
+      "Insufficient relayer balance to preserve the floor after worst-case gas",
+    );
   }
   return input;
 }

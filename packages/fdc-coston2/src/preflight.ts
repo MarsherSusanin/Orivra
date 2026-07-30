@@ -15,11 +15,16 @@ const CREDENTIAL_QUERY_NAMES = new Set([
   "password",
   "xamzcredential",
   "xamzsignature",
+  "authorizationtoken",
+  "credential",
+  "jwt",
+  "xamzsecuritytoken",
 ]);
 
 function isCredentialQueryName(value: string): boolean {
   const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return CREDENTIAL_QUERY_NAMES.has(normalized);
+  const withoutVersionSuffix = normalized.replace(/v\d+$/, "");
+  return CREDENTIAL_QUERY_NAMES.has(withoutVersionSuffix);
 }
 
 export function assertManifestHasNoSecrets(manifest: Web2JsonManifestV1): void {

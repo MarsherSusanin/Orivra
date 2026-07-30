@@ -600,6 +600,18 @@ export function createLiveCoston2PipelinePorts(input: {
         );
       }
       const balanceWei = await publicClient.getBalance({ address: account.address });
+      const nonce = await publicClient.getTransactionCount({
+        address: account.address,
+        blockTag: "pending",
+      });
+      const prepared = await publicClient.prepareTransactionRequest({
+        account,
+        chain: coston2,
+        to: target,
+        data: calldata,
+        value: valueWei,
+        nonce,
+      });
       validateRelayerSubmission({
         idempotencyKey,
         chainId: Number(value.chainId),
@@ -614,18 +626,8 @@ export function createLiveCoston2PipelinePorts(input: {
         quotaRemaining: policy.quotaRemaining,
         balanceWei,
         balanceFloorWei: policy.balanceFloorWei,
-      });
-      const nonce = await publicClient.getTransactionCount({
-        address: account.address,
-        blockTag: "pending",
-      });
-      const prepared = await publicClient.prepareTransactionRequest({
-        account,
-        chain: coston2,
-        to: target,
-        data: calldata,
-        value: valueWei,
-        nonce,
+        gasLimit: prepared.gas as bigint,
+        maxFeePerGasWei: (prepared.maxFeePerGas ?? prepared.gasPrice) as bigint,
       });
       const rawTransaction = await walletClient.signTransaction(prepared);
       return {
