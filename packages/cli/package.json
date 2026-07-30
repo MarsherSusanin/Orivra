@@ -9,7 +9,7 @@
     "proofline": "./dist/index.js"
   },
   "scripts": {
-    "build": "../../node_modules/.bin/esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --banner:js='#!/usr/bin/env node' --outfile=dist/index.js"
+    "build": "../../node_modules/.bin/esbuild src/bin.ts --bundle --platform=node --format=esm --target=node22 --banner:js='#!/usr/bin/env node' --outfile=dist/index.js"
   },
   "engines": {
     "node": "22.x"

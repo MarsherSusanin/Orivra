@@ -1,5 +1,3 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
 import { Web2JsonManifestV1Schema } from "@proofline/contracts";
 import {
   createWalletClient,
@@ -106,16 +104,66 @@ export async function runProoflineCli(input: CliDependencies): Promise<number> {
   }
 }
 
-function productionDependencies(): Omit<CliDependencies, "argv"> {
-  const apiOrigin = process.env.PROOFLINE_API_URL?.replace(/\/+$/, "");
-  const projectToken = process.env.PROOFLINE_PROJECT_TOKEN;
+export function createProductionCliDependencies(input: {
+  environment: Record<string, string | undefined>;
+  fetch: typeof globalThis.fetch;
+  walletFactory?: (input: {
+    privateKey: string;
+    rpcUrl: string;
+  }) => {
+    sendTransaction(transaction: {
+      to: Address;
+      data: Hex;
+      value: bigint;
+    }): Promise<string>;
+  };
+  clock: { now(): number; sleep(ms: number): Promise<void> };
+  files: CliDependencies["files"];
+  io: CliDependencies["io"];
+}): Omit<CliDependencies, "argv"> {
+  const environment = input.environment;
+  const apiOrigin = environment.PROOFLINE_API_URL?.replace(/\/+$/, "");
+  const projectToken = environment.PROOFLINE_PROJECT_TOKEN;
   if (!apiOrigin || !projectToken) {
     throw new Error("PROOFLINE_API_URL and PROOFLINE_PROJECT_TOKEN are required");
   }
+  const walletFactory =
+    input.walletFactory ??
+    ((walletInput: { privateKey: string; rpcUrl: string }) => {
+      const account = privateKeyToAccount(walletInput.privateKey as Hex);
+      const chain = {
+        id: 114,
+        name: "Coston2",
+        nativeCurrency: {
+          name: "Coston2 Flare",
+          symbol: "C2FLR",
+          decimals: 18,
+        },
+        rpcUrls: { default: { http: [walletInput.rpcUrl] } },
+      } as const;
+      const wallet = createWalletClient({
+        account,
+        chain,
+        transport: http(walletInput.rpcUrl),
+      });
+      return {
+        sendTransaction(transaction: {
+          to: Address;
+          data: Hex;
+          value: bigint;
+        }) {
+          return wallet.sendTransaction({
+            account,
+            chain,
+            ...transaction,
+          });
+        },
+      };
+    });
   let idempotencySequence = 0;
   async function api(path: string, init: RequestInit = {}) {
     const method = init.method ?? "GET";
-    const response = await fetch(`${apiOrigin}${path}`, {
+    const response = await input.fetch(`${apiOrigin}${path}`, {
       ...init,
       headers: {
         accept: "application/json",
@@ -123,7 +171,7 @@ function productionDependencies(): Omit<CliDependencies, "argv"> {
         ...(method === "POST"
           ? {
               "content-type": "application/json",
-              "idempotency-key": `cli-${Date.now()}-${++idempotencySequence}`,
+              "idempotency-key": `cli-${input.clock.now()}-${++idempotencySequence}`,
             }
           : {}),
         ...Object.fromEntries(new Headers(init.headers)),
@@ -159,14 +207,14 @@ function productionDependencies(): Omit<CliDependencies, "argv"> {
         body: JSON.stringify({ transactionHash: input.transactionHash }),
       }).then((response) => response.json());
     },
-    async watchRun(input: { runId: string }) {
-      const startedAt = Date.now();
-      while (Date.now() - startedAt < 600_000) {
+    async watchRun(request: { runId: string }) {
+      const startedAt = input.clock.now();
+      while (input.clock.now() - startedAt < 600_000) {
         const run: any = await api(
-          `/v1/runs/${encodeURIComponent(input.runId)}`,
+          `/v1/runs/${encodeURIComponent(request.runId)}`,
         ).then((response) => response.json());
         if (run.terminal) return run;
-        await new Promise((resolve) => setTimeout(resolve, 2_000));
+        await input.clock.sleep(2_000);
       }
       throw new Error("Run watch timed out after 10 minutes");
     },
@@ -201,60 +249,21 @@ function productionDependencies(): Omit<CliDependencies, "argv"> {
         if (request.chainId !== "0x72") {
           throw new Error("Wallet transaction must target Coston2 chain 114");
         }
-        const account = privateKeyToAccount(privateKey as Hex);
-        const wallet = createWalletClient({
-          account,
-          chain: {
-            id: 114,
-            name: "Coston2",
-            nativeCurrency: {
-              name: "Coston2 Flare",
-              symbol: "C2FLR",
-              decimals: 18,
-            },
-            rpcUrls: {
-              default: {
-                http: [
-                  process.env.PROOFLINE_COSTON2_RPC_URL ??
-                    "https://coston2-api.flare.network/ext/C/rpc",
-                ],
-              },
-            },
-          },
-          transport: http(
-            process.env.PROOFLINE_COSTON2_RPC_URL ??
-              "https://coston2-api.flare.network/ext/C/rpc",
-          ),
+        const wallet = walletFactory({
+          privateKey,
+          rpcUrl:
+            environment.PROOFLINE_COSTON2_RPC_URL ??
+            "https://coston2-api.flare.network/ext/C/rpc",
         });
         return wallet.sendTransaction({
-          account,
-          chain: wallet.chain,
           to: request.to,
           data: request.data,
           value: BigInt(request.value),
         });
       },
     },
-    env: process.env,
-    io: { stdout: console.log, stderr: console.error },
-    files: {
-      readText: (path) => readFile(path, "utf8"),
-      writeText: (path, value) => writeFile(path, value, "utf8"),
-    },
+    env: environment,
+    io: input.io,
+    files: input.files,
   };
-}
-
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
-  try {
-    process.exitCode = await runProoflineCli({
-      argv: process.argv.slice(2),
-      ...productionDependencies(),
-    });
-  } catch (cause) {
-    console.error(safeMessage(cause));
-    process.exitCode = 2;
-  }
 }
