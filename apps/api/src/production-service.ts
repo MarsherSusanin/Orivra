@@ -304,15 +304,74 @@ export function createProductionProoflineService(input: {
 
     async getRun(context: Record<string, unknown>) {
       const result = await input.pool.query(
-        `SELECT projection
-         FROM proofline_private.runs
-         WHERE id = $1 AND project_id = $2`,
+        `SELECT projection,
+                (
+                  SELECT event_payload->'payload'->>'transactionHash'
+                  FROM proofline_private.run_events
+                  WHERE run_id = run.id AND event_type = 'REQUEST_SUBMITTED'
+                  ORDER BY sequence DESC
+                  LIMIT 1
+                ) AS transaction_hash,
+                (
+                  SELECT event_payload->'payload'->>'votingRound'
+                  FROM proofline_private.run_events
+                  WHERE run_id = run.id AND event_type = 'ROUND_FINALIZED'
+                  ORDER BY sequence DESC
+                  LIMIT 1
+                ) AS voting_round,
+                (
+                  SELECT (event_payload->'payload'->>'passed')::boolean
+                  FROM proofline_private.run_events
+                  WHERE run_id = run.id AND event_type = 'CONSUMER_VERIFIED'
+                  ORDER BY sequence DESC
+                  LIMIT 1
+                ) AS consumer_verified,
+                (
+                  SELECT metadata->>'checksum'
+                  FROM proofline_private.run_artifacts
+                  WHERE run_id = run.id AND kind = 'proof-bundle'
+                  ORDER BY created_at DESC
+                  LIMIT 1
+                ) AS proof_checksum,
+                CASE WHEN EXISTS (
+                  SELECT 1
+                  FROM proofline_private.relayer_transactions
+                  WHERE run_id = run.id AND broadcast_at IS NOT NULL
+                ) THEN GREATEST((
+                  SELECT count(*)::integer
+                  FROM proofline_private.relayer_audit_events
+                  WHERE run_id = run.id
+                    AND event_type = 'RELAYER_TRANSACTION_BROADCAST'
+                ) - 1, 0) END AS broadcast_count_after_recorded_hash
+         FROM proofline_private.runs AS run
+         WHERE run.id = $1 AND run.project_id = $2`,
         [requireRunId(context.runId), context.projectId],
       );
       if (!result.rowCount) {
         throw Object.assign(new Error("Run not found"), { status: 404 });
       }
-      return result.rows[0].projection;
+      const row = result.rows[0];
+      const releaseEvidence = {
+        ...(typeof row.transaction_hash === "string"
+          ? { transactionHash: row.transaction_hash }
+          : {}),
+        ...(row.voting_round !== undefined && row.voting_round !== null
+          ? { votingRound: String(row.voting_round) }
+          : {}),
+        ...(typeof row.consumer_verified === "boolean"
+          ? { consumerVerified: row.consumer_verified }
+          : {}),
+        ...(typeof row.proof_checksum === "string"
+          ? { proofChecksum: row.proof_checksum }
+          : {}),
+        ...(Number.isInteger(row.broadcast_count_after_recorded_hash)
+          ? {
+              broadcastCountAfterRecordedHash:
+                row.broadcast_count_after_recorded_hash,
+            }
+          : {}),
+      };
+      return { ...row.projection, ...releaseEvidence };
     },
 
     async listEvents(context: Record<string, unknown>) {
@@ -403,6 +462,23 @@ export function createProductionProoflineService(input: {
       if (mode !== "relayer") {
         throw Object.assign(new Error("Unsupported submission mode"), {
           status: 400,
+        });
+      }
+      const owned = await loadMutableOwnedRun(context);
+      const runId = String(owned.id);
+      const priorRelayerCommand = await findRelayerCommandByRun(runId);
+      if (
+        priorRelayerCommand &&
+        String(priorRelayerCommand.idempotency_key) ===
+          `${runId}:submit_relayer`
+      ) {
+        return { accepted: true, runId };
+      }
+      const preflightStage = (owned.projection as any)?.stages?.preflight;
+      if (preflightStage !== undefined && preflightStage !== "completed") {
+        throw Object.assign(new Error("Preflight evidence is not ready"), {
+          status: 404,
+          code: "PREFLIGHT_NOT_READY",
         });
       }
       return enqueue(context, "SUBMIT_RELAYER", {

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   type DiagnosticV1,
+  type ProofBundleV1,
   type RunEventV1,
   type Web2JsonManifestV1,
 } from "@proofline/contracts";
@@ -9,6 +10,7 @@ import {
   createProofBundle,
   generateSafeWeb2JsonConsumer,
   projectRun,
+  replayProofBundle,
 } from "@proofline/domain";
 import { calculateVotingRoundId } from "@proofline/fdc-coston2";
 import { normalizeFdcError, redactEvidence } from "@proofline/fdc-coston2";
@@ -329,6 +331,10 @@ interface ProductionPipelineRepository {
 }
 
 interface ProductionPipelinePorts {
+  loadReplayBundle?(input: {
+    manifest: Web2JsonManifestV1;
+    runId: string;
+  }): Promise<string>;
   preflight(input: {
     manifest: Web2JsonManifestV1;
     runId: string;
@@ -504,6 +510,49 @@ function preflightEvidence(context: RunExecutionContext) {
   }>(context, "preflight-evidence");
 }
 
+function assertReplaySource(
+  serialized: string,
+  manifest: Web2JsonManifestV1,
+): ProofBundleV1 {
+  const source = replayProofBundle(serialized);
+  const comparable = (value: Web2JsonManifestV1) => ({
+    ...value,
+    submission: { ...value.submission, mode: "replay" as const },
+  });
+  if (
+    JSON.stringify(comparable(source.manifest)) !==
+      JSON.stringify(comparable(manifest)) ||
+    projectRun(source.events).terminal !== true ||
+    source.verification.proofVerified !== true ||
+    source.verification.consumerVerified !== true
+  ) {
+    throw Object.assign(
+      new Error("Persisted replay evidence does not match a terminal passing run"),
+      {
+        category: "schema-invalid",
+        code: "REPLAY_EVIDENCE_INVALID",
+        retryable: false,
+      },
+    );
+  }
+  return source;
+}
+
+function replaySource(context: RunExecutionContext): {
+  serialized: string;
+  bundle: ProofBundleV1;
+} {
+  const persisted = [...context.artifacts]
+    .reverse()
+    .find((item) => item.kind === "replay-source");
+  if (!persisted) throw new Error("Persisted replay-source evidence is required");
+  const serialized = decoder.decode(artifactBytes(persisted));
+  return {
+    serialized,
+    bundle: assertReplaySource(serialized, context.manifest),
+  };
+}
+
 function persistedRelayerPolicy(context: RunExecutionContext): RelayerPolicy | null {
   const found = [...context.artifacts]
     .reverse()
@@ -635,7 +684,73 @@ export function createProductionCommandHandlers(input: {
   > = {
     async RUN_PREFLIGHT(command) {
       const context = await load(command);
-      if (hasEvent(context, "PREFLIGHT_ACCEPTED")) return { nextCommands: [] };
+      if (context.manifest.submission.mode === "replay") {
+        const nextCommands = [child(context, "APPLY_REPLAY_EVIDENCE")];
+        if (hasEvent(context, "PREFLIGHT_ACCEPTED")) return { nextCommands };
+        if (!input.ports.loadReplayBundle) {
+          throw Object.assign(
+            new Error("A persisted replay bundle source is required"),
+            {
+              category: "configuration",
+              code: "REPLAY_EVIDENCE_MISSING",
+              retryable: false,
+            },
+          );
+        }
+        const serialized = await input.ports.loadReplayBundle({
+          manifest: context.manifest,
+          runId: context.runId,
+        });
+        const source = assertReplaySource(serialized, context.manifest);
+        const accepted = source.events.find(
+          (item) => item.type === "PREFLIGHT_ACCEPTED",
+        );
+        if (accepted?.type !== "PREFLIGHT_ACCEPTED") {
+          throw new Error("Replay evidence has no accepted preflight event");
+        }
+        return {
+          events: [
+            event(
+              context,
+              command,
+              "PREFLIGHT_ACCEPTED",
+              accepted.payload,
+              input.clock.now(),
+            ),
+          ],
+          artifacts: [
+            {
+              id: randomUUID(),
+              runId: context.runId,
+              kind: "replay-source",
+              canonicalBytes: encoder.encode(serialized),
+              sha256: sha256Bytes(encoder.encode(serialized)),
+              metadata: {
+                version: "1",
+                sourceRunId: source.runId,
+                sourceChecksum: source.checksum,
+              },
+            },
+            artifact(context.runId, "preflight-evidence", {
+              version: "1",
+              canonicalUrl: accepted.payload.canonicalUrl,
+              requestBytes: source.requestBytes,
+              quotedFeeWei: accepted.payload.quotedFeeWei,
+              network: source.network,
+            }),
+          ],
+          nextCommands,
+        };
+      }
+      const nextCommands =
+        context.manifest.submission.mode === "relayer"
+          ? [
+              child(context, "SUBMIT_RELAYER", {
+                idempotencyKey: `${context.runId}:relayer`,
+              }),
+            ]
+          : [];
+      if (hasEvent(context, "PREFLIGHT_ACCEPTED")) return { nextCommands };
       const prepared = await input.ports.preflight({
         manifest: context.manifest,
         runId: context.runId,
@@ -682,7 +797,69 @@ export function createProductionCommandHandlers(input: {
               ]
             : []),
         ],
-        nextCommands: [],
+        nextCommands,
+      };
+    },
+
+    async APPLY_REPLAY_EVIDENCE(command) {
+      const context = await load(command);
+      if (hasEvent(context, "CONSUMER_VERIFIED")) {
+        return { nextCommands: [child(context, "BUILD_PROOF_BUNDLE")] };
+      }
+      const source = replaySource(context).bundle;
+      const remaining = source.events.filter(
+        (item) =>
+          item.type !== "RUN_CREATED" && item.type !== "PREFLIGHT_ACCEPTED",
+      );
+      if (remaining.at(-1)?.type !== "CONSUMER_VERIFIED") {
+        throw new Error("Replay evidence command graph is not terminal");
+      }
+      const events = remaining.map(
+        (item, index) =>
+          ({
+            ...item,
+            runId: context.runId,
+            sequence: context.events.length + index + 1,
+            commandId: command.id,
+            occurredAt: input.clock.now(),
+          }) as RunEventV1,
+      );
+      const safeSource = generateSafeWeb2JsonConsumer(context.manifest, {
+        contractName: "ProoflineSafeWeb2JsonConsumer",
+      });
+      const safeBytes = encoder.encode(safeSource);
+      return {
+        events,
+        artifacts: [
+          artifact(context.runId, "proof-evidence", {
+            version: "1",
+            proof: source.proof,
+            proofVerified: source.verification.proofVerified,
+            replaySourceChecksum: source.checksum,
+          }),
+          artifact(context.runId, "verification-evidence", {
+            version: "1",
+            proofVerified: source.verification.proofVerified,
+            verificationContract:
+              source.network.resolvedContracts.FdcVerification,
+            replaySourceChecksum: source.checksum,
+          }),
+          artifact(context.runId, "consumer-evidence", {
+            version: "1",
+            passed: source.verification.consumerVerified,
+            diagnostics: source.verification.diagnostics,
+            replaySourceChecksum: source.checksum,
+          }),
+          {
+            id: randomUUID(),
+            runId: context.runId,
+            kind: "safe-consumer",
+            canonicalBytes: safeBytes,
+            sha256: sha256Bytes(safeBytes),
+            metadata: { compiler: "solc-0.8.36", replay: true },
+          },
+        ],
+        nextCommands: [child(context, "BUILD_PROOF_BUNDLE")],
       };
     },
 
@@ -1049,7 +1226,7 @@ export function createProductionCommandHandlers(input: {
         runId: context.runId,
         manifest: context.manifest,
         proof,
-        consumer: command.payload.consumer ?? "canonical-vulnerable",
+        consumer: command.payload.consumer ?? "canonical-safe",
       });
       const safeSource = generateSafeWeb2JsonConsumer(context.manifest, {
         contractName: "ProoflineSafeWeb2JsonConsumer",

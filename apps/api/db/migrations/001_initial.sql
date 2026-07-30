@@ -213,6 +213,9 @@ GRANT SELECT, INSERT, UPDATE ON proofline_private.projects,
     TO proofline_api;
 GRANT SELECT, INSERT ON proofline_private.run_artifacts TO proofline_api;
 GRANT SELECT, INSERT ON proofline_private.run_events TO proofline_api;
+GRANT SELECT ON proofline_private.relayer_transactions,
+    proofline_private.relayer_audit_events
+    TO proofline_api;
 GRANT SELECT ON proofline_private.projects,
     proofline_private.runs,
     proofline_private.run_events,

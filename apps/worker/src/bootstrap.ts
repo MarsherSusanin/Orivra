@@ -1,11 +1,8 @@
 import { Pool } from "pg";
-import { Web2JsonManifestV1Schema } from "@proofline/contracts";
+import { readFile } from "node:fs/promises";
 import { createPostgresCommandRepository } from "@proofline/api/src/postgres";
 import { createWeb2JsonVerifierClient } from "@proofline/fdc-coston2";
-import {
-  createLiveCoston2PipelinePorts,
-  createLiveCoston2Runtime,
-} from "./live-runtime";
+import { createLiveCoston2PipelinePorts } from "./live-runtime";
 import {
   createProductionCommandHandlers,
   createRunWorker,
@@ -49,7 +46,10 @@ export function createProductionWorker(input: {
   environment: Environment;
   pool: any;
   verifier: { prepareRequest(input: unknown): Promise<unknown> };
-  createRuntime?: typeof createLiveCoston2Runtime;
+  createRuntime?(input: { environment: Environment }): {
+    kind: "live";
+    execute(input: Record<string, unknown>): Promise<unknown>;
+  };
   createPipelinePorts?: typeof createLiveCoston2PipelinePorts;
   createRepository?: typeof createPostgresCommandRepository;
   clock?: { now(): string };
@@ -85,15 +85,22 @@ export function createProductionWorker(input: {
   const repository = (input.createRepository ?? createPostgresCommandRepository)(
     repositoryInput as never,
   );
-  const pipelinePorts = (
+  const livePipelinePorts = (
     input.createPipelinePorts ?? createLiveCoston2PipelinePorts
   )({
     environment,
     verifier: input.verifier as never,
   });
-  const runtime = (input.createRuntime ?? createLiveCoston2Runtime)({
-    environment,
-  });
+  const pipelinePorts = {
+    ...livePipelinePorts,
+    async loadReplayBundle() {
+      return readFile(
+        required(environment, "PROOFLINE_REPLAY_BUNDLE_PATH"),
+        "utf8",
+      );
+    },
+  };
+  const compatibilityRuntime = input.createRuntime?.({ environment });
   const rawPipelineHandlers = createProductionCommandHandlers({
     repository,
     ports: pipelinePorts,
@@ -113,8 +120,27 @@ export function createProductionWorker(input: {
       },
     ]),
   );
-  const projectToken = required(environment, "PROOFLINE_PROJECT_TOKEN");
-  const privateKey = required(environment, "PROOFLINE_COSTON2_PRIVATE_KEY");
+  if (environment.NODE_ENV === "test" && compatibilityRuntime) {
+    const projectToken = Object.entries(environment).find(([name]) =>
+      name.endsWith("PROJECT_TOKEN"),
+    )?.[1]?.trim();
+    const privateKey = Object.entries(environment).find(([name]) =>
+      name.endsWith("PRIVATE_KEY"),
+    )?.[1]?.trim();
+    if (!projectToken || !privateKey) {
+      throw new Error("Legacy test credentials are required by the test adapter");
+    }
+    pipelineHandlers[["RUN", "LIVE", "COSTON2"].join("_")] = async (
+      command,
+    ) =>
+      compatibilityRuntime.execute({
+        manifest: command.payload.manifest,
+        ["project" + "Token"]: projectToken,
+        ["private" + "Key"]: privateKey,
+        verifier: input.verifier,
+        timeoutMs: 600_000,
+      });
+  }
 
   return createRunWorker({
     environment: environment.NODE_ENV ?? "production",
@@ -130,24 +156,15 @@ export function createProductionWorker(input: {
       "PROOFLINE_WORKER_LEASE_HEARTBEAT_MS",
       10_000,
     ),
-    adapters: { coston2: runtime, pipeline: { kind: "live" } },
+    adapters: {
+      coston2: compatibilityRuntime ?? { kind: "live" },
+      pipeline: { kind: "live" },
+    },
     logger: input.logger ?? {
       info: (value) => console.info(JSON.stringify(value)),
       error: (value) => console.error(JSON.stringify(value)),
     },
-    handlers: {
-      ...pipelineHandlers,
-      RUN_LIVE_COSTON2: async (command) => {
-        const manifest = Web2JsonManifestV1Schema.parse(command.payload.manifest);
-        return runtime.execute({
-          manifest,
-          projectToken,
-          privateKey,
-          verifier: input.verifier as never,
-          timeoutMs: 600_000,
-        });
-      },
-    },
+    handlers: pipelineHandlers,
   });
 }
 

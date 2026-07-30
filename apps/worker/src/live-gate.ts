@@ -1,7 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { Web2JsonManifestV1Schema } from "@proofline/contracts";
 import { createWeb2JsonVerifierClient } from "@proofline/fdc-coston2";
-import { createLiveCoston2Runtime } from "./live-runtime";
+import {
+  createLiveCoston2Runtime,
+  type LiveGateEvidence,
+  type LiveGateRuntime,
+} from "./live-runtime";
+
+export type { LiveGateEvidence, LiveGateRuntime } from "./live-runtime";
 
 export interface LiveGateInput {
   projectToken: string;
@@ -13,28 +19,6 @@ export interface LiveGateInput {
   runtimeFactory?(input: {
     environment: Record<string, string | undefined>;
   }): LiveGateRuntime;
-}
-
-export interface LiveGateEvidence {
-  commitHash: string;
-  treeHash: string;
-  runId: string;
-  transactionHash: string;
-  votingRound: string;
-  proofChecksum: string;
-  consumerVerified: boolean;
-  broadcastCountAfterRecordedHash: number;
-}
-
-export interface LiveGateRuntime {
-  kind: "live";
-  execute(input: {
-    manifest: ReturnType<typeof Web2JsonManifestV1Schema.parse>;
-    projectToken: string;
-    privateKey: string;
-    verifier: ReturnType<typeof createWeb2JsonVerifierClient>;
-    timeoutMs: number;
-  }): Promise<LiveGateEvidence>;
 }
 
 function requireSecret(name: string, value: string): void {

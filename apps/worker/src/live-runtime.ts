@@ -38,10 +38,32 @@ import feeConfigurationsAbi from "@flarenetwork/flare-periphery-contract-artifac
 import flareSystemsManagerAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFlareSystemsManager.sol/IFlareSystemsManager.json";
 import registryAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFlareContractRegistry.sol/IFlareContractRegistry.json";
 import relayAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IRelay.sol/IRelay.json";
-import type {
-  LiveGateEvidence,
-  LiveGateRuntime,
-} from "./live-gate";
+
+export interface LiveGateEvidence {
+  commitHash: string;
+  treeHash: string;
+  runId: string;
+  transactionHash: string;
+  votingRound: string;
+  proofChecksum: string;
+  consumerVerified: boolean;
+  broadcastCountAfterRecordedHash: number;
+}
+
+export interface LiveGateRuntime {
+  kind: "live";
+  execute(input: {
+    manifest: Web2JsonManifestV1;
+    projectToken: string;
+    privateKey: string;
+    verifier: {
+      prepareRequest(
+        input: Web2JsonManifestV1,
+      ): Promise<{ requestBytes: string }>;
+    };
+    timeoutMs: number;
+  }): Promise<LiveGateEvidence>;
+}
 
 const REGISTRY_ADDRESS =
   "0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019" as Address;
