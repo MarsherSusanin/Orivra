@@ -153,6 +153,7 @@ function parseDaProof(value: unknown): RawDaProof {
 export function createDaClient(input: { endpoint: string; dispatcher?: Dispatcher }) {
   return {
     async getProof(votingRoundId: bigint, requestBytes: string): Promise<RawDaProof> {
+      let statusCode: number | undefined;
       try {
         const response = await request(
           `${input.endpoint.replace(/\/+$/, "")}/api/v1/fdc/proof-by-request-round-raw`,
@@ -166,7 +167,23 @@ export function createDaClient(input: { endpoint: string; dispatcher?: Dispatche
             }),
           },
         );
-        return parseDaProof(await response.body.json());
+        statusCode = response.statusCode;
+        const decoded = await response.body.json();
+        if (statusCode < 200 || statusCode >= 300) {
+          throw createFdcError(
+            "transport",
+            "DA_HTTP_STATUS",
+            `Data Availability service returned HTTP ${statusCode}`,
+            true,
+            {
+              operation: "getRawDaProof",
+              endpoint: input.endpoint,
+              votingRoundId: votingRoundId.toString(),
+              statusCode,
+            },
+          );
+        }
+        return parseDaProof(decoded);
       } catch (error) {
         if (
           error &&
@@ -179,6 +196,7 @@ export function createDaClient(input: { endpoint: string; dispatcher?: Dispatche
           operation: "getRawDaProof",
           endpoint: input.endpoint,
           votingRoundId: votingRoundId.toString(),
+          statusCode,
         });
       }
     },

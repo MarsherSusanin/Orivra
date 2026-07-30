@@ -35,6 +35,7 @@ export function createWeb2JsonVerifierClient(options: Web2JsonVerifierClientOpti
         },
       };
       let decoded: unknown;
+      let statusCode: number | undefined;
       try {
         const response = await request(
           `${options.endpoint.replace(/\/+$/, "")}${PREPARE_PATH}`,
@@ -48,6 +49,7 @@ export function createWeb2JsonVerifierClient(options: Web2JsonVerifierClientOpti
             body: JSON.stringify(payload),
           },
         );
+        statusCode = response.statusCode;
         decoded = await response.body.json();
       } catch (error) {
         const message =
@@ -57,7 +59,22 @@ export function createWeb2JsonVerifierClient(options: Web2JsonVerifierClientOpti
         throw normalizeFdcError(new Error(message), {
           operation: "prepareRequest",
           endpoint: options.endpoint,
+          statusCode,
         });
+      }
+
+      if (statusCode === undefined || statusCode < 200 || statusCode >= 300) {
+        throw createFdcError(
+          "transport",
+          "VERIFIER_HTTP_STATUS",
+          `Verifier returned HTTP ${statusCode ?? "unknown"}`,
+          true,
+          {
+            operation: "prepareRequest",
+            endpoint: options.endpoint,
+            statusCode,
+          },
+        );
       }
 
       const response = decoded as Record<string, unknown>;

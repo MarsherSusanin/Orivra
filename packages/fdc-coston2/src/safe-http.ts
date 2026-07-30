@@ -69,8 +69,11 @@ function denyIpv4(address: string): boolean {
     ["169.254.0.0", 16],
     ["172.16.0.0", 12],
     ["192.0.0.0", 24],
+    ["192.0.2.0", 24],
     ["192.168.0.0", 16],
     ["198.18.0.0", 15],
+    ["198.51.100.0", 24],
+    ["203.0.113.0", 24],
     ["224.0.0.0", 4],
     ["240.0.0.0", 4],
   ].some(([base, prefix]) => inV4Range(value, String(base), Number(prefix)));
@@ -96,6 +99,7 @@ function denyIpv6(address: string): boolean {
   return (
     (first & 0xfe00) === 0xfc00 ||
     (first & 0xffc0) === 0xfe80 ||
+    (first & 0xffc0) === 0xfec0 ||
     (first & 0xff00) === 0xff00 ||
     lower.startsWith("2001:db8:")
   );

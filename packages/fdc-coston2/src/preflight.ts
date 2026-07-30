@@ -38,6 +38,15 @@ export async function runWeb2JsonPreflight(
     fdcHub: string;
   },
 ) {
+  if (input.samples !== 5) {
+    throw createFdcError(
+      "configuration",
+      "PREFLIGHT_SAMPLE_COUNT_INVALID",
+      "Web2Json preflight requires exactly five determinism samples",
+      false,
+      { sampleCount: input.samples, requiredSampleCount: 5 },
+    );
+  }
   assertManifestHasNoSecrets(input.manifest);
   const canonicalUrl = canonicalizeManifestUrl(input.manifest);
   const encodedSamples: string[] = [];

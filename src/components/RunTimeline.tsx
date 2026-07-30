@@ -24,7 +24,7 @@ export function RunTimeline({ stages }: { stages: RunStage[] }) {
               <span className="stage-label">{stage.label}</span>
               <span className="stage-axis">
                 {index > 0 ? <span className="axis-line axis-before" aria-hidden="true" /> : null}
-                <span className="stage-node" aria-label={`${stage.label}: ${stage.status}`}>
+                <span className="stage-node" role="img" aria-label={`${stage.label}: ${stage.status}`}>
                   <Icon size={28} weight={stage.state === "complete" ? "bold" : "regular"} aria-hidden="true" />
                 </span>
                 {index < stages.length - 1 ? <span className="axis-line axis-after" aria-hidden="true" /> : null}
