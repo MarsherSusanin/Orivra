@@ -247,9 +247,18 @@ export function createProoflineApi(input: {
           cause && typeof cause === "object" && "status" in cause
             ? Number((cause as { status: unknown }).status)
             : 500;
+        const causeCode =
+          cause &&
+          typeof cause === "object" &&
+          "code" in cause &&
+          typeof (cause as { code?: unknown }).code === "string"
+            ? String((cause as { code: string }).code)
+            : "REQUEST_FAILED";
         return error(
           Number.isInteger(status) && status >= 400 && status < 600 ? status : 500,
-          "REQUEST_FAILED",
+          /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(causeCode)
+            ? causeCode
+            : "REQUEST_FAILED",
           status === 500 ? "Request could not be completed" : "Request rejected",
         );
       }

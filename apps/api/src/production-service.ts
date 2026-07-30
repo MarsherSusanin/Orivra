@@ -43,6 +43,19 @@ export function createProductionProoflineService(input: {
   tokenDigestKey: string;
   publicWebOrigin: string;
 }) {
+  function assertMutableProjection(projection: unknown): void {
+    if (
+      projection &&
+      typeof projection === "object" &&
+      (projection as { terminal?: unknown }).terminal === true
+    ) {
+      throw Object.assign(new Error("Terminal runs are immutable"), {
+        status: 409,
+        code: "RUN_TERMINAL",
+      });
+    }
+  }
+
   async function loadOwnedRun(context: Record<string, unknown>) {
     const runId = requireRunId(context.runId);
     const result = await input.pool.query(
@@ -59,6 +72,12 @@ export function createProductionProoflineService(input: {
       id: runId,
       manifest: Web2JsonManifestV1Schema.parse(result.rows[0].manifest),
     };
+  }
+
+  async function loadMutableOwnedRun(context: Record<string, unknown>) {
+    const run = await loadOwnedRun(context);
+    assertMutableProjection(run.projection);
+    return run;
   }
 
   async function findCommandIntent(
@@ -92,7 +111,7 @@ export function createProductionProoflineService(input: {
     kind: string,
     payload: Record<string, unknown> = {},
   ) {
-    const owned = await loadOwnedRun(context);
+    const owned = await loadMutableOwnedRun(context);
     const runId = String(owned.id);
     const existing = await findCommandIntent(
       context.projectId,
@@ -285,22 +304,34 @@ export function createProductionProoflineService(input: {
       if (mode === "wallet") {
         const runId = requireRunId(context.runId);
         const result = await input.pool.query(
-          `SELECT run.id, run.project_id, run.manifest,
+          `SELECT run.id, run.project_id, run.manifest, run.projection,
                   artifact.kind, artifact.canonical_bytes, artifact.metadata
-           FROM proofline_private.run_artifacts AS artifact
-           JOIN proofline_private.runs AS run ON run.id = artifact.run_id
+           FROM proofline_private.runs AS run
+           LEFT JOIN LATERAL (
+             SELECT kind, canonical_bytes, metadata
+             FROM proofline_private.run_artifacts
+             WHERE run_id = run.id AND kind = 'preflight-evidence'
+             ORDER BY created_at DESC
+             LIMIT 1
+           ) AS artifact ON true
            WHERE run.id = $1 AND run.project_id = $2
-             AND artifact.kind = 'preflight-evidence'
-           ORDER BY artifact.created_at DESC
            LIMIT 1`,
           [runId, context.projectId],
         );
         if (!result.rowCount) {
           throw Object.assign(new Error("Run or preflight evidence not found"), {
             status: 404,
+            code: "PREFLIGHT_NOT_READY",
           });
         }
         const row = result.rows[0];
+        assertMutableProjection(row.projection);
+        if (!row.canonical_bytes) {
+          throw Object.assign(new Error("Preflight evidence is not ready"), {
+            status: 404,
+            code: "PREFLIGHT_NOT_READY",
+          });
+        }
         const evidence = JSON.parse(
           Buffer.from(row.canonical_bytes).toString("utf8"),
         ) as Record<string, unknown>;
@@ -353,16 +384,9 @@ export function createProductionProoflineService(input: {
     },
 
     async generateConsumer(context: Record<string, unknown>) {
-      const result = await input.pool.query(
-        `SELECT manifest FROM proofline_private.runs
-         WHERE id = $1 AND project_id = $2`,
-        [requireRunId(context.runId), context.projectId],
-      );
-      if (!result.rowCount) {
-        throw Object.assign(new Error("Run not found"), { status: 404 });
-      }
+      const owned = await loadMutableOwnedRun(context);
       return {
-        source: generateSafeWeb2JsonConsumer(result.rows[0].manifest, {
+        source: generateSafeWeb2JsonConsumer(owned.manifest, {
           contractName:
             typeof context.contractName === "string"
               ? context.contractName
@@ -402,7 +426,7 @@ export function createProductionProoflineService(input: {
     },
 
     async createShare(context: Record<string, unknown>) {
-      const owned = await loadOwnedRun(context);
+      const owned = await loadMutableOwnedRun(context);
       const runId = String(owned.id);
       const raw = `share_${randomBytes(32).toString("hex")}`;
       await input.pool.query(
