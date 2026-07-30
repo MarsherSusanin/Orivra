@@ -22,7 +22,10 @@ export interface SafeDispatchResponse {
 }
 
 export interface SafeHttpFetcherOptions {
-  lookup(hostname: string): Promise<DnsAnswer[]>;
+  lookup(
+    hostname: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<DnsAnswer[]>;
   dispatch(request: SafeDispatchRequest): Promise<SafeDispatchResponse>;
   timeoutMs: number;
   maxResponseBytes: number;
@@ -181,36 +184,56 @@ export function createSafeHttpFetcher(options: SafeHttpFetcherOptions) {
   return {
     async getJson(source: string): Promise<unknown> {
       const url = assertSafeWeb2JsonUrl(source);
-      const answers = await options.lookup(url.hostname);
-      if (answers.length === 0) throw new Error("DNS returned no public address");
-      for (const answer of answers) assertPublicIpAddress(answer.address);
-      const pinnedAddress = answers[0].address;
       const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(new Error(`Request timeout after ${options.timeoutMs}ms`)),
-        options.timeoutMs,
+      const timeoutFailure = new Error(
+        `Request timeout after ${options.timeoutMs}ms`,
       );
-      let response: SafeDispatchResponse;
-      let deadline: ReturnType<typeof setTimeout> | undefined;
+      const timeout = setTimeout(() => {
+        controller.abort(timeoutFailure);
+      }, options.timeoutMs);
+      const aborted = new Promise<never>((_resolve, reject) => {
+        controller.signal.addEventListener(
+          "abort",
+          () => reject(controller.signal.reason ?? timeoutFailure),
+          { once: true },
+        );
+      });
       try {
-        const dispatch = options.dispatch({
+        const answers = await Promise.race([
+          options.lookup(url.hostname, { signal: controller.signal }),
+          aborted,
+        ]);
+        if (answers.length === 0) {
+          throw new Error("DNS returned no public address");
+        }
+        for (const answer of answers) assertPublicIpAddress(answer.address);
+        const pinnedAddress = answers[0].address;
+        const response = await Promise.race([options.dispatch({
           url,
           method: "GET",
           redirect: "error",
           pinnedAddress,
           signal: controller.signal,
           maxResponseBytes: options.maxResponseBytes,
-        });
-        const timeoutFailure = new Promise<never>((_resolve, reject) => {
-          deadline = setTimeout(() => {
-            const failure = new Error(
-              `Request timeout after ${options.timeoutMs}ms`,
-            );
-            controller.abort(failure);
-            reject(failure);
-          }, options.timeoutMs);
-        });
-        response = await Promise.race([dispatch, timeoutFailure]);
+        }), aborted]);
+
+        if (response.connectedAddress !== pinnedAddress) {
+          throw new Error("Connected address does not match the pinned DNS answer; possible rebinding");
+        }
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          throw new Error("Web2Json redirects are forbidden");
+        }
+        const contentLength = Number(response.headers["content-length"] ?? 0);
+        if (
+          contentLength > options.maxResponseBytes ||
+          response.body.byteLength > options.maxResponseBytes
+        ) {
+          throw new Error(`Web2Json response exceeds ${options.maxResponseBytes} bytes (1 MiB cap)`);
+        }
+        if (response.status < 200 || response.status >= 300) {
+          throw new Error(`Web2Json source returned HTTP ${response.status}`);
+        }
+        return JSON.parse(new TextDecoder().decode(response.body));
       } catch (error) {
         if (controller.signal.aborted) {
           throw new Error(`Request timeout after ${options.timeoutMs}ms`, { cause: error });
@@ -218,26 +241,7 @@ export function createSafeHttpFetcher(options: SafeHttpFetcherOptions) {
         throw error;
       } finally {
         clearTimeout(timeout);
-        if (deadline) clearTimeout(deadline);
       }
-
-      if (response.connectedAddress !== pinnedAddress) {
-        throw new Error("Connected address does not match the pinned DNS answer; possible rebinding");
-      }
-      if ([301, 302, 303, 307, 308].includes(response.status)) {
-        throw new Error("Web2Json redirects are forbidden");
-      }
-      const contentLength = Number(response.headers["content-length"] ?? 0);
-      if (
-        contentLength > options.maxResponseBytes ||
-        response.body.byteLength > options.maxResponseBytes
-      ) {
-        throw new Error(`Web2Json response exceeds ${options.maxResponseBytes} bytes (1 MiB cap)`);
-      }
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(`Web2Json source returned HTTP ${response.status}`);
-      }
-      return JSON.parse(new TextDecoder().decode(response.body));
     },
   };
 }

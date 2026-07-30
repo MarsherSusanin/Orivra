@@ -64,11 +64,12 @@ interface LiveEnvironment {
 interface LivePipelineDependencies {
   createPublicClient(input: Record<string, unknown>): any;
   createWalletClient(input: Record<string, unknown>): any;
-  createDaClient(input: { endpoint: string }): {
+  createDaClient(input: { endpoint: string; timeoutMs?: number }): {
     getProof(votingRoundId: bigint, requestBytes: string): Promise<RawDaProof>;
   };
   lookup(
     hostname: string,
+    options?: { signal?: AbortSignal },
   ): Promise<Array<{ address: string; family: 4 | 6 }>>;
   dispatch(input: {
     url: URL;
@@ -83,11 +84,20 @@ const defaultPipelineDependencies: LivePipelineDependencies = {
   createPublicClient: (input) => createPublicClient(input as never),
   createWalletClient: (input) => createWalletClient(input as never),
   createDaClient,
-  lookup: async (hostname) =>
-    (await lookup(hostname, { all: true, verbatim: true })).map((answer) => ({
+  lookup: async (hostname, options) => {
+    const resolution = lookup(hostname, { all: true, verbatim: true });
+    const aborted = new Promise<never>((_resolve, reject) => {
+      options?.signal?.addEventListener(
+        "abort",
+        () => reject(options.signal?.reason),
+        { once: true },
+      );
+    });
+    return (await Promise.race([resolution, aborted])).map((answer) => ({
       address: answer.address,
       family: answer.family as 4 | 6,
-    })),
+    }));
+  },
   dispatch: httpsDispatch,
   transformJq: async (value, query) => jqFirst(value as never, query),
 };
@@ -444,6 +454,12 @@ export function createLiveCoston2PipelinePorts(input: {
     25_000,
     30_000,
   );
+  const daTimeoutMs = positiveInteger(
+    environment,
+    "PROOFLINE_DA_TIMEOUT_MS",
+    15_000,
+    30_000,
+  );
   const publicClient = dependencies.createPublicClient({
     chain: coston2,
     transport: http(rpcUrl, { timeout: 30_000, retryCount: 0 }),
@@ -453,7 +469,10 @@ export function createLiveCoston2PipelinePorts(input: {
     chain: coston2,
     transport: http(rpcUrl, { timeout: 30_000, retryCount: 0 }),
   });
-  const da = dependencies.createDaClient({ endpoint: daEndpoint });
+  const da = dependencies.createDaClient({
+    endpoint: daEndpoint,
+    timeoutMs: daTimeoutMs,
+  });
   const read = (
     address: Address,
     abi: Abi,

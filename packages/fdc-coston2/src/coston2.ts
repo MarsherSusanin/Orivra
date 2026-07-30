@@ -150,10 +150,28 @@ function parseDaProof(value: unknown): RawDaProof {
   };
 }
 
-export function createDaClient(input: { endpoint: string; dispatcher?: Dispatcher }) {
+export function createDaClient(input: {
+  endpoint: string;
+  dispatcher?: Dispatcher;
+  timeoutMs?: number;
+}) {
+  const timeoutMs = input.timeoutMs ?? 15_000;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw createFdcError(
+      "configuration",
+      "DA_TIMEOUT_INVALID",
+      "Data Availability timeout must be positive",
+      false,
+      {},
+    );
+  }
   return {
     async getProof(votingRoundId: bigint, requestBytes: string): Promise<RawDaProof> {
       let statusCode: number | undefined;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort(new Error(`DA request timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
       try {
         const response = await request(
           `${input.endpoint.replace(/\/+$/, "")}/api/v1/fdc/proof-by-request-round-raw`,
@@ -161,6 +179,7 @@ export function createDaClient(input: { endpoint: string; dispatcher?: Dispatche
             method: "POST",
             dispatcher: input.dispatcher,
             headers: { "content-type": "application/json" },
+            signal: controller.signal,
             body: JSON.stringify({
               votingRoundId: votingRoundId.toString(),
               requestBytes,
@@ -192,12 +211,28 @@ export function createDaClient(input: { endpoint: string; dispatcher?: Dispatche
         ) {
           throw error;
         }
+        if (controller.signal.aborted) {
+          throw createFdcError(
+            "timeout",
+            "FDC_TIMEOUT",
+            `Data Availability request timed out after ${timeoutMs}ms`,
+            true,
+            {
+              operation: "getRawDaProof",
+              endpoint: input.endpoint,
+              votingRoundId: votingRoundId.toString(),
+              timeoutMs,
+            },
+          );
+        }
         throw normalizeFdcError(error, {
           operation: "getRawDaProof",
           endpoint: input.endpoint,
           votingRoundId: votingRoundId.toString(),
           statusCode,
         });
+      } finally {
+        clearTimeout(timeout);
       }
     },
   };

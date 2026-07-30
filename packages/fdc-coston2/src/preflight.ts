@@ -3,17 +3,34 @@ import { canonicalizeManifestUrl } from "@proofline/domain";
 import { createFdcError } from "./errors";
 import { assertSafeWeb2JsonUrl } from "./safe-http";
 
-const SECRET_QUERY_KEY = /^(?:api[_-]?key|token|authorization|auth|secret|private[_-]?key)$/i;
+const CREDENTIAL_QUERY_NAMES = new Set([
+  "apikey",
+  "token",
+  "authorization",
+  "auth",
+  "secret",
+  "privatekey",
+  "accesstoken",
+  "clientsecret",
+  "password",
+  "xamzcredential",
+  "xamzsignature",
+]);
+
+function isCredentialQueryName(value: string): boolean {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return CREDENTIAL_QUERY_NAMES.has(normalized);
+}
 
 export function assertManifestHasNoSecrets(manifest: Web2JsonManifestV1): void {
   const url = assertSafeWeb2JsonUrl(manifest.request.url);
   for (const key of url.searchParams.keys()) {
-    if (SECRET_QUERY_KEY.test(key)) {
+    if (isCredentialQueryName(key)) {
       throw new Error("Public Web2Json URLs cannot contain secret credentials");
     }
   }
   for (const key of Object.keys(manifest.request.query)) {
-    if (SECRET_QUERY_KEY.test(key)) {
+    if (isCredentialQueryName(key)) {
       throw new Error("Public Web2Json query cannot contain secret credentials");
     }
   }
