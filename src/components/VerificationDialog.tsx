@@ -1,5 +1,5 @@
 import { Check, Code, ShieldCheck, SpinnerGap, Warning, X } from "@phosphor-icons/react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   ConsumerVerificationResult,
   GeneratedConsumer,
@@ -46,12 +46,23 @@ export function VerificationDialog({
     }
   }, [result, status]);
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
+  useLayoutEffect(() => {
+    if (generated) {
+      closeRef.current?.focus();
+    }
+  }, [generated]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
       event.preventDefault();
       onClose();
-      return;
-    }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Tab") return;
     const focusable = Array.from(
       dialogRef.current?.querySelectorAll<HTMLElement>(
