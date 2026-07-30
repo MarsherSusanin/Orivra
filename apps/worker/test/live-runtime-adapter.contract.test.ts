@@ -5,11 +5,13 @@ import { validManifest } from "../../../packages/contracts/test/fixtures";
 
 type Factory = (input: Record<string, unknown>) => any;
 
-async function exportedFactory(name: string): Promise<Factory> {
-  const module = (await import("../src/live-runtime")) as unknown as Record<
-    string,
-    unknown
-  >;
+async function exportedFactory(
+  name: string,
+  surface: "pipeline" | "live-gate" = "pipeline",
+): Promise<Factory> {
+  const module = (surface === "live-gate"
+    ? await import("../src/live-gate-runtime")
+    : await import("../src/live-runtime")) as unknown as Record<string, unknown>;
   const value = module[name];
   expect(
     value,
@@ -76,7 +78,13 @@ describe("Slice 004 live Coston2 adapter injection", () => {
   });
 
   it("runs the live gate through the staged ports without a second RPC lifecycle", async () => {
-    const createRuntime = await exportedFactory("createLiveCoston2Runtime");
+    const createRuntime = await exportedFactory(
+      "createLiveCoston2Runtime",
+      "live-gate",
+    );
+    await expect(import("../src/live-runtime")).resolves.not.toHaveProperty(
+      "createLiveCoston2Runtime",
+    );
     const trace: string[] = [];
     const ports = {
       preflight: vi.fn(async () => {

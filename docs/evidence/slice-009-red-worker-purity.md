@@ -83,3 +83,51 @@ Result: `6 passed` files; `48 passed` tests.
   `apps/worker/src/entry.ts` or `apps/worker/src/bootstrap.ts`.
 - Any obsolete bootstrap-injection tests are reconciled only after the production
   candidate satisfies this frozen contract.
+
+## Superseded-control reconciliation
+
+The frozen production candidate was:
+
+- Commit: `90d7d668a5b9906926f39884c21c462de3b96b7c`
+- Tree: `bdff8e58e81adbeeeec68839725645d5ab21600c`
+
+That candidate satisfied the frozen purity contract but left fourteen earlier
+expectations tied to the deleted production injection seam. The reconciliation
+changes only six pre-existing test files:
+
+- production bootstrap now composes and asserts only repository and persisted
+  pipeline ports;
+- bootstrap coverage uses throwing credential getters to prove that neither a
+  project token nor an execution private key is requested;
+- `RUN_LIVE_COSTON2` is asserted to fail with `WORKER_HANDLER_MISSING`, including
+  under `NODE_ENV=test`;
+- the legacy orchestrator tests import `createLiveCoston2Runtime` only from the
+  isolated `live-gate-runtime.ts` module and assert that `live-runtime.ts` does
+  not export it;
+- obsolete `createRuntime` mocks and production-bootstrap arguments are removed.
+
+Affected controls:
+
+```text
+6 passed files
+35 passed tests
+```
+
+Frozen Slice 008 and Slice 009 controls:
+
+```text
+8 passed | 1 skipped files
+48 passed | 1 skipped tests
+```
+
+Type contract: `npm run typecheck` — PASS.
+
+Full hermetic result:
+
+```text
+88 passed | 4 skipped files
+742 passed | 6 skipped tests
+```
+
+There are no remaining hermetic failures. The skipped controls retain their
+explicit external-runtime opt-in and are left for the root release gate.

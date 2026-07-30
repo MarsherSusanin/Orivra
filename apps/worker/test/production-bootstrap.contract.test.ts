@@ -18,26 +18,23 @@ async function loadBootstrap(): Promise<Required<BootstrapModule>> {
 }
 
 describe("Slice 004 production worker bootstrap", () => {
-  it("composes injected live dependencies without touching process globals", async () => {
+  it("composes only persisted pipeline dependencies without execution credentials", async () => {
     const { createProductionWorker } = await loadBootstrap();
-    const runtime = { kind: "live", execute: vi.fn() };
     const pipelinePorts = { kind: "live" };
     const repository = { claimNextCommand: vi.fn() };
-    const createRuntime = vi.fn(() => runtime);
     const createPipelinePorts = vi.fn(() => pipelinePorts);
     const createRepository = vi.fn(() => repository);
+    const environment = {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgres://proofline.invalid/proofline",
+      PROOFLINE_VERIFIER_API_KEY: "verifier-test-key",
+    };
+    const verifier = { prepareRequest: vi.fn() };
 
     const worker = createProductionWorker({
-      environment: {
-        NODE_ENV: "production",
-        DATABASE_URL: "postgres://proofline.invalid/proofline",
-        PROOFLINE_PROJECT_TOKEN: `project_${"a".repeat(64)}`,
-        PROOFLINE_COSTON2_PRIVATE_KEY: `0x${"b".repeat(64)}`,
-        PROOFLINE_VERIFIER_API_KEY: "verifier-test-key",
-      },
+      environment,
       pool: { end: vi.fn() },
-      verifier: { prepareRequest: vi.fn() },
-      createRuntime,
+      verifier,
       createPipelinePorts,
       createRepository,
       clock: { now: () => "2025-05-15T12:04:11.000Z" },
@@ -45,8 +42,10 @@ describe("Slice 004 production worker bootstrap", () => {
     });
 
     expect(worker).toEqual(expect.objectContaining({ processOne: expect.any(Function) }));
-    expect(createRuntime).toHaveBeenCalledOnce();
-    expect(createPipelinePorts).toHaveBeenCalledOnce();
+    expect(createPipelinePorts).toHaveBeenCalledExactlyOnceWith({
+      environment,
+      verifier,
+    });
     expect(createRepository).toHaveBeenCalledOnce();
   });
 

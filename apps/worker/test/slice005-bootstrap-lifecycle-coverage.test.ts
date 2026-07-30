@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => {
     createVerifier: vi.fn(() => ({ prepareRequest: vi.fn() })),
     createRepository: vi.fn(() => ({ claimNextCommand: vi.fn() })),
     createPipelinePorts: vi.fn(() => ({ kind: "live" })),
-    createRuntime: vi.fn(() => ({ kind: "live", execute: vi.fn() })),
     createHandlers: vi.fn(() => ({})),
     worker: { processOne: vi.fn<() => Promise<boolean>>() },
     createRunWorker: vi.fn(() => ({ processOne: mocks.worker.processOne })),
@@ -30,7 +29,6 @@ vi.mock("@proofline/fdc-coston2", () => ({
 }));
 vi.mock("../src/live-runtime", () => ({
   createLiveCoston2PipelinePorts: mocks.createPipelinePorts,
-  createLiveCoston2Runtime: mocks.createRuntime,
 }));
 vi.mock("../src/worker", () => ({
   createProductionCommandHandlers: mocks.createHandlers,
@@ -46,7 +44,6 @@ function environment(overrides: Record<string, string | undefined> = {}) {
   return {
     NODE_ENV: "production",
     DATABASE_URL: "postgres://proofline.invalid/proofline",
-    PROOFLINE_PROJECT_TOKEN: `project_${"a".repeat(64)}`,
     PROOFLINE_COSTON2_PRIVATE_KEY: `0x${"b".repeat(64)}`,
     PROOFLINE_VERIFIER_API_KEY: "verifier-key",
     PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000",
@@ -83,7 +80,6 @@ describe("Slice 005 production worker configuration", () => {
         pool: mocks.pool,
         verifier: { prepareRequest: vi.fn() },
         createPipelinePorts: mocks.createPipelinePorts as any,
-        createRuntime: mocks.createRuntime as any,
       }),
     ).toThrow(error);
     expect(mocks.createRunWorker).not.toHaveBeenCalled();
@@ -104,7 +100,6 @@ describe("Slice 005 production worker configuration", () => {
         verifier: { prepareRequest: vi.fn() },
         createRepository: mocks.createRepository as any,
         createPipelinePorts: mocks.createPipelinePorts as any,
-        createRuntime: mocks.createRuntime as any,
       }),
     ).toThrow(error);
   });
@@ -118,7 +113,6 @@ describe("Slice 005 production worker configuration", () => {
       pool: mocks.pool,
       verifier: { prepareRequest: vi.fn() },
       createPipelinePorts: mocks.createPipelinePorts as any,
-      createRuntime: mocks.createRuntime as any,
     });
 
     expect(mocks.createRepository).toHaveBeenCalledWith({

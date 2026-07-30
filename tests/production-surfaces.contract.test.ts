@@ -23,10 +23,18 @@ afterEach(async () => {
 });
 
 describe("production Coston2 composition", () => {
-  it("exports a concrete live-only runtime constructor", async () => {
-    const module = await import("../apps/worker/src/live-runtime");
-    expect(module.createLiveCoston2Runtime).toEqual(expect.any(Function));
-    expect(module.createLiveCoston2Runtime({ environment: {} }).kind).toBe("live");
+  it("exports the legacy runtime only from the isolated live-gate surface", async () => {
+    const [pipelineModule, gateRuntimeModule] = await Promise.all([
+      import("../apps/worker/src/live-runtime"),
+      import("../apps/worker/src/live-gate-runtime"),
+    ]);
+    expect(pipelineModule).not.toHaveProperty("createLiveCoston2Runtime");
+    expect(gateRuntimeModule.createLiveCoston2Runtime).toEqual(
+      expect.any(Function),
+    );
+    expect(
+      gateRuntimeModule.createLiveCoston2Runtime({ environment: {} }).kind,
+    ).toBe("live");
   });
 
   it("uses the default live runtime factory when no test seam is supplied", async () => {

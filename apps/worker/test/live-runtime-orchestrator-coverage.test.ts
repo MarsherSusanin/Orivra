@@ -5,7 +5,7 @@ import {
   validDiagnostic,
   validManifest,
 } from "../../../packages/contracts/test/fixtures";
-import { createLiveCoston2Runtime } from "../src/live-runtime";
+import { createLiveCoston2Runtime } from "../src/live-gate-runtime";
 
 const TX_HASH = `0x${"2".repeat(64)}`;
 

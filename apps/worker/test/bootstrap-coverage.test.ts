@@ -1,7 +1,6 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
-import { validManifest } from "../../../packages/contracts/test/fixtures";
 import {
   createProductionWorker,
   runWorkerLoop,
@@ -10,8 +9,6 @@ import {
 function environment(override: Record<string, string | undefined> = {}) {
   return {
     NODE_ENV: "test",
-    PROOFLINE_PROJECT_TOKEN: `project_${"a".repeat(64)}`,
-    PROOFLINE_COSTON2_PRIVATE_KEY: `0x${"b".repeat(64)}`,
     ...override,
   };
 }
@@ -32,11 +29,6 @@ function composition(command: Record<string, unknown>) {
     persistRelayerTransaction: vi.fn(),
     markRelayerBroadcast: vi.fn(),
   };
-  const runtime = {
-    kind: "live" as const,
-    execute: vi.fn(async () => ({ runId: "run_live", consumerVerified: true })),
-  };
-  const createRuntime = vi.fn(() => runtime);
   const createPipelinePorts = vi.fn(() => ({} as any));
   const createRepository = vi.fn(() => repository as any);
   const logger = { info: vi.fn(), error: vi.fn() };
@@ -44,49 +36,61 @@ function composition(command: Record<string, unknown>) {
     environment: environment(),
     pool: {},
     verifier: { prepareRequest: vi.fn() },
-    createRuntime,
     createPipelinePorts,
     createRepository,
     clock: { now: () => "2025-05-15T12:04:11.000Z" },
     logger,
   });
-  return { worker, repository, runtime, logger };
+  return { worker, repository, createPipelinePorts, logger };
 }
 
 describe("production worker bootstrap coverage", () => {
-  it.each([
-    ["project", { PROOFLINE_PROJECT_TOKEN: "" }],
-    ["private key", { PROOFLINE_COSTON2_PRIVATE_KEY: "" }],
-  ])("requires the %s credential", (_label, override) => {
+  it("does not request project-token or execution-private-key credentials", () => {
+    const guardedEnvironment = environment();
+    const credentialReads: string[] = [];
+    for (const name of [
+      "PROOFLINE_PROJECT_TOKEN",
+      "PROOFLINE_COSTON2_PRIVATE_KEY",
+    ]) {
+      Object.defineProperty(guardedEnvironment, name, {
+        enumerable: true,
+        get() {
+          credentialReads.push(name);
+          throw new Error(`Production bootstrap requested ${name}`);
+        },
+      });
+    }
+
     expect(() =>
       createProductionWorker({
-        environment: environment(override),
+        environment: guardedEnvironment,
         pool: {},
         verifier: { prepareRequest: vi.fn() },
-        createRuntime: vi.fn(() => ({ kind: "live", execute: vi.fn() })) as any,
         createPipelinePorts: vi.fn(() => ({})) as any,
-        createRepository: vi.fn(() => ({})) as any,
+        createRepository: vi.fn(() => ({ claimNextCommand: vi.fn() })) as any,
       }),
-    ).toThrow(/required/i);
+    ).not.toThrow();
+    expect(credentialReads).toEqual([]);
   });
 
-  it("executes a live command with validated manifest and injected secrets", async () => {
+  it("never registers the synthetic live command, even in test environment", async () => {
     const fixture = composition({
       id: "command-live",
       kind: "RUN_LIVE_COSTON2",
       runId: "run-1",
-      payload: { manifest: validManifest },
+      payload: {},
     });
     await expect(fixture.worker.processOne()).resolves.toBe(true);
-    expect(fixture.runtime.execute).toHaveBeenCalledWith(
+    expect(fixture.repository.completeCommand).not.toHaveBeenCalled();
+    expect(fixture.repository.retryCommand).toHaveBeenCalledWith(
+      "command-live",
+      "claim-1",
       expect.objectContaining({
-        manifest: validManifest,
-        projectToken: environment().PROOFLINE_PROJECT_TOKEN,
-        privateKey: environment().PROOFLINE_COSTON2_PRIVATE_KEY,
-        timeoutMs: 600_000,
+        category: "configuration",
+        code: "WORKER_HANDLER_MISSING",
+        terminal: true,
       }),
     );
-    expect(fixture.repository.completeCommand).toHaveBeenCalledOnce();
   });
 
   it("rejects a persisted pipeline command without a run id", async () => {
