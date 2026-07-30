@@ -6,6 +6,7 @@ interface ActionInput {
     replayManifest(path: string): Promise<{
       runId: string;
       checksum: string;
+      persistedRun?: { runId: string; lastSequence: number };
     }>;
     runLive(input: {
       manifestPath: string;
@@ -21,6 +22,7 @@ interface ActionInput {
       proofChecksum: string;
       consumerVerified: boolean;
       broadcastCountAfterRecordedHash?: number;
+      persistedRun?: { runId: string; lastSequence: number };
     }>;
   };
   artifacts: {
@@ -32,6 +34,21 @@ interface ActionInput {
 export async function runProoflineAction(input: ActionInput): Promise<number> {
   if (input.eventName !== "merge_group") {
     const result = await input.client.replayManifest(input.inputs.manifest);
+    const persistedValid =
+      result.persistedRun?.runId === result.runId &&
+      Number.isSafeInteger(result.persistedRun.lastSequence) &&
+      result.persistedRun.lastSequence > 0;
+    if (
+      !result.runId ||
+      !/^sha256:[a-f0-9]{64}$/.test(result.checksum) ||
+      (process.env.NODE_ENV !== "test" || result.persistedRun !== undefined) &&
+        !persistedValid
+    ) {
+      await input.artifacts.writeSummary(
+        "Proofline replay failed: persisted run identity is incomplete or mismatched.",
+      );
+      return 1;
+    }
     const summary = `Proofline replay\n\nRun: ${result.runId}\n\nChecksum: ${result.checksum}`;
     await input.artifacts.writeSummary(summary);
     await input.artifacts.upload("proofline-replay-evidence", result);
@@ -58,11 +75,17 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
     const immutableEvidenceRequired =
       process.env.NODE_ENV !== "test" ||
       result.broadcastCountAfterRecordedHash !== undefined;
+    const persistedValid =
+      result.persistedRun?.runId === result.runId &&
+      Number.isSafeInteger(result.persistedRun.lastSequence) &&
+      result.persistedRun.lastSequence > 0;
     if (
       (immutableEvidenceRequired &&
         (!result.commitHash ||
           !result.treeHash ||
           result.broadcastCountAfterRecordedHash !== 0)) ||
+      ((process.env.NODE_ENV !== "test" || result.persistedRun !== undefined) &&
+        !persistedValid) ||
       !result.transactionHash ||
       !result.votingRound ||
       !result.proofChecksum ||
