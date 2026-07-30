@@ -153,22 +153,38 @@ describe("Slice 007 replay command graph coverage", () => {
     const applied = await fixture.handlers.APPLY_REPLAY_EVIDENCE(
       command("APPLY_REPLAY_EVIDENCE"),
     );
-    expect(applied.events.map((event: any) => event.type)).toEqual([
+    const expectedTypes = [
       "REQUEST_SUBMITTED",
       "ROUND_FINALIZED",
       "PROOF_AVAILABLE",
       "PROOF_VERIFIED",
       "CONSUMER_VERIFIED",
-    ]);
+    ];
+    expect(applied.events.map((event: any) => event.type)).toEqual(
+      expectedTypes,
+    );
+    const expectedCommandIds = expectedTypes.map(
+      (type, index) =>
+        `command_apply_replay_evidence:replay:${index + 1}:${type.toLowerCase()}`,
+    );
+    expect(applied.events.map((event: any) => event.commandId)).toEqual(
+      expectedCommandIds,
+    );
+    expect(new Set(expectedCommandIds).size).toBe(expectedCommandIds.length);
     expect(applied.events).toEqual(
-      expect.arrayContaining([
+      expectedTypes.map((type, index) =>
         expect.objectContaining({
+          type,
           runId: TARGET_RUN_ID,
-          commandId: "command_apply_replay_evidence",
+          commandId: expectedCommandIds[index],
           occurredAt: OCCURRED_AT,
         }),
-      ]),
+      ),
     );
+    const retried = await fixture.handlers.APPLY_REPLAY_EVIDENCE(
+      command("APPLY_REPLAY_EVIDENCE"),
+    );
+    expect(retried.events).toEqual(applied.events);
     expect(applied.artifacts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "proof-evidence" }),
