@@ -1,0 +1,12 @@
+name: Proofline Web2Json
+description: Replay a Proofline bundle on pull requests or run Coston2 in merge queue.
+inputs:
+  manifest:
+    description: Path to a Web2JsonManifestV1 JSON file.
+    required: true
+  mode:
+    description: replay, wallet, relayer, or live-coston2.
+    required: false
+runs:
+  using: node20
+  main: dist/index.js
