@@ -109,8 +109,11 @@ function denyIpv6(address: string): boolean {
   // benchmarking, unique-local, link-local, site-local, and multicast denied.
   if ((first & 0xe000) !== 0x2000) return true;
   return (
+    (first === 0x2001 && second === 0x0002) ||
     (first === 0x2001 && second === 0x0db8) ||
     (first === 0x2001 && (second & 0xfff0) === 0x0010) ||
+    (first === 0x2001 && (second & 0xfff0) === 0x0020) ||
+    (first === 0x3fff && (second & 0xf000) === 0) ||
     (first & 0xfe00) === 0xfc00 ||
     (first & 0xffc0) === 0xfe80 ||
     (first & 0xffc0) === 0xfec0 ||

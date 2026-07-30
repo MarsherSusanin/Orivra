@@ -11,6 +11,13 @@ function solidityString(value: string): string {
   return JSON.stringify(value);
 }
 
+function urlSearchParamPair(key: string, value: string): [string, string] {
+  const encoded = new URLSearchParams([[key, value]]).toString();
+  const separator = encoded.indexOf("=");
+  if (separator < 0) throw new Error("URLSearchParams did not encode a value");
+  return [encoded.slice(0, separator), encoded.slice(separator + 1)];
+}
+
 export function generateSafeWeb2JsonConsumer(
   manifestValue: Web2JsonManifestV1,
   options: SafeConsumerOptions,
@@ -21,10 +28,10 @@ export function generateSafeWeb2JsonConsumer(
   }
 
   const queryChecks = Object.entries(manifest.consumer.expectedQuery)
-    .map(
-      ([key, value]) =>
-        `        ProoflineUrlInvariant.requireQueryValue(requestUrl, ${solidityString(key)}, ${solidityString(value)});`,
-    )
+    .map(([key, value]) => {
+      const [encodedKey, encodedValue] = urlSearchParamPair(key, value);
+      return `        ProoflineUrlInvariant.requireQueryValue(requestUrl, ${solidityString(encodedKey)}, ${solidityString(encodedValue)});`;
+    })
     .join("\n");
 
   return `// SPDX-License-Identifier: MIT

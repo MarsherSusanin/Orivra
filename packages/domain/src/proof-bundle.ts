@@ -5,6 +5,7 @@ import {
   type ProofBundleV1,
 } from "@proofline/contracts";
 import { canonicalJson } from "./canonical-json";
+import { generateSafeWeb2JsonConsumer } from "./codegen";
 import { projectRun } from "./run-lifecycle";
 import { sha256Hex } from "./sha256";
 
@@ -13,7 +14,18 @@ function checksumContent(content: unknown): string {
 }
 
 export function createProofBundle(input: ProofBundleContentV1): ProofBundleV1 {
-  const content = ProofBundleContentV1Schema.parse(input);
+  const parsed = ProofBundleContentV1Schema.parse(input);
+  const proofHash = proofResponseHash(parsed.proof.response);
+  const safeConsumerSha256 = generatedSafeConsumerHash(parsed.manifest);
+  const content = ProofBundleContentV1Schema.parse({
+    ...parsed,
+    events: parsed.events.map((event) =>
+      event.type === "PROOF_AVAILABLE"
+        ? { ...event, payload: { proofHash } }
+        : event,
+    ),
+    artifacts: { safeConsumerSha256 },
+  });
   return ProofBundleV1Schema.parse({
     ...content,
     checksum: checksumContent(content),
@@ -51,6 +63,9 @@ export function replayProofBundle(serialized: string): ProofBundleV1 {
 
   if (!verifyProofBundleChecksum(decoded)) {
     throw new Error("Proof bundle checksum mismatch");
+  }
+  if (canonicalJson(decoded) !== serialized) {
+    throw new Error("Proof bundle input bytes are not canonical JSON");
   }
   const bundle = ProofBundleV1Schema.parse(decoded);
   assertSemanticIntegrity(bundle);
@@ -91,6 +106,29 @@ function assertSemanticIntegrity(bundle: ProofBundleV1): void {
     throw new Error("Proof bundle voting round does not match lifecycle evidence");
   }
 
+
+  const proofAvailable = bundle.events.find(
+    (event) => event.type === "PROOF_AVAILABLE",
+  );
+  if (
+    proofAvailable?.type !== "PROOF_AVAILABLE" ||
+    proofAvailable.payload.proofHash.toLowerCase() !==
+      proofResponseHash(bundle.proof.response)
+  ) {
+    throw new Error(
+      "PROOF_AVAILABLE proof hash does not match the bundled proof response",
+    );
+  }
+
+  if (
+    bundle.artifacts.safeConsumerSha256 !==
+    generatedSafeConsumerHash(bundle.manifest)
+  ) {
+    throw new Error(
+      "Generated safe consumer artifact evidence is missing or mismatched",
+    );
+  }
+
   const proofVerification = bundle.events.find(
     (event) => event.type === "PROOF_VERIFIED",
   );
@@ -122,4 +160,23 @@ function assertSemanticIntegrity(bundle: ProofBundleV1): void {
       "Consumer verification result does not match lifecycle evidence",
     );
   }
+}
+
+function proofResponseHash(response: string): string {
+  const hex = response.slice(2);
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  }
+  return `0x${sha256Hex(bytes)}`;
+}
+
+function generatedSafeConsumerHash(
+  manifest: ProofBundleContentV1["manifest"],
+): string {
+  return sha256Hex(
+    generateSafeWeb2JsonConsumer(manifest, {
+      contractName: "ProoflineSafeWeb2JsonConsumer",
+    }),
+  );
 }

@@ -5,6 +5,7 @@ import {
   type RunEventV1,
 } from "@proofline/contracts";
 import {
+  canonicalSerializeProofBundle,
   generateSafeWeb2JsonConsumer,
   projectRun,
   replayProofBundle,
@@ -23,6 +24,18 @@ function requireRunId(value: unknown): string {
     throw Object.assign(new Error("Run id is required"), { status: 400 });
   }
   return value;
+}
+
+function isUniqueViolation(value: unknown): value is {
+  code: "23505";
+  constraint?: string;
+} {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "code" in value &&
+      (value as { code?: unknown }).code === "23505",
+  );
 }
 
 export function createProductionProoflineService(input: {
@@ -128,6 +141,29 @@ export function createProductionProoflineService(input: {
       const manifest = Web2JsonManifestV1Schema.parse(context.manifest);
       const requestFingerprint = fingerprint(manifest);
       const client = await input.pool.connect();
+      const accepted = (runId: string) => ({
+        status: "accepted" as const,
+        runId,
+        location: `/v1/runs/${runId}`,
+      });
+      const reconcile = async () => {
+        const existing = await client.query(
+          `SELECT id, request_fingerprint
+           FROM proofline_private.runs
+           WHERE project_id = $1 AND idempotency_key = $2
+           FOR UPDATE`,
+          [context.projectId, context.idempotencyKey],
+        );
+        if (
+          existing.rowCount === 1 &&
+          Buffer.from(existing.rows[0].request_fingerprint).equals(
+            requestFingerprint,
+          )
+        ) {
+          return accepted(String(existing.rows[0].id));
+        }
+        throw Object.assign(new Error("Idempotency conflict"), { status: 409 });
+      };
       try {
         await client.query("BEGIN");
         const existing = await client.query(
@@ -148,12 +184,7 @@ export function createProductionProoflineService(input: {
             });
           }
           await client.query("COMMIT");
-          const runId = String(existing.rows[0].id);
-          return {
-            status: "accepted",
-            runId,
-            location: `/v1/runs/${runId}`,
-          };
+          return accepted(String(existing.rows[0].id));
         }
 
         const runId = randomUUID();
@@ -203,13 +234,12 @@ export function createProductionProoflineService(input: {
           ],
         );
         await client.query("COMMIT");
-        return {
-          status: "accepted",
-          runId,
-          location: `/v1/runs/${runId}`,
-        };
+        return accepted(runId);
       } catch (cause) {
         await client.query("ROLLBACK");
+        if (isUniqueViolation(cause)) {
+          return await reconcile();
+        }
         throw cause;
       } finally {
         client.release();
@@ -361,8 +391,14 @@ export function createProductionProoflineService(input: {
     },
 
     async replay(context: Record<string, unknown>) {
-      const bundle = replayProofBundle(String(context.bundle ?? ""));
-      return { runId: bundle.runId, byteIdentical: true, checksum: bundle.checksum };
+      const inputBytes = String(context.bundle ?? "");
+      const bundle = replayProofBundle(inputBytes);
+      const replayedBytes = canonicalSerializeProofBundle(bundle);
+      return {
+        runId: bundle.runId,
+        byteIdentical: replayedBytes === inputBytes,
+        checksum: bundle.checksum,
+      };
     },
 
     async createShare(context: Record<string, unknown>) {
