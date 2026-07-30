@@ -195,6 +195,22 @@ describe("diagnostic and bundle defensive branches", () => {
     expect(() => replayProofBundle(canonicalJson(invalidBundle))).toThrow();
   });
 
+  it("rejects an internally ordered journal that belongs to another run", () => {
+    const content = makeBundleInput();
+    const foreignJournal = {
+      ...content,
+      events: content.events.map((event) => ({
+        ...event,
+        runId: "run_foreign_journal",
+      })),
+    };
+    const serialized = canonicalSerializeProofBundle(
+      createProofBundle(foreignJournal),
+    );
+
+    expect(() => replayProofBundle(serialized)).toThrow(/run identity/i);
+  });
+
   it("rejects malformed canonical serialization and emits no query checks for an empty invariant map", () => {
     expect(() =>
       canonicalSerializeProofBundle({
