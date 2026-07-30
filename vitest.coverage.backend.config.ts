@@ -18,10 +18,19 @@ export default defineConfig({
       include: [
         "apps/api/src/app.ts",
         "apps/api/src/postgres.ts",
+        "apps/api/src/production-service.ts",
+        "apps/api/src/bootstrap.ts",
         "apps/worker/src/**/*.ts",
+        "apps/worker/src/bootstrap.ts",
         "packages/action/src/**/*.ts",
         "packages/cli/src/**/*.ts",
         "packages/fdc-coston2/src/**/*.ts",
+      ],
+      exclude: [
+        "apps/api/src/server.ts",
+        "apps/worker/src/entry.ts",
+        "packages/action/src/entry.ts",
+        "packages/cli/src/bin.ts",
       ],
       thresholds: {
         lines: 90,
