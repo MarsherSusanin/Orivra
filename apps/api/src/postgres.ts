@@ -76,7 +76,7 @@ export const POSTGRES_QUERIES = {
       AND lease_token = $2::uuid
       AND status = 'leased'
       AND lease_expires_at > now()
-    RETURNING id
+    RETURNING id, run_id
   `,
   renewLease: `
     UPDATE proofline_private.run_commands
@@ -102,6 +102,12 @@ interface SqlClient {
 
 interface SqlPool {
   connect(): Promise<SqlClient>;
+}
+
+interface RelayerPolicyConfig {
+  globalFeeCapWei: bigint;
+  balanceFloorWei: bigint;
+  dailyProjectQuota: number;
 }
 
 function hexBytes(value: string, bytes?: number): Uint8Array {
@@ -179,8 +185,50 @@ export function createPostgresRunRepository(input: {
   };
 }
 
-export function createPostgresCommandRepository(input: { pool: SqlPool }) {
+export function createPostgresCommandRepository(input: {
+  pool: SqlPool;
+  relayerPolicy?: RelayerPolicyConfig;
+}) {
   return {
+    async loadRelayerPolicy(
+      projectId: string,
+      manifestFeeCapWei: bigint,
+    ) {
+      const policy = input.relayerPolicy;
+      if (!policy) {
+        throw new Error("Relayer policy configuration is required");
+      }
+      if (
+        manifestFeeCapWei < 0n ||
+        policy.globalFeeCapWei < 0n ||
+        policy.balanceFloorWei < 0n ||
+        !Number.isInteger(policy.dailyProjectQuota) ||
+        policy.dailyProjectQuota <= 0
+      ) {
+        throw new Error("Relayer policy configuration is invalid");
+      }
+      const client = await input.pool.connect();
+      try {
+        const used = await client.query(
+          `SELECT count(*)::integer AS used
+           FROM proofline_private.relayer_transactions AS relayer
+           JOIN proofline_private.runs AS run ON run.id = relayer.run_id
+           WHERE run.project_id = $1
+             AND relayer.created_at >= date_trunc('day', now())`,
+          [projectId],
+        );
+        const usedToday = Number(used.rows[0]?.used ?? 0);
+        return {
+          projectFeeCapWei: manifestFeeCapWei,
+          globalFeeCapWei: policy.globalFeeCapWei,
+          quotaRemaining: Math.max(0, policy.dailyProjectQuota - usedToday),
+          balanceFloorWei: policy.balanceFloorWei,
+        };
+      } finally {
+        client.release();
+      }
+    },
+
     async findRelayerTransaction(idempotencyKey: string) {
       const client = await input.pool.connect();
       try {
@@ -233,6 +281,12 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
       rawTransaction: string;
       transactionHash: string;
       commandFingerprint?: string;
+      policy?: {
+        projectFeeCapWei: bigint;
+        globalFeeCapWei: bigint;
+        quotaRemaining: number;
+        balanceFloorWei: bigint;
+      };
     }): Promise<void> {
       if (
         !value.projectId ||
@@ -249,9 +303,73 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
       if (!/^[a-f0-9]{64}$/.test(fingerprint)) {
         throw new Error("Persisted relayer command fingerprint is invalid");
       }
+      if (
+        value.policy &&
+        (value.policy.projectFeeCapWei < value.valueWei ||
+          value.policy.globalFeeCapWei < value.valueWei ||
+          !Number.isInteger(value.policy.quotaRemaining) ||
+          value.policy.quotaRemaining <= 0 ||
+          value.policy.balanceFloorWei < 0n)
+      ) {
+        throw new Error("Persisted relayer policy rejects this transaction");
+      }
+      const matches = (row: Record<string, unknown> | undefined) =>
+        Boolean(
+          row &&
+            String(row.run_id) === value.runId &&
+            Number(row.chain_id) === value.chainId &&
+            BigInt(String(row.nonce)) === value.nonce &&
+            bytesHex(row.target_address).toLowerCase() ===
+              value.target.toLowerCase() &&
+            Buffer.from(row.calldata_hash as Uint8Array).equals(
+              Buffer.from(digestHexBytes(value.calldata)),
+            ) &&
+            Buffer.from(row.command_fingerprint as Uint8Array).toString("hex") ===
+              fingerprint &&
+            BigInt(String(row.value_wei)) === value.valueWei &&
+            bytesHex(row.raw_signed_transaction).toLowerCase() ===
+              value.rawTransaction.toLowerCase() &&
+            bytesHex(row.transaction_hash).toLowerCase() ===
+              value.transactionHash.toLowerCase(),
+        );
       const client = await input.pool.connect();
       try {
         await client.query("BEGIN");
+        if (value.policy && input.relayerPolicy) {
+          await client.query(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+            [value.projectId],
+          );
+        }
+        const prior = await client.query(
+          `SELECT run_id, chain_id, nonce, target_address, calldata_hash,
+                  command_fingerprint, value_wei, raw_signed_transaction,
+                  transaction_hash
+           FROM proofline_private.relayer_transactions
+           WHERE idempotency_key = $1`,
+          [value.idempotencyKey],
+        );
+        if (prior.rows[0]) {
+          if (!matches(prior.rows[0])) {
+            throw new Error("Persisted relayer idempotency identity conflict");
+          }
+          await client.query("COMMIT");
+          return;
+        }
+        if (value.policy && input.relayerPolicy) {
+          const usage = await client.query(
+            `SELECT count(*)::integer AS used
+             FROM proofline_private.relayer_transactions AS relayer
+             JOIN proofline_private.runs AS run ON run.id = relayer.run_id
+             WHERE run.project_id = $1
+               AND relayer.created_at >= date_trunc('day', now())`,
+            [value.projectId],
+          );
+          const usedToday = Number(usage.rows[0]?.used ?? 0);
+          if (usedToday >= input.relayerPolicy.dailyProjectQuota) {
+            throw new Error("Relayer quota is exhausted");
+          }
+        }
         const inserted = await client.query(
           `INSERT INTO proofline_private.relayer_transactions
             (id, run_id, idempotency_key, chain_id, from_address, nonce,
@@ -284,25 +402,7 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
              WHERE idempotency_key = $1`,
             [value.idempotencyKey],
           );
-          const row = existing.rows[0];
-          const same =
-            row &&
-            String(row.run_id) === value.runId &&
-            Number(row.chain_id) === value.chainId &&
-            BigInt(String(row.nonce)) === value.nonce &&
-            bytesHex(row.target_address).toLowerCase() ===
-              value.target.toLowerCase() &&
-            Buffer.from(row.calldata_hash as Uint8Array).equals(
-              Buffer.from(digestHexBytes(value.calldata)),
-            ) &&
-            Buffer.from(row.command_fingerprint as Uint8Array).toString("hex") ===
-              fingerprint &&
-            BigInt(String(row.value_wei)) === value.valueWei &&
-            bytesHex(row.raw_signed_transaction).toLowerCase() ===
-              value.rawTransaction.toLowerCase() &&
-            bytesHex(row.transaction_hash).toLowerCase() ===
-              value.transactionHash.toLowerCase();
-          if (!same) {
+          if (!matches(existing.rows[0])) {
             throw new Error("Persisted relayer idempotency identity conflict");
           }
         } else {
@@ -597,6 +697,7 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
     ): Promise<void> {
       const client = await input.pool.connect();
       try {
+        await client.query("BEGIN");
         const result = await client.query(POSTGRES_QUERIES.retryCommand, [
           commandId,
           claimToken,
@@ -606,6 +707,24 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
         if (result.rowCount !== 1) {
           throw new Error("Command lease is stale; retry rejected");
         }
+        const runId = result.rows[0]?.run_id;
+        if (failure.terminal === true && typeof runId === "string") {
+          await client.query(
+            `UPDATE proofline_private.runs
+             SET projection = COALESCE(projection, '{}'::jsonb)
+                   || jsonb_build_object(
+                        'terminal', true,
+                        'terminalFailure', $2::jsonb
+                      ),
+                 updated_at = now()
+             WHERE id = $1`,
+            [runId, JSON.stringify(failure)],
+          );
+        }
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
       } finally {
         client.release();
       }

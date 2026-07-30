@@ -207,9 +207,11 @@ GRANT INSERT ON proofline_private.run_events,
     proofline_private.relayer_transactions,
     proofline_private.relayer_audit_events
     TO proofline_worker;
+GRANT UPDATE (broadcast_at)
+    ON proofline_private.relayer_transactions
+    TO proofline_worker;
 GRANT UPDATE ON proofline_private.runs,
-    proofline_private.run_commands,
-    proofline_private.relayer_transactions
+    proofline_private.run_commands
     TO proofline_worker;
 
 COMMIT;

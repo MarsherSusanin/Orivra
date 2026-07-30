@@ -70,8 +70,13 @@ function safeFailure(cause: unknown, commandId: string): Record<string, unknown>
     const source = cause as Record<string, unknown>;
     return redactEvidence({
       category: source.category,
+      ...(typeof source.code === "string" ? { code: source.code } : {}),
       retryable: source.retryable === true,
       message: source.message ?? "Worker command failed",
+      evidence:
+        source.evidence && typeof source.evidence === "object"
+          ? source.evidence
+          : {},
       commandId,
     }) as Record<string, unknown>;
   }
@@ -88,12 +93,22 @@ export function createRunWorker(input: {
     error(value: unknown): void;
   };
   adapters?: Record<string, { kind: string }>;
+  maxAttempts?: number;
+  leaseHeartbeatMs?: number;
 }) {
   validateWorkerComposition({
     environment: input.environment,
     mode: input.mode,
     adapters: input.adapters ?? {},
   });
+  const maxAttempts = input.maxAttempts ?? 8;
+  const leaseHeartbeatMs = input.leaseHeartbeatMs ?? 10_000;
+  if (!Number.isInteger(maxAttempts) || maxAttempts <= 0) {
+    throw new Error("Worker maxAttempts must be a positive integer");
+  }
+  if (!Number.isFinite(leaseHeartbeatMs) || leaseHeartbeatMs <= 0) {
+    throw new Error("Worker leaseHeartbeatMs must be positive");
+  }
 
   return {
     async processOne(): Promise<boolean> {
@@ -116,6 +131,8 @@ export function createRunWorker(input: {
         return true;
       }
 
+      let heartbeat: ReturnType<typeof setInterval> | undefined;
+      let heartbeatFailure: unknown;
       try {
         if (input.repository.renewLease) {
           await input.repository.renewLease(
@@ -123,8 +140,20 @@ export function createRunWorker(input: {
             claimed.claimToken,
             "30 seconds",
           );
+          heartbeat = setInterval(() => {
+            void Promise.resolve(
+              input.repository.renewLease?.(
+                claimed.command.id,
+                claimed.claimToken,
+                "30 seconds",
+              ),
+            ).catch((cause) => {
+                heartbeatFailure ??= cause;
+            });
+          }, leaseHeartbeatMs);
         }
         const result = await handler(claimed.command);
+        if (heartbeatFailure) throw heartbeatFailure;
         await input.repository.completeCommand(
           claimed.command.id,
           claimed.claimToken,
@@ -135,7 +164,29 @@ export function createRunWorker(input: {
           commandId: claimed.command.id,
         });
       } catch (cause) {
-        const failure = safeFailure(cause, claimed.command.id);
+        const normalized = safeFailure(cause, claimed.command.id);
+        const attempts = claimed.command.attempts ?? 1;
+        const exhausted =
+          normalized.retryable === true && attempts >= maxAttempts;
+        const failure = exhausted
+          ? {
+              ...normalized,
+              code: "COMMAND_RETRY_EXHAUSTED",
+              retryable: false,
+              terminal: true,
+              evidence: {
+                ...(normalized.evidence &&
+                typeof normalized.evidence === "object"
+                  ? (normalized.evidence as Record<string, unknown>)
+                  : {}),
+                ...(typeof normalized.code === "string"
+                  ? { originalCode: normalized.code }
+                  : {}),
+              },
+            }
+          : normalized.retryable === false
+            ? { ...normalized, terminal: true }
+            : normalized;
         await input.repository.retryCommand(
           claimed.command.id,
           claimed.claimToken,
@@ -145,6 +196,8 @@ export function createRunWorker(input: {
           event: "WORKER_COMMAND_FAILED",
           ...failure,
         });
+      } finally {
+        if (heartbeat) clearInterval(heartbeat);
       }
       return true;
     },
@@ -187,6 +240,14 @@ interface PersistedRelayerTransaction {
   projectId?: string;
   runId?: string;
   broadcastAt?: string | null;
+  policy?: RelayerPolicy;
+}
+
+interface RelayerPolicy {
+  projectFeeCapWei: bigint;
+  globalFeeCapWei: bigint;
+  quotaRemaining: number;
+  balanceFloorWei: bigint;
 }
 
 function sha256HexBytes(value: string): string {
@@ -207,20 +268,41 @@ function assertRelayerIdentity(
     calldata: string;
     valueWei: bigint;
   },
+  requireFingerprint: boolean,
 ): void {
   const calldataMatches = persisted.calldata
     ? sameHex(persisted.calldata, expected.calldata)
     : persisted.calldataHash === sha256HexBytes(expected.calldata);
+  const fingerprint = relayerFingerprint(expected);
   if (
     persisted.chainId !== 114 ||
     persisted.idempotencyKey !== expected.idempotencyKey ||
     (persisted.runId !== undefined && persisted.runId !== expected.runId) ||
     !sameHex(persisted.target, expected.target) ||
     !calldataMatches ||
-    persisted.valueWei !== expected.valueWei
+    persisted.valueWei !== expected.valueWei ||
+    (requireFingerprint && persisted.commandFingerprint !== fingerprint)
   ) {
     throw new Error("Persisted relayer command identity conflict");
   }
+}
+
+function relayerFingerprint(value: {
+  runId: string;
+  idempotencyKey: string;
+  target: string;
+  calldata: string;
+  valueWei: bigint;
+}): string {
+  const canonical = JSON.stringify({
+    runId: value.runId,
+    idempotencyKey: value.idempotencyKey,
+    chainId: 114,
+    target: value.target.toLowerCase(),
+    calldata: value.calldata.toLowerCase(),
+    valueWei: value.valueWei.toString(),
+  });
+  return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
 }
 
 interface ProductionPipelineRepository {
@@ -234,6 +316,10 @@ interface ProductionPipelineRepository {
     idempotencyKey: string,
     transactionHash: string,
   ): Promise<unknown>;
+  loadRelayerPolicy?(
+    projectId: string,
+    manifestFeeCapWei: bigint,
+  ): Promise<RelayerPolicy>;
 }
 
 interface ProductionPipelinePorts {
@@ -257,6 +343,8 @@ interface ProductionPipelinePorts {
   }>;
   signRelayerTransaction(input: Record<string, unknown>): Promise<PersistedRelayerTransaction>;
   broadcastRawTransaction(rawTransaction: string): Promise<string>;
+  deriveTransactionHash?(rawTransaction: string): string;
+  resolveRecordedTransaction?(transactionHash: string): Promise<boolean>;
   observeWalletTransaction(input: Record<string, unknown>): Promise<{
     transactionHash: string;
     chainId: number;
@@ -410,6 +498,36 @@ function preflightEvidence(context: RunExecutionContext) {
   }>(context, "preflight-evidence");
 }
 
+function persistedRelayerPolicy(context: RunExecutionContext): RelayerPolicy | null {
+  const found = [...context.artifacts]
+    .reverse()
+    .find((item) => item.kind === "relayer-policy");
+  if (!found) return null;
+  const value = JSON.parse(decoder.decode(artifactBytes(found))) as Record<
+    string,
+    unknown
+  >;
+  const projectFeeCapWei = BigInt(String(value.projectFeeCapWei ?? "-1"));
+  const globalFeeCapWei = BigInt(String(value.globalFeeCapWei ?? "-1"));
+  const quotaRemaining = Number(value.quotaRemaining);
+  const balanceFloorWei = BigInt(String(value.balanceFloorWei ?? "-1"));
+  if (
+    projectFeeCapWei < 0n ||
+    globalFeeCapWei < 0n ||
+    !Number.isInteger(quotaRemaining) ||
+    quotaRemaining < 0 ||
+    balanceFloorWei < 0n
+  ) {
+    throw new Error("Persisted relayer policy evidence is invalid");
+  }
+  return {
+    projectFeeCapWei,
+    globalFeeCapWei,
+    quotaRemaining,
+    balanceFloorWei,
+  };
+}
+
 /**
  * Assemble export bytes exclusively from the append-only journal and immutable
  * artifacts. Artifact metadata is deliberately ignored because it may contain
@@ -524,6 +642,12 @@ export function createProductionCommandHandlers(input: {
         quotedFeeWei: prepared.quotedFeeWei.toString(),
         network: prepared.network,
       };
+      const relayerPolicy = input.repository.loadRelayerPolicy
+        ? await input.repository.loadRelayerPolicy(
+            context.projectId,
+            BigInt(context.manifest.submission.feeCapWei),
+          )
+        : null;
       return {
         events: [
           event(
@@ -538,7 +662,20 @@ export function createProductionCommandHandlers(input: {
             input.clock.now(),
           ),
         ],
-        artifacts: [artifact(context.runId, "preflight-evidence", evidence)],
+        artifacts: [
+          artifact(context.runId, "preflight-evidence", evidence),
+          ...(relayerPolicy
+            ? [
+                artifact(context.runId, "relayer-policy", {
+                  version: "1",
+                  projectFeeCapWei: relayerPolicy.projectFeeCapWei.toString(),
+                  globalFeeCapWei: relayerPolicy.globalFeeCapWei.toString(),
+                  quotaRemaining: relayerPolicy.quotaRemaining,
+                  balanceFloorWei: relayerPolicy.balanceFloorWei.toString(),
+                }),
+              ]
+            : []),
+        ],
         nextCommands: [],
       };
     },
@@ -556,6 +693,7 @@ export function createProductionCommandHandlers(input: {
         calldata: preflight.requestCalldata,
         valueWei: BigInt(preflight.quotedFeeWei),
       };
+      const policy = persistedRelayerPolicy(context);
       let persisted = await input.repository.findRelayerTransaction(
         idempotencyKey,
       );
@@ -569,16 +707,18 @@ export function createProductionCommandHandlers(input: {
           calldata: expected.calldata,
           valueWei: expected.valueWei,
           manifest: context.manifest,
+          ...(policy ? { policy } : {}),
         });
-        assertRelayerIdentity(persisted, expected);
+        assertRelayerIdentity(persisted, expected, policy !== null);
         await input.repository.persistRelayerTransaction({
           ...persisted,
           projectId: context.projectId,
           runId: context.runId,
           idempotencyKey,
+          ...(policy ? { policy } : {}),
         });
       }
-      assertRelayerIdentity(persisted, expected);
+      assertRelayerIdentity(persisted, expected, policy !== null);
       return {
         nextCommands: [
           child(context, "BROADCAST_RELAYER_TRANSACTION", {
@@ -595,12 +735,39 @@ export function createProductionCommandHandlers(input: {
         idempotencyKey,
       );
       if (!persisted) throw new Error("Persisted signed relayer transaction is required");
-      if (!persisted.broadcastAt) {
-        const reportedHash = await input.ports.broadcastRawTransaction(
+      const preflight = preflightEvidence(context);
+      const expected = {
+        runId: context.runId,
+        idempotencyKey,
+        target: preflight.network.resolvedContracts.FdcHub,
+        calldata: preflight.requestCalldata,
+        valueWei: BigInt(preflight.quotedFeeWei),
+      };
+      const policy = persistedRelayerPolicy(context);
+      assertRelayerIdentity(persisted, expected, policy !== null);
+      if (policy && input.ports.deriveTransactionHash) {
+        const derivedHash = input.ports.deriveTransactionHash(
           persisted.rawTransaction,
         );
-        if (!sameHex(reportedHash, persisted.transactionHash)) {
-          throw new Error("Broadcast transaction hash mismatch");
+        if (!sameHex(derivedHash, persisted.transactionHash)) {
+          throw new Error(
+            "Raw signed transaction hash does not match persisted identity",
+          );
+        }
+      }
+      if (!persisted.broadcastAt) {
+        const alreadyRecorded = input.ports.resolveRecordedTransaction
+          ? await input.ports.resolveRecordedTransaction(
+              persisted.transactionHash,
+            )
+          : false;
+        if (!alreadyRecorded) {
+          const reportedHash = await input.ports.broadcastRawTransaction(
+            persisted.rawTransaction,
+          );
+          if (!sameHex(reportedHash, persisted.transactionHash)) {
+            throw new Error("Broadcast transaction hash mismatch");
+          }
         }
         await input.repository.markRelayerBroadcast(
           idempotencyKey,
@@ -671,8 +838,21 @@ export function createProductionCommandHandlers(input: {
 
     async POLL_TRANSACTION_RECEIPT(command) {
       const context = await load(command);
-      if (hasEvent(context, "ROUND_FINALIZED")) {
-        return { nextCommands: [child(context, "POLL_RELAY_FINALIZATION")] };
+      const persistedReceipt = [...context.artifacts]
+        .reverse()
+        .find((item) => item.kind === "receipt-evidence");
+      if (persistedReceipt) {
+        const evidence = JSON.parse(
+          decoder.decode(artifactBytes(persistedReceipt)),
+        ) as { votingRound: number; protocolId: number };
+        return {
+          nextCommands: [
+            child(context, "POLL_RELAY_FINALIZATION", {
+              votingRound: evidence.votingRound,
+              protocolId: evidence.protocolId,
+            }),
+          ],
+        };
       }
       const receipt = await input.ports.getTransactionReceipt({
         transactionHash: command.payload.transactionHash,
@@ -694,15 +874,7 @@ export function createProductionCommandHandlers(input: {
         protocolId: voting.protocolId,
       };
       return {
-        events: [
-          event(
-            context,
-            command,
-            "ROUND_FINALIZED",
-            { votingRound: Number(votingRound) },
-            input.clock.now(),
-          ),
-        ],
+        events: [],
         artifacts: [artifact(context.runId, "receipt-evidence", evidence)],
         nextCommands: [
           child(context, "POLL_RELAY_FINALIZATION", {
@@ -715,30 +887,42 @@ export function createProductionCommandHandlers(input: {
 
     async POLL_RELAY_FINALIZATION(command) {
       const context = await load(command);
-      const round = context.events.find((item) => item.type === "ROUND_FINALIZED");
-      if (round?.type !== "ROUND_FINALIZED") {
-        throw new Error("Voting round evidence is required before Relay polling");
-      }
-      const receipt = artifactValue<{ protocolId: number }>(
+      const receipt = artifactValue<{
+        votingRound: number;
+        protocolId: number;
+      }>(
         context,
         "receipt-evidence",
       );
       const finalized = await input.ports.isRelayFinalized({
-        votingRound: round.payload.votingRound,
+        votingRound: receipt.votingRound,
         protocolId: receipt.protocolId,
         runId: context.runId,
       });
       if (!finalized) {
         throw Object.assign(new Error("Relay voting round is not finalized"), {
           category: "not-finalized",
+          code: "RELAY_FINALIZATION_PENDING",
           retryable: true,
+          evidence: { votingRound: receipt.votingRound },
         });
       }
       return {
+        events: hasEvent(context, "ROUND_FINALIZED")
+          ? []
+          : [
+              event(
+                context,
+                command,
+                "ROUND_FINALIZED",
+                { votingRound: receipt.votingRound },
+                input.clock.now(),
+              ),
+            ],
         artifacts: [
           artifact(context.runId, "relay-evidence", {
             version: "1",
-            votingRound: round.payload.votingRound,
+            votingRound: receipt.votingRound,
             protocolId: receipt.protocolId,
             finalized: true,
           }),
