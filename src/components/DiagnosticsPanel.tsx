@@ -1,29 +1,70 @@
 import { CaretRight, Warning } from "@phosphor-icons/react";
+import type { RunDiagnosticView } from "../services/run-surface";
 
-export function DiagnosticsPanel({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+const defaultDiagnostic: RunDiagnosticView = {
+  code: "CONSUMER_INVARIANT_MISSING",
+  severity: "warning",
+  confidence: "high",
+  summary: "Missing consumer host invariant",
+  evidence: {
+    detail: "Proof request host is api.example.com; the consumer has no matching assertion.",
+  },
+  remediation: "The consumer verifies the proof but does not enforce the expected source host.",
+};
+
+function sentenceCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function evidenceText(value: Record<string, unknown> | undefined): string {
+  if (!value) return "No additional evidence was returned.";
+  const detail = value.detail;
+  if (typeof detail === "string") return detail;
+  return Object.entries(value)
+    .map(([key, item]) => `${key}: ${typeof item === "string" ? item : JSON.stringify(item)}`)
+    .join(" ");
+}
+
+export function DiagnosticsPanel({
+  expanded,
+  onToggle,
+  diagnostics,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  diagnostics?: readonly RunDiagnosticView[];
+}) {
+  const diagnostic = diagnostics === undefined ? defaultDiagnostic : diagnostics[0];
   return (
     <aside className="diagnostics" aria-labelledby="diagnostics-title">
       <p className="section-label" id="diagnostics-title">Diagnostics</p>
-      <section className="diagnostic-card">
+      {diagnostic ? <section className="diagnostic-card">
         <div className="diagnostic-heading">
           <Warning className="warning-icon" size={44} aria-hidden="true" />
-          <h2>Missing consumer host invariant</h2>
+          <h2>{diagnostic.summary}</h2>
         </div>
         <dl className="diagnostic-summary">
-          <div><dt>Severity</dt><dd><span className="warning-badge">Warning</span></dd></div>
-          <div><dt>Confidence</dt><dd className="warning-value">High</dd></div>
+          <div><dt>Severity</dt><dd><span className="warning-badge">{sentenceCase(diagnostic.severity)}</span></dd></div>
+          <div><dt>Confidence</dt><dd className="warning-value">{sentenceCase(diagnostic.confidence)}</dd></div>
         </dl>
-        <p className="diagnostic-copy">The consumer verifies the proof but does not enforce the expected source host.</p>
+        <p className="diagnostic-copy">{diagnostic.remediation ?? "Review the evidence and enforce the expected consumer invariant."}</p>
         {expanded ? (
           <div className="diagnostic-evidence" role="region" aria-label="Diagnostic evidence">
-            <code>CONSUMER_INVARIANT_MISSING</code>
-            <p>Proof request host is api.example.com; the consumer has no matching assertion.</p>
+            <code>{diagnostic.code}</code>
+            <p>{evidenceText(diagnostic.evidence)}</p>
           </div>
         ) : null}
         <button className="details-button" type="button" aria-expanded={expanded} onClick={onToggle}>
           {expanded ? "Hide details" : "View details"}<CaretRight size={17} weight="bold" aria-hidden="true" />
         </button>
-      </section>
+      </section> : (
+        <section className="diagnostic-card diagnostic-clear" aria-label="No consumer diagnostics">
+          <div className="diagnostic-heading">
+            <h2>No invariant findings</h2>
+          </div>
+          <p className="diagnostic-copy">The consumer verification completed without diagnostics.</p>
+        </section>
+      )}
     </aside>
   );
 }

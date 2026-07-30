@@ -1,19 +1,26 @@
 import { ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass } from "@phosphor-icons/react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { EvidenceStrip } from "./components/EvidenceStrip";
+import { ProjectTokenDialog } from "./components/ProjectTokenDialog";
 import { RunTimeline } from "./components/RunTimeline";
 import { Sidebar } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { VerificationDialog } from "./components/VerificationDialog";
-import { initialRunStages } from "./data/run";
+import {
+  initialRunStages,
+  timelineFromProjection,
+  type EvidenceItem,
+} from "./data/run";
 import {
   createLiveSurfaceServices,
   createTestSurfaceServices,
+  type HydratedRunView,
   type RunSurfaceServices,
 } from "./services/run-surface";
 
 const COCKPIT_RUN_ID = "run_01JYXW5ZC6K9JSGG0TQ7V8N3PH";
+const PROJECT_TOKEN_KEY = "proofline:project-token";
 
 export type AppProps = {
   runId?: string;
@@ -23,10 +30,67 @@ export type AppProps = {
 
 function sessionProjectToken(): string {
   try {
-    return globalThis.sessionStorage?.getItem("proofline:project-token") ?? "";
+    return globalThis.sessionStorage?.getItem(PROJECT_TOKEN_KEY) ?? "";
   } catch {
     return "";
   }
+}
+
+function deepRouteRunId(): string | null {
+  const match = /^\/runs\/([^/]+)\/?$/.exec(globalThis.location?.pathname ?? "");
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function displayNetwork(value: string | undefined): string {
+  if (!value) return "Coston2";
+  return value.toLowerCase() === "coston2" ? "Coston2" : value;
+}
+
+function displayStartedAt(value: string | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  const month = date.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  return `${month} ${date.getUTCDate()}, ${date.getUTCFullYear()} ${date
+    .toISOString()
+    .slice(11, 19)} UTC`;
+}
+
+function shortHash(value: string): string {
+  return value.length > 22 ? `${value.slice(0, 8)}…${value.slice(-8)}` : value;
+}
+
+function evidenceFromRun(run: HydratedRunView): EvidenceItem[] {
+  const evidence = run.evidence;
+  return [
+    {
+      label: "Transaction hash",
+      value: evidence.transactionHash ? shortHash(evidence.transactionHash) : "—",
+      rawValue: evidence.transactionHash,
+      kind: evidence.transactionHash ? "copy" : undefined,
+    },
+    { label: "Voting round", value: evidence.votingRound ?? "—" },
+    { label: "Fee", value: evidence.fee ?? "—" },
+    { label: "Elapsed time", value: evidence.elapsed ?? "—" },
+    {
+      label: "Explorer",
+      value: evidence.explorerUrl ? "View on Blockscout" : "—",
+      kind: evidence.explorerUrl ? "external" : undefined,
+      href: evidence.explorerUrl,
+    },
+  ];
+}
+
+function safeHydrationError(cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : "Run hydration failed";
+  return message
+    .replace(/(?:project|share)_[a-f0-9]{64}/gi, "[REDACTED]")
+    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]");
 }
 
 export function App({ runId, projectToken, services }: AppProps = {}) {
@@ -35,8 +99,15 @@ export function App({ runId, projectToken, services }: AppProps = {}) {
   const [bundleState, setBundleState] = useState<"idle" | "running" | "verified" | "error">("idle");
   const [bundleSource, setBundleSource] = useState<string | null>(null);
   const [bundleError, setBundleError] = useState("");
+  const [sessionToken, setSessionToken] = useState(
+    () => projectToken ?? sessionProjectToken(),
+  );
+  const [hydratedRun, setHydratedRun] = useState<HydratedRunView | null>(null);
+  const [hydrationError, setHydrationError] = useState("");
+  const [hydrationRevision, setHydrationRevision] = useState(0);
   const verifyTrigger = useRef<HTMLButtonElement>(null);
-  const resolvedToken = projectToken ?? sessionProjectToken();
+  const [routeRunId] = useState(deepRouteRunId);
+  const resolvedToken = projectToken ?? sessionToken;
   const servicePort = useMemo(() => {
     if (services) return services;
     if (import.meta.env.MODE === "test") return createTestSurfaceServices();
@@ -45,9 +116,57 @@ export function App({ runId, projectToken, services }: AppProps = {}) {
       projectToken: resolvedToken,
     });
   }, [resolvedToken, services]);
+  const [resumedRun] = useState(() => servicePort.resume?.() ?? null);
   const [activeRunId] = useState(
-    () => runId ?? servicePort.resume?.()?.runId ?? COCKPIT_RUN_ID,
+    () => runId ?? routeRunId ?? resumedRun?.runId ?? COCKPIT_RUN_ID,
   );
+  const shouldHydrate = Boolean(
+    servicePort.hydrateRun &&
+    resolvedToken &&
+    (runId || routeRunId || resumedRun?.runId),
+  );
+
+  useEffect(() => {
+    if (!shouldHydrate || !servicePort.hydrateRun) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+    const load = async (after: number) => {
+      try {
+        const run = await servicePort.hydrateRun!({
+          runId: activeRunId,
+          projectToken: resolvedToken,
+          after,
+        });
+        if (cancelled) return;
+        setHydratedRun(run);
+        setHydrationError("");
+        if (!run.terminal) {
+          timer = globalThis.setTimeout(() => void load(run.sequence), 1_500);
+        }
+      } catch (cause) {
+        if (cancelled) return;
+        setHydrationError(safeHydrationError(cause));
+      }
+    };
+
+    void load(hydrationRevision === 0 ? 0 : (hydratedRun?.sequence ?? 0));
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) globalThis.clearTimeout(timer);
+    };
+  // `hydratedRun` is intentionally read as the cursor without making each response restart the effect.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRunId, hydrationRevision, resolvedToken, servicePort, shouldHydrate]);
+
+  const connectProject = (token: string) => {
+    try {
+      globalThis.sessionStorage?.setItem(PROJECT_TOKEN_KEY, token);
+    } catch {
+      // The in-memory token still permits the current session in privacy-restricted browsers.
+    }
+    setSessionToken(token);
+  };
 
   const closeVerification = () => {
     setVerificationOpen(false);
@@ -74,25 +193,41 @@ export function App({ runId, projectToken, services }: AppProps = {}) {
     }
   };
 
+  const title = hydratedRun?.title ?? "ETH/USD snapshot";
+  const attestationType = hydratedRun?.attestationType ?? "Web2Json";
+  const network = displayNetwork(hydratedRun?.network);
+  const startedAt = hydratedRun
+    ? displayStartedAt(hydratedRun.startedAt)
+    : "May 15, 2025 12:04:11 UTC";
+  const timeline = hydratedRun
+    ? timelineFromProjection(hydratedRun.stages, hydratedRun.stageDetails)
+    : initialRunStages;
+  const consumerFailed = hydratedRun?.stages.consumer === "failed";
+  const evidence = useMemo(
+    () => hydratedRun ? evidenceFromRun(hydratedRun) : undefined,
+    [hydratedRun],
+  );
+
   return (
     <div className="app-shell">
       <Sidebar />
       <div className="shell-main">
-        <Topbar />
+        <Topbar title={title} network={network} attestationType={attestationType} />
         <main className="run-layout" id="run">
           <section className="run-primary" aria-labelledby="run-title">
             <header className="run-heading">
               <span className="section-label">Run detail</span>
-              <h1 id="run-title">ETH/USD snapshot</h1>
-              <p>Attestation: <strong>Web2Json</strong><span aria-hidden="true">•</span>Network: <strong>Coston2</strong><span aria-hidden="true">•</span>Started: May 15, 2025 12:04:11 UTC</p>
+              <h1 id="run-title">{title}</h1>
+              <p>Attestation: <strong>{attestationType}</strong><span aria-hidden="true">•</span>Network: <strong>{network}</strong><span aria-hidden="true">•</span>Started: {startedAt}</p>
+              {hydrationError ? <span className="hydration-error" role="alert">{hydrationError}</span> : null}
             </header>
-            <RunTimeline stages={initialRunStages} />
+            <RunTimeline stages={timeline} />
             <section className="next-action" aria-labelledby="next-action-title">
               <span className="next-action-icon" aria-hidden="true"><FileMagnifyingGlass size={51} /></span>
               <div className="next-action-content">
                 <h2 id="next-action-title">Proof is ready.</h2>
                 <p>Verify your consumer contract before consuming the attestation.</p>
-                <button ref={verifyTrigger} className="verify-button" type="button" onClick={() => setVerificationOpen(true)}>Verify consumer<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
+                <button ref={verifyTrigger} className="verify-button" type="button" onClick={() => setVerificationOpen(true)}>{consumerFailed ? "Retry verification" : "Verify consumer"}<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
                 <div className="action-footer">
                   <span>Next step: Verify consumer invariants and enforcement.</span>
                   {bundleState === "verified" && bundleSource ? (
@@ -114,8 +249,8 @@ export function App({ runId, projectToken, services }: AppProps = {}) {
               </div>
             </section>
           </section>
-          <DiagnosticsPanel expanded={diagnosticExpanded} onToggle={() => setDiagnosticExpanded((value) => !value)} />
-          <EvidenceStrip />
+          <DiagnosticsPanel diagnostics={hydratedRun?.diagnostics} expanded={diagnosticExpanded} onToggle={() => setDiagnosticExpanded((value) => !value)} />
+          <EvidenceStrip items={evidence} />
         </main>
       </div>
       {verificationOpen ? (
@@ -123,7 +258,11 @@ export function App({ runId, projectToken, services }: AppProps = {}) {
           context={{ runId: activeRunId, projectToken: resolvedToken }}
           services={servicePort}
           onClose={closeVerification}
+          onVerified={() => setHydrationRevision((value) => value + 1)}
         />
+      ) : null}
+      {routeRunId && !resolvedToken ? (
+        <ProjectTokenDialog onConnect={connectProject} />
       ) : null}
     </div>
   );

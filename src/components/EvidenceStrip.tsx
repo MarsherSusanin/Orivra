@@ -1,27 +1,31 @@
 import { ArrowSquareOut, Check, Copy } from "@phosphor-icons/react";
 import { useState } from "react";
-import { evidenceItems } from "../data/run";
+import { evidenceItems, type EvidenceItem } from "../data/run";
 
-export function EvidenceStrip() {
+export function EvidenceStrip({ items = evidenceItems }: { items?: readonly EvidenceItem[] }) {
   const [copied, setCopied] = useState(false);
-  const copyHash = async () => {
-    await navigator.clipboard?.writeText("0x9f3e0000000000000000000000007ab2c1d4");
+  const copyHash = async (value: string) => {
+    await navigator.clipboard?.writeText(value);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
   };
   return (
     <section className="evidence-strip" aria-label="Run evidence">
-      {evidenceItems.map((item) => (
+      {items.map((item) => (
         <div className="evidence-item" key={item.label}>
           <span className="evidence-label">{item.label}</span>
           <span className="evidence-value">
             {item.value}
             {item.kind === "copy" ? (
-              <button className="icon-button" type="button" onClick={copyHash} aria-label="Copy transaction hash">
+              <button className="icon-button" type="button" onClick={() => copyHash(item.rawValue ?? item.value)} aria-label="Copy transaction hash">
                 {copied ? <Check size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />}
               </button>
             ) : null}
-            {item.kind === "external" ? <ArrowSquareOut size={18} aria-hidden="true" /> : null}
+            {item.kind === "external" && item.href ? (
+              <a className="evidence-link" href={item.href} target="_blank" rel="noreferrer" aria-label="View transaction on Blockscout">
+                <ArrowSquareOut size={18} aria-hidden="true" />
+              </a>
+            ) : item.kind === "external" ? <ArrowSquareOut size={18} aria-hidden="true" /> : null}
           </span>
         </div>
       ))}

@@ -20,10 +20,12 @@ export function VerificationDialog({
   context,
   services,
   onClose,
+  onVerified,
 }: {
   context: RunServiceContext;
   services: RunSurfaceServices;
   onClose: () => void;
+  onVerified?: () => void;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -70,6 +72,7 @@ export function VerificationDialog({
       const nextResult = await services.verifyConsumer(context);
       setResult(nextResult);
       setStatus("complete");
+      onVerified?.();
     } catch (cause) {
       setError(safeError(cause));
       setStatus("error");

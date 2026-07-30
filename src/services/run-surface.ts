@@ -1,4 +1,5 @@
 import { createRunClient } from "./run-client";
+import type { ProjectionStages, RunStage } from "../data/run";
 
 export type VerificationCheck = {
   label: string;
@@ -21,11 +22,49 @@ export type RunServiceContext = {
   projectToken: string;
 };
 
+export type HydrateRunContext = RunServiceContext & {
+  after: number;
+};
+
+export type RunDiagnosticView = {
+  code: string;
+  severity: "info" | "warning" | "error";
+  confidence: "low" | "medium" | "high";
+  summary: string;
+  evidence?: Record<string, unknown>;
+  remediation?: string;
+};
+
+export type RunEvidenceView = {
+  transactionHash?: string;
+  votingRound?: string;
+  fee?: string;
+  elapsed?: string;
+  explorerUrl?: string;
+};
+
+export type HydratedRunView = {
+  runId: string;
+  title: string;
+  attestationType?: string;
+  network?: string;
+  startedAt?: string;
+  sequence: number;
+  terminal: boolean;
+  stages: ProjectionStages;
+  stageDetails?: Partial<
+    Record<keyof ProjectionStages, Pick<RunStage, "time" | "duration">>
+  >;
+  diagnostics: RunDiagnosticView[];
+  evidence: RunEvidenceView;
+};
+
 export interface RunSurfaceServices {
   verifyConsumer(context: RunServiceContext): Promise<ConsumerVerificationResult>;
   generateConsumer(context: RunServiceContext): Promise<GeneratedConsumer>;
   exportBundle(context: RunServiceContext): Promise<string>;
   replayBundle(bundle: string): Promise<{ byteIdentical: boolean }>;
+  hydrateRun?(context: HydrateRunContext): Promise<HydratedRunView>;
   resume?(): { runId: string; after: number } | null;
 }
 
@@ -57,10 +96,11 @@ function diagnosticCodes(value: unknown): string[] {
   });
 }
 
-function consumerCompleted(run: Record<string, unknown>): boolean {
+function consumerTerminal(run: Record<string, unknown>): boolean {
   const stages = run.stages;
   if (!stages || typeof stages !== "object") return false;
-  return (stages as Record<string, unknown>).consumer === "completed";
+  const consumer = (stages as Record<string, unknown>).consumer;
+  return consumer === "completed" || consumer === "failed";
 }
 
 function resultFromRun(run: Record<string, unknown>): ConsumerVerificationResult {
@@ -83,6 +123,196 @@ function resultFromRun(run: Record<string, unknown>): ConsumerVerificationResult
       };
 }
 
+const projectionStageNames = [
+  "preflight",
+  "request",
+  "round",
+  "proof",
+  "verify",
+  "consumer",
+] as const;
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function projectionStages(value: unknown): ProjectionStages {
+  const record = objectValue(value);
+  const allowed = new Set(["completed", "active", "pending", "failed"]);
+  return Object.fromEntries(
+    projectionStageNames.map((name) => {
+      const state = record?.[name];
+      return [name, typeof state === "string" && allowed.has(state) ? state : "pending"];
+    }),
+  ) as ProjectionStages;
+}
+
+function diagnosticsFrom(value: unknown): RunDiagnosticView[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate) => {
+    const diagnostic = objectValue(candidate);
+    const code = stringValue(diagnostic?.code);
+    const summary = stringValue(diagnostic?.summary);
+    if (!diagnostic || !code || !summary) return [];
+    const severity = diagnostic.severity;
+    const confidence = diagnostic.confidence;
+    return [{
+      code,
+      summary,
+      severity:
+        severity === "info" || severity === "warning" || severity === "error"
+          ? severity
+          : "warning",
+      confidence:
+        confidence === "low" || confidence === "medium" || confidence === "high"
+          ? confidence
+          : "medium",
+      evidence: objectValue(diagnostic.evidence) ?? undefined,
+      remediation: stringValue(diagnostic.remediation),
+    }];
+  });
+}
+
+function eventRecords(values: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(values)) return [];
+  const records: Record<string, unknown>[] = [];
+  for (const value of values) {
+    const record = objectValue(value);
+    if (record) records.push(record);
+  }
+  return records;
+}
+
+function eventPayload(event: Record<string, unknown> | undefined): Record<string, unknown> {
+  return objectValue(event?.payload) ?? {};
+}
+
+function eventOfType(events: readonly Record<string, unknown>[], type: string) {
+  return events.find((event) => event.type === type);
+}
+
+function formatWei(value: unknown): string | undefined {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return undefined;
+  const padded = value.padStart(19, "0");
+  const whole = padded.slice(0, -18);
+  const fraction = padded.slice(-18).replace(/0+$/, "").slice(0, 6);
+  return `${whole}${fraction ? `.${fraction}` : ""} ETH`;
+}
+
+function formatClock(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const instant = new Date(value);
+  if (!Number.isFinite(instant.getTime())) return undefined;
+  return instant.toISOString().slice(11, 19);
+}
+
+function formatDuration(milliseconds: number): string {
+  const seconds = Math.max(0, Math.round(milliseconds / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes > 0 ? `${minutes}m ${remainder}s` : `${seconds}s`;
+}
+
+function stageDetailsFrom(events: readonly Record<string, unknown>[]) {
+  const eventTypes = [
+    "RUN_CREATED",
+    "REQUEST_SUBMITTED",
+    "ROUND_FINALIZED",
+    "PROOF_AVAILABLE",
+    "PROOF_VERIFIED",
+    "CONSUMER_VERIFIED",
+  ] as const;
+  const result: HydratedRunView["stageDetails"] = {};
+  let priorTime: number | undefined;
+  for (let index = 0; index < projectionStageNames.length; index += 1) {
+    const event = eventOfType(events, eventTypes[index]);
+    const occurredAt = stringValue(event?.occurredAt);
+    if (!occurredAt) continue;
+    const timestamp = new Date(occurredAt).getTime();
+    result[projectionStageNames[index]] = {
+      time: formatClock(occurredAt) ?? "—",
+      duration:
+        priorTime === undefined || !Number.isFinite(timestamp)
+          ? "—"
+          : formatDuration(timestamp - priorTime),
+    };
+    if (Number.isFinite(timestamp)) priorTime = timestamp;
+  }
+  return result;
+}
+
+function titleFrom(run: Record<string, unknown>, events: readonly Record<string, unknown>[]) {
+  const explicit = stringValue(run.title);
+  if (explicit) return explicit;
+  const manifest = objectValue(eventPayload(eventOfType(events, "RUN_CREATED")).manifest);
+  const consumer = objectValue(manifest?.consumer);
+  const host = stringValue(consumer?.expectedHost);
+  return host ? `Web2Json · ${host}` : "Web2Json run";
+}
+
+function hydrateView(
+  runId: string,
+  run: Record<string, unknown>,
+  events: readonly Record<string, unknown>[],
+): HydratedRunView {
+  const created = eventOfType(events, "RUN_CREATED");
+  const manifest = objectValue(eventPayload(created).manifest);
+  const submission = eventPayload(eventOfType(events, "REQUEST_SUBMITTED"));
+  const round = eventPayload(eventOfType(events, "ROUND_FINALIZED"));
+  const preflight = eventPayload(eventOfType(events, "PREFLIGHT_ACCEPTED"));
+  const runEvidence = objectValue(run.evidence) ?? {};
+  const transactionHash =
+    stringValue(runEvidence.transactionHash) ?? stringValue(submission.transactionHash);
+  const startedAt = stringValue(run.startedAt) ?? stringValue(created?.occurredAt);
+  const lastOccurredAt = stringValue(events.at(-1)?.occurredAt);
+  const elapsed = (() => {
+    const explicit = stringValue(runEvidence.elapsed);
+    if (explicit) return explicit;
+    if (!startedAt || !lastOccurredAt) return undefined;
+    const duration = new Date(lastOccurredAt).getTime() - new Date(startedAt).getTime();
+    return Number.isFinite(duration) ? formatDuration(duration) : undefined;
+  })();
+  const diagnostics = diagnosticsFrom(run.diagnostics);
+  const consumerEventDiagnostics = diagnosticsFrom(
+    eventPayload(eventOfType(events, "CONSUMER_VERIFIED")).diagnostics,
+  );
+  return {
+    runId,
+    title: titleFrom(run, events),
+    attestationType:
+      stringValue(run.attestationType) ?? stringValue(manifest?.attestationType),
+    network: stringValue(run.network) ?? stringValue(manifest?.network),
+    startedAt,
+    sequence:
+      typeof run.sequence === "number" && Number.isSafeInteger(run.sequence)
+        ? run.sequence
+        : events.length,
+    terminal: run.terminal === true,
+    stages: projectionStages(run.stages),
+    stageDetails: stageDetailsFrom(events),
+    diagnostics: diagnostics.length > 0 ? diagnostics : consumerEventDiagnostics,
+    evidence: {
+      transactionHash,
+      votingRound:
+        stringValue(runEvidence.votingRound) ??
+        (typeof round.votingRound === "number" ? String(round.votingRound) : undefined),
+      fee: stringValue(runEvidence.fee) ?? formatWei(preflight.quotedFeeWei),
+      elapsed,
+      explorerUrl:
+        stringValue(runEvidence.explorerUrl) ??
+        (transactionHash
+          ? `https://coston2-explorer.flare.network/tx/${transactionHash}`
+          : undefined),
+    },
+  };
+}
+
 export function createLiveSurfaceServices(input: {
   baseUrl: string;
   projectToken: string;
@@ -93,6 +323,7 @@ export function createLiveSurfaceServices(input: {
     projectToken: input.projectToken,
     storage: input.storage,
   });
+  const eventsByRun = new Map<string, Record<string, unknown>[]>();
 
   function assertContext(context: RunServiceContext): void {
     if (!input.projectToken || context.projectToken !== input.projectToken) {
@@ -111,7 +342,7 @@ export function createLiveSurfaceServices(input: {
 
       for (let attempt = 0; attempt < 12; attempt += 1) {
         const run = await client.getRun(context.runId);
-        if (consumerCompleted(run)) return resultFromRun(run);
+        if (consumerTerminal(run)) return resultFromRun(run);
         await delay(500);
       }
       throw new Error("Consumer verification timed out; the run is still available for retry");
@@ -130,6 +361,29 @@ export function createLiveSurfaceServices(input: {
     async replayBundle(bundle) {
       const result = await client.replay(bundle, commandKey("replay-bundle"));
       return { byteIdentical: result.byteIdentical };
+    },
+
+    async hydrateRun(context) {
+      assertContext(context);
+      const cached = eventsByRun.get(context.runId) ?? [];
+      const cachedAfter = Number(cached.at(-1)?.sequence ?? 0);
+      const after = cachedAfter >= context.after ? context.after : 0;
+      const [run, incremental] = await Promise.all([
+        client.getRun(context.runId),
+        client.events(context.runId, after),
+      ]);
+      const merged = new Map<number, Record<string, unknown>>(
+        cached.map((event) => [Number(event.sequence), event]),
+      );
+      for (const event of eventRecords(incremental.events)) {
+        const sequence = Number(event.sequence);
+        if (Number.isSafeInteger(sequence) && sequence > 0) merged.set(sequence, event);
+      }
+      const events = [...merged.values()].sort(
+        (left, right) => Number(left.sequence) - Number(right.sequence),
+      );
+      eventsByRun.set(context.runId, events);
+      return hydrateView(context.runId, run, events);
     },
 
     resume: () => client.resume(),

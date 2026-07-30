@@ -403,6 +403,12 @@ a {
   box-shadow: 0 0 0 4px rgba(45, 200, 243, 0.07);
 }
 
+.is-failed .stage-node {
+  color: var(--amber);
+  border-color: var(--amber);
+  box-shadow: 0 0 0 4px rgba(244, 186, 8, 0.07);
+}
+
 .stage-status {
   margin-top: 32px;
   color: var(--muted);
@@ -415,6 +421,10 @@ a {
 
 .is-active .stage-status {
   color: var(--cyan);
+}
+
+.is-failed .stage-status {
+  color: var(--amber);
 }
 
 .stage-meta {
@@ -560,6 +570,13 @@ a {
   text-align: center;
 }
 
+.hydration-error {
+  display: block;
+  margin-top: 12px;
+  color: var(--amber);
+  font-size: 13px;
+}
+
 .diagnostics {
   min-width: 0;
   overflow-y: auto;
@@ -578,6 +595,20 @@ a {
   border: 1px solid var(--amber-border);
   border-radius: var(--radius-md);
   background: rgba(56, 46, 10, 0.15);
+}
+
+.diagnostic-clear {
+  border-color: rgba(85, 215, 120, 0.52);
+  background: rgba(85, 215, 120, 0.045);
+}
+
+.diagnostic-clear h2 {
+  color: var(--green);
+}
+
+.diagnostic-clear .diagnostic-copy {
+  margin-top: 22px;
+  border-bottom: 0;
 }
 
 .diagnostic-heading {
@@ -745,6 +776,19 @@ a {
   outline: none;
 }
 
+.evidence-link {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--cyan);
+}
+
+.evidence-link:hover,
+.evidence-link:focus-visible {
+  color: #fff;
+  outline: none;
+}
+
 .dialog-backdrop {
   position: fixed;
   z-index: 100;
@@ -807,6 +851,42 @@ a {
 
 .dialog-body {
   padding: 24px 26px 28px;
+}
+
+.project-token-dialog {
+  width: min(520px, 100%);
+}
+
+.project-lock {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--cyan);
+  border: 1px solid rgba(45, 200, 243, 0.32);
+  border-radius: 50%;
+  background: rgba(45, 200, 243, 0.05);
+}
+
+.project-token-form > p:first-child {
+  margin: 0 0 22px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.project-token-field {
+  margin-bottom: 18px;
+}
+
+.project-token-field svg {
+  color: var(--cyan);
+}
+
+.project-token-error {
+  margin: -7px 0 16px;
+  color: var(--amber);
+  font-size: 13px;
 }
 
 .field-label {
