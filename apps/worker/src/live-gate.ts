@@ -5,9 +5,9 @@ import {
   createLiveCoston2Runtime,
   type LiveGateEvidence,
   type LiveGateRuntime,
-} from "./live-runtime";
+} from "./live-gate-runtime";
 
-export type { LiveGateEvidence, LiveGateRuntime } from "./live-runtime";
+export type { LiveGateEvidence, LiveGateRuntime } from "./live-gate-runtime";
 
 export interface LiveGateInput {
   projectToken: string;

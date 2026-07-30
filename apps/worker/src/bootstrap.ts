@@ -46,10 +46,6 @@ export function createProductionWorker(input: {
   environment: Environment;
   pool: any;
   verifier: { prepareRequest(input: unknown): Promise<unknown> };
-  createRuntime?(input: { environment: Environment }): {
-    kind: "live";
-    execute(input: Record<string, unknown>): Promise<unknown>;
-  };
   createPipelinePorts?: typeof createLiveCoston2PipelinePorts;
   createRepository?: typeof createPostgresCommandRepository;
   clock?: { now(): string };
@@ -100,7 +96,6 @@ export function createProductionWorker(input: {
       );
     },
   };
-  const compatibilityRuntime = input.createRuntime?.({ environment });
   const rawPipelineHandlers = createProductionCommandHandlers({
     repository,
     ports: pipelinePorts,
@@ -120,28 +115,6 @@ export function createProductionWorker(input: {
       },
     ]),
   );
-  if (environment.NODE_ENV === "test" && compatibilityRuntime) {
-    const projectToken = Object.entries(environment).find(([name]) =>
-      name.endsWith("PROJECT_TOKEN"),
-    )?.[1]?.trim();
-    const privateKey = Object.entries(environment).find(([name]) =>
-      name.endsWith("PRIVATE_KEY"),
-    )?.[1]?.trim();
-    if (!projectToken || !privateKey) {
-      throw new Error("Legacy test credentials are required by the test adapter");
-    }
-    pipelineHandlers[["RUN", "LIVE", "COSTON2"].join("_")] = async (
-      command,
-    ) =>
-      compatibilityRuntime.execute({
-        manifest: command.payload.manifest,
-        ["project" + "Token"]: projectToken,
-        ["private" + "Key"]: privateKey,
-        verifier: input.verifier,
-        timeoutMs: 600_000,
-      });
-  }
-
   return createRunWorker({
     environment: environment.NODE_ENV ?? "production",
     mode: "live",
@@ -157,7 +130,7 @@ export function createProductionWorker(input: {
       10_000,
     ),
     adapters: {
-      coston2: compatibilityRuntime ?? { kind: "live" },
+      coston2: { kind: "live" },
       pipeline: { kind: "live" },
     },
     logger: input.logger ?? {
