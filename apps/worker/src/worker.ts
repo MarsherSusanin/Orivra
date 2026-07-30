@@ -178,11 +178,46 @@ interface PersistedRelayerTransaction {
   commandFingerprint?: string;
   chainId: number;
   target: string;
-  calldata: string;
+  calldata?: string;
+  calldataHash?: string;
   valueWei: bigint;
   fromAddress?: string;
   runId?: string;
   broadcastAt?: string | null;
+}
+
+function sha256HexBytes(value: string): string {
+  if (!/^0x(?:[0-9a-fA-F]{2})+$/.test(value)) {
+    throw new Error("Expected canonical hexadecimal calldata");
+  }
+  return createHash("sha256")
+    .update(Buffer.from(value.slice(2), "hex"))
+    .digest("hex");
+}
+
+function assertRelayerIdentity(
+  persisted: PersistedRelayerTransaction,
+  expected: {
+    runId: string;
+    idempotencyKey: string;
+    target: string;
+    calldata: string;
+    valueWei: bigint;
+  },
+): void {
+  const calldataMatches = persisted.calldata
+    ? sameHex(persisted.calldata, expected.calldata)
+    : persisted.calldataHash === sha256HexBytes(expected.calldata);
+  if (
+    persisted.chainId !== 114 ||
+    persisted.idempotencyKey !== expected.idempotencyKey ||
+    (persisted.runId !== undefined && persisted.runId !== expected.runId) ||
+    !sameHex(persisted.target, expected.target) ||
+    !calldataMatches ||
+    persisted.valueWei !== expected.valueWei
+  ) {
+    throw new Error("Persisted relayer command identity conflict");
+  }
 }
 
 interface ProductionPipelineRepository {
@@ -510,27 +545,36 @@ export function createProductionCommandHandlers(input: {
       const idempotencyKey = String(
         command.payload.idempotencyKey ?? command.id,
       );
+      const preflight = preflightEvidence(context);
+      const expected = {
+        runId: context.runId,
+        idempotencyKey,
+        target: preflight.network.resolvedContracts.FdcHub,
+        calldata: preflight.requestCalldata,
+        valueWei: BigInt(preflight.quotedFeeWei),
+      };
       let persisted = await input.repository.findRelayerTransaction(
         idempotencyKey,
       );
       if (!persisted) {
-        const preflight = preflightEvidence(context);
         persisted = await input.ports.signRelayerTransaction({
           runId: context.runId,
           projectId: context.projectId,
           idempotencyKey,
           chainId: 114,
-          target: preflight.network.resolvedContracts.FdcHub,
-          calldata: preflight.requestCalldata,
-          valueWei: BigInt(preflight.quotedFeeWei),
+          target: expected.target,
+          calldata: expected.calldata,
+          valueWei: expected.valueWei,
           manifest: context.manifest,
         });
+        assertRelayerIdentity(persisted, expected);
         await input.repository.persistRelayerTransaction({
           ...persisted,
           runId: context.runId,
           idempotencyKey,
         });
       }
+      assertRelayerIdentity(persisted, expected);
       return {
         nextCommands: [
           child(context, "BROADCAST_RELAYER_TRANSACTION", {

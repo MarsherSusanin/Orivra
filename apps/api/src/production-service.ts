@@ -30,29 +30,96 @@ export function createProductionProoflineService(input: {
   tokenDigestKey: string;
   publicWebOrigin: string;
 }) {
-  async function enqueue(context: Record<string, unknown>, kind: string) {
+  async function loadOwnedRun(context: Record<string, unknown>) {
     const runId = requireRunId(context.runId);
-    await input.pool.query(
+    const result = await input.pool.query(
+      `SELECT id, project_id, manifest, projection, last_sequence
+       FROM proofline_private.runs
+       WHERE id = $1 AND project_id = $2`,
+      [runId, context.projectId],
+    );
+    if (!result.rowCount) {
+      throw Object.assign(new Error("Run not found"), { status: 404 });
+    }
+    return {
+      ...result.rows[0],
+      id: runId,
+      manifest: Web2JsonManifestV1Schema.parse(result.rows[0].manifest),
+    };
+  }
+
+  async function findCommandIntent(
+    projectId: unknown,
+    idempotencyKey: unknown,
+  ) {
+    const result = await input.pool.query(
+      `SELECT project_id, run_id, idempotency_key, kind, payload
+       FROM proofline_private.run_commands
+       WHERE project_id = $1 AND idempotency_key = $2`,
+      [projectId, idempotencyKey],
+    );
+    return result.rows[0] as Record<string, unknown> | undefined;
+  }
+
+  function sameIntent(
+    existing: Record<string, unknown>,
+    runId: string,
+    kind: string,
+    payload: Record<string, unknown>,
+  ): boolean {
+    return (
+      String(existing.run_id) === runId &&
+      String(existing.kind) === kind &&
+      JSON.stringify(existing.payload ?? {}) === JSON.stringify(payload)
+    );
+  }
+
+  async function enqueue(
+    context: Record<string, unknown>,
+    kind: string,
+    payload: Record<string, unknown> = {},
+  ) {
+    const owned = await loadOwnedRun(context);
+    const runId = String(owned.id);
+    const existing = await findCommandIntent(
+      context.projectId,
+      context.idempotencyKey,
+    );
+    if (existing) {
+      if (!sameIntent(existing, runId, kind, payload)) {
+        throw Object.assign(new Error("Idempotency key command intent conflict"), {
+          status: 409,
+        });
+      }
+      return { accepted: true, runId };
+    }
+
+    const inserted = await input.pool.query(
       `INSERT INTO proofline_private.run_commands
         (id, project_id, run_id, idempotency_key, kind, payload)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-       ON CONFLICT (project_id, idempotency_key) DO NOTHING`,
+       ON CONFLICT (project_id, idempotency_key) DO NOTHING
+       RETURNING project_id, run_id, idempotency_key, kind, payload`,
       [
         randomUUID(),
         context.projectId,
         runId,
         context.idempotencyKey,
         kind,
-        JSON.stringify(
-          Object.fromEntries(
-            Object.entries(context).filter(
-              ([key]) =>
-                !["projectId", "runId", "idempotencyKey"].includes(key),
-            ),
-          ),
-        ),
+        JSON.stringify(payload),
       ],
     );
+    if (!inserted.rowCount) {
+      const raced = await findCommandIntent(
+        context.projectId,
+        context.idempotencyKey,
+      );
+      if (!raced || !sameIntent(raced, runId, kind, payload)) {
+        throw Object.assign(new Error("Idempotency key command intent conflict"), {
+          status: 409,
+        });
+      }
+    }
     return { accepted: true, runId };
   }
 
@@ -183,14 +250,76 @@ export function createProductionProoflineService(input: {
       };
     },
 
-    createSubmission(context: Record<string, unknown>) {
-      return enqueue(context, `SUBMIT_${String(context.mode ?? "relayer").toUpperCase()}`);
+    async createSubmission(context: Record<string, unknown>) {
+      const mode = String(context.mode ?? "relayer");
+      if (mode === "wallet") {
+        const runId = requireRunId(context.runId);
+        const result = await input.pool.query(
+          `SELECT run.id, run.project_id, run.manifest,
+                  artifact.kind, artifact.canonical_bytes, artifact.metadata
+           FROM proofline_private.run_artifacts AS artifact
+           JOIN proofline_private.runs AS run ON run.id = artifact.run_id
+           WHERE run.id = $1 AND run.project_id = $2
+             AND artifact.kind = 'preflight-evidence'
+           ORDER BY artifact.created_at DESC
+           LIMIT 1`,
+          [runId, context.projectId],
+        );
+        if (!result.rowCount) {
+          throw Object.assign(new Error("Run or preflight evidence not found"), {
+            status: 404,
+          });
+        }
+        const row = result.rows[0];
+        const evidence = JSON.parse(
+          Buffer.from(row.canonical_bytes).toString("utf8"),
+        ) as Record<string, unknown>;
+        const chainId = Number(evidence.chainId ?? 114);
+        const fdcHub = String(
+          evidence.fdcHub ??
+            (evidence.network as any)?.resolvedContracts?.FdcHub ??
+            "",
+        );
+        const requestCalldata = String(evidence.requestCalldata ?? "");
+        const quotedFeeWei = BigInt(String(evidence.quotedFeeWei ?? "-1"));
+        if (
+          chainId !== 114 ||
+          !/^0x[0-9a-fA-F]{40}$/.test(fdcHub) ||
+          !/^0x(?:[0-9a-fA-F]{2})+$/.test(requestCalldata) ||
+          quotedFeeWei < 0n
+        ) {
+          throw Object.assign(new Error("Persisted preflight evidence is invalid"), {
+            status: 409,
+          });
+        }
+        return {
+          mode: "wallet",
+          transaction: {
+            chainId: "0x72",
+            to: fdcHub,
+            data: requestCalldata,
+            value: `0x${quotedFeeWei.toString(16)}`,
+          },
+        };
+      }
+      if (mode !== "relayer") {
+        throw Object.assign(new Error("Unsupported submission mode"), {
+          status: 400,
+        });
+      }
+      return enqueue(context, "SUBMIT_RELAYER", {
+        idempotencyKey: context.idempotencyKey,
+      });
     },
     attachTransaction(context: Record<string, unknown>) {
-      return enqueue(context, "ATTACH_WALLET_TRANSACTION");
+      return enqueue(context, "ATTACH_WALLET_TRANSACTION", {
+        transactionHash: context.transactionHash,
+      });
     },
     verifyConsumer(context: Record<string, unknown>) {
-      return enqueue(context, "VERIFY_CONSUMER");
+      return enqueue(context, "VERIFY_CONSUMER", {
+        ...(context.consumer ? { consumer: context.consumer } : {}),
+      });
     },
 
     async generateConsumer(context: Record<string, unknown>) {
@@ -237,8 +366,9 @@ export function createProductionProoflineService(input: {
     },
 
     async createShare(context: Record<string, unknown>) {
+      const owned = await loadOwnedRun(context);
+      const runId = String(owned.id);
       const raw = `share_${randomBytes(32).toString("hex")}`;
-      const runId = requireRunId(context.runId);
       await input.pool.query(
         `INSERT INTO proofline_private.share_tokens
           (id, project_id, run_id, token_digest, expires_at)

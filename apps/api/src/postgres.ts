@@ -1,6 +1,10 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { appendRunEvents, projectRun } from "@proofline/domain";
-import { RunEventV1Schema, type RunEventV1 } from "@proofline/contracts";
+import {
+  RunEventV1Schema,
+  Web2JsonManifestV1Schema,
+  type RunEventV1,
+} from "@proofline/contracts";
 
 export function digestOpaqueToken(rawToken: string, digestKey: string): Uint8Array {
   return new Uint8Array(
@@ -74,6 +78,16 @@ export const POSTGRES_QUERIES = {
       AND lease_expires_at > now()
     RETURNING id
   `,
+  renewLease: `
+    UPDATE proofline_private.run_commands
+    SET lease_expires_at = now() + $3::interval,
+        updated_at = now()
+    WHERE id = $1
+      AND lease_token = $2::uuid
+      AND status = 'leased'
+      AND lease_expires_at > now()
+    RETURNING id
+  `,
 } as const;
 
 interface QueryResult {
@@ -88,6 +102,23 @@ interface SqlClient {
 
 interface SqlPool {
   connect(): Promise<SqlClient>;
+}
+
+function hexBytes(value: string, bytes?: number): Uint8Array {
+  const pattern = bytes
+    ? new RegExp(`^0x[0-9a-fA-F]{${bytes * 2}}$`)
+    : /^0x(?:[0-9a-fA-F]{2})+$/;
+  if (!pattern.test(value)) throw new Error("Expected canonical hexadecimal bytes");
+  return new Uint8Array(Buffer.from(value.slice(2), "hex"));
+}
+
+function bytesHex(value: unknown): string {
+  if (!(value instanceof Uint8Array)) throw new Error("Expected persisted bytes");
+  return `0x${Buffer.from(value).toString("hex")}`;
+}
+
+function digestHexBytes(value: string): Uint8Array {
+  return new Uint8Array(createHash("sha256").update(hexBytes(value)).digest());
 }
 
 async function appendEventInTransaction(
@@ -150,6 +181,246 @@ export function createPostgresRunRepository(input: {
 
 export function createPostgresCommandRepository(input: { pool: SqlPool }) {
   return {
+    async findRelayerTransaction(idempotencyKey: string) {
+      const client = await input.pool.connect();
+      try {
+        const result = await client.query(
+          `SELECT run_id, idempotency_key, chain_id, from_address, nonce,
+                  target_address, calldata_hash, value_wei,
+                  raw_signed_transaction, transaction_hash,
+                  command_fingerprint, broadcast_at
+           FROM proofline_private.relayer_transactions
+           WHERE idempotency_key = $1`,
+          [idempotencyKey],
+        );
+        const row = result.rows[0];
+        if (!row) return null;
+        return {
+          runId: String(row.run_id),
+          idempotencyKey: String(row.idempotency_key),
+          chainId: Number(row.chain_id),
+          fromAddress: bytesHex(row.from_address),
+          nonce: BigInt(String(row.nonce)),
+          target: bytesHex(row.target_address),
+          calldataHash: Buffer.from(
+            row.calldata_hash as Uint8Array,
+          ).toString("hex"),
+          valueWei: BigInt(String(row.value_wei)),
+          rawTransaction: bytesHex(row.raw_signed_transaction),
+          transactionHash: bytesHex(row.transaction_hash),
+          commandFingerprint: `sha256:${Buffer.from(
+            row.command_fingerprint as Uint8Array,
+          ).toString("hex")}`,
+          broadcastAt: row.broadcast_at
+            ? new Date(String(row.broadcast_at)).toISOString()
+            : null,
+        };
+      } finally {
+        client.release();
+      }
+    },
+
+    async persistRelayerTransaction(value: {
+      runId?: string;
+      idempotencyKey: string;
+      chainId: number;
+      fromAddress?: string;
+      nonce: bigint;
+      target: string;
+      calldata: string;
+      valueWei: bigint;
+      rawTransaction: string;
+      transactionHash: string;
+      commandFingerprint?: string;
+    }): Promise<void> {
+      if (!value.runId || !value.fromAddress || !value.commandFingerprint) {
+        throw new Error("Persisted relayer identity is incomplete");
+      }
+      if (value.chainId !== 114 || value.valueWei < 0n || value.nonce < 0n) {
+        throw new Error("Persisted relayer chain identity is invalid");
+      }
+      const fingerprint = value.commandFingerprint.replace(/^sha256:/, "");
+      if (!/^[a-f0-9]{64}$/.test(fingerprint)) {
+        throw new Error("Persisted relayer command fingerprint is invalid");
+      }
+      const client = await input.pool.connect();
+      try {
+        const inserted = await client.query(
+          `INSERT INTO proofline_private.relayer_transactions
+            (id, run_id, idempotency_key, chain_id, from_address, nonce,
+             target_address, calldata_hash, command_fingerprint, value_wei,
+             raw_signed_transaction, transaction_hash)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           ON CONFLICT (idempotency_key) DO NOTHING
+           RETURNING id`,
+          [
+            randomUUID(),
+            value.runId,
+            value.idempotencyKey,
+            value.chainId,
+            hexBytes(value.fromAddress, 20),
+            value.nonce.toString(),
+            hexBytes(value.target, 20),
+            digestHexBytes(value.calldata),
+            new Uint8Array(Buffer.from(fingerprint, "hex")),
+            value.valueWei.toString(),
+            hexBytes(value.rawTransaction),
+            hexBytes(value.transactionHash, 32),
+          ],
+        );
+        if (inserted.rowCount !== 1) {
+          const existing = await client.query(
+            `SELECT run_id, chain_id, nonce, target_address, calldata_hash,
+                    command_fingerprint, value_wei, raw_signed_transaction,
+                    transaction_hash
+             FROM proofline_private.relayer_transactions
+             WHERE idempotency_key = $1`,
+            [value.idempotencyKey],
+          );
+          const row = existing.rows[0];
+          const same =
+            row &&
+            String(row.run_id) === value.runId &&
+            Number(row.chain_id) === value.chainId &&
+            BigInt(String(row.nonce)) === value.nonce &&
+            bytesHex(row.target_address).toLowerCase() ===
+              value.target.toLowerCase() &&
+            Buffer.from(row.calldata_hash as Uint8Array).equals(
+              Buffer.from(digestHexBytes(value.calldata)),
+            ) &&
+            Buffer.from(row.command_fingerprint as Uint8Array).toString("hex") ===
+              fingerprint &&
+            BigInt(String(row.value_wei)) === value.valueWei &&
+            bytesHex(row.raw_signed_transaction).toLowerCase() ===
+              value.rawTransaction.toLowerCase() &&
+            bytesHex(row.transaction_hash).toLowerCase() ===
+              value.transactionHash.toLowerCase();
+          if (!same) {
+            throw new Error("Persisted relayer idempotency identity conflict");
+          }
+        }
+      } finally {
+        client.release();
+      }
+    },
+
+    async markRelayerBroadcast(
+      idempotencyKey: string,
+      transactionHash: string,
+    ): Promise<void> {
+      const client = await input.pool.connect();
+      try {
+        const result = await client.query(
+          `UPDATE proofline_private.relayer_transactions
+           SET broadcast_at = now()
+           WHERE idempotency_key = $1
+             AND transaction_hash = $2
+             AND broadcast_at IS NULL
+           RETURNING id`,
+          [idempotencyKey, hexBytes(transactionHash, 32)],
+        );
+        if (result.rowCount !== 1) {
+          const existing = await client.query(
+            `SELECT transaction_hash, broadcast_at
+             FROM proofline_private.relayer_transactions
+             WHERE idempotency_key = $1`,
+            [idempotencyKey],
+          );
+          const row = existing.rows[0];
+          if (
+            !row?.broadcast_at ||
+            bytesHex(row.transaction_hash).toLowerCase() !==
+              transactionHash.toLowerCase()
+          ) {
+            throw new Error("Relayer broadcast marker identity conflict");
+          }
+        }
+      } finally {
+        client.release();
+      }
+    },
+
+    async loadRunExecutionContext(runId: string) {
+      const client = await input.pool.connect();
+      try {
+        await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+        const run = await client.query(
+          `SELECT id, project_id, manifest, projection, last_sequence
+           FROM proofline_private.runs
+           WHERE id = $1`,
+          [runId],
+        );
+        if (run.rowCount !== 1) throw new Error("Run execution context not found");
+        const events = await client.query(
+          `SELECT event_payload
+           FROM proofline_private.run_events
+           WHERE run_id = $1
+           ORDER BY sequence`,
+          [runId],
+        );
+        const artifacts = await client.query(
+          `SELECT id, run_id, kind, canonical_bytes, sha256, metadata
+           FROM proofline_private.run_artifacts
+           WHERE run_id = $1
+           ORDER BY created_at, id`,
+          [runId],
+        );
+        await client.query("COMMIT");
+        const row = run.rows[0];
+        return {
+          runId: String(row.id),
+          projectId: String(row.project_id),
+          manifest: Web2JsonManifestV1Schema.parse(row.manifest),
+          projection: row.projection,
+          events: events.rows.map((item) =>
+            RunEventV1Schema.parse(item.event_payload),
+          ),
+          artifacts: artifacts.rows.map((item) => ({
+            id: String(item.id),
+            runId: String(item.run_id),
+            kind: String(item.kind),
+            canonicalBytes:
+              item.canonical_bytes instanceof Uint8Array
+                ? new Uint8Array(item.canonical_bytes)
+                : new Uint8Array(),
+            sha256:
+              item.sha256 instanceof Uint8Array
+                ? new Uint8Array(item.sha256)
+                : new Uint8Array(),
+            metadata:
+              item.metadata && typeof item.metadata === "object"
+                ? (item.metadata as Record<string, unknown>)
+                : {},
+          })),
+        };
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    async renewLease(
+      commandId: string,
+      claimToken: string,
+      interval = "30 seconds",
+    ): Promise<void> {
+      const client = await input.pool.connect();
+      try {
+        const result = await client.query(POSTGRES_QUERIES.renewLease, [
+          commandId,
+          claimToken,
+          interval,
+        ]);
+        if (result.rowCount !== 1) {
+          throw new Error("Command lease is stale; renewal rejected");
+        }
+      } finally {
+        client.release();
+      }
+    },
+
     async claimNextCommand() {
       const client = await input.pool.connect();
       const claimToken = randomUUID();
@@ -202,6 +473,14 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
               sha256: Uint8Array;
               metadata?: Record<string, unknown>;
             }>;
+            nextCommands?: Array<{
+              id: string;
+              projectId: string;
+              runId: string;
+              idempotencyKey: string;
+              kind: string;
+              payload: Record<string, unknown>;
+            }>;
           };
           for (const event of result.events ?? []) {
             await appendEventInTransaction(client, RunEventV1Schema.parse(event));
@@ -219,6 +498,22 @@ export function createPostgresCommandRepository(input: { pool: SqlPool }) {
                 artifact.canonicalBytes,
                 artifact.sha256,
                 JSON.stringify(artifact.metadata ?? {}),
+              ],
+            );
+          }
+          for (const command of result.nextCommands ?? []) {
+            await client.query(
+              `INSERT INTO proofline_private.run_commands
+                (id, project_id, run_id, idempotency_key, kind, payload)
+               VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+               ON CONFLICT (project_id, idempotency_key) DO NOTHING`,
+              [
+                command.id,
+                command.projectId,
+                command.runId,
+                command.idempotencyKey,
+                command.kind,
+                JSON.stringify(command.payload),
               ],
             );
           }
