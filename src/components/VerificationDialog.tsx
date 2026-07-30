@@ -29,6 +29,7 @@ export function VerificationDialog({
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const resultActionRef = useRef<HTMLButtonElement>(null);
   const [status, setStatus] = useState<VerificationStatus>("idle");
   const [result, setResult] = useState<ConsumerVerificationResult | null>(null);
   const [error, setError] = useState("");
@@ -38,6 +39,12 @@ export function VerificationDialog({
   useLayoutEffect(() => {
     closeRef.current?.focus();
   }, []);
+
+  useLayoutEffect(() => {
+    if (status === "complete" && result) {
+      resultActionRef.current?.focus();
+    }
+  }, [result, status]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
@@ -149,7 +156,7 @@ export function VerificationDialog({
               </ul>
               {error ? <p className="generation-error" role="alert">{error}</p> : null}
               {!generated ? (
-                <button className="dialog-primary" type="button" disabled={generating} onClick={generateConsumer}>
+                <button ref={resultActionRef} className="dialog-primary" type="button" disabled={generating} onClick={generateConsumer}>
                   {generating ? "Generating safe consumer…" : "Generate safe consumer"}<Code size={21} weight="bold" aria-hidden="true" />
                 </button>
               ) : (
