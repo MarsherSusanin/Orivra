@@ -99,7 +99,7 @@ export function makeRunEvents() {
       type: "PROOF_AVAILABLE" as const,
       payload: {
         proofHash:
-          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "0x9b11457aa29d65e4940b67b7da16bd370d29bf6a3247a28066f93ac407b8b811",
       },
     },
     {
@@ -151,7 +151,7 @@ export function makeBundleInput() {
     },
     artifacts: {
       safeConsumerSha256:
-        "d3b07384d113edec49eaa6238ad5ff00d6fbc37aa1455b6fef45f5f59960b100",
+        "e3bc5540039a2c2b07fe9e89bccfd76194d1f427888dcd9505f4707095c3ccae",
     },
   };
 }

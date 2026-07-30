@@ -183,6 +183,12 @@ describe("live Coston2 pipeline port coverage", () => {
       target: ADDRESSES.FdcHub,
       calldata: "0xfeedcafe",
       valueWei: 12_345n,
+      policy: {
+        projectFeeCapWei: BigInt(validManifest.submission.feeCapWei),
+        globalFeeCapWei: 20_000_000_000_000_000n,
+        quotaRemaining: 1,
+        balanceFloorWei: 1_000n,
+      },
     });
     expect(signed).toMatchObject({
       projectId: "project-1",

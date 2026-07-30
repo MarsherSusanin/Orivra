@@ -8,6 +8,7 @@ import {
 } from "../../../packages/contracts/test/fixtures";
 import {
   canonicalSerializeProofBundle,
+  generateSafeWeb2JsonConsumer,
   replayProofBundle,
 } from "@proofline/domain";
 import * as workerModule from "../src/worker";
@@ -55,8 +56,11 @@ describe("Slice 003 persisted proof-bundle assembly", () => {
         },
         {
           kind: "safe-consumer",
-          canonicalBytes: new TextEncoder().encode("contract SafeConsumer {}"),
-          sha256: expected.artifacts.safeConsumerSha256,
+          canonicalBytes: new TextEncoder().encode(
+            generateSafeWeb2JsonConsumer(validManifest, {
+              contractName: "ProoflineSafeWeb2JsonConsumer",
+            }),
+          ),
           metadata: { compiler: "solc-0.8.36" },
         },
       ],
