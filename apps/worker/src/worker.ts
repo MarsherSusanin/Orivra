@@ -488,6 +488,14 @@ function child(
   };
 }
 
+function replayEffectCommandId(
+  parentCommandId: string,
+  type: RunEventV1["type"],
+  ordinal: number,
+): string {
+  return `${parentCommandId}:replay:${ordinal}:${type.toLowerCase()}`;
+}
+
 function sameHex(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
 }
@@ -820,7 +828,11 @@ export function createProductionCommandHandlers(input: {
             ...item,
             runId: context.runId,
             sequence: context.events.length + index + 1,
-            commandId: command.id,
+            commandId: replayEffectCommandId(
+              command.id,
+              item.type,
+              index + 1,
+            ),
             occurredAt: input.clock.now(),
           }) as RunEventV1,
       );
