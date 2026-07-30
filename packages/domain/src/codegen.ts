@@ -14,7 +14,6 @@ function solidityString(value: string): string {
 function urlSearchParamPair(key: string, value: string): [string, string] {
   const encoded = new URLSearchParams([[key, value]]).toString();
   const separator = encoded.indexOf("=");
-  if (separator < 0) throw new Error("URLSearchParams did not encode a value");
   return [encoded.slice(0, separator), encoded.slice(separator + 1)];
 }
 
