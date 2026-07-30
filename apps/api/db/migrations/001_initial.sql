@@ -100,11 +100,18 @@ CREATE TABLE IF NOT EXISTS proofline_private.relayer_transactions (
     value_wei numeric(78, 0) NOT NULL CHECK (value_wei >= 0),
     raw_signed_transaction bytea NOT NULL,
     transaction_hash bytea NOT NULL UNIQUE CHECK (octet_length(transaction_hash) = 32),
+    broadcast_attempted_at timestamptz,
     broadcast_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT relayer_transactions_run_id_unique UNIQUE (run_id),
     UNIQUE (chain_id, from_address, nonce)
 );
+
+ALTER TABLE proofline_private.relayer_transactions
+    ADD COLUMN IF NOT EXISTS broadcast_attempted_at timestamptz;
+
+COMMENT ON COLUMN proofline_private.relayer_transactions.broadcast_attempted_at
+    IS 'RELAYER_TRANSACTION_BROADCAST_ATTEMPT persisted before external RPC I/O';
 
 DO $constraints$
 BEGIN
@@ -228,7 +235,7 @@ GRANT INSERT ON proofline_private.run_events,
     proofline_private.relayer_transactions,
     proofline_private.relayer_audit_events
     TO proofline_worker;
-GRANT UPDATE (broadcast_at)
+GRANT UPDATE (broadcast_attempted_at, broadcast_at)
     ON proofline_private.relayer_transactions
     TO proofline_worker;
 GRANT UPDATE ON proofline_private.runs,

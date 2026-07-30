@@ -146,6 +146,9 @@ function hydrateRelayerTransaction(row: Record<string, unknown>) {
     broadcastAt: row.broadcast_at
       ? new Date(String(row.broadcast_at)).toISOString()
       : null,
+    broadcastAttemptedAt: row.broadcast_attempted_at
+      ? new Date(String(row.broadcast_attempted_at)).toISOString()
+      : null,
   };
 }
 
@@ -315,7 +318,7 @@ export function createPostgresCommandRepository(input: {
           `SELECT run_id, idempotency_key, chain_id, from_address, nonce,
                   target_address, calldata_hash, value_wei,
                   raw_signed_transaction, transaction_hash,
-                  command_fingerprint, broadcast_at
+                  command_fingerprint, broadcast_attempted_at, broadcast_at
            FROM proofline_private.relayer_transactions
            WHERE idempotency_key = $1`,
           [idempotencyKey],
@@ -335,7 +338,7 @@ export function createPostgresCommandRepository(input: {
           `SELECT run_id, idempotency_key, chain_id, from_address, nonce,
                   target_address, calldata_hash, value_wei,
                   raw_signed_transaction, transaction_hash,
-                  command_fingerprint, broadcast_at
+                  command_fingerprint, broadcast_attempted_at, broadcast_at
            FROM proofline_private.relayer_transactions
            WHERE run_id = $1`,
           [runId],
@@ -523,6 +526,51 @@ export function createPostgresCommandRepository(input: {
       }
     },
 
+    async claimRelayerBroadcastAttempt(
+      idempotencyKey: string,
+      transactionHash: string,
+    ): Promise<boolean> {
+      const client = await input.pool.connect();
+      try {
+        await client.query("BEGIN");
+        const claimed = await client.query(
+          `UPDATE proofline_private.relayer_transactions
+           SET broadcast_attempted_at = now()
+           WHERE idempotency_key = $1
+             AND transaction_hash = $2
+             AND broadcast_attempted_at IS NULL
+             AND broadcast_at IS NULL
+           RETURNING id, run_id`,
+          [idempotencyKey, hexBytes(transactionHash, 32)],
+        );
+        if (claimed.rowCount !== 1) {
+          await client.query("COMMIT");
+          return false;
+        }
+        await client.query(
+          `INSERT INTO proofline_private.relayer_audit_events
+            (id, project_id, run_id, event_type, evidence)
+           SELECT $1, run.project_id, relayer.run_id,
+                  'RELAYER_TRANSACTION_BROADCAST_ATTEMPT', $3::jsonb
+           FROM proofline_private.relayer_transactions AS relayer
+           JOIN proofline_private.runs AS run ON run.id = relayer.run_id
+           WHERE relayer.idempotency_key = $2`,
+          [
+            randomUUID(),
+            idempotencyKey,
+            JSON.stringify({ idempotencyKey, transactionHash }),
+          ],
+        );
+        await client.query("COMMIT");
+        return true;
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
     async markRelayerBroadcast(
       idempotencyKey: string,
       transactionHash: string,
@@ -535,6 +583,7 @@ export function createPostgresCommandRepository(input: {
            SET broadcast_at = now()
            WHERE idempotency_key = $1
              AND transaction_hash = $2
+             AND broadcast_attempted_at IS NOT NULL
              AND broadcast_at IS NULL
            RETURNING id`,
           [idempotencyKey, hexBytes(transactionHash, 32)],
