@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 import { Web2JsonManifestV1Schema } from "@proofline/contracts";
+import {
+  canonicalSerializeProofBundle,
+  replayProofBundle,
+} from "@proofline/domain";
 import { runProoflineAction } from "./index";
 
 type Environment = Record<string, string | undefined>;
@@ -79,17 +83,24 @@ export function createPersistedActionRunClient(input: {
   files: { readText(path: string): Promise<string> };
 }) {
   const environment = input.environment;
-  const apiOrigin = required(environment, "PROOFLINE_API_URL").replace(
-    /\/+$/,
-    "",
-  );
-  const projectToken = required(environment, "PROOFLINE_PROJECT_TOKEN");
+
+  function apiConfiguration() {
+    return {
+      apiOrigin: required(environment, "PROOFLINE_API_URL").replace(/\/+$/, ""),
+      projectToken: required(environment, "PROOFLINE_PROJECT_TOKEN"),
+    };
+  }
+
+  if (environment.GITHUB_EVENT_NAME !== "pull_request") {
+    apiConfiguration();
+  }
 
   async function request(
     path: string,
     init: RequestInit = {},
     command?: { mode: "replay" | "relayer"; operation: string },
   ) {
+    const { apiOrigin, projectToken } = apiConfiguration();
     const method = init.method ?? "GET";
     const response = await input.fetch(`${apiOrigin}${path}`, {
       ...init,
@@ -164,6 +175,30 @@ export function createPersistedActionRunClient(input: {
     throw new Error("Persisted Proofline run timed out before terminal evidence");
   }
 
+  async function waitForProofBoundary(runId: string, timeoutMs: number) {
+    const startedAt = input.clock.now();
+    const maxAttempts = Math.ceil(timeoutMs / 2_000) + 1;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const projection = (await request(
+        `/v1/runs/${encodeURIComponent(runId)}`,
+      ).then((response) => response.json())) as Record<string, any>;
+      if (String(projection.runId ?? "") !== runId) {
+        throw new Error("Persisted run projection identity mismatch");
+      }
+      const verifyStage = projection.stages?.verify;
+      if (verifyStage === "completed" || projection.proofVerified === true) {
+        return projection;
+      }
+      if (projection.terminal === true) {
+        return projection;
+      }
+      const remainingMs = timeoutMs - (input.clock.now() - startedAt);
+      if (remainingMs <= 0) break;
+      await input.clock.sleep(Math.min(2_000, remainingMs));
+    }
+    throw new Error("Persisted Proofline run timed out before proof verification");
+  }
+
   async function submitRelayerWhenReady(runId: string, timeoutMs: number) {
     const startedAt = input.clock.now();
     const readinessTimeoutMs = Math.min(60_000, Math.max(1, timeoutMs));
@@ -232,8 +267,38 @@ export function createPersistedActionRunClient(input: {
     return { bundle, decoded, replay, checksum };
   }
 
+  async function replayLocalManifest(manifestPath: string) {
+    const bundlePath = required(environment, "PROOFLINE_REPLAY_BUNDLE_PATH");
+    const [manifestSource, serialized] = await Promise.all([
+      input.files.readText(manifestPath),
+      input.files.readText(bundlePath),
+    ]);
+    const manifest = Web2JsonManifestV1Schema.parse(JSON.parse(manifestSource));
+    const bundle = replayProofBundle(serialized);
+    if (
+      JSON.stringify(bundle.manifest) !==
+      JSON.stringify(manifest)
+    ) {
+      throw new Error(
+        "Local Proofline bundle manifest does not match the requested manifest",
+      );
+    }
+    if (canonicalSerializeProofBundle(bundle) !== serialized) {
+      throw new Error("Local Proofline bundle replay is not byte-identical");
+    }
+    return {
+      runId: bundle.runId,
+      checksum: bundle.checksum,
+      byteIdentical: true,
+      localReplay: true,
+    };
+  }
+
   return {
     async replayManifest(manifestPath: string) {
+      if (environment.GITHUB_EVENT_NAME === "pull_request") {
+        return replayLocalManifest(manifestPath);
+      }
       const created = await createRun(manifestPath, "replay");
       const projection = await waitForTerminalRun(created.runId, 60_000);
       const identity = persistedIdentity(projection);
@@ -259,6 +324,20 @@ export function createPersistedActionRunClient(input: {
         created.runId,
         Math.min(600_000, Math.max(1, requestInput.timeoutMs)),
       );
+      const proofProjection = await waitForProofBoundary(
+        created.runId,
+        Math.min(600_000, Math.max(1, requestInput.timeoutMs)),
+      );
+      if (proofProjection.terminal !== true) {
+        await request(
+          `/v1/runs/${encodeURIComponent(created.runId)}/consumer-verifications`,
+          {
+            method: "POST",
+            body: JSON.stringify({ consumer: "canonical-safe" }),
+          },
+          { mode: "relayer", operation: "verify-canonical-safe" },
+        );
+      }
       const projection = await waitForTerminalRun(
         created.runId,
         Math.min(600_000, Math.max(1, requestInput.timeoutMs)),
@@ -348,14 +427,20 @@ export function createProductionActionDependencies(input: {
 }
 
 export async function runActionEntry(input: {
-  dependencies: Record<string, unknown>;
+  dependencies?: Record<string, unknown>;
+  createDependencies?: () =>
+    | Record<string, unknown>
+    | Promise<Record<string, unknown>>;
   runAction?: typeof runProoflineAction;
   setFailed(message: string): void;
   setExitCode(code: number): void;
 }): Promise<number> {
   try {
+    const dependencies = input.createDependencies
+      ? await input.createDependencies()
+      : (input.dependencies ?? {});
     const result = await (input.runAction ?? runProoflineAction)(
-      input.dependencies as never,
+      dependencies as never,
     );
     if (result !== 0) input.setFailed("Proofline release gate failed");
     input.setExitCode(result);

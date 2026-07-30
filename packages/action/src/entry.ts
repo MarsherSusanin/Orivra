@@ -9,36 +9,42 @@ import {
   runActionEntry,
 } from "./runtime";
 
-const artifactClient = new DefaultArtifactClient();
-const persistedClient = createPersistedActionRunClient({
-  environment: process.env,
-  fetch: globalThis.fetch,
-  clock: {
-    now: Date.now,
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  },
-  files: { readText: (path) => readFile(path, "utf8") },
-});
-
 await runActionEntry({
-  dependencies: createProductionActionDependencies({
-    environment: process.env,
-    core: {
-      getInput: core.getInput,
-      setFailed: core.setFailed,
-      async writeSummary(markdown) {
-        await core.summary.addRaw(markdown).write();
+  createDependencies() {
+    const environment = {
+      ...process.env,
+      PROOFLINE_REPLAY_BUNDLE_PATH:
+        core.getInput("bundle") || process.env.PROOFLINE_REPLAY_BUNDLE_PATH,
+    };
+    const artifactClient = new DefaultArtifactClient();
+    const persistedClient = createPersistedActionRunClient({
+      environment,
+      fetch: globalThis.fetch,
+      clock: {
+        now: Date.now,
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       },
-    },
-    replayManifest: persistedClient.replayManifest,
-    runLive: persistedClient.runLive,
-    async uploadJson(name, value) {
-      const directory = await mkdtemp(join(tmpdir(), "proofline-action-"));
-      const path = join(directory, `${name}.json`);
-      await writeFile(path, JSON.stringify(value, null, 2), "utf8");
-      await artifactClient.uploadArtifact(name, [path], directory);
-    },
-  }),
+      files: { readText: (path) => readFile(path, "utf8") },
+    });
+    return createProductionActionDependencies({
+      environment,
+      core: {
+        getInput: core.getInput,
+        setFailed: core.setFailed,
+        async writeSummary(markdown) {
+          await core.summary.addRaw(markdown).write();
+        },
+      },
+      replayManifest: persistedClient.replayManifest,
+      runLive: persistedClient.runLive,
+      async uploadJson(name, value) {
+        const directory = await mkdtemp(join(tmpdir(), "proofline-action-"));
+        const path = join(directory, `${name}.json`);
+        await writeFile(path, JSON.stringify(value, null, 2), "utf8");
+        await artifactClient.uploadArtifact(name, [path], directory);
+      },
+    });
+  },
   setFailed: core.setFailed,
   setExitCode: (code) => {
     process.exitCode = code;

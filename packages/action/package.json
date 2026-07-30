@@ -14,6 +14,7 @@
   "dependencies": {
     "@actions/artifact": "^2.3.2",
     "@actions/core": "^1.11.1",
-    "@proofline/contracts": "0.1.0"
+    "@proofline/contracts": "0.1.0",
+    "@proofline/domain": "0.1.0"
   }
 }

@@ -6,6 +6,8 @@ interface ActionInput {
     replayManifest(path: string): Promise<{
       runId: string;
       checksum: string;
+      byteIdentical?: boolean;
+      localReplay?: boolean;
       persistedRun?: { runId: string; lastSequence: number };
     }>;
     runLive(input: {
@@ -38,11 +40,15 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
       result.persistedRun?.runId === result.runId &&
       Number.isSafeInteger(result.persistedRun.lastSequence) &&
       result.persistedRun.lastSequence > 0;
+    const localReplayValid =
+      result.localReplay === true && result.byteIdentical === true;
     if (
       !result.runId ||
       !/^sha256:[a-f0-9]{64}$/.test(result.checksum) ||
-      (process.env.NODE_ENV !== "test" || result.persistedRun !== undefined) &&
-        !persistedValid
+      (result.localReplay === true && !localReplayValid) ||
+      (result.localReplay !== true &&
+        (process.env.NODE_ENV !== "test" || result.persistedRun !== undefined) &&
+        !persistedValid)
     ) {
       await input.artifacts.writeSummary(
         "Proofline replay failed: persisted run identity is incomplete or mismatched.",

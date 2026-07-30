@@ -7,6 +7,10 @@ inputs:
   mode:
     description: replay, wallet, relayer, or live-coston2.
     required: false
+  bundle:
+    description: Path to the canonical ProofBundleV1 used for local pull-request replay.
+    required: false
+    default: fixtures/proofline.bundle.json
 runs:
   using: node20
   main: dist/index.js
