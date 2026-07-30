@@ -15,7 +15,12 @@ export function RunTimeline({ stages }: { stages: RunStage[] }) {
   }, []);
 
   return (
-    <div className="timeline-scroller" ref={scrollerRef}>
+    <div
+      className="timeline-scroller"
+      ref={scrollerRef}
+      tabIndex={0}
+      aria-label="Attestation lifecycle timeline"
+    >
       <ol className="timeline" aria-label="Attestation lifecycle">
         {stages.map((stage, index) => {
           const Icon = stage.key === "consumer" && stage.state === "pending" ? UserCircle : stageIcons[stage.state];

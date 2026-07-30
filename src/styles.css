@@ -317,6 +317,11 @@ a {
   scrollbar-color: #314651 transparent;
 }
 
+.timeline-scroller:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+}
+
 .timeline {
   display: grid;
   min-width: 740px;
