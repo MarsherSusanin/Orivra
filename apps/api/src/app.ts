@@ -1,3 +1,6 @@
+import { Web2JsonManifestV1Schema } from "@proofline/contracts";
+import { z } from "zod";
+
 type AuthContext =
   | { kind: "project"; projectId: string }
   | { kind: "share"; projectId: string; runId: string };
@@ -7,7 +10,33 @@ interface ProoflineApiService {
 }
 
 const TOKEN_PATTERN = /^(?:project|share)_[a-f0-9]{64}$/i;
-const PRIVATE_KEY_PATTERN = /private.?key|seed.?phrase|mnemonic/i;
+const PRIVATE_KEY_PATTERN =
+  /private.?key|seed.?phrase|mnemonic|(?:^|[_-])secret(?:$|[_-])/i;
+const TransactionHashSchema = z
+  .string()
+  .regex(/^0x[0-9a-fA-F]{64}$/);
+const StrictEmptyBodySchema = z.object({}).strict();
+const CreateRunBodySchema = z
+  .object({ manifest: Web2JsonManifestV1Schema })
+  .strict();
+const ReplayBodySchema = z.object({ bundle: z.string().min(1).optional() }).strict();
+const SubmissionBodySchema = z
+  .object({ mode: z.enum(["wallet", "relayer"]).optional() })
+  .strict();
+const TransactionBodySchema = z
+  .object({ transactionHash: TransactionHashSchema.optional() })
+  .strict();
+const ConsumerArtifactBodySchema = z
+  .object({
+    contractName: z
+      .string()
+      .regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
+      .optional(),
+  })
+  .strict();
+const ShareBodySchema = z
+  .object({ expiresAt: z.string().datetime({ offset: true }).optional() })
+  .strict();
 
 function json(value: unknown, status = 200, headers?: HeadersInit): Response {
   const body = typeof value === "string" ? value : JSON.stringify(value);
@@ -62,6 +91,29 @@ function isSharedRead(request: Request, pathname: string): boolean {
   );
 }
 
+function commandBodySchema(
+  method: string,
+  pathname: string,
+): z.ZodType<Record<string, unknown>> | undefined {
+  if (method !== "POST") return undefined;
+  if (pathname === "/v1/runs") return CreateRunBodySchema;
+  if (pathname === "/v1/replays") return ReplayBodySchema;
+  if (/^\/v1\/runs\/[^/]+\/submissions$/.test(pathname)) {
+    return SubmissionBodySchema;
+  }
+  if (/^\/v1\/runs\/[^/]+\/transactions$/.test(pathname)) {
+    return TransactionBodySchema;
+  }
+  if (/^\/v1\/runs\/[^/]+\/consumer-verifications$/.test(pathname)) {
+    return StrictEmptyBodySchema;
+  }
+  if (/^\/v1\/runs\/[^/]+\/artifacts\/consumer$/.test(pathname)) {
+    return ConsumerArtifactBodySchema;
+  }
+  if (/^\/v1\/runs\/[^/]+\/share$/.test(pathname)) return ShareBodySchema;
+  return undefined;
+}
+
 export function createProoflineApi(input: {
   service: ProoflineApiService;
   authenticate(rawToken: string): Promise<AuthContext | null>;
@@ -101,6 +153,18 @@ export function createProoflineApi(input: {
       }
       if (containsPrivateKey(body)) {
         return error(400, "PRIVATE_KEY_FORBIDDEN", "Private keys must remain on the client");
+      }
+      const bodySchema = commandBodySchema(request.method, url.pathname);
+      if (bodySchema) {
+        const parsed = bodySchema.safeParse(body);
+        if (!parsed.success) {
+          return error(
+            400,
+            "INVALID_REQUEST_BODY",
+            "Request body does not match the endpoint contract",
+          );
+        }
+        body = parsed.data;
       }
 
       const projectId = auth.projectId;

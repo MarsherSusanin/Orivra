@@ -13,7 +13,11 @@ export const POSTGRES_QUERIES = {
     WITH candidate AS (
       SELECT id
       FROM proofline_private.run_commands
-      WHERE status = 'queued' AND available_at <= now()
+      WHERE (
+        status = 'queued' AND available_at <= now()
+      ) OR (
+        status = 'leased' AND lease_expires_at <= now()
+      )
       ORDER BY available_at, created_at
       FOR UPDATE SKIP LOCKED
       LIMIT 1
@@ -67,6 +71,7 @@ export const POSTGRES_QUERIES = {
     WHERE id = $1
       AND lease_token = $2::uuid
       AND status = 'leased'
+      AND lease_expires_at > now()
     RETURNING id
   `,
 } as const;

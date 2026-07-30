@@ -176,6 +176,9 @@ CREATE INDEX IF NOT EXISTS run_events_run_id_sequence_idx
 CREATE INDEX IF NOT EXISTS run_commands_available_at_created_at_queued_idx
     ON proofline_private.run_commands (available_at, created_at)
     WHERE status = 'queued';
+CREATE INDEX IF NOT EXISTS run_commands_expired_lease_idx
+    ON proofline_private.run_commands (lease_expires_at, created_at)
+    WHERE status = 'leased';
 CREATE INDEX IF NOT EXISTS share_tokens_token_digest_idx
     ON proofline_private.share_tokens (token_digest);
 CREATE INDEX IF NOT EXISTS runs_project_id_created_at_idx
@@ -191,6 +194,21 @@ GRANT SELECT, INSERT, UPDATE ON proofline_private.projects,
     TO proofline_api;
 GRANT SELECT, INSERT ON proofline_private.run_artifacts TO proofline_api;
 GRANT SELECT, INSERT ON proofline_private.run_events TO proofline_api;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA proofline_private TO proofline_worker;
+GRANT SELECT ON proofline_private.projects,
+    proofline_private.runs,
+    proofline_private.run_events,
+    proofline_private.run_artifacts,
+    proofline_private.run_commands,
+    proofline_private.relayer_transactions
+    TO proofline_worker;
+GRANT INSERT ON proofline_private.run_events,
+    proofline_private.run_artifacts,
+    proofline_private.relayer_transactions,
+    proofline_private.relayer_audit_events
+    TO proofline_worker;
+GRANT UPDATE ON proofline_private.runs,
+    proofline_private.run_commands,
+    proofline_private.relayer_transactions
+    TO proofline_worker;
 
 COMMIT;
