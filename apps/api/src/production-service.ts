@@ -57,6 +57,20 @@ export function createProductionProoflineService(input: {
     }
   }
 
+  function assertSubmissionMode(
+    manifest: { submission: { mode: string } },
+    expectedMode: "wallet" | "relayer",
+  ): void {
+    if (manifest.submission.mode !== expectedMode) {
+      throw Object.assign(
+        new Error(
+          `Persisted submission mode ${manifest.submission.mode} does not authorize ${expectedMode}`,
+        ),
+        { status: 409, code: "SUBMISSION_MODE_MISMATCH" },
+      );
+    }
+  }
+
   async function loadOwnedRun(context: Record<string, unknown>) {
     const runId = requireRunId(context.runId);
     const result = await input.pool.query(
@@ -127,6 +141,11 @@ export function createProductionProoflineService(input: {
   ) {
     const owned = await loadOwnedRun(context);
     const runId = String(owned.id);
+    if (kind === "SUBMIT_RELAYER") {
+      assertSubmissionMode(owned.manifest, "relayer");
+    } else if (kind === "ATTACH_WALLET_TRANSACTION") {
+      assertSubmissionMode(owned.manifest, "wallet");
+    }
     const existing = await findCommandIntent(
       context.projectId,
       context.idempotencyKey,
@@ -511,6 +530,8 @@ export function createProductionProoflineService(input: {
           });
         }
         const row = result.rows[0];
+        const persistedManifest = Web2JsonManifestV1Schema.parse(row.manifest);
+        assertSubmissionMode(persistedManifest, "wallet");
         assertMutableProjection(row.projection);
         if (!row.canonical_bytes) {
           throw Object.assign(new Error("Preflight evidence is not ready"), {
@@ -556,6 +577,7 @@ export function createProductionProoflineService(input: {
       }
       const owned = await loadOwnedRun(context);
       const runId = String(owned.id);
+      assertSubmissionMode(owned.manifest, "relayer");
       const payload = { idempotencyKey: context.idempotencyKey };
       const existing = await findCommandIntent(
         context.projectId,

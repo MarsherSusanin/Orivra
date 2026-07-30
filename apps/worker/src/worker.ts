@@ -692,6 +692,24 @@ export function createProductionCommandHandlers(input: {
   const load = (command: ProductionCommand) =>
     input.repository.loadRunExecutionContext(command.runId);
 
+  function assertSubmissionMode(
+    context: RunExecutionContext,
+    expectedMode: "wallet" | "relayer",
+  ): void {
+    if (context.manifest.submission.mode !== expectedMode) {
+      throw Object.assign(
+        new Error(
+          `Persisted submission mode ${context.manifest.submission.mode} does not authorize ${expectedMode}`,
+        ),
+        {
+          category: "configuration",
+          code: "SUBMISSION_MODE_MISMATCH",
+          retryable: false,
+        },
+      );
+    }
+  }
+
   const handlers: Record<
     string,
     (command: ProductionCommand) => Promise<CommandOutcome>
@@ -883,6 +901,7 @@ export function createProductionCommandHandlers(input: {
 
     async SUBMIT_RELAYER(command) {
       const context = await load(command);
+      assertSubmissionMode(context, "relayer");
       if (projectRun(context.events).terminal) {
         throw new Error("Terminal runs are immutable and cannot be submitted again");
       }
@@ -1069,6 +1088,7 @@ export function createProductionCommandHandlers(input: {
 
     async ATTACH_WALLET_TRANSACTION(command) {
       const context = await load(command);
+      assertSubmissionMode(context, "wallet");
       const preflight = preflightEvidence(context);
       const observed = await input.ports.observeWalletTransaction({
         transactionHash: command.payload.transactionHash,
