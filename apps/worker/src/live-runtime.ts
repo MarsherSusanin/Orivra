@@ -280,6 +280,29 @@ function positiveBigInt(environment: LiveEnvironment, name: string): bigint {
   return BigInt(value);
 }
 
+function positiveInteger(
+  environment: LiveEnvironment,
+  name: string,
+  fallback: number,
+  maximum: number,
+): number {
+  const raw = environment[name]?.trim();
+  if (raw === undefined || raw === "") return fallback;
+  if (!/^[1-9][0-9]*$/.test(raw)) {
+    throw Object.assign(new Error(`${name} must be a positive integer`), {
+      kind: "configuration",
+    });
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value > maximum) {
+    throw Object.assign(
+      new Error(`${name} must not exceed ${maximum}`),
+      { kind: "configuration" },
+    );
+  }
+  return value;
+}
+
 function recordValue(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw createFdcError(
@@ -291,6 +314,52 @@ function recordValue(value: unknown, label: string): Record<string, unknown> {
     );
   }
   return value as Record<string, unknown>;
+}
+
+function relayerPolicyFromEvidence(value: unknown) {
+  const policy = recordValue(value, "relayer policy");
+  try {
+    const projectFeeCapWei = BigInt(String(policy.projectFeeCapWei ?? "-1"));
+    const globalFeeCapWei = BigInt(String(policy.globalFeeCapWei ?? "-1"));
+    const quotaRemaining = Number(policy.quotaRemaining);
+    const balanceFloorWei = BigInt(String(policy.balanceFloorWei ?? "-1"));
+    if (
+      projectFeeCapWei < 0n ||
+      globalFeeCapWei < 0n ||
+      !Number.isInteger(quotaRemaining) ||
+      quotaRemaining <= 0 ||
+      balanceFloorWei < 0n
+    ) {
+      throw new Error("invalid policy values");
+    }
+    return {
+      projectFeeCapWei,
+      globalFeeCapWei,
+      quotaRemaining,
+      balanceFloorWei,
+    };
+  } catch {
+    throw createFdcError(
+      "schema-invalid",
+      "RELAYER_POLICY_EVIDENCE_INVALID",
+      "Persisted relayer policy evidence is invalid",
+      false,
+      {},
+    );
+  }
+}
+
+function transactionIsMissing(cause: unknown): boolean {
+  if (!cause || typeof cause !== "object") return false;
+  const name = String((cause as { name?: unknown }).name ?? "");
+  const message = String((cause as { message?: unknown }).message ?? "");
+  return (
+    name === "TransactionNotFoundError" ||
+    name === "TransactionReceiptNotFoundError" ||
+    name === "WaitForTransactionReceiptTimeoutError" ||
+    /\btransaction(?: receipt)?\b.*\bnot found\b/i.test(message) ||
+    /^not found$/i.test(message)
+  );
 }
 
 function rawProofFromEvidence(value: unknown): RawDaProof {
@@ -368,6 +437,12 @@ export function createLiveCoston2PipelinePorts(input: {
   const balanceFloorWei = positiveBigInt(
     environment,
     "PROOFLINE_RELAYER_BALANCE_FLOOR_WEI",
+  );
+  const receiptPollTimeoutMs = positiveInteger(
+    environment,
+    "PROOFLINE_RECEIPT_POLL_TIMEOUT_MS",
+    25_000,
+    30_000,
   );
   const publicClient = dependencies.createPublicClient({
     chain: coston2,
@@ -468,6 +543,21 @@ export function createLiveCoston2PipelinePorts(input: {
       const target = getAddress(String(value.target ?? ""));
       const calldata = String(value.calldata ?? "") as Hex;
       const valueWei = BigInt(String(value.valueWei ?? "-1"));
+      const policy = relayerPolicyFromEvidence(value.policy);
+      if (
+        policy.projectFeeCapWei !==
+          BigInt(manifest.submission.feeCapWei) ||
+        policy.globalFeeCapWei !== globalFeeCapWei ||
+        policy.balanceFloorWei !== balanceFloorWei
+      ) {
+        throw createFdcError(
+          "configuration",
+          "RELAYER_POLICY_CONFIGURATION_DRIFT",
+          "Persisted relayer policy does not match the active worker configuration",
+          false,
+          {},
+        );
+      }
       const balanceWei = await publicClient.getBalance({ address: account.address });
       validateRelayerSubmission({
         idempotencyKey,
@@ -478,11 +568,11 @@ export function createLiveCoston2PipelinePorts(input: {
         expectedCalldata: calldata,
         valueWei,
         quotedFeeWei: valueWei,
-        projectFeeCapWei: BigInt(manifest.submission.feeCapWei),
-        globalFeeCapWei,
-        quotaRemaining: 1,
+        projectFeeCapWei: policy.projectFeeCapWei,
+        globalFeeCapWei: policy.globalFeeCapWei,
+        quotaRemaining: policy.quotaRemaining,
         balanceWei,
-        balanceFloorWei,
+        balanceFloorWei: policy.balanceFloorWei,
       });
       const nonce = await publicClient.getTransactionCount({
         address: account.address,
@@ -526,6 +616,29 @@ export function createLiveCoston2PipelinePorts(input: {
       });
     },
 
+    deriveTransactionHash(rawTransaction: string) {
+      if (!/^0x(?:[0-9a-fA-F]{2})+$/.test(rawTransaction)) {
+        throw new Error("Raw signed transaction must be canonical hexadecimal bytes");
+      }
+      return keccak256(rawTransaction as Hex);
+    },
+
+    async resolveRecordedTransaction(transactionHash: string) {
+      try {
+        await publicClient.getTransaction({ hash: transactionHash as Hex });
+        return true;
+      } catch (cause) {
+        if (transactionIsMissing(cause)) return false;
+        throw createFdcError(
+          "transport",
+          "RELAYER_TRANSACTION_LOOKUP_FAILED",
+          "Unable to determine whether the persisted relayer transaction is on-chain",
+          true,
+          { transactionHash },
+        );
+      }
+    },
+
     async observeWalletTransaction(value: Record<string, unknown>) {
       const transactionHash = String(value.transactionHash ?? "") as Hex;
       const [transaction, chainId] = await Promise.all([
@@ -545,9 +658,16 @@ export function createLiveCoston2PipelinePorts(input: {
     async getTransactionReceipt(value: Record<string, unknown>) {
       const transactionHash = String(value.transactionHash ?? "") as Hex;
       try {
-        const receipt = await publicClient.getTransactionReceipt({
-          hash: transactionHash,
-        });
+        const receipt =
+          typeof publicClient.waitForTransactionReceipt === "function"
+            ? await publicClient.waitForTransactionReceipt({
+                hash: transactionHash,
+                pollingInterval: 2_000,
+                timeout: receiptPollTimeoutMs,
+              })
+            : await publicClient.getTransactionReceipt({
+                hash: transactionHash,
+              });
         if (receipt.status !== "success") {
           throw createFdcError(
             "transport",
@@ -565,6 +685,15 @@ export function createLiveCoston2PipelinePorts(input: {
         };
       } catch (cause) {
         if (cause && typeof cause === "object" && "category" in cause) throw cause;
+        if (!transactionIsMissing(cause)) {
+          throw createFdcError(
+            "transport",
+            "REQUEST_RECEIPT_LOOKUP_FAILED",
+            "FdcHub request transaction receipt lookup failed",
+            true,
+            { transactionHash },
+          );
+        }
         throw createFdcError(
           "not-finalized",
           "REQUEST_RECEIPT_PENDING",

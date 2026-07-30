@@ -20,6 +20,31 @@ function required(environment: Environment, name: string): string {
   return value;
 }
 
+function unsignedBigInt(environment: Environment, name: string): bigint {
+  const value = required(environment, name);
+  if (!/^[0-9]+$/.test(value)) {
+    throw new Error(`${name} must be an unsigned integer`);
+  }
+  return BigInt(value);
+}
+
+function positiveInteger(
+  environment: Environment,
+  name: string,
+  fallback?: number,
+): number {
+  const value = environment[name]?.trim();
+  if (!value && fallback !== undefined) return fallback;
+  if (!value || !/^[1-9][0-9]*$/.test(value)) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`${name} exceeds the safe integer range`);
+  }
+  return parsed;
+}
+
 export function createProductionWorker(input: {
   environment: Environment;
   pool: any;
@@ -31,9 +56,35 @@ export function createProductionWorker(input: {
   logger?: { info(value: unknown): void; error(value: unknown): void };
 }) {
   const environment = input.environment;
-  const repository = (input.createRepository ?? createPostgresCommandRepository)({
+  const repositoryInput: {
+    pool: unknown;
+    relayerPolicy?: {
+      globalFeeCapWei: bigint;
+      balanceFloorWei: bigint;
+      dailyProjectQuota: number;
+    };
+  } = {
     pool: input.pool,
-  });
+  };
+  if (!input.createRepository) {
+    repositoryInput.relayerPolicy = {
+      globalFeeCapWei: unsignedBigInt(
+        environment,
+        "PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI",
+      ),
+      balanceFloorWei: unsignedBigInt(
+        environment,
+        "PROOFLINE_RELAYER_BALANCE_FLOOR_WEI",
+      ),
+      dailyProjectQuota: positiveInteger(
+        environment,
+        "PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA",
+      ),
+    };
+  }
+  const repository = (input.createRepository ?? createPostgresCommandRepository)(
+    repositoryInput as never,
+  );
   const pipelinePorts = (
     input.createPipelinePorts ?? createLiveCoston2PipelinePorts
   )({
@@ -69,6 +120,16 @@ export function createProductionWorker(input: {
     environment: environment.NODE_ENV ?? "production",
     mode: "live",
     repository,
+    maxAttempts: positiveInteger(
+      environment,
+      "PROOFLINE_WORKER_MAX_ATTEMPTS",
+      8,
+    ),
+    leaseHeartbeatMs: positiveInteger(
+      environment,
+      "PROOFLINE_WORKER_LEASE_HEARTBEAT_MS",
+      10_000,
+    ),
     adapters: { coston2: runtime, pipeline: { kind: "live" } },
     logger: input.logger ?? {
       info: (value) => console.info(JSON.stringify(value)),

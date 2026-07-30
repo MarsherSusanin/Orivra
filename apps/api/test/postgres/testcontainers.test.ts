@@ -25,7 +25,12 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           POSTGRES_DB: "proofline",
         })
         .withExposedPorts(5432)
-        .withWaitStrategy(Wait.forLogMessage(/database system is ready to accept connections/))
+        .withWaitStrategy(
+          Wait.forLogMessage(
+            /database system is ready to accept connections/,
+            2,
+          ),
+        )
         .start();
 
       const client = new pg.Client({
@@ -48,6 +53,21 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
         expect(tables.rows.map(({ table_name }) => table_name)).toEqual(
           expect.arrayContaining(["runs", "run_events", "run_commands"]),
         );
+        const relayerUpdateGrants = await client.query<{
+          column_name: string;
+          privilege_type: string;
+        }>(
+          `SELECT column_name, privilege_type
+           FROM information_schema.role_column_grants
+           WHERE grantee = 'proofline_worker'
+             AND table_schema = 'proofline_private'
+             AND table_name = 'relayer_transactions'
+             AND privilege_type = 'UPDATE'
+           ORDER BY column_name`,
+        );
+        expect(relayerUpdateGrants.rows).toEqual([
+          { column_name: "broadcast_at", privilege_type: "UPDATE" },
+        ]);
 
         const projectId = "11111111-1111-4111-8111-111111111111";
         const runId = "22222222-2222-4222-8222-222222222222";
