@@ -1213,6 +1213,10 @@ a {
     padding-bottom: 68px;
   }
 
+  .app-shell:has(.bundle-download) {
+    padding-bottom: 76px;
+  }
+
   .shell-main {
     height: auto;
     min-height: 100dvh;
@@ -1347,6 +1351,10 @@ a {
   .next-action p {
     margin-bottom: 14px;
     font-size: 15px;
+  }
+
+  .action-footer {
+    align-items: flex-start;
   }
 
   .verify-button {
