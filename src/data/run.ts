@@ -29,19 +29,3 @@ export const evidenceItems: ReadonlyArray<{
   { label: "Elapsed time", value: "1m 57s" },
   { label: "Explorer", value: "View on Blockscout", kind: "external" },
 ];
-
-export async function simulateConsumerVerification() {
-  await new Promise((resolve) => window.setTimeout(resolve, 360));
-
-  return {
-    outcome: "failed" as const,
-    code: "EXPECTED_HOST_NOT_ENFORCED",
-    summary: "Consumer needs one fix",
-    checks: [
-      { label: "Cryptographic proof", status: "passed" as const },
-      { label: "Request identity", status: "passed" as const },
-      { label: "Source host invariant", status: "failed" as const },
-      { label: "Replay protection", status: "passed" as const },
-    ],
-  };
-}

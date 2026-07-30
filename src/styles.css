@@ -503,11 +503,60 @@ a {
   transform: translateY(-1px);
 }
 
-.next-action-content > span {
-  display: block;
-  margin-top: 23px;
+.action-footer {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px 17px;
+  margin-top: 16px;
+}
+
+.action-footer > span {
   color: var(--muted);
   font-size: 14px;
+}
+
+.bundle-action,
+.bundle-download {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  color: var(--cyan-soft);
+  border: 1px solid rgba(45, 200, 243, 0.3);
+  border-radius: 6px;
+  background: rgba(45, 200, 243, 0.04);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.bundle-action:hover,
+.bundle-action:focus-visible,
+.bundle-download:hover,
+.bundle-download:focus-visible {
+  color: #fff;
+  border-color: rgba(45, 200, 243, 0.72);
+  outline: none;
+}
+
+.bundle-action:disabled {
+  cursor: wait;
+  opacity: 0.66;
+}
+
+.bundle-download {
+  color: var(--green);
+  border-color: rgba(85, 215, 120, 0.36);
+  background: rgba(85, 215, 120, 0.05);
+}
+
+.bundle-error {
+  margin: 3px 0 0;
+  color: var(--amber);
+  font-size: 12px;
   text-align: center;
 }
 
@@ -846,6 +895,52 @@ a {
   margin-top: 24px;
 }
 
+.verification-error {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 23px;
+  padding: 18px;
+  color: var(--muted);
+  border: 1px solid rgba(244, 186, 8, 0.42);
+  border-radius: var(--radius-sm);
+  background: rgba(244, 186, 8, 0.055);
+}
+
+.verification-error > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+}
+
+.verification-error > div svg,
+.verification-error code {
+  color: var(--amber);
+}
+
+.verification-error code {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+}
+
+.verification-error p,
+.verification-error span,
+.generation-error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.verification-error .dialog-primary {
+  margin-top: 4px;
+}
+
+.generation-error {
+  margin-bottom: 13px;
+  color: var(--amber);
+}
+
 .result-heading {
   display: flex;
   align-items: center;
@@ -921,9 +1016,14 @@ a {
 }
 
 .generated-code code {
+  max-height: 130px;
+  overflow: auto;
   color: #dceee1;
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 @keyframes fade-in {
@@ -1117,6 +1217,10 @@ a {
 
   .run-heading p {
     font-size: 14px;
+  }
+
+  .action-footer {
+    flex-direction: column;
   }
 
   .timeline-scroller {
