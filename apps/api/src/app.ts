@@ -15,7 +15,6 @@ const PRIVATE_KEY_PATTERN =
 const TransactionHashSchema = z
   .string()
   .regex(/^0x[0-9a-fA-F]{64}$/);
-const StrictEmptyBodySchema = z.object({}).strict();
 const CreateRunBodySchema = z
   .object({ manifest: Web2JsonManifestV1Schema })
   .strict();
@@ -25,6 +24,13 @@ const SubmissionBodySchema = z
   .strict();
 const TransactionBodySchema = z
   .object({ transactionHash: TransactionHashSchema.optional() })
+  .strict();
+const ConsumerVerificationBodySchema = z
+  .object({
+    consumer: z
+      .enum(["canonical-vulnerable", "canonical-safe"])
+      .optional(),
+  })
   .strict();
 const ConsumerArtifactBodySchema = z
   .object({
@@ -105,7 +111,7 @@ function commandBodySchema(
     return TransactionBodySchema;
   }
   if (/^\/v1\/runs\/[^/]+\/consumer-verifications$/.test(pathname)) {
-    return StrictEmptyBodySchema;
+    return ConsumerVerificationBodySchema;
   }
   if (/^\/v1\/runs\/[^/]+\/artifacts\/consumer$/.test(pathname)) {
     return ConsumerArtifactBodySchema;
