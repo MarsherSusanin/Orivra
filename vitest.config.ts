@@ -9,6 +9,7 @@ export default defineConfig({
       "packages/**/test/**/*.test.ts",
       "apps/**/test/**/*.test.ts",
       "contracts/**/*.test.ts",
+      "tests/**/*.contract.test.ts",
     ],
     setupFiles: ["./src/test/setup.ts"],
     css: true,
