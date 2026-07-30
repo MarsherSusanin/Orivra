@@ -38,6 +38,9 @@
     "zod": "^4.3.5"
   },
   "devDependencies": {
+    "@ethereumjs/common": "10.1.2",
+    "@ethereumjs/util": "10.1.2",
+    "@ethereumjs/vm": "10.1.2",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
