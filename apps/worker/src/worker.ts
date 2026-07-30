@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  DiagnosticV1Schema,
   type DiagnosticV1,
   type ProofBundleV1,
   type RunEventV1,
@@ -245,6 +246,7 @@ interface PersistedRelayerTransaction {
   projectId?: string;
   runId?: string;
   broadcastAt?: string | null;
+  broadcastAttemptedAt?: string | null;
   policy?: RelayerPolicy;
 }
 
@@ -324,6 +326,10 @@ interface ProductionPipelineRepository {
     idempotencyKey: string,
     transactionHash: string,
   ): Promise<unknown>;
+  claimRelayerBroadcastAttempt?(
+    idempotencyKey: string,
+    transactionHash: string,
+  ): Promise<boolean>;
   loadRelayerPolicy?(
     projectId: string,
     manifestFeeCapWei: bigint,
@@ -960,23 +966,61 @@ export function createProductionCommandHandlers(input: {
         }
       }
       if (!persisted.broadcastAt) {
-        const alreadyRecorded = input.ports.resolveRecordedTransaction
-          ? await input.ports.resolveRecordedTransaction(
-              persisted.transactionHash,
-            )
-          : false;
-        if (!alreadyRecorded) {
+        if (persisted.broadcastAttemptedAt) {
+          const alreadyRecorded = input.ports.resolveRecordedTransaction
+            ? await input.ports.resolveRecordedTransaction(
+                persisted.transactionHash,
+              )
+            : false;
+          if (!alreadyRecorded) {
+            throw Object.assign(
+              new Error(
+                "Relayer broadcast attempt is ambiguous; manual recovery is required",
+              ),
+              {
+                category: "transport",
+                code: "RELAYER_BROADCAST_ATTEMPT_AMBIGUOUS",
+                retryable: false,
+              },
+            );
+          }
+          await input.repository.markRelayerBroadcast(
+            idempotencyKey,
+            persisted.transactionHash,
+          );
+        } else {
+          if (!input.repository.claimRelayerBroadcastAttempt) {
+            throw new Error(
+              "Durable relayer broadcast-attempt repository support is required",
+            );
+          }
+          const claimed = await input.repository.claimRelayerBroadcastAttempt(
+            idempotencyKey,
+            persisted.transactionHash,
+          );
+          if (!claimed) {
+            throw Object.assign(
+              new Error(
+                "Relayer broadcast attempt is already claimed; manual recovery is required",
+              ),
+              {
+                category: "transport",
+                code: "RELAYER_BROADCAST_ATTEMPT_AMBIGUOUS",
+                retryable: false,
+              },
+            );
+          }
           const reportedHash = await input.ports.broadcastRawTransaction(
             persisted.rawTransaction,
           );
           if (!sameHex(reportedHash, persisted.transactionHash)) {
             throw new Error("Broadcast transaction hash mismatch");
           }
+          await input.repository.markRelayerBroadcast(
+            idempotencyKey,
+            persisted.transactionHash,
+          );
         }
-        await input.repository.markRelayerBroadcast(
-          idempotencyKey,
-          persisted.transactionHash,
-        );
       }
       const events = hasEvent(context, "REQUEST_SUBMITTED")
         ? []
@@ -1192,7 +1236,7 @@ export function createProductionCommandHandlers(input: {
     async VERIFY_PROOF(command) {
       const context = await load(command);
       if (hasEvent(context, "PROOF_VERIFIED")) {
-        return { nextCommands: [child(context, "VERIFY_CONSUMER")] };
+        return { nextCommands: [] };
       }
       const preflight = preflightEvidence(context);
       const proof = artifactValue<Record<string, unknown>>(context, "proof-evidence");
@@ -1224,7 +1268,7 @@ export function createProductionCommandHandlers(input: {
             verificationContract: verified.verificationContract,
           }),
         ],
-        nextCommands: [child(context, "VERIFY_CONSUMER")],
+        nextCommands: [],
       };
     },
 
@@ -1238,8 +1282,24 @@ export function createProductionCommandHandlers(input: {
         runId: context.runId,
         manifest: context.manifest,
         proof,
-        consumer: command.payload.consumer ?? "canonical-safe",
+        consumer: command.payload.consumer,
       });
+      const diagnostics = DiagnosticV1Schema.array().safeParse(
+        result.diagnostics,
+      );
+      if (!diagnostics.success || (!result.passed && diagnostics.data.length === 0)) {
+        throw Object.assign(
+          new Error(
+            "A failed consumer verification requires versioned diagnostic evidence",
+          ),
+          {
+            category: "consumer-invariant",
+            code: "CONSUMER_DIAGNOSTICS_MISSING",
+            retryable: false,
+            evidence: { consumer: command.payload.consumer ?? null },
+          },
+        );
+      }
       const safeSource = generateSafeWeb2JsonConsumer(context.manifest, {
         contractName: "ProoflineSafeWeb2JsonConsumer",
       });
@@ -1250,7 +1310,7 @@ export function createProductionCommandHandlers(input: {
             context,
             command,
             "CONSUMER_VERIFIED",
-            { passed: result.passed, diagnostics: result.diagnostics },
+            { passed: result.passed, diagnostics: diagnostics.data },
             input.clock.now(),
           ),
         ],
@@ -1258,7 +1318,7 @@ export function createProductionCommandHandlers(input: {
           artifact(context.runId, "consumer-evidence", {
             version: "1",
             passed: result.passed,
-            diagnostics: result.diagnostics,
+            diagnostics: diagnostics.data,
           }),
           {
             id: randomUUID(),
