@@ -1277,12 +1277,26 @@ export function createProductionCommandHandlers(input: {
       if (hasEvent(context, "CONSUMER_VERIFIED")) {
         return { nextCommands: [child(context, "BUILD_PROOF_BUNDLE")] };
       }
+      const consumer = command.payload.consumer;
+      if (
+        consumer !== "canonical-vulnerable" &&
+        consumer !== "canonical-safe"
+      ) {
+        throw Object.assign(
+          new Error("Consumer verification requires an explicit canonical consumer"),
+          {
+            category: "configuration",
+            code: "CONSUMER_INTENT_REQUIRED",
+            retryable: false,
+          },
+        );
+      }
       const proof = artifactValue<Record<string, unknown>>(context, "proof-evidence");
       const result = await input.ports.verifyConsumer({
         runId: context.runId,
         manifest: context.manifest,
         proof,
-        consumer: command.payload.consumer,
+        consumer,
       });
       const diagnostics = DiagnosticV1Schema.array().safeParse(
         result.diagnostics,
@@ -1296,7 +1310,7 @@ export function createProductionCommandHandlers(input: {
             category: "consumer-invariant",
             code: "CONSUMER_DIAGNOSTICS_MISSING",
             retryable: false,
-            evidence: { consumer: command.payload.consumer ?? null },
+            evidence: { consumer },
           },
         );
       }

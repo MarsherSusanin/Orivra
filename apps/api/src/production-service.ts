@@ -581,8 +581,17 @@ export function createProductionProoflineService(input: {
       });
     },
     verifyConsumer(context: Record<string, unknown>) {
+      if (
+        context.consumer !== "canonical-vulnerable" &&
+        context.consumer !== "canonical-safe"
+      ) {
+        throw Object.assign(
+          new Error("Consumer verification requires an explicit canonical consumer"),
+          { status: 400, code: "CONSUMER_INTENT_REQUIRED" },
+        );
+      }
       return enqueue(context, "VERIFY_CONSUMER", {
-        ...(context.consumer ? { consumer: context.consumer } : {}),
+        consumer: context.consumer,
       });
     },
 
