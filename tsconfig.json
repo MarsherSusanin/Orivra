@@ -17,5 +17,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "vite.config.mjs", "vitest.config.ts"]
+  "include": ["src", "packages/*/src", "vite.config.mjs", "vitest.config.ts"]
 }
