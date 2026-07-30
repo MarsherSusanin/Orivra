@@ -1,0 +1,77 @@
+import { readFile } from "node:fs/promises";
+import { Web2JsonManifestV1Schema } from "@proofline/contracts";
+import { createWeb2JsonVerifierClient } from "@proofline/fdc-coston2";
+
+export interface LiveGateInput {
+  projectToken: string;
+  privateKey: string;
+  verifierApiKey: string;
+  manifestPath: string;
+  timeoutMs: number;
+  runtime?: LiveGateRuntime;
+}
+
+export interface LiveGateEvidence {
+  commitHash: string;
+  treeHash: string;
+  runId: string;
+  transactionHash: string;
+  votingRound: string;
+  proofChecksum: string;
+  consumerVerified: boolean;
+  broadcastCountAfterRecordedHash: number;
+}
+
+export interface LiveGateRuntime {
+  kind: "live";
+  execute(input: {
+    manifest: ReturnType<typeof Web2JsonManifestV1Schema.parse>;
+    projectToken: string;
+    privateKey: string;
+    verifier: ReturnType<typeof createWeb2JsonVerifierClient>;
+    timeoutMs: number;
+  }): Promise<LiveGateEvidence>;
+}
+
+function requireSecret(name: string, value: string): void {
+  if (!value || value.trim().length < 8) {
+    throw Object.assign(new Error(`${name} is required for the live Coston2 gate`), {
+      kind: "configuration",
+    });
+  }
+}
+
+export async function runLiveCoston2Gate(
+  input: LiveGateInput,
+): Promise<LiveGateEvidence> {
+  requireSecret("PROOFLINE_PROJECT_TOKEN", input.projectToken);
+  requireSecret("PROOFLINE_COSTON2_PRIVATE_KEY", input.privateKey);
+  requireSecret("PROOFLINE_VERIFIER_API_KEY", input.verifierApiKey);
+  if (!Number.isFinite(input.timeoutMs) || input.timeoutMs <= 0 || input.timeoutMs > 600_000) {
+    throw Object.assign(new Error("Live Coston2 timeout must be within 10 minutes"), {
+      kind: "configuration",
+    });
+  }
+  const manifest = Web2JsonManifestV1Schema.parse(
+    JSON.parse(await readFile(input.manifestPath, "utf8")),
+  );
+  if (!input.runtime || input.runtime.kind !== "live") {
+    throw Object.assign(
+      new Error(
+        "Live Coston2 runtime is not configured; replay/simulator adapters are forbidden",
+      ),
+      { kind: "configuration" },
+    );
+  }
+  const verifier = createWeb2JsonVerifierClient({
+    endpoint: "https://fdc-verifiers-testnet.flare.network",
+    apiKey: input.verifierApiKey,
+  });
+  return input.runtime.execute({
+    manifest,
+    projectToken: input.projectToken,
+    privateKey: input.privateKey,
+    verifier,
+    timeoutMs: input.timeoutMs,
+  });
+}

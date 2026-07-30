@@ -2,5 +2,11 @@
   "name": "@proofline/fdc-coston2",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@proofline/contracts": "0.1.0",
+    "@proofline/domain": "0.1.0",
+    "undici": "^7.29.0"
+  }
 }

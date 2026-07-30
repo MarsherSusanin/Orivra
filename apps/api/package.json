@@ -2,5 +2,10 @@
   "name": "@proofline/api",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@proofline/contracts": "0.1.0",
+    "@proofline/domain": "0.1.0",
+    "pg": "^8.22.0"
+  }
 }

@@ -40,9 +40,7 @@ export function appendRunEvents(
   for (const event of journal) {
     const priorCommand = commands.get(event.commandId);
     if (priorCommand !== undefined) {
-      const suffix =
-        commandEffect(priorCommand) === commandEffect(event) ? "duplicate" : "conflict";
-      throw new Error(`Idempotency command ${suffix} for ${event.commandId}`);
+      throw new Error(`Idempotency command conflict for ${event.commandId}`);
     }
     commands.set(event.commandId, event);
   }
@@ -121,7 +119,7 @@ export function projectRun(eventValues: readonly RunEventV1[]): RunProjectionV1 
     const expectedType = LIFECYCLE[index];
     if (event.type !== expectedType) {
       throw new Error(
-        `Invalid lifecycle transition: expected ${expectedType ?? "terminal"}, received ${event.type}`,
+        `Invalid lifecycle transition: expected ${expectedType}, received ${event.type}`,
       );
     }
     events.push(event);
