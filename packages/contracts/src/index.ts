@@ -79,6 +79,39 @@ export const DiagnosticV1Schema = z
 
 export type DiagnosticV1 = z.infer<typeof DiagnosticV1Schema>;
 
+export const NormalizedFdcErrorSchema = z
+  .object({
+    version: VersionV1Schema,
+    category: z.enum([
+      "configuration",
+      "transport",
+      "timeout",
+      "not-finalized",
+      "consensus-miss",
+      "schema-invalid",
+      "proof-invalid",
+      "consumer-invariant",
+    ]),
+    code: z.string().regex(/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/),
+    message: z.string().min(1),
+    retryable: z.boolean(),
+    evidence: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+
+export type NormalizedFdcError = z.infer<typeof NormalizedFdcErrorSchema>;
+
+export const RunStageNameV1Schema = z.enum([
+  "preflight",
+  "request",
+  "round",
+  "proof",
+  "verify",
+  "consumer",
+]);
+
+export type RunStageNameV1 = z.infer<typeof RunStageNameV1Schema>;
+
 const RunEventCommon = {
   version: VersionV1Schema,
   runId: NonEmptyIdSchema,
@@ -145,6 +178,15 @@ export const RunEventV1Schema = z.discriminatedUnion("type", [
       })
       .strict(),
   ),
+  runEvent(
+    "RUN_FAILED",
+    z
+      .object({
+        stage: RunStageNameV1Schema,
+        error: NormalizedFdcErrorSchema,
+      })
+      .strict(),
+  ),
 ]);
 
 export type RunEventV1 = z.infer<typeof RunEventV1Schema>;
@@ -158,6 +200,13 @@ export const RunProjectionV1Schema = z
     runId: NonEmptyIdSchema,
     sequence: z.number().int().positive(),
     terminal: z.boolean(),
+    terminalFailure: z
+      .object({
+        stage: RunStageNameV1Schema,
+        error: NormalizedFdcErrorSchema,
+      })
+      .strict()
+      .optional(),
     stages: z
       .object({
         preflight: RunStageStatusV1Schema,
@@ -173,28 +222,6 @@ export const RunProjectionV1Schema = z
 
 export type RunProjectionV1 = z.infer<typeof RunProjectionV1Schema>;
 export type RunStageStatusV1 = z.infer<typeof RunStageStatusV1Schema>;
-
-export const NormalizedFdcErrorSchema = z
-  .object({
-    version: VersionV1Schema,
-    category: z.enum([
-      "configuration",
-      "transport",
-      "timeout",
-      "not-finalized",
-      "consensus-miss",
-      "schema-invalid",
-      "proof-invalid",
-      "consumer-invariant",
-    ]),
-    code: z.string().regex(/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/),
-    message: z.string().min(1),
-    retryable: z.boolean(),
-    evidence: z.record(z.string(), z.unknown()),
-  })
-  .strict();
-
-export type NormalizedFdcError = z.infer<typeof NormalizedFdcErrorSchema>;
 
 const NetworkSnapshotV1Schema = z
   .object({

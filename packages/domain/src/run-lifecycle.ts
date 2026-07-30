@@ -18,12 +18,22 @@ const LIFECYCLE: readonly RunEventTypeV1[] = [
   "CONSUMER_VERIFIED",
 ];
 
+const STAGE_NAMES = [
+  "preflight",
+  "request",
+  "round",
+  "proof",
+  "verify",
+  "consumer",
+] as const;
+
 function commandEffect(event: RunEventV1): string {
   return canonicalJson({ runId: event.runId, type: event.type, payload: event.payload });
 }
 
 function isTerminal(events: readonly RunEventV1[]): boolean {
-  return events.at(-1)?.type === "CONSUMER_VERIFIED";
+  const type = events.at(-1)?.type;
+  return type === "CONSUMER_VERIFIED" || type === "RUN_FAILED";
 }
 
 export function appendRunEvents(
@@ -60,7 +70,7 @@ export function appendRunEvents(
     }
 
     if (isTerminal(journal)) {
-      throw new Error("Cannot append an event after the terminal consumer state");
+      throw new Error("Cannot append an event after a terminal run state");
     }
 
     const expectedSequence = journal.length + 1;
@@ -79,19 +89,28 @@ export function appendRunEvents(
 }
 
 function completedStages(count: number): Record<string, RunStageStatusV1> {
-  const stageNames = ["preflight", "request", "round", "proof", "verify", "consumer"];
   const stages: Record<string, RunStageStatusV1> = Object.fromEntries(
-    stageNames.map((stage) => [stage, "pending"] as const),
+    STAGE_NAMES.map((stage) => [stage, "pending"] as const),
   );
 
   const completedCount = Math.max(0, count - 1);
   for (let index = 0; index < completedCount; index += 1) {
-    stages[stageNames[index]] = "completed";
+    stages[STAGE_NAMES[index]] = "completed";
   }
-  if (count >= 1 && count <= stageNames.length) {
-    stages[stageNames[count - 1]] = "active";
+  if (count >= 1 && count <= STAGE_NAMES.length) {
+    stages[STAGE_NAMES[count - 1]] = "active";
   }
   return stages;
+}
+
+function failedStages(stage: (typeof STAGE_NAMES)[number]) {
+  const failedAt = STAGE_NAMES.indexOf(stage);
+  return Object.fromEntries(
+    STAGE_NAMES.map((name, index) => [
+      name,
+      index < failedAt ? "completed" : index === failedAt ? "failed" : "pending",
+    ]),
+  ) as Record<string, RunStageStatusV1>;
 }
 
 export function projectRun(eventValues: readonly RunEventV1[]): RunProjectionV1 {
@@ -103,7 +122,7 @@ export function projectRun(eventValues: readonly RunEventV1[]): RunProjectionV1 
   let runId: string | undefined;
   for (let index = 0; index < eventValues.length; index += 1) {
     if (isTerminal(events)) {
-      throw new Error("Cannot project events after the terminal consumer state");
+      throw new Error("Cannot project events after a terminal run state");
     }
 
     const event = RunEventV1Schema.parse(eventValues[index]);
@@ -117,7 +136,7 @@ export function projectRun(eventValues: readonly RunEventV1[]): RunProjectionV1 
     runId ??= event.runId;
 
     const expectedType = LIFECYCLE[index];
-    if (event.type !== expectedType) {
+    if (event.type !== "RUN_FAILED" && event.type !== expectedType) {
       throw new Error(
         `Invalid lifecycle transition: expected ${expectedType}, received ${event.type}`,
       );
@@ -126,9 +145,12 @@ export function projectRun(eventValues: readonly RunEventV1[]): RunProjectionV1 
   }
 
   const last = events.at(-1)!;
-  const terminal = last.type === "CONSUMER_VERIFIED";
-  const stages = completedStages(events.length);
-  if (terminal) {
+  const failed = last.type === "RUN_FAILED";
+  const terminal = failed || last.type === "CONSUMER_VERIFIED";
+  const stages = failed
+    ? failedStages(last.payload.stage)
+    : completedStages(events.length);
+  if (last.type === "CONSUMER_VERIFIED") {
     stages.consumer = last.payload.passed ? "completed" : "failed";
   }
 
@@ -138,5 +160,6 @@ export function projectRun(eventValues: readonly RunEventV1[]): RunProjectionV1 
     sequence: last.sequence,
     terminal,
     stages,
+    ...(failed ? { terminalFailure: last.payload } : {}),
   });
 }
