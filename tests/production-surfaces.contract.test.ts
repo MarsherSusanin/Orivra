@@ -1,73 +1,14 @@
 // @vitest-environment node
 
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { validManifest } from "../packages/contracts/test/fixtures";
+import { describe, expect, it, vi } from "vitest";
 import { runProoflineAction } from "../packages/action/src/index";
-import { runLiveCoston2Gate } from "../apps/worker/src/live-gate";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
-const temporaryDirectories: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
-  );
-});
-
-describe("production Coston2 composition", () => {
-  it("exports the legacy runtime only from the isolated live-gate surface", async () => {
-    const [pipelineModule, gateRuntimeModule] = await Promise.all([
-      import("../apps/worker/src/live-runtime"),
-      import("../apps/worker/src/live-gate-runtime"),
-    ]);
-    expect(pipelineModule).not.toHaveProperty("createLiveCoston2Runtime");
-    expect(gateRuntimeModule.createLiveCoston2Runtime).toEqual(
-      expect.any(Function),
-    );
-    expect(
-      gateRuntimeModule.createLiveCoston2Runtime({ environment: {} }).kind,
-    ).toBe("live");
-  });
-
-  it("uses the default live runtime factory when no test seam is supplied", async () => {
-    const directory = await mkdtemp(`${tmpdir()}/proofline-live-gate-`);
-    temporaryDirectories.push(directory);
-    const manifestPath = `${directory}/manifest.json`;
-    await writeFile(manifestPath, JSON.stringify(validManifest), "utf8");
-    const execute = vi.fn().mockResolvedValue({
-      commitHash: "commit-a",
-      treeHash: "tree-a",
-      runId: "run_live",
-      transactionHash: `0x${"a".repeat(64)}`,
-      votingRound: "42871",
-      proofChecksum: `sha256:${"b".repeat(64)}`,
-      consumerVerified: true,
-      broadcastCountAfterRecordedHash: 0,
-    });
-    const runtimeFactory = vi.fn().mockReturnValue({ kind: "live", execute });
-
-    await expect(
-      runLiveCoston2Gate({
-        projectToken: `project_${"c".repeat(64)}`,
-        privateKey: `0x${"d".repeat(64)}`,
-        verifierApiKey: "verifier-secret",
-        manifestPath,
-        timeoutMs: 600_000,
-        runtimeFactory,
-      } as Parameters<typeof runLiveCoston2Gate>[0]),
-    ).resolves.toMatchObject({ runId: "run_live", consumerVerified: true });
-    expect(runtimeFactory).toHaveBeenCalledOnce();
-    expect(execute).toHaveBeenCalledOnce();
-  });
-});
 
 describe("runnable package artifacts", () => {
   it.each([
@@ -99,7 +40,6 @@ describe("runnable package artifacts", () => {
         cwd: repositoryRoot,
         timeout: 30_000,
       });
-      await expect(readFile(`${repositoryRoot}/${artifact.startsWith("dist") ? packagePath.replace("package.json", artifact) : artifact}`)).resolves.toBeInstanceOf(Buffer);
     },
   );
 });

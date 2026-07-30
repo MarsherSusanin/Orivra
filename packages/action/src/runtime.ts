@@ -8,6 +8,16 @@ import { runProoflineAction } from "./index";
 
 type Environment = Record<string, string | undefined>;
 
+export function observerActionEnvironment(
+  environment: Environment,
+): Environment {
+  return Object.fromEntries(
+    Object.entries(environment).filter(
+      ([name]) => !/(?:private|secret|verifier).*key|private_key/i.test(name),
+    ),
+  );
+}
+
 function required(environment: Environment, name: string): string {
   const value = environment[name]?.trim();
   if (!value) {
@@ -389,14 +399,7 @@ export function createProductionActionDependencies(input: {
   runLive(input: Record<string, unknown>): Promise<any>;
   uploadJson(name: string, value: unknown): void | Promise<void>;
 }) {
-  const production = process.env.NODE_ENV !== "test";
-  const environment = production
-    ? Object.fromEntries(
-        Object.entries(input.environment).filter(
-          ([name]) => !/(?:private|secret).*key|private_key/i.test(name),
-        ),
-      )
-    : input.environment;
+  const environment = observerActionEnvironment(input.environment);
   return {
     eventName: environment.GITHUB_EVENT_NAME ?? "",
     inputs: {
@@ -406,18 +409,7 @@ export function createProductionActionDependencies(input: {
     env: environment,
     client: {
       replayManifest: input.replayManifest,
-      runLive(request: Record<string, unknown>) {
-        if (production) return input.runLive(request);
-        const legacyPrivateKey = Object.entries(environment).find(
-          ([name]) => name.endsWith("PRIVATE_KEY"),
-        )?.[1];
-        return input.runLive({
-          ...request,
-          projectToken: environment.PROOFLINE_PROJECT_TOKEN ?? "",
-          ["private" + "Key"]: legacyPrivateKey ?? "",
-          verifierApiKey: environment.PROOFLINE_VERIFIER_API_KEY ?? "",
-        });
-      },
+      runLive: input.runLive,
     },
     artifacts: {
       writeSummary: input.core.writeSummary,

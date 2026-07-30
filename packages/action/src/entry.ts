@@ -6,13 +6,14 @@ import * as core from "@actions/core";
 import {
   createPersistedActionRunClient,
   createProductionActionDependencies,
+  observerActionEnvironment,
   runActionEntry,
 } from "./runtime";
 
 await runActionEntry({
   createDependencies() {
     const environment = {
-      ...process.env,
+      ...observerActionEnvironment(process.env),
       PROOFLINE_REPLAY_BUNDLE_PATH:
         core.getInput("bundle") || process.env.PROOFLINE_REPLAY_BUNDLE_PATH,
     };

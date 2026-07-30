@@ -59,8 +59,13 @@ describe("Slice 004 GitHub Action production adapter", () => {
     expect(dependencies).toMatchObject({
       eventName: "merge_group",
       inputs: { manifest: "proofline.manifest.json", mode: "live" },
-      env: environment,
+      env: {
+        GITHUB_EVENT_NAME: "merge_group",
+        PROOFLINE_PROJECT_TOKEN: environment.PROOFLINE_PROJECT_TOKEN,
+      },
     });
+    expect(dependencies.env).not.toHaveProperty("PROOFLINE_COSTON2_PRIVATE_KEY");
+    expect(dependencies.env).not.toHaveProperty("PROOFLINE_VERIFIER_API_KEY");
     await dependencies.client.runLive({
       manifestPath: "proofline.manifest.json",
       network: "coston2",
@@ -70,13 +75,12 @@ describe("Slice 004 GitHub Action production adapter", () => {
     await dependencies.artifacts.upload("proofline-live-evidence", {
       runId: "run_live",
     });
-    expect(runLive).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectToken: environment.PROOFLINE_PROJECT_TOKEN,
-        privateKey: environment.PROOFLINE_COSTON2_PRIVATE_KEY,
-        verifierApiKey: environment.PROOFLINE_VERIFIER_API_KEY,
-      }),
-    );
+    expect(runLive).toHaveBeenCalledWith({
+      manifestPath: "proofline.manifest.json",
+      network: "coston2",
+      timeoutMs: 600_000,
+      rebroadcastAfterTransactionHash: false,
+    });
     expect(uploadJson).toHaveBeenCalledWith(
       "proofline-live-evidence",
       { runId: "run_live" },

@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL("../../../", import.meta.url));
 const entry = resolve(root, "apps/worker/src/entry.ts");
 const bootstrap = resolve(root, "apps/worker/src/bootstrap.ts");
 const liveRuntime = resolve(root, "apps/worker/src/live-runtime.ts");
-const legacyLiveGate = resolve(root, "apps/worker/src/live-gate.ts");
+const obsoleteDirectGate = resolve(root, "apps/worker/src/live-gate.ts");
 const workerArtifact = resolve(root, "apps/worker/dist/worker.js");
 
 function sourceImportGraph(start: string): Map<string, string> {
@@ -64,7 +64,7 @@ describe("Slice 009 production worker purity", () => {
         ["legacy credential error", /Legacy test credentials/],
       ]),
     ).toEqual([]);
-    expect([...graph.keys()]).not.toContain(legacyLiveGate);
+    expect([...graph.keys()]).not.toContain(obsoleteDirectGate);
   });
 
   it("ships no project-token/private-key execution compatibility path", () => {
@@ -111,9 +111,9 @@ describe("Slice 009 production worker purity", () => {
     );
   });
 
-  it("keeps the narrow legacy live-gate module outside the production graph", () => {
-    expect(existsSync(legacyLiveGate)).toBe(true);
-    expect(sourceImportGraph(entry).has(legacyLiveGate)).toBe(false);
+  it("removes the obsolete direct orchestrator from the repository and production graph", () => {
+    expect(existsSync(obsoleteDirectGate)).toBe(false);
+    expect(sourceImportGraph(entry).has(obsoleteDirectGate)).toBe(false);
     expect(readFileSync(bootstrap, "utf8")).not.toMatch(/from\s+["']\.\/live-gate["']/);
   });
 });

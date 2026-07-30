@@ -56,12 +56,7 @@ describe("Action production runtime coverage", () => {
     });
     expect(dependencies.eventName).toBe("");
     await dependencies.client.runLive({ manifestPath: "manifest.json" });
-    expect(runLive).toHaveBeenCalledWith({
-      manifestPath: "manifest.json",
-      projectToken: "",
-      privateKey: "",
-      verifierApiKey: "",
-    });
+    expect(runLive).toHaveBeenCalledWith({ manifestPath: "manifest.json" });
   });
 
   it.each([0, 2])("maps action result %s to exit state and a generic failure", async (code) => {
@@ -104,12 +99,9 @@ describe("Action immutable live evidence coverage", () => {
     expect(harness.artifacts.upload).not.toHaveBeenCalled();
   });
 
-  it.each([
-    [{ PROOFLINE_COSTON2_PRIVATE_KEY: "key" }],
-    [{ PROOFLINE_PROJECT_TOKEN: "token" }],
-  ])("requires both credential classes before live execution", async (env) => {
+  it("requires the opaque project token before live execution", async () => {
     const harness = actionHarness();
-    harness.env = env as any;
+    harness.env = {} as any;
     await expect(runProoflineAction(harness)).resolves.toBe(1);
     expect(harness.client.runLive).not.toHaveBeenCalled();
   });
