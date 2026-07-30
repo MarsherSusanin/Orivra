@@ -67,6 +67,8 @@ interface PersistedRelayerTransaction {
   rawTransaction: string;
   transactionHash: string;
   commandFingerprint?: string;
+  broadcastAttemptedAt?: string | null;
+  broadcastAt?: string | null;
 }
 
 interface RelayerRepository {
@@ -76,6 +78,7 @@ interface RelayerRepository {
     key: string,
     value: PersistedRelayerTransaction,
   ): Promise<void>;
+  claimBroadcastAttempt(key: string, transactionHash: string): Promise<boolean>;
   markBroadcast(
     key: string,
     transactionHash: string,
@@ -105,12 +108,42 @@ export function createRelayerExecutor(input: {
     ): Promise<{ rawTransaction: string; transactionHash: string }>;
   };
   broadcaster(rawTransaction: string): Promise<string>;
+  resolveRecordedTransaction?(transactionHash: string): Promise<boolean>;
 }) {
   async function broadcast(
     command: RelayerSubmission,
     persisted: PersistedRelayerTransaction,
     reused: boolean,
   ) {
+    if (persisted.broadcastAt) return { ...persisted, reused };
+    if (persisted.broadcastAttemptedAt) {
+      const recorded = input.resolveRecordedTransaction
+        ? await input.resolveRecordedTransaction(persisted.transactionHash)
+        : false;
+      if (!recorded) {
+        throw new Error(
+          "Relayer broadcast attempt is ambiguous; manual recovery is required",
+        );
+      }
+      await input.repository.markBroadcast(
+        command.idempotencyKey,
+        persisted.transactionHash,
+        { recovered: true },
+      );
+      return { ...persisted, reused };
+    }
+    if (typeof input.repository.claimBroadcastAttempt !== "function") {
+      throw new Error("Durable relayer broadcast-attempt support is required");
+    }
+    const claimed = await input.repository.claimBroadcastAttempt(
+      command.idempotencyKey,
+      persisted.transactionHash,
+    );
+    if (!claimed) {
+      throw new Error(
+        "Relayer broadcast attempt is already claimed; manual recovery is required",
+      );
+    }
     const reportedHash = await input.broadcaster(persisted.rawTransaction);
     if (reportedHash.toLowerCase() !== persisted.transactionHash.toLowerCase()) {
       throw new Error("Broadcast transaction hash mismatch");
@@ -118,7 +151,7 @@ export function createRelayerExecutor(input: {
     await input.repository.markBroadcast(
       command.idempotencyKey,
       persisted.transactionHash,
-      { recovered: reused },
+      { recovered: false },
     );
     return { ...persisted, reused };
   }

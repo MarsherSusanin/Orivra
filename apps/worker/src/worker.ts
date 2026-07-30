@@ -999,27 +999,48 @@ export function createProductionCommandHandlers(input: {
             persisted.transactionHash,
           );
           if (!claimed) {
-            throw Object.assign(
-              new Error(
-                "Relayer broadcast attempt is already claimed; manual recovery is required",
-              ),
-              {
-                category: "transport",
-                code: "RELAYER_BROADCAST_ATTEMPT_AMBIGUOUS",
-                retryable: false,
-              },
+            const refreshed = await input.repository.findRelayerTransaction(
+              idempotencyKey,
+            );
+            if (refreshed?.broadcastAt) {
+              persisted.broadcastAt = refreshed.broadcastAt;
+            } else if (refreshed?.broadcastAttemptedAt) {
+              const alreadyRecorded = input.ports.resolveRecordedTransaction
+                ? await input.ports.resolveRecordedTransaction(
+                    refreshed.transactionHash,
+                  )
+                : false;
+              if (!alreadyRecorded) {
+                throw Object.assign(
+                  new Error(
+                    "Relayer broadcast attempt is already claimed; manual recovery is required",
+                  ),
+                  {
+                    category: "transport",
+                    code: "RELAYER_BROADCAST_ATTEMPT_AMBIGUOUS",
+                    retryable: false,
+                  },
+                );
+              }
+              await input.repository.markRelayerBroadcast(
+                idempotencyKey,
+                refreshed.transactionHash,
+              );
+            } else {
+              throw new Error("Relayer broadcast-attempt claim identity conflict");
+            }
+          } else {
+            const reportedHash = await input.ports.broadcastRawTransaction(
+              persisted.rawTransaction,
+            );
+            if (!sameHex(reportedHash, persisted.transactionHash)) {
+              throw new Error("Broadcast transaction hash mismatch");
+            }
+            await input.repository.markRelayerBroadcast(
+              idempotencyKey,
+              persisted.transactionHash,
             );
           }
-          const reportedHash = await input.ports.broadcastRawTransaction(
-            persisted.rawTransaction,
-          );
-          if (!sameHex(reportedHash, persisted.transactionHash)) {
-            throw new Error("Broadcast transaction hash mismatch");
-          }
-          await input.repository.markRelayerBroadcast(
-            idempotencyKey,
-            persisted.transactionHash,
-          );
         }
       }
       const events = hasEvent(context, "REQUEST_SUBMITTED")
