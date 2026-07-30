@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { appendRunEvents, projectRun } from "@proofline/domain";
 import {
+  NormalizedFdcErrorSchema,
   RunEventV1Schema,
   Web2JsonManifestV1Schema,
   type RunEventV1,
@@ -76,7 +77,7 @@ export const POSTGRES_QUERIES = {
       AND lease_token = $2::uuid
       AND status = 'leased'
       AND lease_expires_at > now()
-    RETURNING id, run_id
+    RETURNING id, run_id, kind
   `,
   renewLease: `
     UPDATE proofline_private.run_commands
@@ -125,6 +126,84 @@ function bytesHex(value: unknown): string {
 
 function digestHexBytes(value: string): Uint8Array {
   return new Uint8Array(createHash("sha256").update(hexBytes(value)).digest());
+}
+
+function hydrateRelayerTransaction(row: Record<string, unknown>) {
+  return {
+    runId: String(row.run_id),
+    idempotencyKey: String(row.idempotency_key),
+    chainId: Number(row.chain_id),
+    fromAddress: bytesHex(row.from_address),
+    nonce: BigInt(String(row.nonce)),
+    target: bytesHex(row.target_address),
+    calldataHash: Buffer.from(row.calldata_hash as Uint8Array).toString("hex"),
+    valueWei: BigInt(String(row.value_wei)),
+    rawTransaction: bytesHex(row.raw_signed_transaction),
+    transactionHash: bytesHex(row.transaction_hash),
+    commandFingerprint: `sha256:${Buffer.from(
+      row.command_fingerprint as Uint8Array,
+    ).toString("hex")}`,
+    broadcastAt: row.broadcast_at
+      ? new Date(String(row.broadcast_at)).toISOString()
+      : null,
+  };
+}
+
+function failureStage(commandKind: unknown) {
+  const kind = String(commandKind ?? "");
+  if (kind === "RUN_PREFLIGHT") return "preflight" as const;
+  if (
+    kind === "SUBMIT_RELAYER" ||
+    kind === "BROADCAST_RELAYER_TRANSACTION" ||
+    kind === "ATTACH_WALLET_TRANSACTION"
+  ) {
+    return "request" as const;
+  }
+  if (
+    kind === "POLL_TRANSACTION_RECEIPT" ||
+    kind === "POLL_RELAY_FINALIZATION"
+  ) {
+    return "round" as const;
+  }
+  if (kind === "FETCH_DA_PROOF") return "proof" as const;
+  if (kind === "VERIFY_PROOF") return "verify" as const;
+  if (kind === "VERIFY_CONSUMER" || kind === "BUILD_PROOF_BUNDLE") {
+    return "consumer" as const;
+  }
+  return "preflight" as const;
+}
+
+function terminalError(failure: Record<string, unknown>) {
+  const categories = new Set([
+    "configuration",
+    "transport",
+    "timeout",
+    "not-finalized",
+    "consensus-miss",
+    "schema-invalid",
+    "proof-invalid",
+    "consumer-invariant",
+  ]);
+  return NormalizedFdcErrorSchema.parse({
+    version: "1",
+    category: categories.has(String(failure.category))
+      ? failure.category
+      : "configuration",
+    code:
+      typeof failure.code === "string" &&
+      /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(failure.code)
+        ? failure.code
+        : "WORKER_COMMAND_FAILED",
+    message:
+      typeof failure.message === "string" && failure.message.length > 0
+        ? failure.message
+        : "Worker command failed",
+    retryable: false,
+    evidence:
+      failure.evidence && typeof failure.evidence === "object"
+        ? failure.evidence
+        : {},
+  });
 }
 
 async function appendEventInTransaction(
@@ -243,26 +322,26 @@ export function createPostgresCommandRepository(input: {
         );
         const row = result.rows[0];
         if (!row) return null;
-        return {
-          runId: String(row.run_id),
-          idempotencyKey: String(row.idempotency_key),
-          chainId: Number(row.chain_id),
-          fromAddress: bytesHex(row.from_address),
-          nonce: BigInt(String(row.nonce)),
-          target: bytesHex(row.target_address),
-          calldataHash: Buffer.from(
-            row.calldata_hash as Uint8Array,
-          ).toString("hex"),
-          valueWei: BigInt(String(row.value_wei)),
-          rawTransaction: bytesHex(row.raw_signed_transaction),
-          transactionHash: bytesHex(row.transaction_hash),
-          commandFingerprint: `sha256:${Buffer.from(
-            row.command_fingerprint as Uint8Array,
-          ).toString("hex")}`,
-          broadcastAt: row.broadcast_at
-            ? new Date(String(row.broadcast_at)).toISOString()
-            : null,
-        };
+        return hydrateRelayerTransaction(row);
+      } finally {
+        client.release();
+      }
+    },
+
+    async findRelayerTransactionByRun(runId: string) {
+      const client = await input.pool.connect();
+      try {
+        const result = await client.query(
+          `SELECT run_id, idempotency_key, chain_id, from_address, nonce,
+                  target_address, calldata_hash, value_wei,
+                  raw_signed_transaction, transaction_hash,
+                  command_fingerprint, broadcast_at
+           FROM proofline_private.relayer_transactions
+           WHERE run_id = $1`,
+          [runId],
+        );
+        const row = result.rows[0];
+        return row ? hydrateRelayerTransaction(row) : null;
       } finally {
         client.release();
       }
@@ -317,6 +396,7 @@ export function createPostgresCommandRepository(input: {
         Boolean(
           row &&
             String(row.run_id) === value.runId &&
+            String(row.idempotency_key) === value.idempotencyKey &&
             Number(row.chain_id) === value.chainId &&
             BigInt(String(row.nonce)) === value.nonce &&
             bytesHex(row.target_address).toLowerCase() ===
@@ -335,6 +415,10 @@ export function createPostgresCommandRepository(input: {
       const client = await input.pool.connect();
       try {
         await client.query("BEGIN");
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+          [value.runId],
+        );
         if (value.policy && input.relayerPolicy) {
           await client.query(
             "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
@@ -344,10 +428,10 @@ export function createPostgresCommandRepository(input: {
         const prior = await client.query(
           `SELECT run_id, chain_id, nonce, target_address, calldata_hash,
                   command_fingerprint, value_wei, raw_signed_transaction,
-                  transaction_hash
+                  transaction_hash, idempotency_key
            FROM proofline_private.relayer_transactions
-           WHERE idempotency_key = $1`,
-          [value.idempotencyKey],
+           WHERE idempotency_key = $1 OR run_id = $2`,
+          [value.idempotencyKey, value.runId],
         );
         if (prior.rows[0]) {
           if (!matches(prior.rows[0])) {
@@ -397,10 +481,10 @@ export function createPostgresCommandRepository(input: {
           const existing = await client.query(
             `SELECT run_id, chain_id, nonce, target_address, calldata_hash,
                     command_fingerprint, value_wei, raw_signed_transaction,
-                    transaction_hash
+                    transaction_hash, idempotency_key
              FROM proofline_private.relayer_transactions
-             WHERE idempotency_key = $1`,
-            [value.idempotencyKey],
+             WHERE idempotency_key = $1 OR run_id = $2`,
+            [value.idempotencyKey, value.runId],
           );
           if (!matches(existing.rows[0])) {
             throw new Error("Persisted relayer idempotency identity conflict");
@@ -709,16 +793,41 @@ export function createPostgresCommandRepository(input: {
         }
         const runId = result.rows[0]?.run_id;
         if (failure.terminal === true && typeof runId === "string") {
+          const locked = await client.query(POSTGRES_QUERIES.lockRun, [runId]);
+          if (locked.rowCount !== 1) {
+            throw new Error("Terminal failure run is missing");
+          }
+          const projection = locked.rows[0]?.projection;
+          const alreadyTerminal =
+            projection &&
+            typeof projection === "object" &&
+            (projection as { terminal?: unknown }).terminal === true;
+          if (!alreadyTerminal) {
+            const sequence = Number(locked.rows[0]?.last_sequence ?? 0) + 1;
+            const terminalEvent = RunEventV1Schema.parse({
+              version: "1",
+              runId,
+              sequence,
+              commandId,
+              occurredAt: new Date().toISOString(),
+              type: "RUN_FAILED",
+              payload: {
+                stage: failureStage(result.rows[0]?.kind),
+                error: terminalError(failure),
+              },
+            });
+            await appendEventInTransaction(client, terminalEvent);
+          }
           await client.query(
-            `UPDATE proofline_private.runs
-             SET projection = COALESCE(projection, '{}'::jsonb)
-                   || jsonb_build_object(
-                        'terminal', true,
-                        'terminalFailure', $2::jsonb
-                      ),
+            `UPDATE proofline_private.run_commands
+             SET status = 'cancelled',
+                 lease_token = NULL,
+                 lease_expires_at = NULL,
                  updated_at = now()
-             WHERE id = $1`,
-            [runId, JSON.stringify(failure)],
+             WHERE run_id = $1
+               AND id <> $2
+               AND status IN ('queued', 'leased')`,
+            [runId, commandId],
           );
         }
         await client.query("COMMIT");

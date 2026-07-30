@@ -118,8 +118,11 @@ export function createRunWorker(input: {
       if (!handler) {
         const failure = {
           category: "configuration",
+          code: "WORKER_HANDLER_MISSING",
           retryable: false,
+          terminal: true,
           message: "No handler registered for command",
+          evidence: { commandId: claimed.command.id },
           commandId: claimed.command.id,
         };
         await input.repository.retryCommand(
@@ -310,6 +313,9 @@ interface ProductionPipelineRepository {
   renewLease?(commandId: string, claimToken: string, interval: string): Promise<unknown>;
   findRelayerTransaction(
     idempotencyKey: string,
+  ): Promise<PersistedRelayerTransaction | null>;
+  findRelayerTransactionByRun?(
+    runId: string,
   ): Promise<PersistedRelayerTransaction | null>;
   persistRelayerTransaction(value: PersistedRelayerTransaction): Promise<unknown>;
   markRelayerBroadcast(
@@ -682,6 +688,9 @@ export function createProductionCommandHandlers(input: {
 
     async SUBMIT_RELAYER(command) {
       const context = await load(command);
+      if (projectRun(context.events).terminal) {
+        throw new Error("Terminal runs are immutable and cannot be submitted again");
+      }
       const idempotencyKey = String(
         command.payload.idempotencyKey ?? command.id,
       );
@@ -694,9 +703,15 @@ export function createProductionCommandHandlers(input: {
         valueWei: BigInt(preflight.quotedFeeWei),
       };
       const policy = persistedRelayerPolicy(context);
-      let persisted = await input.repository.findRelayerTransaction(
-        idempotencyKey,
-      );
+      const forRun = input.repository.findRelayerTransactionByRun
+        ? await input.repository.findRelayerTransactionByRun(context.runId)
+        : null;
+      if (forRun && forRun.idempotencyKey !== idempotencyKey) {
+        throw new Error("Run already has one persisted relayer transaction");
+      }
+      let persisted =
+        forRun ??
+        (await input.repository.findRelayerTransaction(idempotencyKey));
       if (!persisted) {
         persisted = await input.ports.signRelayerTransaction({
           runId: context.runId,

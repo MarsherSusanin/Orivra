@@ -93,6 +93,19 @@ export function createProductionProoflineService(input: {
     return result.rows[0] as Record<string, unknown> | undefined;
   }
 
+  async function findRelayerCommandByRun(runId: string) {
+    const result = await input.pool.query(
+      `SELECT project_id, run_id, idempotency_key, kind, payload
+       FROM proofline_private.run_commands
+       WHERE run_id = $1
+         AND kind = 'SUBMIT_RELAYER'
+         AND status <> 'cancelled'
+       LIMIT 1`,
+      [runId],
+    );
+    return result.rows[0] as Record<string, unknown> | undefined;
+  }
+
   function sameIntent(
     existing: Record<string, unknown>,
     runId: string,
@@ -126,21 +139,45 @@ export function createProductionProoflineService(input: {
       return { accepted: true, runId };
     }
 
-    const inserted = await input.pool.query(
-      `INSERT INTO proofline_private.run_commands
-        (id, project_id, run_id, idempotency_key, kind, payload)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-       ON CONFLICT (project_id, idempotency_key) DO NOTHING
-       RETURNING project_id, run_id, idempotency_key, kind, payload`,
-      [
-        randomUUID(),
-        context.projectId,
-        runId,
-        context.idempotencyKey,
-        kind,
-        JSON.stringify(payload),
-      ],
-    );
+    if (kind === "SUBMIT_RELAYER") {
+      const priorRelayerCommand = await findRelayerCommandByRun(runId);
+      if (priorRelayerCommand) {
+        throw Object.assign(
+          new Error("Run already has one relayer submission command"),
+          { status: 409, code: "RELAYER_SUBMISSION_EXISTS" },
+        );
+      }
+    }
+
+    let inserted;
+    try {
+      inserted = await input.pool.query(
+        `INSERT INTO proofline_private.run_commands
+          (id, project_id, run_id, idempotency_key, kind, payload)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+         ON CONFLICT (project_id, idempotency_key) DO NOTHING
+         RETURNING project_id, run_id, idempotency_key, kind, payload`,
+        [
+          randomUUID(),
+          context.projectId,
+          runId,
+          context.idempotencyKey,
+          kind,
+          JSON.stringify(payload),
+        ],
+      );
+    } catch (cause) {
+      if (kind === "SUBMIT_RELAYER" && isUniqueViolation(cause)) {
+        const racedRelayerCommand = await findRelayerCommandByRun(runId);
+        if (racedRelayerCommand) {
+          throw Object.assign(
+            new Error("Run already has one relayer submission command"),
+            { status: 409, code: "RELAYER_SUBMISSION_EXISTS" },
+          );
+        }
+      }
+      throw cause;
+    }
     if (!inserted.rowCount) {
       const raced = await findCommandIntent(
         context.projectId,

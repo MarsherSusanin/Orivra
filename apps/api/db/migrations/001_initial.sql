@@ -102,8 +102,23 @@ CREATE TABLE IF NOT EXISTS proofline_private.relayer_transactions (
     transaction_hash bytea NOT NULL UNIQUE CHECK (octet_length(transaction_hash) = 32),
     broadcast_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT relayer_transactions_run_id_unique UNIQUE (run_id),
     UNIQUE (chain_id, from_address, nonce)
 );
+
+DO $constraints$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'relayer_transactions_run_id_unique'
+          AND conrelid = 'proofline_private.relayer_transactions'::regclass
+    ) THEN
+        ALTER TABLE proofline_private.relayer_transactions
+            ADD CONSTRAINT relayer_transactions_run_id_unique UNIQUE (run_id);
+    END IF;
+END
+$constraints$;
 
 CREATE TABLE IF NOT EXISTS proofline_private.share_tokens (
     id uuid PRIMARY KEY,
@@ -180,6 +195,9 @@ CREATE INDEX IF NOT EXISTS run_commands_available_at_created_at_queued_idx
 CREATE INDEX IF NOT EXISTS run_commands_expired_lease_idx
     ON proofline_private.run_commands (lease_expires_at, created_at)
     WHERE status = 'leased';
+CREATE UNIQUE INDEX IF NOT EXISTS run_commands_one_relayer_submission_per_run_idx
+    ON proofline_private.run_commands (run_id)
+    WHERE kind = 'SUBMIT_RELAYER' AND status <> 'cancelled';
 CREATE INDEX IF NOT EXISTS share_tokens_token_digest_idx
     ON proofline_private.share_tokens (token_digest);
 CREATE INDEX IF NOT EXISTS runs_project_id_created_at_idx
