@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/worker.js",
   "scripts": {
-    "build": "../../node_modules/.bin/esbuild src/entry.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/worker.js --external:pg",
+    "build": "../../node_modules/.bin/esbuild src/entry.ts --bundle --platform=node --format=esm --target=node22 --banner:js='import { createRequire } from \"node:module\"; const require = createRequire(import.meta.url);' --outfile=dist/worker.js --external:pg",
     "start": "node dist/worker.js"
   },
   "engines": {

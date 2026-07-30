@@ -54,19 +54,21 @@ export async function runProoflineCli(input: CliDependencies): Promise<number> {
         JSON.parse(await input.files.readText(manifestPath)),
       );
       const created = await input.client.createRun({ manifest, mode });
-      if (mode === "wallet") {
+      if (mode === "wallet" || mode === "relayer") {
         const transaction = await input.client.prepareSubmission({
           runId: created.runId,
-          mode: "wallet",
+          mode,
         });
-        const transactionHash = await input.wallet.signAndBroadcast(
-          transaction,
-          privateKey!,
-        );
-        await input.client.attachTransaction({
-          runId: created.runId,
-          transactionHash,
-        });
+        if (mode === "wallet") {
+          const transactionHash = await input.wallet.signAndBroadcast(
+            transaction,
+            privateKey!,
+          );
+          await input.client.attachTransaction({
+            runId: created.runId,
+            transactionHash,
+          });
+        }
       }
       input.io.stdout(`Run created: ${created.runId}`);
       return 0;
@@ -161,9 +163,9 @@ export function createProductionCliDependencies(input: {
       };
     });
   let idempotencySequence = 0;
-  async function api(path: string, init: RequestInit = {}) {
+  async function requestApi(path: string, init: RequestInit = {}) {
     const method = init.method ?? "GET";
-    const response = await input.fetch(`${apiOrigin}${path}`, {
+    return input.fetch(`${apiOrigin}${path}`, {
       ...init,
       headers: {
         accept: "application/json",
@@ -177,6 +179,10 @@ export function createProductionCliDependencies(input: {
         ...Object.fromEntries(new Headers(init.headers)),
       },
     });
+  }
+  async function api(path: string, init: RequestInit = {}) {
+    const method = init.method ?? "GET";
+    const response = await requestApi(path, init);
     if (!response.ok) {
       throw new Error(`Proofline API rejected ${method} ${path} (${response.status})`);
     }
@@ -193,13 +199,40 @@ export function createProductionCliDependencies(input: {
         body: JSON.stringify({ manifest }),
       }).then((response) => response.json());
     },
-    async prepareSubmission(input: { runId: string; mode: string }) {
-      return api(`/v1/runs/${encodeURIComponent(input.runId)}/submissions`, {
-        method: "POST",
-        body: JSON.stringify({ mode: input.mode }),
-      })
-        .then((response) => response.json())
-        .then((value: any) => value.transaction);
+    async prepareSubmission(request: { runId: string; mode: string }) {
+      const path = `/v1/runs/${encodeURIComponent(request.runId)}/submissions`;
+      const startedAt = input.clock.now();
+      const timeoutMs = 60_000;
+      while (true) {
+        const response = await requestApi(path, {
+          method: "POST",
+          body: JSON.stringify({ mode: request.mode }),
+        });
+        if (response.ok) {
+          const value: any = await response.json();
+          return value.transaction ?? value;
+        }
+        let code: unknown;
+        if (response.status === 404) {
+          try {
+            code = ((await response.json()) as any)?.error?.code;
+          } catch {
+            code = undefined;
+          }
+        }
+        if (response.status !== 404 || code !== "PREFLIGHT_NOT_READY") {
+          throw new Error(
+            `Proofline API rejected POST ${path} (${response.status})`,
+          );
+        }
+        const remainingMs = timeoutMs - (input.clock.now() - startedAt);
+        if (remainingMs <= 0) {
+          throw new Error(
+            "Web2Json preflight was not ready before the 60 second timeout",
+          );
+        }
+        await input.clock.sleep(Math.min(2_000, remainingMs));
+      }
     },
     async attachTransaction(input: { runId: string; transactionHash: string }) {
       return api(`/v1/runs/${encodeURIComponent(input.runId)}/transactions`, {
