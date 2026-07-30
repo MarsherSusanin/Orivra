@@ -52,14 +52,16 @@ describe("mobile fixed-navigation safe area", () => {
   it("does not stack the secondary action into the fixed navigation hit area", () => {
     const layout = computedMobileLayout(390);
 
-    // These controls prove the test is exercising the fixed 68px mobile navigation.
+    // These controls prove the test is exercising the fixed mobile navigation
+    // plus the ADR 0010 full-footer clearance token.
     expect(layout.navigation.position).toBe("fixed");
     expect(layout.navigation.height).toBe("68px");
-    expect(layout.shell.paddingBottom).toBe("68px");
+    expect(Number.parseFloat(layout.shell.paddingBottom)).toBeGreaterThanOrEqual(
+      Number.parseFloat(layout.navigation.height) + 8,
+    );
 
-    // Root Chromium evidence measured the stacked button at y=769..801 and the
-    // navigation at y=776..844. Keeping the footer inline removes the second row;
-    // the browser gate separately enforces action.bottom + 8 <= navigation.top.
+    // Root Chromium separately enforces the rendered inequality for every
+    // footer child: child.bottom + 8 <= navigation.top.
     expect(layout.actionFooter.flexDirection).not.toBe("column");
   });
 });

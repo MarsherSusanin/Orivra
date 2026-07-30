@@ -23,6 +23,10 @@ const FDC_HUB = "0x3333333333333333333333333333333333333333";
 const FDC_VERIFICATION = "0x1111111111111111111111111111111111111111";
 const TRANSACTION_HASH = `0x${"9".repeat(64)}`;
 const encoder = new TextEncoder();
+const relayerManifest = {
+  ...validManifest,
+  submission: { ...validManifest.submission, mode: "relayer" as const },
+};
 
 function artifact(kind: string, value: unknown) {
   return {
@@ -355,6 +359,7 @@ function preflightArtifact() {
 }
 
 function liveHarness(input?: {
+  mode?: "wallet" | "relayer";
   events?: any[];
   persisted?: any;
   byRun?: any;
@@ -362,13 +367,20 @@ function liveHarness(input?: {
   reportedHash?: string;
   alreadyRecorded?: boolean;
 }) {
-  const events = input?.events ?? makeRunEvents().slice(0, 2);
+  const persistedManifest =
+    input?.mode === "relayer" ? relayerManifest : validManifest;
+  const events = (input?.events ?? makeRunEvents().slice(0, 2)).map(
+    (event: any) =>
+      event.type === "RUN_CREATED"
+        ? { ...event, payload: { manifest: persistedManifest } }
+        : event,
+  );
   let persisted = input?.persisted ?? null;
   const repository = {
     loadRunExecutionContext: vi.fn(async () => ({
       runId: RUN_ID,
       projectId: PROJECT_ID,
-      manifest: validManifest,
+      manifest: persistedManifest,
       events,
       projection: projectRun(events),
       artifacts: [preflightArtifact()],
@@ -483,7 +495,7 @@ describe("Slice 007 wallet and relayer recovery coverage", () => {
 
   it("reconciles the run-level relayer identity without signing after restart", async () => {
     const persisted = persistedRelayer();
-    const fixture = liveHarness({ byRun: persisted });
+    const fixture = liveHarness({ mode: "relayer", byRun: persisted });
     await expect(
       fixture.handlers.SUBMIT_RELAYER(
         command("SUBMIT_RELAYER", { idempotencyKey: "submission-1" }),
@@ -500,6 +512,7 @@ describe("Slice 007 wallet and relayer recovery coverage", () => {
       .update(Buffer.from("feedcafe", "hex"))
       .digest("hex");
     const matching = liveHarness({
+      mode: "relayer",
       byRun: persistedRelayer({ calldata: undefined, calldataHash: digest }),
     });
     await expect(
@@ -509,6 +522,7 @@ describe("Slice 007 wallet and relayer recovery coverage", () => {
     ).resolves.toBeDefined();
 
     const changed = liveHarness({
+      mode: "relayer",
       byRun: persistedRelayer({
         calldata: undefined,
         calldataHash: "0".repeat(64),
@@ -522,7 +536,7 @@ describe("Slice 007 wallet and relayer recovery coverage", () => {
   });
 
   it("fails closed when broadcast has no durable signed identity", async () => {
-    const fixture = liveHarness();
+    const fixture = liveHarness({ mode: "relayer" });
     await expect(
       fixture.handlers.BROADCAST_RELAYER_TRANSACTION(
         command("BROADCAST_RELAYER_TRANSACTION", {
@@ -537,6 +551,7 @@ describe("Slice 007 wallet and relayer recovery coverage", () => {
       broadcastAttemptedAt: OCCURRED_AT,
     });
     const fixture = liveHarness({
+      mode: "relayer",
       persisted,
       alreadyRecorded: true,
     });
@@ -557,6 +572,7 @@ describe("Slice 007 wallet and relayer recovery coverage", () => {
 
   it("rejects a broadcaster that reports a different transaction hash", async () => {
     const fixture = liveHarness({
+      mode: "relayer",
       persisted: persistedRelayer(),
       reportedHash: `0x${"8".repeat(64)}`,
     });

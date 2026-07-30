@@ -20,6 +20,10 @@ const transactionHash = `0x${"9".repeat(64)}`;
 const fdcHub = "0x3333333333333333333333333333333333333333";
 const fdcVerification = "0x1111111111111111111111111111111111111111";
 const relay = "0x4444444444444444444444444444444444444444";
+const relayerManifest = {
+  ...validManifest,
+  submission: { ...validManifest.submission, mode: "relayer" as const },
+};
 
 function bytes(value: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value));
@@ -48,12 +52,17 @@ const preflightArtifact = {
 function context(
   eventCount: number,
   artifacts: Array<Record<string, unknown>> = [preflightArtifact],
+  manifest = validManifest as typeof validManifest | typeof relayerManifest,
 ) {
-  const events = makeRunEvents().slice(0, eventCount);
+  const events = makeRunEvents().slice(0, eventCount).map((event) =>
+    event.type === "RUN_CREATED"
+      ? { ...event, payload: { manifest } }
+      : event,
+  );
   return {
     runId: RUN_ID,
     projectId,
-    manifest: validManifest,
+    manifest,
     events,
     projection: projectRun(events),
     artifacts,
@@ -316,7 +325,11 @@ describe("Slice 005 persisted relayer policy and identity", () => {
       fromAddress: "0x5555555555555555555555555555555555555555",
     });
     const fixture = handlers({
-      executionContext: context(2, [preflightArtifact, policyArtifact]),
+      executionContext: context(
+        2,
+        [preflightArtifact, policyArtifact],
+        relayerManifest,
+      ),
       portOverrides: { signRelayerTransaction: sign },
     });
     await fixture.handlers.SUBMIT_RELAYER({
@@ -354,7 +367,11 @@ describe("Slice 005 persisted relayer policy and identity", () => {
       broadcastAt: null,
     };
     const fixture = handlers({
-      executionContext: context(2, [preflightArtifact, policyArtifact]),
+      executionContext: context(
+        2,
+        [preflightArtifact, policyArtifact],
+        relayerManifest,
+      ),
       persisted,
     });
     await expect(

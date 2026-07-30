@@ -30,6 +30,10 @@ const registryAddress = "0x2222222222222222222222222222222222222222";
 const fdcHub = "0x3333333333333333333333333333333333333333";
 const fdcVerification = "0x1111111111111111111111111111111111111111";
 const relay = "0x4444444444444444444444444444444444444444";
+const relayerManifest = {
+  ...validManifest,
+  submission: { ...validManifest.submission, mode: "relayer" as const },
+};
 
 function productionHandlerFactory(): (...args: any[]) => any {
   const factory = (workerModule as Record<string, unknown>)
@@ -52,7 +56,7 @@ function createFixture() {
         commandId: "cmd_create",
         occurredAt: OCCURRED_AT,
         type: "RUN_CREATED" as const,
-        payload: { manifest: validManifest },
+        payload: { manifest: relayerManifest },
       },
     ],
     artifacts: [] as Array<Record<string, unknown>>,
@@ -63,7 +67,7 @@ function createFixture() {
     loadRunExecutionContext: vi.fn(async () => ({
       runId: RUN_ID,
       projectId: "11111111-1111-4111-8111-111111111111",
-      manifest: validManifest,
+      manifest: relayerManifest,
       events: [...state.events],
       projection: projectRun(state.events),
       artifacts: [...state.artifacts],
@@ -223,7 +227,9 @@ describe("Slice 003 production command composition", () => {
     const fixture = createFixture();
 
     const preflight = await fixture.execute("RUN_PREFLIGHT");
-    expect(preflight.nextCommands ?? []).toEqual([]);
+    expect(preflight.nextCommands).toEqual([
+      expect.objectContaining({ kind: "SUBMIT_RELAYER" }),
+    ]);
 
     const prepared = await fixture.execute("SUBMIT_RELAYER", {
       idempotencyKey: "submission-1",

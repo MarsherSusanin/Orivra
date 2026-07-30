@@ -21,10 +21,14 @@ const preflightEvidence = {
 
 type Row = Record<string, any>;
 
-function createPool() {
+function createPool(mode: "wallet" | "relayer" = "wallet") {
+  const persistedManifest = {
+    ...validManifest,
+    submission: { ...validManifest.submission, mode },
+  };
   const runs = new Map<string, Row>([
-    [runA, { id: runA, project_id: projectA, manifest: validManifest }],
-    [runB, { id: runB, project_id: projectA, manifest: validManifest }],
+    [runA, { id: runA, project_id: projectA, manifest: persistedManifest }],
+    [runB, { id: runB, project_id: projectA, manifest: persistedManifest }],
   ]);
   const commands = new Map<string, Row>();
   const shares: Row[] = [];
@@ -162,7 +166,7 @@ describe("Slice 003 production ownership and idempotency intent", () => {
   });
 
   it("returns a conflict when one idempotency key is reused for another run", async () => {
-    const harness = createPool();
+    const harness = createPool("relayer");
     const productionService = service(harness);
     await expect(
       productionService.createSubmission({

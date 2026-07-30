@@ -15,8 +15,13 @@ import { createProductionProoflineService } from "../src/production-service";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const RUN_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const WALLET_RUN_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb0";
 const CLAIM = "11111111-1111-4111-8111-111111111111";
 const FDC_HUB = "0x3333333333333333333333333333333333333333";
+const relayerManifest = {
+  ...validManifest,
+  submission: { ...validManifest.submission, mode: "relayer" as const },
+};
 
 function service(pool: any) {
   return createProductionProoflineService({
@@ -227,11 +232,17 @@ describe("production service read, artifact, replay, and share coverage", () => 
 });
 
 describe("production service submission and command intent coverage", () => {
-  it("enqueues each owned command and reuses the identical intent", async () => {
+  it("enqueues selected commands on distinct persisted run authorities", async () => {
     const commands = new Map<string, Record<string, unknown>>();
     const query = vi.fn(async (text: string, values: readonly unknown[] = []) => {
       if (/SELECT id, project_id, manifest, projection, last_sequence/i.test(text)) {
-        return result([{ id: RUN_ID, project_id: PROJECT_ID, manifest: validManifest }]);
+        const selectedRunId = String(values[0]);
+        return result([{
+          id: selectedRunId,
+          project_id: PROJECT_ID,
+          manifest:
+            selectedRunId === WALLET_RUN_ID ? validManifest : relayerManifest,
+        }]);
       }
       if (/SELECT project_id, run_id, idempotency_key, kind, payload/i.test(text)) {
         const row = commands.get(String(values[1]));
@@ -269,6 +280,7 @@ describe("production service submission and command intent coverage", () => {
     ).resolves.toEqual({ accepted: true, runId: RUN_ID });
     await production.attachTransaction({
       ...base,
+      runId: WALLET_RUN_ID,
       idempotencyKey: "attach-1",
       transactionHash: `0x${"9".repeat(64)}`,
     });
@@ -351,7 +363,10 @@ describe("production service submission and command intent coverage", () => {
     };
     const production = service({
       query: vi.fn(async () =>
-        result([{ canonical_bytes: Buffer.from(JSON.stringify(evidence)) }]),
+        result([{
+          manifest: validManifest,
+          canonical_bytes: Buffer.from(JSON.stringify(evidence)),
+        }]),
       ),
     });
     await expect(
@@ -368,6 +383,7 @@ describe("production service submission and command intent coverage", () => {
       query: vi.fn(async () =>
         result([
           {
+            manifest: validManifest,
             canonical_bytes: Buffer.from(
               JSON.stringify({
                 network: { resolvedContracts: { FdcHub: FDC_HUB } },

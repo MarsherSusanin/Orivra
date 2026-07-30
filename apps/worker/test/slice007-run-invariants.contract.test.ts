@@ -22,6 +22,10 @@ const RELAY = "0x4444444444444444444444444444444444444444";
 const REGISTRY = "0x2222222222222222222222222222222222222222";
 const REQUEST_CALLDATA = "0xfeedcafe";
 const QUOTED_FEE = 12_345n;
+const relayerManifest = {
+  ...validManifest,
+  submission: { ...validManifest.submission, mode: "relayer" as const },
+};
 
 function preflightArtifact() {
   return {
@@ -49,7 +53,11 @@ function preflightArtifact() {
 
 function relayerHarness(initialEvents = makeRunEvents().slice(0, 2)) {
   const state = {
-    events: [...initialEvents] as any[],
+    events: initialEvents.map((event) =>
+      event.type === "RUN_CREATED"
+        ? { ...event, payload: { manifest: relayerManifest } }
+        : event,
+    ) as any[],
     transactions: new Map<string, any>(),
   };
   let nonce = 0n;
@@ -57,7 +65,7 @@ function relayerHarness(initialEvents = makeRunEvents().slice(0, 2)) {
     loadRunExecutionContext: vi.fn(async () => ({
       runId: RUN_ID,
       projectId: PROJECT_ID,
-      manifest: validManifest,
+      manifest: relayerManifest,
       events: [...state.events],
       projection: projectRun(state.events as any),
       artifacts: [preflightArtifact()],

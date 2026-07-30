@@ -107,3 +107,53 @@ Tests       49 passed (49)
   `status = 'cancelled'`; per-kind uniqueness is insufficient.
 - The final mobile gate must repeat the Chromium inequality for every footer
   child in all three states: `child.bottom + 8 <= navigation.top`.
+
+## Superseded-control reconciliation
+
+The frozen production candidate for reconciliation was:
+
+- Commit: `1c9391150ed09625213aa1d3beeeef3b06c35594`
+- Tree: `9810589deff5058c8445cb3d45d44131a4c38e4d`
+
+The production candidate satisfied the frozen Slice 010 contracts, while seven
+pre-existing controls still encoded the superseded dual-authority or 68px-only
+assumption. The reconciliation changes tests only:
+
+- API SQL mocks now return each persisted manifest;
+- relayer API fixtures persist relayer manifests, while wallet attachment uses a
+  distinct wallet run instead of constructing both submission paths on one run;
+- worker relayer fixtures keep the `RUN_CREATED` payload and loaded execution
+  context on the same relayer manifest;
+- replay, wallet, and relayer worker fixtures select only their authorized path;
+- the original mobile safe-area control derives its reserve from fixed navigation
+  plus the eight-pixel ADR 0010 clearance instead of requiring the obsolete
+  literal `68px`.
+
+No frozen Slice 010 test, production source, migration, package manifest, or build
+artifact changed.
+
+Affected controls:
+
+```text
+Test Files  7 passed (7)
+Tests       50 passed (50)
+```
+
+Frozen Slice 010:
+
+```text
+Test Files  5 passed (5)
+Tests       17 passed | 3 skipped (20)
+```
+
+The three skips remain the explicit Testcontainers opt-in for the root real-PG
+gate.
+
+Full hermetic suite:
+
+```text
+Test Files  93 passed | 4 skipped (97)
+Tests       759 passed | 9 skipped (768)
+```
+
+`npm run typecheck` — PASS.
