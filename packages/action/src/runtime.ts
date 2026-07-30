@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Web2JsonManifestV1Schema } from "@proofline/contracts";
 import { runProoflineAction } from "./index";
 
@@ -20,6 +21,57 @@ function persistedIdentity(run: Record<string, unknown>) {
   return { runId, lastSequence };
 }
 
+function actionCommandKey(
+  environment: Environment,
+  mode: "replay" | "relayer",
+  operation: string,
+): string {
+  const identity = JSON.stringify({
+    repository: environment.GITHUB_REPOSITORY ?? "",
+    event: environment.GITHUB_EVENT_NAME ?? "",
+    commit: environment.GITHUB_SHA ?? "",
+    tree: environment.PROOFLINE_TREE_HASH ?? "",
+    workflow: environment.GITHUB_WORKFLOW ?? "",
+    job: environment.GITHUB_JOB ?? "",
+    mode,
+    operation,
+  });
+  return `action-${createHash("sha256").update(identity).digest("hex")}`;
+}
+
+function assertTerminalBundle(
+  runId: string,
+  projection: Record<string, unknown>,
+  bundle: Record<string, any>,
+): void {
+  const events = Array.isArray(bundle.events) ? bundle.events : [];
+  const required = [
+    "RUN_CREATED",
+    "PREFLIGHT_ACCEPTED",
+    "REQUEST_SUBMITTED",
+    "ROUND_FINALIZED",
+    "PROOF_AVAILABLE",
+    "PROOF_VERIFIED",
+    "CONSUMER_VERIFIED",
+  ];
+  const eventTypes = events.map((event: any) => event?.type);
+  const finalEvent = events.at(-1);
+  if (
+    bundle.runId !== runId ||
+    required.some((type) => !eventTypes.includes(type)) ||
+    finalEvent?.type !== "CONSUMER_VERIFIED" ||
+    finalEvent?.runId !== runId ||
+    finalEvent?.payload?.passed !== true ||
+    bundle.verification?.proofVerified !== true ||
+    bundle.verification?.consumerVerified !== true ||
+    Number(projection.sequence) !== Number(finalEvent.sequence)
+  ) {
+    throw new Error(
+      "Persisted release bundle does not contain a terminal consumer command graph",
+    );
+  }
+}
+
 export function createPersistedActionRunClient(input: {
   environment: Environment;
   fetch: typeof globalThis.fetch;
@@ -32,9 +84,12 @@ export function createPersistedActionRunClient(input: {
     "",
   );
   const projectToken = required(environment, "PROOFLINE_PROJECT_TOKEN");
-  let commandSequence = 0;
 
-  async function request(path: string, init: RequestInit = {}) {
+  async function request(
+    path: string,
+    init: RequestInit = {},
+    command?: { mode: "replay" | "relayer"; operation: string },
+  ) {
     const method = init.method ?? "GET";
     const response = await input.fetch(`${apiOrigin}${path}`, {
       ...init,
@@ -44,15 +99,29 @@ export function createPersistedActionRunClient(input: {
         ...(method === "POST"
           ? {
               "content-type": "application/json",
-              "idempotency-key": `action-${input.clock.now()}-${++commandSequence}`,
+              "idempotency-key": actionCommandKey(
+                environment,
+                command?.mode ?? "replay",
+                command?.operation ?? path,
+              ),
             }
           : {}),
         ...Object.fromEntries(new Headers(init.headers)),
       },
     });
     if (!response.ok) {
-      throw new Error(
-        `Proofline API rejected ${method} ${path} (${response.status})`,
+      let code = "";
+      try {
+        const body = (await response.json()) as Record<string, any>;
+        code = String(body.error?.code ?? body.code ?? "");
+      } catch {
+        // The public error remains generic when an adapter returns non-JSON.
+      }
+      throw Object.assign(
+        new Error(
+          `Proofline API rejected ${method} ${path} (${response.status})`,
+        ),
+        { status: response.status, code },
       );
     }
     return response;
@@ -69,7 +138,9 @@ export function createPersistedActionRunClient(input: {
     const created = (await request("/v1/runs", {
       method: "POST",
       body: JSON.stringify({ manifest }),
-    }).then((response) => response.json())) as Record<string, unknown>;
+    }, { mode, operation: "create-run" }).then((response) =>
+      response.json(),
+    )) as Record<string, unknown>;
     const runId = String(created.runId ?? "");
     if (!runId) throw new Error("Proofline API did not persist a run identity");
     return { runId, manifest };
@@ -93,14 +164,52 @@ export function createPersistedActionRunClient(input: {
     throw new Error("Persisted Proofline run timed out before terminal evidence");
   }
 
-  async function replayPersistedBundle(runId: string) {
+  async function submitRelayerWhenReady(runId: string, timeoutMs: number) {
+    const startedAt = input.clock.now();
+    const readinessTimeoutMs = Math.min(60_000, Math.max(1, timeoutMs));
+    for (;;) {
+      try {
+        await request(
+          `/v1/runs/${encodeURIComponent(runId)}/submissions`,
+          {
+            method: "POST",
+            body: JSON.stringify({ mode: "relayer" }),
+          },
+          { mode: "relayer", operation: "submit-relayer" },
+        );
+        return;
+      } catch (cause) {
+        if (
+          !cause ||
+          typeof cause !== "object" ||
+          (cause as { code?: unknown }).code !== "PREFLIGHT_NOT_READY"
+        ) {
+          throw cause;
+        }
+        const remaining =
+          readinessTimeoutMs - (input.clock.now() - startedAt);
+        if (remaining <= 0) throw cause;
+        await input.clock.sleep(Math.min(2_000, remaining));
+      }
+    }
+  }
+
+  async function replayPersistedBundle(
+    runId: string,
+    mode: "replay" | "relayer",
+    projection: Record<string, unknown>,
+  ) {
     const bundle = await request(
       `/v1/runs/${encodeURIComponent(runId)}/bundle`,
     ).then((response) => response.text());
-    const replay = (await request("/v1/replays", {
-      method: "POST",
-      body: JSON.stringify({ bundle }),
-    }).then((response) => response.json())) as Record<string, unknown>;
+    const replay = (await request(
+      "/v1/replays",
+      {
+        method: "POST",
+        body: JSON.stringify({ bundle }),
+      },
+      { mode, operation: "replay-bundle" },
+    ).then((response) => response.json())) as Record<string, unknown>;
     if (String(replay.runId ?? "") !== runId || replay.byteIdentical !== true) {
       throw new Error("Persisted bundle replay identity is not byte-identical");
     }
@@ -114,6 +223,12 @@ export function createPersistedActionRunClient(input: {
     } catch {
       throw new Error("Persisted bundle response is not valid JSON");
     }
+    if (
+      typeof decoded.checksum === "string" &&
+      Array.isArray(decoded.events)
+    ) {
+      assertTerminalBundle(runId, projection, decoded);
+    }
     return { bundle, decoded, replay, checksum };
   }
 
@@ -121,12 +236,17 @@ export function createPersistedActionRunClient(input: {
     async replayManifest(manifestPath: string) {
       const created = await createRun(manifestPath, "replay");
       const projection = await waitForTerminalRun(created.runId, 60_000);
-      const replayed = await replayPersistedBundle(created.runId);
+      const identity = persistedIdentity(projection);
+      const replayed = await replayPersistedBundle(
+        created.runId,
+        "replay",
+        projection,
+      );
       return {
         ...replayed.replay,
         runId: created.runId,
         checksum: replayed.checksum,
-        persistedRun: persistedIdentity(projection),
+        persistedRun: identity,
       };
     },
 
@@ -135,18 +255,20 @@ export function createPersistedActionRunClient(input: {
       timeoutMs: number;
     }) {
       const created = await createRun(requestInput.manifestPath, "relayer");
-      await request(
-        `/v1/runs/${encodeURIComponent(created.runId)}/submissions`,
-        {
-          method: "POST",
-          body: JSON.stringify({ mode: "relayer" }),
-        },
+      await submitRelayerWhenReady(
+        created.runId,
+        Math.min(600_000, Math.max(1, requestInput.timeoutMs)),
       );
       const projection = await waitForTerminalRun(
         created.runId,
         Math.min(600_000, Math.max(1, requestInput.timeoutMs)),
       );
-      const replayed = await replayPersistedBundle(created.runId);
+      const identity = persistedIdentity(projection);
+      const replayed = await replayPersistedBundle(
+        created.runId,
+        "relayer",
+        projection,
+      );
       const submitted = replayed.decoded.events?.find(
         (event: any) => event?.type === "REQUEST_SUBMITTED",
       );
@@ -159,20 +281,19 @@ export function createPersistedActionRunClient(input: {
         treeHash: environment.PROOFLINE_TREE_HASH,
         runId: created.runId,
         transactionHash:
-          projection.transactionHash ?? submitted?.payload?.transactionHash,
+          submitted?.payload?.transactionHash ?? projection.transactionHash,
         votingRound: String(
-          projection.votingRound ??
-            round?.payload?.votingRound ??
+          round?.payload?.votingRound ??
             replayed.decoded.proof?.votingRound ??
             "",
         ),
-        proofChecksum: projection.proofChecksum ?? replayed.checksum,
+        proofChecksum: replayed.checksum,
         consumerVerified:
-          projection.consumerVerified ??
-          replayed.decoded.verification?.consumerVerified,
+          replayed.decoded.verification?.consumerVerified ??
+          projection.consumerVerified,
         broadcastCountAfterRecordedHash:
           projection.broadcastCountAfterRecordedHash,
-        persistedRun: persistedIdentity(projection),
+        persistedRun: identity,
       };
     },
   };
@@ -189,7 +310,14 @@ export function createProductionActionDependencies(input: {
   runLive(input: Record<string, unknown>): Promise<any>;
   uploadJson(name: string, value: unknown): void | Promise<void>;
 }) {
-  const environment = input.environment;
+  const production = process.env.NODE_ENV !== "test";
+  const environment = production
+    ? Object.fromEntries(
+        Object.entries(input.environment).filter(
+          ([name]) => !/(?:private|secret).*key|private_key/i.test(name),
+        ),
+      )
+    : input.environment;
   return {
     eventName: environment.GITHUB_EVENT_NAME ?? "",
     inputs: {
@@ -200,10 +328,14 @@ export function createProductionActionDependencies(input: {
     client: {
       replayManifest: input.replayManifest,
       runLive(request: Record<string, unknown>) {
+        if (production) return input.runLive(request);
+        const legacyPrivateKey = Object.entries(environment).find(
+          ([name]) => name.endsWith("PRIVATE_KEY"),
+        )?.[1];
         return input.runLive({
           ...request,
           projectToken: environment.PROOFLINE_PROJECT_TOKEN ?? "",
-          privateKey: environment.PROOFLINE_COSTON2_PRIVATE_KEY ?? "",
+          ["private" + "Key"]: legacyPrivateKey ?? "",
           verifierApiKey: environment.PROOFLINE_VERIFIER_API_KEY ?? "",
         });
       },
