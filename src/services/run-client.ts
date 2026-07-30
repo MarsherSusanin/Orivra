@@ -173,10 +173,18 @@ export function createRunClient(input: {
       );
     },
 
-    verifyConsumer(runId: string, idempotencyKey: string) {
+    verifyConsumer(
+      runId: string,
+      idempotencyKey: string,
+      consumer?: "canonical-vulnerable" | "canonical-safe",
+    ) {
       return request<Record<string, unknown>>(
         `/runs/${encodeURIComponent(runId)}/consumer-verifications`,
-        { method: "POST", body: {}, idempotencyKey },
+        {
+          method: "POST",
+          body: consumer === undefined ? {} : { consumer },
+          idempotencyKey,
+        },
       );
     },
 

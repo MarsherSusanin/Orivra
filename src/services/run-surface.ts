@@ -27,6 +27,7 @@ export type HydrateRunContext = RunServiceContext & {
 };
 
 export type RunDiagnosticView = {
+  version?: string;
   code: string;
   severity: "info" | "warning" | "error";
   confidence: "low" | "medium" | "high";
@@ -105,6 +106,12 @@ function consumerTerminal(run: Record<string, unknown>): boolean {
 
 function resultFromRun(run: Record<string, unknown>): ConsumerVerificationResult {
   const codes = diagnosticCodes(run.diagnostics);
+  const stages = objectValue(run.stages);
+  if (stages?.consumer === "failed" && codes.length === 0) {
+    throw new Error(
+      "Consumer verification failed closed because diagnostic evidence is missing",
+    );
+  }
   const isMissing = (part: string) => codes.some((code) => code.includes(part));
   const checks: VerificationCheck[] = [
     { label: "Cryptographic proof", status: "passed" },
@@ -163,6 +170,7 @@ function diagnosticsFrom(value: unknown): RunDiagnosticView[] {
     const severity = diagnostic.severity;
     const confidence = diagnostic.confidence;
     return [{
+      version: stringValue(diagnostic.version),
       code,
       summary,
       severity:
@@ -337,6 +345,7 @@ export function createLiveSurfaceServices(input: {
       const accepted = await client.verifyConsumer(
         context.runId,
         commandKey("verify-consumer"),
+        "canonical-vulnerable",
       );
       if (isVerificationResult(accepted)) return accepted;
 
