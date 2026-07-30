@@ -959,6 +959,7 @@ export function createProductionCommandHandlers(input: {
 
     async BROADCAST_RELAYER_TRANSACTION(command) {
       const context = await load(command);
+      assertSubmissionMode(context, "relayer");
       const idempotencyKey = String(command.payload.idempotencyKey ?? "");
       const persisted = await input.repository.findRelayerTransaction(
         idempotencyKey,
