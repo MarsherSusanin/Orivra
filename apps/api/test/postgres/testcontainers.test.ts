@@ -67,6 +67,7 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
         );
         expect(relayerUpdateGrants.rows).toEqual([
           { column_name: "broadcast_at", privilege_type: "UPDATE" },
+          { column_name: "broadcast_attempted_at", privilege_type: "UPDATE" },
         ]);
 
         const projectId = "11111111-1111-4111-8111-111111111111";

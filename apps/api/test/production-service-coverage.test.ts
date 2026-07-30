@@ -280,6 +280,7 @@ describe("production service submission and command intent coverage", () => {
     await production.verifyConsumer({
       ...base,
       idempotencyKey: "verify-2",
+      consumer: "canonical-safe",
     });
     expect([...commands.values()].map((row) => row.kind)).toEqual([
       "SUBMIT_RELAYER",
@@ -330,6 +331,7 @@ describe("production service submission and command intent coverage", () => {
         runId: RUN_ID,
         projectId: PROJECT_ID,
         idempotencyKey: "race",
+        consumer: "canonical-safe",
       }),
     ).rejects.toMatchObject({ status: 409 });
   });

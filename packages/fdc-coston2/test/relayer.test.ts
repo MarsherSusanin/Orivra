@@ -22,6 +22,8 @@ const exactCommand = {
   quotaRemaining: 1,
   balanceWei: 100_000n,
   balanceFloorWei: 50_000n,
+  gasLimit: 21_000n,
+  maxFeePerGasWei: 1n,
 } as const;
 
 describe("relayer authorization envelope", () => {
@@ -37,7 +39,7 @@ describe("relayer authorization envelope", () => {
     [{ projectFeeCapWei: 12_344n }, /project.*cap|fee/i],
     [{ globalFeeCapWei: 12_344n }, /global.*cap|fee/i],
     [{ quotaRemaining: 0 }, /quota/i],
-    [{ balanceWei: 62_344n }, /balance.*floor|insufficient/i],
+    [{ balanceWei: 83_344n }, /balance.*floor|insufficient/i],
   ])("rejects a policy mismatch %o", (override, expected) => {
     expect(() =>
       validateRelayerSubmission({ ...exactCommand, ...override }),
@@ -53,6 +55,10 @@ describe("restart-safe relayer execution", () => {
       reserveNonce: vi.fn().mockResolvedValue(7n),
       persistSignedTransaction: vi.fn(async () => {
         order.push("persist");
+      }),
+      claimBroadcastAttempt: vi.fn(async () => {
+        order.push("claim-attempt");
+        return true;
       }),
       markBroadcast: vi.fn(async () => {
         order.push("mark");
@@ -80,33 +86,82 @@ describe("restart-safe relayer execution", () => {
     expect(signer.sign).toHaveBeenCalledWith(
       expect.objectContaining({ chainId: 114, nonce: 7n }),
     );
-    expect(order).toEqual(["persist", "broadcast:0x02f8signed", "mark"]);
+    expect(order).toEqual([
+      "persist",
+      "claim-attempt",
+      "broadcast:0x02f8signed",
+      "mark",
+    ]);
   });
 
-  it("rebroadcasts the exact persisted raw transaction after a crash and never signs again", async () => {
+  it("fails closed without rebroadcast when a durable attempt is not recorded", async () => {
     const persisted = {
       nonce: 7n,
       rawTransaction: "0x02f8signed",
       transactionHash:
         "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      broadcastAttemptedAt: "2025-05-15T12:04:14.000Z",
     };
     const repository = {
       findByIdempotencyKey: vi.fn().mockResolvedValue(persisted),
       reserveNonce: vi.fn(),
       persistSignedTransaction: vi.fn(),
+      claimBroadcastAttempt: vi.fn(),
       markBroadcast: vi.fn(),
     };
     const signer = { sign: vi.fn() };
     const broadcaster = vi.fn().mockResolvedValue(persisted.transactionHash);
-    const executor = createRelayerExecutor({ repository, signer, broadcaster });
+    const executor = createRelayerExecutor({
+      repository,
+      signer,
+      broadcaster,
+      resolveRecordedTransaction: vi.fn().mockResolvedValue(false),
+    });
+
+    await expect(executor.execute(exactCommand)).rejects.toThrow(
+      /ambiguous|manual recovery/i,
+    );
+    expect(broadcaster).not.toHaveBeenCalled();
+    expect(signer.sign).not.toHaveBeenCalled();
+    expect(repository.reserveNonce).not.toHaveBeenCalled();
+    expect(repository.claimBroadcastAttempt).not.toHaveBeenCalled();
+    expect(repository.markBroadcast).not.toHaveBeenCalled();
+  });
+
+  it("marks a durably attempted transaction only after the node records it", async () => {
+    const persisted = {
+      nonce: 7n,
+      rawTransaction: "0x02f8signed",
+      transactionHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      broadcastAttemptedAt: "2025-05-15T12:04:14.000Z",
+    };
+    const repository = {
+      findByIdempotencyKey: vi.fn().mockResolvedValue(persisted),
+      reserveNonce: vi.fn(),
+      persistSignedTransaction: vi.fn(),
+      claimBroadcastAttempt: vi.fn(),
+      markBroadcast: vi.fn(),
+    };
+    const broadcaster = vi.fn();
+    const executor = createRelayerExecutor({
+      repository,
+      signer: { sign: vi.fn() },
+      broadcaster,
+      resolveRecordedTransaction: vi.fn().mockResolvedValue(true),
+    });
 
     await expect(executor.execute(exactCommand)).resolves.toMatchObject({
       ...persisted,
       reused: true,
     });
-    expect(broadcaster).toHaveBeenCalledWith(persisted.rawTransaction);
-    expect(signer.sign).not.toHaveBeenCalled();
-    expect(repository.reserveNonce).not.toHaveBeenCalled();
+    expect(broadcaster).not.toHaveBeenCalled();
+    expect(repository.claimBroadcastAttempt).not.toHaveBeenCalled();
+    expect(repository.markBroadcast).toHaveBeenCalledWith(
+      exactCommand.idempotencyKey,
+      persisted.transactionHash,
+      { recovered: true },
+    );
   });
 
   it("fails closed when a node reports a different transaction hash", async () => {
@@ -121,6 +176,7 @@ describe("restart-safe relayer execution", () => {
         findByIdempotencyKey: async () => persisted,
         reserveNonce: vi.fn(),
         persistSignedTransaction: vi.fn(),
+        claimBroadcastAttempt: vi.fn().mockResolvedValue(true),
         markBroadcast: vi.fn(),
       },
       signer: { sign: vi.fn() },

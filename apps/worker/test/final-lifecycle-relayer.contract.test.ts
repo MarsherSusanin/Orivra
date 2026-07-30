@@ -403,13 +403,13 @@ describe("Slice 005 persisted relayer policy and identity", () => {
     expect(broadcast).not.toHaveBeenCalled();
   });
 
-  it("grants the worker only the broadcast marker column", async () => {
+  it("grants the worker only the durable broadcast-attempt and acceptance markers", async () => {
     const sql = await readFile(
       new URL("../../api/db/migrations/001_initial.sql", import.meta.url),
       "utf8",
     );
     expect(sql).toMatch(
-      /GRANT\s+UPDATE\s*\(\s*broadcast_at\s*\)\s+ON\s+proofline_private\.relayer_transactions\s+TO\s+proofline_worker/i,
+      /GRANT\s+UPDATE\s*\(\s*broadcast_attempted_at\s*,\s*broadcast_at\s*\)\s+ON\s+proofline_private\.relayer_transactions\s+TO\s+proofline_worker/i,
     );
     expect(sql).not.toMatch(
       /GRANT\s+UPDATE\s+ON[\s\S]*?relayer_transactions[\s\S]*?TO\s+proofline_worker/i,

@@ -73,8 +73,18 @@ function relayerHarness(initialEvents = makeRunEvents().slice(0, 2)) {
     persistRelayerTransaction: vi.fn(async (value: any) => {
       state.transactions.set(value.idempotencyKey, {
         ...value,
+        broadcastAttemptedAt: null,
         broadcastAt: null,
       });
+    }),
+    claimRelayerBroadcastAttempt: vi.fn(async (key: string) => {
+      const prior = state.transactions.get(key);
+      if (!prior || prior.broadcastAttemptedAt) return false;
+      state.transactions.set(key, {
+        ...prior,
+        broadcastAttemptedAt: OCCURRED_AT,
+      });
+      return true;
     }),
     markRelayerBroadcast: vi.fn(async (key: string, transactionHash: string) => {
       const prior = state.transactions.get(key);

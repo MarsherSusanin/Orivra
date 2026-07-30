@@ -105,6 +105,7 @@ describe("verifier remediation: relayer command binding and recovery", () => {
       }),
       reserveNonce: vi.fn(),
       persistSignedTransaction: vi.fn(),
+      claimBroadcastAttempt: vi.fn(),
       markBroadcast: vi.fn(),
     };
     const executor = createRelayerExecutor({
@@ -128,20 +129,24 @@ describe("verifier remediation: relayer command binding and recovery", () => {
         quotaRemaining: 1,
         balanceWei: 100_000n,
         balanceFloorWei: 50_000n,
+        gasLimit: 21_000n,
+        maxFeePerGasWei: 1n,
       }),
     ).rejects.toThrow(/fingerprint|command mismatch/i);
   });
 
-  it("records a successful recovery broadcast of the exact persisted bytes", async () => {
+  it("records a successful node-confirmed recovery without rebroadcasting persisted bytes", async () => {
     const persisted = {
       nonce: 7n,
       rawTransaction: "0x02f8signed",
       transactionHash,
+      broadcastAttemptedAt: "2025-05-15T12:04:14.000Z",
     };
     const repository = {
       findByIdempotencyKey: vi.fn().mockResolvedValue(persisted),
       reserveNonce: vi.fn(),
       persistSignedTransaction: vi.fn(),
+      claimBroadcastAttempt: vi.fn(),
       markBroadcast: vi.fn().mockResolvedValue(undefined),
     };
     const broadcaster = vi.fn().mockResolvedValue(transactionHash);
@@ -149,6 +154,7 @@ describe("verifier remediation: relayer command binding and recovery", () => {
       repository,
       signer: { sign: vi.fn() },
       broadcaster,
+      resolveRecordedTransaction: vi.fn().mockResolvedValue(true),
     });
     const command = {
       idempotencyKey: "submission-1",
@@ -164,10 +170,13 @@ describe("verifier remediation: relayer command binding and recovery", () => {
       quotaRemaining: 1,
       balanceWei: 100_000n,
       balanceFloorWei: 50_000n,
+      gasLimit: 21_000n,
+      maxFeePerGasWei: 1n,
     };
 
     await executor.execute(command);
-    expect(broadcaster).toHaveBeenCalledWith(persisted.rawTransaction);
+    expect(broadcaster).not.toHaveBeenCalled();
+    expect(repository.claimBroadcastAttempt).not.toHaveBeenCalled();
     expect(repository.markBroadcast).toHaveBeenCalledWith(
       command.idempotencyKey,
       persisted.transactionHash,

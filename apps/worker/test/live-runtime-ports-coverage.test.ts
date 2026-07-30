@@ -87,7 +87,11 @@ function harness() {
     readContract,
     getBalance: vi.fn(async () => 1_000_000n),
     getTransactionCount: vi.fn(async () => 7),
-    prepareTransactionRequest: vi.fn(async (value) => value),
+    prepareTransactionRequest: vi.fn(async (value) => ({
+      ...value,
+      gas: 21_000n,
+      maxFeePerGas: 1n,
+    })),
     sendRawTransaction: vi.fn(async () => TRANSACTION_HASH),
     getTransaction: vi.fn(async () => ({
       to: ADDRESSES.FdcHub,

@@ -109,3 +109,53 @@ Result: `4 passed` files; `26 passed` tests.
   second broadcast path.
 - Real PostgreSQL, packaged CLI and Action entry tests are release gates, not
   optional unit substitutes.
+
+## Superseded-control reconciliation
+
+The frozen production candidate was:
+
+- Commit: `d66902d7583b2e374e6228fcb33bb47c38b04326`
+- Tree: `840c4863f6965dea17e2ef7649656ad4e5da42e6`
+
+After that tree satisfied the frozen Slice 008 contracts, eleven earlier
+Slice 005/007 and adapter test files still encoded superseded behavior. The
+test-only reconciliation preserved the ADR 0008 boundaries explicitly:
+
+- terminal codegen and sharing are derived products and never append
+  `run_events`;
+- `VERIFY_PROOF` does not choose or enqueue a consumer;
+- every consumer verification carries an explicit canonical consumer intent;
+- a relayer claim is durable before network I/O, includes worst-case gas
+  evidence, and a durable attempt is never rebroadcast;
+- the worker has column-level `UPDATE` privilege for exactly
+  `broadcast_attempted_at` and `broadcast_at`;
+- pull-request replay is local, byte-identical, and performs no API request.
+
+Affected-control result:
+
+```text
+10 passed | 1 skipped files
+96 passed | 1 skipped tests
+```
+
+Frozen Slice 008 result:
+
+```text
+7 passed | 1 skipped files
+44 passed | 1 skipped tests
+```
+
+Type contract: `npm run typecheck` — PASS.
+
+Full hermetic result:
+
+```text
+87 passed | 4 skipped files
+739 passed | 6 skipped tests
+```
+
+The opt-in PostgreSQL suite was requested with
+`PROOFLINE_TESTCONTAINERS=1`; the current sandbox could run `docker version`
+but Testcontainers could not discover a usable runtime. No semantic
+PostgreSQL failure was observed in that attempt, so a verifier with direct
+Docker socket access must rerun the real-PostgreSQL gate.

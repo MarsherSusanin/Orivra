@@ -363,6 +363,7 @@ function liveHarness(input?: {
   alreadyRecorded?: boolean;
 }) {
   const events = input?.events ?? makeRunEvents().slice(0, 2);
+  let persisted = input?.persisted ?? null;
   const repository = {
     loadRunExecutionContext: vi.fn(async () => ({
       runId: RUN_ID,
@@ -372,9 +373,23 @@ function liveHarness(input?: {
       projection: projectRun(events),
       artifacts: [preflightArtifact()],
     })),
-    findRelayerTransaction: vi.fn(async () => input?.persisted ?? null),
+    findRelayerTransaction: vi.fn(async () => persisted),
     findRelayerTransactionByRun: vi.fn(async () => input?.byRun ?? null),
-    persistRelayerTransaction: vi.fn(),
+    persistRelayerTransaction: vi.fn(async (value: Record<string, unknown>) => {
+      persisted = {
+        ...value,
+        broadcastAttemptedAt: null,
+        broadcastAt: null,
+      };
+    }),
+    claimRelayerBroadcastAttempt: vi.fn(async () => {
+      if (!persisted || persisted.broadcastAttemptedAt) return false;
+      persisted = {
+        ...persisted,
+        broadcastAttemptedAt: OCCURRED_AT,
+      };
+      return true;
+    }),
     markRelayerBroadcast: vi.fn(),
   };
   const ports = {
@@ -413,6 +428,7 @@ function persistedRelayer(overrides: Record<string, unknown> = {}) {
     nonce: 7n,
     rawTransaction: "0x02f8",
     transactionHash: TRANSACTION_HASH,
+    broadcastAttemptedAt: null,
     broadcastAt: null,
     ...overrides,
   };
@@ -517,7 +533,9 @@ describe("Slice 007 wallet and relayer recovery coverage", () => {
   });
 
   it("uses recorded transaction recovery without a duplicate broadcast", async () => {
-    const persisted = persistedRelayer();
+    const persisted = persistedRelayer({
+      broadcastAttemptedAt: OCCURRED_AT,
+    });
     const fixture = liveHarness({
       persisted,
       alreadyRecorded: true,
@@ -533,6 +551,7 @@ describe("Slice 007 wallet and relayer recovery coverage", () => {
       nextCommands: [{ kind: "POLL_TRANSACTION_RECEIPT" }],
     });
     expect(fixture.ports.broadcastRawTransaction).not.toHaveBeenCalled();
+    expect(fixture.repository.claimRelayerBroadcastAttempt).not.toHaveBeenCalled();
     expect(fixture.repository.markRelayerBroadcast).toHaveBeenCalledOnce();
   });
 
@@ -548,6 +567,12 @@ describe("Slice 007 wallet and relayer recovery coverage", () => {
         }),
       ),
     ).rejects.toThrow(/broadcast transaction hash mismatch/i);
+    expect(fixture.repository.claimRelayerBroadcastAttempt).toHaveBeenCalledOnce();
+    expect(
+      fixture.repository.claimRelayerBroadcastAttempt.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      fixture.ports.broadcastRawTransaction.mock.invocationCallOrder[0],
+    );
     expect(fixture.repository.markRelayerBroadcast).not.toHaveBeenCalled();
   });
 });

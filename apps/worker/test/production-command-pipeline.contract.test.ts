@@ -72,7 +72,20 @@ function createFixture() {
     findRelayerTransaction: vi.fn(async () => state.relayerTransaction),
     persistRelayerTransaction: vi.fn(async (value: Record<string, unknown>) => {
       trace.push("persist-signed");
-      state.relayerTransaction = { ...value, broadcastAt: null };
+      state.relayerTransaction = {
+        ...value,
+        broadcastAttemptedAt: null,
+        broadcastAt: null,
+      };
+    }),
+    claimRelayerBroadcastAttempt: vi.fn(async () => {
+      trace.push("claim-broadcast-attempt");
+      if (state.relayerTransaction?.broadcastAttemptedAt) return false;
+      state.relayerTransaction = {
+        ...state.relayerTransaction,
+        broadcastAttemptedAt: OCCURRED_AT,
+      };
+      return true;
     }),
     markRelayerBroadcast: vi.fn(async (_key: string, hash: string) => {
       trace.push("mark-broadcast");
@@ -242,10 +255,10 @@ describe("Slice 003 production command composition", () => {
       expect.objectContaining({ kind: "VERIFY_PROOF" }),
     ]);
     const verified = await fixture.execute("VERIFY_PROOF");
-    expect(verified.nextCommands).toEqual([
-      expect.objectContaining({ kind: "VERIFY_CONSUMER" }),
-    ]);
-    const consumer = await fixture.execute("VERIFY_CONSUMER");
+    expect(verified.nextCommands).toEqual([]);
+    const consumer = await fixture.execute("VERIFY_CONSUMER", {
+      consumer: "canonical-vulnerable",
+    });
     expect(consumer.nextCommands).toEqual([
       expect.objectContaining({ kind: "BUILD_PROOF_BUNDLE" }),
     ]);
@@ -268,10 +281,14 @@ describe("Slice 003 production command composition", () => {
       type: "CONSUMER_VERIFIED",
       payload: { passed: false, diagnostics: [validDiagnostic] },
     });
+    expect(fixture.ports.verifyConsumer).toHaveBeenCalledWith(
+      expect.objectContaining({ consumer: "canonical-vulnerable" }),
+    );
     expect(fixture.trace).toEqual([
       "preflight",
       "sign-relayer",
       "persist-signed",
+      "claim-broadcast-attempt",
       "broadcast:0x02f8signed",
       "mark-broadcast",
       "receipt",

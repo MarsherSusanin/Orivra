@@ -97,24 +97,7 @@ describe("Slice 007 terminal API immutability", () => {
           projectId: PROJECT_ID,
           runId: RUN_ID,
           idempotencyKey: "terminal-consumer",
-        }),
-    ],
-    [
-      "consumer generation",
-      (service: ReturnType<typeof productionService>) =>
-        service.generateConsumer({
-          projectId: PROJECT_ID,
-          runId: RUN_ID,
-          idempotencyKey: "terminal-codegen",
-        }),
-    ],
-    [
-      "share creation",
-      (service: ReturnType<typeof productionService>) =>
-        service.createShare({
-          projectId: PROJECT_ID,
-          runId: RUN_ID,
-          idempotencyKey: "terminal-share",
+          consumer: "canonical-vulnerable",
         }),
     ],
   ])("rejects %s after terminal failure", async (_label, invoke) => {
@@ -125,6 +108,55 @@ describe("Slice 007 terminal API immutability", () => {
     expect(
       pool.query.mock.calls.some(([text]) => /INSERT/i.test(String(text))),
     ).toBe(false);
+  });
+
+  it("allows terminal codegen as a derived product without mutating the journal", async () => {
+    const pool = terminalPool();
+    await expect(
+      productionService(pool).generateConsumer({
+        projectId: PROJECT_ID,
+        runId: RUN_ID,
+        idempotencyKey: "terminal-codegen",
+      }),
+    ).resolves.toMatchObject({
+      source: expect.stringContaining("contract ProoflineSafeWeb2JsonConsumer"),
+    });
+
+    expect(
+      pool.query.mock.calls.some(([text]) =>
+        /INSERT INTO proofline_private\.run_events/i.test(String(text)),
+      ),
+    ).toBe(false);
+    expect(
+      pool.query.mock.calls.some(([text]) =>
+        /INSERT INTO proofline_private\.run_commands/i.test(String(text)),
+      ),
+    ).toBe(true);
+  });
+
+  it("allows terminal sharing as a read-only product without mutating the journal", async () => {
+    const pool = terminalPool();
+    await expect(
+      productionService(pool).createShare({
+        projectId: PROJECT_ID,
+        runId: RUN_ID,
+        idempotencyKey: "terminal-share",
+      }),
+    ).resolves.toMatchObject({
+      token: expect.stringMatching(/^share_[a-f0-9]{64}$/),
+      url: expect.stringContaining(`/runs/${RUN_ID}?share=`),
+    });
+
+    expect(
+      pool.query.mock.calls.some(([text]) =>
+        /INSERT INTO proofline_private\.run_events/i.test(String(text)),
+      ),
+    ).toBe(false);
+    expect(
+      pool.query.mock.calls.some(([text]) =>
+        /INSERT INTO proofline_private\.share_tokens/i.test(String(text)),
+      ),
+    ).toBe(true);
   });
 });
 

@@ -84,6 +84,7 @@ function actionClientHarness(input: {
   const requests: Request[] = [];
   const bundle = bundleFor(input.mode, input.terminalBundle ?? true);
   const serialized = canonicalSerializeProofBundle(bundle);
+  const replayBundlePath = "fixtures/proofline.bundle.json";
   const projectionRunId = input.projectionRunId ?? RUN_ID;
   const fetch = vi.fn(
     async (requestInput: string | URL | Request, init?: RequestInit) => {
@@ -129,11 +130,18 @@ function actionClientHarness(input: {
   const client = createPersistedActionRunClient({
     environment: {
       ...immutableActionEnvironment,
+      PROOFLINE_REPLAY_BUNDLE_PATH: replayBundlePath,
       ...input.environment,
     },
     fetch,
     clock: { now: () => input.now, sleep: vi.fn() },
-    files: { readText: vi.fn().mockResolvedValue(JSON.stringify(validManifest)) },
+    files: {
+      readText: vi.fn(async (path: string) =>
+        path === replayBundlePath
+          ? serialized
+          : JSON.stringify(bundle.manifest),
+      ),
+    },
   });
   return { client, requests, bundle };
 }
@@ -157,25 +165,33 @@ describe("Slice 007 persisted Action release identity", () => {
 
     await expect(
       client.replayManifest("proofline.manifest.json"),
-    ).rejects.toThrow(/terminal|command graph|consumer/i);
+    ).rejects.toThrow(/terminal|command graph|consumer|lifecycle evidence/i);
   });
 
-  it("derives the same command keys after a clock change and process restart", async () => {
+  it("replays the same local bytes after a clock change and process restart", async () => {
     const first = actionClientHarness({ now: 1_000, mode: "replay" });
     const restarted = actionClientHarness({ now: 98_765, mode: "replay" });
 
-    await first.client.replayManifest("proofline.manifest.json");
-    await restarted.client.replayManifest("proofline.manifest.json");
+    const firstReplay = await first.client.replayManifest("proofline.manifest.json");
+    const restartedReplay = await restarted.client.replayManifest(
+      "proofline.manifest.json",
+    );
 
-    expect(postKeys(restarted.requests)).toEqual(postKeys(first.requests));
+    expect(restartedReplay).toEqual(firstReplay);
+    expect(first.requests).toEqual([]);
+    expect(restarted.requests).toEqual([]);
   });
 
   it("separates every immutable GitHub identity component and submission mode", async () => {
-    const replay = actionClientHarness({ now: 1_000, mode: "replay" });
+    const replay = actionClientHarness({
+      now: 1_000,
+      mode: "replay",
+      environment: { GITHUB_EVENT_NAME: "workflow_dispatch" },
+    });
     const live = actionClientHarness({
       now: 1_000,
       mode: "relayer",
-      environment: { GITHUB_EVENT_NAME: "merge_group" },
+      environment: { GITHUB_EVENT_NAME: "workflow_dispatch" },
     });
 
     await replay.client.replayManifest("proofline.manifest.json");
@@ -190,7 +206,7 @@ describe("Slice 007 persisted Action release identity", () => {
     expect(postKeys(live.requests)[0]?.key).not.toBe(replayCreate);
     const variations = [
       { GITHUB_REPOSITORY: "proofline/another-repository" },
-      { GITHUB_EVENT_NAME: "workflow_dispatch" },
+      { GITHUB_EVENT_NAME: "merge_group" },
       { GITHUB_SHA: "d".repeat(40) },
       { PROOFLINE_TREE_HASH: "e".repeat(40) },
       { GITHUB_WORKFLOW: "another-workflow" },
@@ -199,10 +215,18 @@ describe("Slice 007 persisted Action release identity", () => {
     for (const environment of variations) {
       const changed = actionClientHarness({
         now: 1_000,
-        mode: "replay",
-        environment,
+        mode: "relayer",
+        environment: {
+          GITHUB_EVENT_NAME: "workflow_dispatch",
+          ...environment,
+        },
       });
-      await changed.client.replayManifest("proofline.manifest.json");
+      await changed.client.runLive({
+        manifestPath: "proofline.manifest.json",
+        network: "coston2",
+        timeoutMs: 600_000,
+        rebroadcastAfterTransactionHash: false,
+      });
       expect(
         postKeys(changed.requests)[0]?.key,
         `identity must include ${Object.keys(environment)[0]}`,
@@ -215,6 +239,7 @@ describe("Slice 007 persisted Action release identity", () => {
       now: 1_000,
       mode: "replay",
       projectionRunId: "run_other",
+      environment: { GITHUB_EVENT_NAME: "workflow_dispatch" },
     });
 
     await expect(
@@ -261,7 +286,19 @@ function liveGraphHarness() {
       return state.relayer;
     },
     async persistRelayerTransaction(value: Record<string, unknown>) {
-      state.relayer = { ...value, broadcastAt: null };
+      state.relayer = {
+        ...value,
+        broadcastAttemptedAt: null,
+        broadcastAt: null,
+      };
+    },
+    async claimRelayerBroadcastAttempt() {
+      if (state.relayer?.broadcastAttemptedAt) return false;
+      state.relayer = {
+        ...state.relayer,
+        broadcastAttemptedAt: OCCURRED_AT,
+      };
+      return true;
     },
     async markRelayerBroadcast(_key: string, transactionHash: string) {
       state.relayer = {
@@ -382,6 +419,13 @@ describe("Slice 007 scheduled live command graph", () => {
       );
       fixture.state.artifacts.push(...(outcome.artifacts ?? []));
       queue.push(...(outcome.nextCommands ?? []));
+      if (command.kind === "VERIFY_PROOF") {
+        queue.push({
+          id: "verify-safe-consumer",
+          kind: "VERIFY_CONSUMER",
+          payload: { consumer: "canonical-safe" },
+        });
+      }
     }
 
     expect(executed).toEqual([
