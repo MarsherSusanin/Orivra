@@ -88,13 +88,47 @@ function isVerificationResult(value: unknown): value is ConsumerVerificationResu
   );
 }
 
-function diagnosticCodes(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const code = (item as Record<string, unknown>).code;
-    return typeof code === "string" ? [code] : [];
-  });
+const urlInvariants = ["scheme", "host", "path", "query"] as const;
+
+type UrlInvariant = (typeof urlInvariants)[number];
+
+const knownUrlInvariants = new Set<string>(urlInvariants);
+const codeInvariant = new Map<string, UrlInvariant>([
+  ["CONSUMER_SCHEME_MISMATCH", "scheme"],
+  ["CONSUMER_HOST_MISMATCH", "host"],
+  ["EXPECTED_HOST_NOT_ENFORCED", "host"],
+  ["MISSING_CONSUMER_HOST_INVARIANT", "host"],
+  ["CONSUMER_PATH_MISMATCH", "path"],
+  ["CONSUMER_QUERY_MISMATCH", "query"],
+]);
+
+function diagnosticFailures(value: unknown): {
+  codes: string[];
+  invariants: Set<UrlInvariant>;
+} {
+  const codes: string[] = [];
+  const invariants = new Set<UrlInvariant>();
+  if (!Array.isArray(value)) return { codes, invariants };
+
+  for (const item of value) {
+    const diagnostic = objectValue(item);
+    const code = diagnostic?.code;
+    if (typeof code !== "string") continue;
+
+    codes.push(code);
+    const invariant = codeInvariant.get(code);
+    if (invariant) invariants.add(invariant);
+
+    const evidence = objectValue(diagnostic?.evidence);
+    if (!Array.isArray(evidence?.missingChecks)) continue;
+    for (const missingCheck of evidence.missingChecks) {
+      if (typeof missingCheck === "string" && knownUrlInvariants.has(missingCheck)) {
+        invariants.add(missingCheck as UrlInvariant);
+      }
+    }
+  }
+
+  return { codes, invariants };
 }
 
 function consumerTerminal(run: Record<string, unknown>): boolean {
@@ -105,26 +139,27 @@ function consumerTerminal(run: Record<string, unknown>): boolean {
 }
 
 function resultFromRun(run: Record<string, unknown>): ConsumerVerificationResult {
-  const codes = diagnosticCodes(run.diagnostics);
+  const { codes, invariants } = diagnosticFailures(run.diagnostics);
   const stages = objectValue(run.stages);
   if (stages?.consumer === "failed" && codes.length === 0) {
     throw new Error(
       "Consumer verification failed closed because diagnostic evidence is missing",
     );
   }
-  const isMissing = (part: string) => codes.some((code) => code.includes(part));
+  const isMissing = (part: UrlInvariant) => invariants.has(part);
   const checks: VerificationCheck[] = [
     { label: "Cryptographic proof", status: "passed" },
     { label: "Request identity", status: "passed" },
-    { label: "Source scheme invariant", status: isMissing("SCHEME") ? "failed" : "passed" },
-    { label: "Source host invariant", status: isMissing("HOST") ? "failed" : "passed" },
-    { label: "Source path invariant", status: isMissing("PATH") ? "failed" : "passed" },
-    { label: "Source query invariant", status: isMissing("QUERY") ? "failed" : "passed" },
+    { label: "Source scheme invariant", status: isMissing("scheme") ? "failed" : "passed" },
+    { label: "Source host invariant", status: isMissing("host") ? "failed" : "passed" },
+    { label: "Source path invariant", status: isMissing("path") ? "failed" : "passed" },
+    { label: "Source query invariant", status: isMissing("query") ? "failed" : "passed" },
   ];
+  const fixCount = invariants.size > 0 ? invariants.size : codes.length;
   return codes.length === 0
     ? { summary: "Consumer invariants verified", code: "CONSUMER_VERIFIED", checks }
     : {
-        summary: `Consumer needs ${codes.length === 1 ? "one fix" : `${codes.length} fixes`}`,
+        summary: `Consumer needs ${fixCount === 1 ? "one fix" : `${fixCount} fixes`}`,
         code: codes[0] ?? "CONSUMER_INVARIANT_FAILED",
         checks,
       };
