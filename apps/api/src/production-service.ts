@@ -554,8 +554,23 @@ export function createProductionProoflineService(input: {
           status: 400,
         });
       }
-      const owned = await loadMutableOwnedRun(context);
+      const owned = await loadOwnedRun(context);
       const runId = String(owned.id);
+      const payload = { idempotencyKey: context.idempotencyKey };
+      const existing = await findCommandIntent(
+        context.projectId,
+        context.idempotencyKey,
+      );
+      if (existing) {
+        if (!sameIntent(existing, runId, "SUBMIT_RELAYER", payload)) {
+          throw Object.assign(
+            new Error("Idempotency key command intent conflict"),
+            { status: 409 },
+          );
+        }
+        return { accepted: true, runId };
+      }
+      assertMutableProjection(owned.projection);
       const priorRelayerCommand = await findRelayerCommandByRun(runId);
       if (
         priorRelayerCommand &&
@@ -571,9 +586,7 @@ export function createProductionProoflineService(input: {
           code: "PREFLIGHT_NOT_READY",
         });
       }
-      return enqueue(context, "SUBMIT_RELAYER", {
-        idempotencyKey: context.idempotencyKey,
-      });
+      return enqueue(context, "SUBMIT_RELAYER", payload);
     },
     attachTransaction(context: Record<string, unknown>) {
       return enqueue(context, "ATTACH_WALLET_TRANSACTION", {
