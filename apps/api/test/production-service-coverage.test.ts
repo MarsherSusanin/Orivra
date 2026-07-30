@@ -1,0 +1,388 @@
+// @vitest-environment node
+
+import { createHash } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
+import {
+  makeBundleInput,
+  makeRunEvents,
+  validManifest,
+} from "../../../packages/contracts/test/fixtures";
+import {
+  canonicalSerializeProofBundle,
+  createProofBundle,
+} from "@proofline/domain";
+import { createProductionProoflineService } from "../src/production-service";
+
+const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
+const RUN_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const CLAIM = "11111111-1111-4111-8111-111111111111";
+const FDC_HUB = "0x3333333333333333333333333333333333333333";
+
+function service(pool: any) {
+  return createProductionProoflineService({
+    pool,
+    tokenDigestKey: "coverage-digest-key",
+    publicWebOrigin: "https://proofline.test///",
+  });
+}
+
+function result(rows: Record<string, unknown>[] = [], rowCount = rows.length) {
+  return { rows, rowCount };
+}
+
+describe("production service run transaction coverage", () => {
+  it("creates a run atomically and returns an existing byte-identical intent", async () => {
+    const expectedFingerprint = createHash("sha256")
+      .update(JSON.stringify(validManifest))
+      .digest();
+    let existing = false;
+    const client = {
+      query: vi.fn(async (text: string) => {
+        if (/SELECT id, request_fingerprint/i.test(text)) {
+          return existing
+            ? result([{ id: RUN_ID, request_fingerprint: expectedFingerprint }])
+            : result([], 0);
+        }
+        return result([], 1);
+      }),
+      release: vi.fn(),
+    };
+    const production = service({
+      connect: vi.fn().mockResolvedValue(client),
+      query: vi.fn(),
+    });
+
+    const created = await production.createRun({
+      projectId: PROJECT_ID,
+      idempotencyKey: "create-1",
+      manifest: validManifest,
+    });
+    expect(created).toMatchObject({ status: "accepted" });
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringMatching(/INSERT INTO proofline_private\.runs/i),
+      expect.arrayContaining([PROJECT_ID, "create-1"]),
+    );
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringMatching(/RUN_PREFLIGHT/),
+      expect.any(Array),
+    );
+
+    client.query.mockClear();
+    existing = true;
+    await expect(
+      production.createRun({
+        projectId: PROJECT_ID,
+        idempotencyKey: "create-1",
+        manifest: validManifest,
+      }),
+    ).resolves.toEqual({
+      status: "accepted",
+      runId: RUN_ID,
+      location: `/v1/runs/${RUN_ID}`,
+    });
+    expect(client.query).toHaveBeenCalledWith("COMMIT");
+    expect(client.release).toHaveBeenCalledTimes(2);
+  });
+
+  it("rolls back both idempotency conflicts and storage failures", async () => {
+    const conflictClient = {
+      query: vi.fn(async (text: string) =>
+        /SELECT id, request_fingerprint/i.test(text)
+          ? result([{ id: RUN_ID, request_fingerprint: Buffer.alloc(32, 9) }])
+          : result([], 1),
+      ),
+      release: vi.fn(),
+    };
+    await expect(
+      service({ connect: vi.fn().mockResolvedValue(conflictClient) }).createRun({
+        projectId: PROJECT_ID,
+        idempotencyKey: "conflict",
+        manifest: validManifest,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(conflictClient.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(conflictClient.release).toHaveBeenCalledOnce();
+
+    const failingClient = {
+      query: vi.fn(async (text: string) => {
+        if (/SELECT id, request_fingerprint/i.test(text)) return result([], 0);
+        if (/INSERT INTO proofline_private\.runs/i.test(text)) {
+          throw new Error("storage unavailable");
+        }
+        return result([], 1);
+      }),
+      release: vi.fn(),
+    };
+    await expect(
+      service({ connect: vi.fn().mockResolvedValue(failingClient) }).createRun({
+        projectId: PROJECT_ID,
+        idempotencyKey: "storage-failure",
+        manifest: validManifest,
+      }),
+    ).rejects.toThrow(/storage unavailable/i);
+    expect(failingClient.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(failingClient.release).toHaveBeenCalledOnce();
+  });
+});
+
+describe("production service read, artifact, replay, and share coverage", () => {
+  it("serves owned projections, events, consumers, bundles, replay, and shares", async () => {
+    const events = makeRunEvents();
+    const bundle = createProofBundle(makeBundleInput());
+    const serialized = canonicalSerializeProofBundle(bundle);
+    const query = vi.fn(async (text: string, values: readonly unknown[] = []) => {
+      if (/SELECT projection/i.test(text)) {
+        return result([{ projection: { runId: RUN_ID, terminal: true } }]);
+      }
+      if (/SELECT event_payload/i.test(text)) {
+        return result(events.slice(0, 2).map((event_payload) => ({ event_payload })));
+      }
+      if (/SELECT manifest FROM proofline_private\.runs/i.test(text)) {
+        return result([{ manifest: validManifest }]);
+      }
+      if (/artifact\.kind = 'proof-bundle'/i.test(text)) {
+        return result([{ canonical_bytes: Buffer.from(serialized) }]);
+      }
+      if (/SELECT id, project_id, manifest, projection, last_sequence/i.test(text)) {
+        return result([
+          {
+            id: RUN_ID,
+            project_id: PROJECT_ID,
+            manifest: validManifest,
+            projection: {},
+            last_sequence: 2,
+          },
+        ]);
+      }
+      if (/INSERT INTO proofline_private\.share_tokens/i.test(text)) {
+        expect(values[3]).toBeInstanceOf(Uint8Array);
+        return result([], 1);
+      }
+      return result([], 1);
+    });
+    const production = service({ query });
+
+    await expect(
+      production.getRun({ runId: RUN_ID, projectId: PROJECT_ID }),
+    ).resolves.toEqual({ runId: RUN_ID, terminal: true });
+    await expect(
+      production.listEvents({ runId: RUN_ID, projectId: PROJECT_ID, after: 0 }),
+    ).resolves.toEqual({ events: events.slice(0, 2), nextAfter: 2 });
+    await expect(
+      production.generateConsumer({ runId: RUN_ID, projectId: PROJECT_ID }),
+    ).resolves.toMatchObject({
+      source: expect.stringContaining("contract ProoflineSafeWeb2JsonConsumer"),
+    });
+    await expect(
+      production.generateConsumer({
+        runId: RUN_ID,
+        projectId: PROJECT_ID,
+        contractName: "CoverageConsumer",
+      }),
+    ).resolves.toMatchObject({
+      source: expect.stringContaining("contract CoverageConsumer"),
+    });
+    await expect(
+      production.getBundle({ runId: RUN_ID, projectId: PROJECT_ID }),
+    ).resolves.toEqual(bundle);
+    await expect(production.replay({ bundle: serialized })).resolves.toEqual({
+      runId: bundle.runId,
+      byteIdentical: true,
+      checksum: bundle.checksum,
+    });
+    const share = await production.createShare({
+      runId: RUN_ID,
+      projectId: PROJECT_ID,
+      expiresAt: "2025-05-16T12:04:11.000Z",
+    });
+    expect(share.token).toMatch(/^share_[a-f0-9]{64}$/);
+    expect(share.url).toBe(
+      `https://proofline.test/runs/${RUN_ID}?share=${share.token}`,
+    );
+  });
+
+  it("fails closed for missing IDs, foreign runs, and unavailable artifacts", async () => {
+    const production = service({ query: vi.fn(async () => result([], 0)) });
+    await expect(production.getRun({ runId: "", projectId: PROJECT_ID })).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(
+      production.getRun({ runId: RUN_ID, projectId: PROJECT_ID }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      production.generateConsumer({ runId: RUN_ID, projectId: PROJECT_ID }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      production.getBundle({ runId: RUN_ID, projectId: PROJECT_ID }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      production.createShare({ runId: RUN_ID, projectId: PROJECT_ID }),
+    ).rejects.toMatchObject({ status: 404 });
+
+    const emptyEvents = service({ query: vi.fn(async () => result([], 0)) });
+    await expect(
+      emptyEvents.listEvents({ runId: RUN_ID, projectId: PROJECT_ID }),
+    ).resolves.toEqual({ events: [], nextAfter: 0 });
+  });
+});
+
+describe("production service submission and command intent coverage", () => {
+  it("enqueues each owned command and reuses the identical intent", async () => {
+    const commands = new Map<string, Record<string, unknown>>();
+    const query = vi.fn(async (text: string, values: readonly unknown[] = []) => {
+      if (/SELECT id, project_id, manifest, projection, last_sequence/i.test(text)) {
+        return result([{ id: RUN_ID, project_id: PROJECT_ID, manifest: validManifest }]);
+      }
+      if (/SELECT project_id, run_id, idempotency_key, kind, payload/i.test(text)) {
+        const row = commands.get(String(values[1]));
+        return row ? result([row]) : result([], 0);
+      }
+      if (/INSERT INTO proofline_private\.run_commands/i.test(text)) {
+        const row = {
+          project_id: values[1],
+          run_id: values[2],
+          idempotency_key: values[3],
+          kind: values[4],
+          payload: JSON.parse(String(values[5])),
+        };
+        commands.set(String(values[3]), row);
+        return result([row]);
+      }
+      return result([], 1);
+    });
+    const production = service({ query });
+    const base = { runId: RUN_ID, projectId: PROJECT_ID };
+
+    await expect(
+      production.createSubmission({
+        ...base,
+        mode: "relayer",
+        idempotencyKey: "submit-1",
+      }),
+    ).resolves.toEqual({ accepted: true, runId: RUN_ID });
+    await expect(
+      production.createSubmission({
+        ...base,
+        mode: "relayer",
+        idempotencyKey: "submit-1",
+      }),
+    ).resolves.toEqual({ accepted: true, runId: RUN_ID });
+    await production.attachTransaction({
+      ...base,
+      idempotencyKey: "attach-1",
+      transactionHash: `0x${"9".repeat(64)}`,
+    });
+    await production.verifyConsumer({
+      ...base,
+      idempotencyKey: "verify-1",
+      consumer: "canonical-vulnerable",
+    });
+    await production.verifyConsumer({
+      ...base,
+      idempotencyKey: "verify-2",
+    });
+    expect([...commands.values()].map((row) => row.kind)).toEqual([
+      "SUBMIT_RELAYER",
+      "ATTACH_WALLET_TRANSACTION",
+      "VERIFY_CONSUMER",
+      "VERIFY_CONSUMER",
+    ]);
+  });
+
+  it("rejects unsupported modes, ownership failures, and raced intent conflicts", async () => {
+    const missing = service({ query: vi.fn(async () => result([], 0)) });
+    await expect(
+      missing.createSubmission({
+        runId: RUN_ID,
+        projectId: PROJECT_ID,
+        idempotencyKey: "missing",
+        mode: "relayer",
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      missing.createSubmission({ runId: RUN_ID, projectId: PROJECT_ID, mode: "other" }),
+    ).rejects.toMatchObject({ status: 400 });
+
+    let commandSelects = 0;
+    const raced = service({
+      query: vi.fn(async (text: string) => {
+        if (/SELECT id, project_id, manifest, projection, last_sequence/i.test(text)) {
+          return result([{ id: RUN_ID, project_id: PROJECT_ID, manifest: validManifest }]);
+        }
+        if (/SELECT project_id, run_id, idempotency_key, kind, payload/i.test(text)) {
+          commandSelects += 1;
+          return commandSelects === 1
+            ? result([], 0)
+            : result([
+                {
+                  run_id: RUN_ID,
+                  kind: "VERIFY_CONSUMER",
+                  payload: { consumer: "wrong" },
+                },
+              ]);
+        }
+        if (/INSERT INTO proofline_private\.run_commands/i.test(text)) return result([], 0);
+        return result([], 1);
+      }),
+    });
+    await expect(
+      raced.verifyConsumer({
+        runId: RUN_ID,
+        projectId: PROJECT_ID,
+        idempotencyKey: "race",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it.each([
+    ["chain", { chainId: 1 }],
+    ["hub", { fdcHub: "not-an-address" }],
+    ["calldata", { requestCalldata: "0x1" }],
+    ["fee", { quotedFeeWei: "-1" }],
+  ])("rejects invalid persisted wallet %s evidence", async (_label, override) => {
+    const evidence = {
+      chainId: 114,
+      fdcHub: FDC_HUB,
+      requestCalldata: "0xfeedcafe",
+      quotedFeeWei: "12345",
+      ...override,
+    };
+    const production = service({
+      query: vi.fn(async () =>
+        result([{ canonical_bytes: Buffer.from(JSON.stringify(evidence)) }]),
+      ),
+    });
+    await expect(
+      production.createSubmission({
+        runId: RUN_ID,
+        projectId: PROJECT_ID,
+        mode: "wallet",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("supports nested registry wallet evidence and rejects missing evidence", async () => {
+    const nested = service({
+      query: vi.fn(async () =>
+        result([
+          {
+            canonical_bytes: Buffer.from(
+              JSON.stringify({
+                network: { resolvedContracts: { FdcHub: FDC_HUB } },
+                requestCalldata: "0xfeedcafe",
+                quotedFeeWei: "12345",
+              }),
+            ),
+          },
+        ]),
+      ),
+    });
+    await expect(
+      nested.createSubmission({ runId: RUN_ID, projectId: PROJECT_ID, mode: "wallet" }),
+    ).resolves.toMatchObject({ transaction: { chainId: "0x72", to: FDC_HUB } });
+    const missing = service({ query: vi.fn(async () => result([], 0)) });
+    await expect(
+      missing.createSubmission({ runId: RUN_ID, projectId: PROJECT_ID, mode: "wallet" }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});
