@@ -114,6 +114,19 @@ describe("Slice 015B Transform validation", () => {
 });
 
 describe("Slice 015B pure manifest finalization", () => {
+  it("propagates stable Source and Trust syntax issues", () => {
+    expectIssue(
+      finalize(draft({ sourceUrl: "http://api.example.com/prices/eth" })),
+      "sourceUrl",
+      "SOURCE_URL_HTTPS_REQUIRED",
+    );
+    expectIssue(
+      finalize(draft({ expectedHost: "bad host" })),
+      "expectedHost",
+      "TRUST_HOST_INVALID",
+    );
+  });
+
   it("returns the exact strict manifest and canonical local-only preview", () => {
     const input = draft();
     const result = finalize(input);
