@@ -2,7 +2,12 @@
 
 import { MockAgent } from "undici";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { validManifest } from "../../contracts/test/fixtures";
+import {
+  RUN_ID,
+  exactTrustManifest,
+  validManifest,
+  validPreflightReport,
+} from "../../contracts/test/fixtures";
 import {
   createDaClient,
   quoteAttestationFee,
@@ -273,11 +278,13 @@ describe("preflight and error invariants", () => {
 
       await expect(
         runWeb2JsonPreflight({
-          manifest: validManifest,
+          runId: RUN_ID,
+          manifest: exactTrustManifest,
           samples,
           fdcHub: FDC_HUB,
+          networkSnapshot: validPreflightReport.registrySnapshot,
           ...ports,
-        }),
+        } as any),
       ).rejects.toMatchObject({
         category: "configuration",
         code: "PREFLIGHT_SAMPLE_COUNT_INVALID",

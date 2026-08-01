@@ -113,6 +113,15 @@ describe("Slice 016A deterministic redacted JSON shape", () => {
       65_536,
     );
   });
+
+  it("represents JSON null and rejects unsupported values without inventing a shape", () => {
+    const shape = requiredFunction("createRedactedJsonShape");
+    expect(shape(null)).toEqual({
+      truncated: false,
+      nodes: [{ path: "", type: "null" }],
+    });
+    expect(() => shape(undefined)).toThrow(/unsupported JSON shape value/i);
+  });
 });
 
 describe("Slice 016A canonical public report bytes", () => {

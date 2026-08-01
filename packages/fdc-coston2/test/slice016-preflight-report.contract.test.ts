@@ -91,8 +91,8 @@ describe("Slice 016A FDC preflight public evidence outcomes", () => {
     expect(adapterPorts.safeFetcher.getJson).toHaveBeenCalledTimes(5);
     expect(adapterPorts.transformJq).toHaveBeenCalledTimes(5);
     expect(adapterPorts.abiEncode).toHaveBeenCalledTimes(5);
-    expect(adapterPorts.verifier.prepareRequest).not.toHaveBeenCalled();
-    expect(adapterPorts.feeOracle.quote).not.toHaveBeenCalled();
+    expect(adapterPorts.verifier.prepareRequest).toHaveBeenCalledOnce();
+    expect(adapterPorts.feeOracle.quote).toHaveBeenCalledOnce();
   });
 
   it("collects five real samples before publishing an ABI-incompatible blocked report", async () => {
@@ -117,8 +117,8 @@ describe("Slice 016A FDC preflight public evidence outcomes", () => {
     expect(adapterPorts.safeFetcher.getJson).toHaveBeenCalledTimes(5);
     expect(adapterPorts.transformJq).toHaveBeenCalledTimes(5);
     expect(adapterPorts.abiEncode).toHaveBeenCalledTimes(5);
-    expect(adapterPorts.verifier.prepareRequest).not.toHaveBeenCalled();
-    expect(adapterPorts.feeOracle.quote).not.toHaveBeenCalled();
+    expect(adapterPorts.verifier.prepareRequest).toHaveBeenCalledOnce();
+    expect(adapterPorts.feeOracle.quote).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -162,6 +162,10 @@ describe("Slice 016A FDC preflight public evidence outcomes", () => {
       },
     });
     expect(adapterPorts.safeFetcher.getJson).toHaveBeenCalledTimes(5);
+    expect(adapterPorts.transformJq).toHaveBeenCalledTimes(5);
+    expect(adapterPorts.abiEncode).toHaveBeenCalledTimes(5);
+    expect(adapterPorts.verifier.prepareRequest).toHaveBeenCalledOnce();
+    expect(adapterPorts.feeOracle.quote).toHaveBeenCalledOnce();
   });
 
   it("publishes fee-cap evidence as blocked instead of losing the five samples", async () => {
@@ -188,6 +192,10 @@ describe("Slice 016A FDC preflight public evidence outcomes", () => {
       },
     });
     expect(adapterPorts.safeFetcher.getJson).toHaveBeenCalledTimes(5);
+    expect(adapterPorts.transformJq).toHaveBeenCalledTimes(5);
+    expect(adapterPorts.abiEncode).toHaveBeenCalledTimes(5);
+    expect(adapterPorts.verifier.prepareRequest).toHaveBeenCalledOnce();
+    expect(adapterPorts.feeOracle.quote).toHaveBeenCalledOnce();
   });
 
   it.each([

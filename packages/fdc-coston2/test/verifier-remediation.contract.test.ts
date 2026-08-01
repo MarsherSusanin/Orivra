@@ -1,7 +1,12 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
-import { validManifest, expectedCanonicalUrl } from "../../contracts/test/fixtures";
+import {
+  RUN_ID,
+  exactTrustManifest,
+  expectedCanonicalUrl,
+  validPreflightReport,
+} from "../../contracts/test/fixtures";
 import { runWeb2JsonPreflight } from "../src/preflight";
 import {
   assertPublicIpAddress,
@@ -11,6 +16,16 @@ import { createRelayerExecutor } from "../src/relayer";
 import { FDC_HUB, REQUEST_BYTES } from "./fixtures";
 
 const transactionHash = `0x${"a".repeat(64)}`;
+
+function preflightContext(manifest: unknown = exactTrustManifest) {
+  return {
+    runId: RUN_ID,
+    manifest,
+    samples: 5,
+    fdcHub: FDC_HUB,
+    networkSnapshot: validPreflightReport.registrySnapshot,
+  } as const;
+}
 
 describe("verifier remediation: SSRF and deadlines", () => {
   it.each([
@@ -45,15 +60,27 @@ describe("verifier remediation: canonical request and fee caps", () => {
       .fn()
       .mockResolvedValue({ requestBytes: REQUEST_BYTES });
 
-    await runWeb2JsonPreflight({
-      manifest: validManifest,
-      samples: 5,
-      fdcHub: FDC_HUB,
-      safeFetcher,
-      transformJq: vi.fn().mockResolvedValue({ value: 1 }),
-      abiEncode: vi.fn().mockReturnValue("0x01"),
-      verifier: { prepareRequest },
-      feeOracle: { quote: vi.fn().mockResolvedValue(12_345n) },
+    await expect(
+      runWeb2JsonPreflight({
+        ...preflightContext(),
+        safeFetcher,
+        transformJq: vi.fn().mockResolvedValue({ value: 1 }),
+        abiEncode: vi.fn().mockReturnValue("0x01"),
+        verifier: { prepareRequest },
+        feeOracle: { quote: vi.fn().mockResolvedValue(12_345n) },
+      } as any),
+    ).resolves.toMatchObject({
+      kind: "accepted",
+      report: {
+        runId: RUN_ID,
+        canonicalUrl: expectedCanonicalUrl,
+        requestIdentitySha256: validPreflightReport.requestIdentitySha256,
+      },
+      submissionEvidence: {
+        canonicalUrl: expectedCanonicalUrl,
+        requestBytes: REQUEST_BYTES,
+        quotedFeeWei: 12_345n,
+      },
     });
 
     expect(safeFetcher.getJson).toHaveBeenCalledTimes(5);
@@ -65,32 +92,69 @@ describe("verifier remediation: canonical request and fee caps", () => {
     );
   });
 
-  it.each([
-    ["wallet", -1n],
-    ["wallet", 20_000_000_000_000_001n],
-    ["relayer", -1n],
-    ["relayer", 20_000_000_000_000_001n],
-  ] as const)("rejects a %s quote of %s outside the manifest fee envelope", async (mode, quote) => {
-    const manifest = {
-      ...validManifest,
-      submission: { ...validManifest.submission, mode },
-    };
+  it.each(["wallet", "relayer"] as const)(
+    "returns a blocked report when a %s quote exceeds the manifest cap",
+    async (mode) => {
+      const quote = 20_000_000_000_000_001n;
+      const manifest = {
+        ...exactTrustManifest,
+        submission: { ...exactTrustManifest.submission, mode },
+      };
+      const prepareRequest = vi
+        .fn()
+        .mockResolvedValue({ requestBytes: REQUEST_BYTES });
+      const feeOracle = { quote: vi.fn().mockResolvedValue(quote) };
+      await expect(
+        runWeb2JsonPreflight({
+          ...preflightContext(manifest),
+          safeFetcher: { getJson: vi.fn().mockResolvedValue({ price: 1 }) },
+          transformJq: vi.fn().mockResolvedValue({ value: 1 }),
+          abiEncode: vi.fn().mockReturnValue("0x01"),
+          verifier: { prepareRequest },
+          feeOracle,
+        } as any),
+      ).resolves.toMatchObject({
+        kind: "blocked",
+        report: {
+          runId: RUN_ID,
+          verdict: "blocked",
+          requestIdentitySha256: validPreflightReport.requestIdentitySha256,
+          fee: {
+            quotedWei: quote.toString(),
+            capWei: exactTrustManifest.submission.feeCapWei,
+            withinCap: false,
+          },
+          blockers: ["PREFLIGHT_FEE_CAP_EXCEEDED"],
+          diagnostics: [
+            expect.objectContaining({ code: "PREFLIGHT_FEE_CAP_EXCEEDED" }),
+          ],
+        },
+      });
+      expect(prepareRequest).toHaveBeenCalledOnce();
+      expect(feeOracle.quote).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("rejects an impossible negative registry quote without inventing report evidence", async () => {
+    const prepareRequest = vi.fn().mockResolvedValue({ requestBytes: REQUEST_BYTES });
+    const feeOracle = { quote: vi.fn().mockResolvedValue(-1n) };
+
     await expect(
       runWeb2JsonPreflight({
-        manifest,
-        samples: 5,
-        fdcHub: FDC_HUB,
+        ...preflightContext(),
         safeFetcher: { getJson: vi.fn().mockResolvedValue({ price: 1 }) },
         transformJq: vi.fn().mockResolvedValue({ value: 1 }),
         abiEncode: vi.fn().mockReturnValue("0x01"),
-        verifier: { prepareRequest: vi.fn().mockResolvedValue({ requestBytes: REQUEST_BYTES }) },
-        feeOracle: { quote: vi.fn().mockResolvedValue(quote) },
-      }),
+        verifier: { prepareRequest },
+        feeOracle,
+      } as any),
     ).rejects.toMatchObject({
       category: "configuration",
       code: "FEE_QUOTE_OUT_OF_BOUNDS",
       retryable: false,
     });
+    expect(prepareRequest).toHaveBeenCalledOnce();
+    expect(feeOracle.quote).toHaveBeenCalledOnce();
   });
 });
 
