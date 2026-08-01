@@ -720,6 +720,52 @@ a {
   line-height: 1.5;
 }
 
+.composer-alert strong,
+.composer-alert span {
+  display: block;
+}
+
+.composer-alert .entry-secondary {
+  margin-top: 12px;
+}
+
+.composer-draft-notice {
+  display: flex;
+  max-width: 980px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 18px auto 0;
+  padding: 12px 14px;
+  color: var(--cyan-soft);
+  border: 1px solid rgba(45, 200, 243, 0.28);
+  background: rgba(45, 200, 243, 0.045);
+}
+
+.composer-draft-notice div {
+  display: grid;
+  gap: 3px;
+}
+
+.composer-draft-notice strong {
+  font-size: 12px;
+}
+
+.composer-draft-notice span,
+.composer-storage-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.composer-storage-note {
+  max-width: 980px;
+  margin: 14px auto 0;
+  padding: 10px 13px;
+  color: #ffd36b;
+  border-left: 2px solid var(--amber);
+  background: rgba(244, 186, 8, 0.055);
+}
+
 .composer-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -755,9 +801,10 @@ a {
 }
 
 .composer-field input,
+.composer-field textarea,
+.composer-field select,
 .composer-query-row input {
   width: 100%;
-  height: 44px;
   min-width: 0;
   padding: 0 13px;
   color: var(--text);
@@ -770,12 +817,40 @@ a {
   transition: border-color var(--motion), box-shadow var(--motion);
 }
 
+.composer-field input,
+.composer-field select,
+.composer-query-row input {
+  height: 44px;
+}
+
+.composer-field textarea {
+  min-height: 104px;
+  padding-top: 11px;
+  padding-bottom: 11px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.composer-field select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--cyan) 50%),
+    linear-gradient(135deg, var(--cyan) 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) 19px,
+    calc(100% - 12px) 19px;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+}
+
 .composer-field input::placeholder,
 .composer-query-row input::placeholder {
   color: #63727d;
 }
 
 .composer-field input:focus,
+.composer-field textarea:focus,
+.composer-field select:focus,
 .composer-query-row input:focus {
   border-color: var(--cyan);
   box-shadow: 0 0 0 3px rgba(45, 200, 243, 0.09);
@@ -787,8 +862,101 @@ a {
   background: rgba(45, 200, 243, 0.035);
 }
 
-.composer-field input[aria-invalid="true"] {
+.composer-field input[aria-invalid="true"],
+.composer-field textarea[aria-invalid="true"] {
   border-color: var(--amber);
+}
+
+.composer-local-badge {
+  flex: none;
+  padding: 6px 9px;
+  color: var(--cyan-soft);
+  border: 1px solid rgba(45, 200, 243, 0.32);
+  border-radius: 999px;
+  background: rgba(45, 200, 243, 0.04);
+  font-size: 11px;
+  font-weight: 670;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.composer-preview {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  background: rgba(7, 16, 22, 0.65);
+}
+
+.composer-preview > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.composer-preview h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.composer-preview span {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.composer-preview pre {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  color: #cdeef7;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.composer-submit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  padding-top: 25px;
+}
+
+.composer-submit-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 23px 0 0;
+  border: 1px solid var(--border-soft);
+}
+
+.composer-submit-summary div {
+  min-width: 0;
+  padding: 13px 15px;
+}
+
+.composer-submit-summary div + div {
+  border-left: 1px solid var(--border-soft);
+}
+
+.composer-submit-summary dt {
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.composer-submit-summary dd {
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-error {
@@ -2194,12 +2362,36 @@ a {
     display: grid;
   }
 
+  .composer-draft-notice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .composer-draft-notice .entry-secondary {
+    width: 100%;
+  }
+
   .composer-import {
     width: 100%;
   }
 
   .composer-trust-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .composer-submit-grid,
+  .composer-submit-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .composer-submit-summary div + div {
+    border-top: 1px solid var(--border-soft);
+    border-left: 0;
+  }
+
+  .composer-preview > div {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .composer-query-row {

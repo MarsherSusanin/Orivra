@@ -1,5 +1,10 @@
 import { createRunClient } from "./run-client";
-import type { RunListPageV1 } from "../../packages/contracts/src";
+import {
+  CreateRunResultV1Schema,
+  type CreateRunResultV1,
+  type RunListPageV1,
+  type Web2JsonManifestV1,
+} from "../../packages/contracts/src";
 import type { ProjectionStages, RunStage } from "../data/run";
 
 export type VerificationCheck = {
@@ -32,6 +37,12 @@ export type ListRunsContext = {
   status?: "active" | "completed" | "failed";
   cursor?: string;
   limit?: number;
+};
+
+export type CreateRunContext = {
+  projectToken: string;
+  manifest: Web2JsonManifestV1;
+  idempotencyKey: string;
 };
 
 export type RunDiagnosticView = {
@@ -72,6 +83,7 @@ export type HydratedRunView = {
 };
 
 export interface RunSurfaceServices {
+  createRun?(context: CreateRunContext): Promise<CreateRunResultV1>;
   verifyConsumer(context: RunServiceContext): Promise<ConsumerVerificationResult>;
   generateConsumer(context: RunServiceContext): Promise<GeneratedConsumer>;
   exportBundle(context: RunServiceContext): Promise<string>;
@@ -417,6 +429,19 @@ export function createLiveSurfaceServices(input: {
   }
 
   return {
+    async createRun(context) {
+      assertContext({ runId: "new-run", projectToken: context.projectToken });
+      const result = await client.createRun(
+        context.manifest,
+        context.idempotencyKey,
+      );
+      const parsed = CreateRunResultV1Schema.safeParse(result);
+      if (!parsed.success) {
+        throw new Error("Proofline returned an invalid create-run response contract");
+      }
+      return parsed.data;
+    },
+
     async listRuns(context) {
       assertContext({ runId: "run-list", projectToken: context.projectToken });
       return client.listRuns({
@@ -490,6 +515,9 @@ export function createTestSurfaceServices(): RunSurfaceServices {
     throw new Error("The deterministic Web adapter is available only in test mode");
   }
   return {
+    async createRun() {
+      throw new Error("Run creation requires an explicit persisted test adapter");
+    },
     async listRuns() {
       return { version: "1", runs: [] };
     },

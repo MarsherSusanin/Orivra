@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { request as httpsRequest } from "node:https";
-import type { Web2JsonManifestV1 } from "@proofline/contracts";
+import {
+  Web2JsonAbiParameterV1Schema,
+  type Web2JsonManifestV1,
+} from "@proofline/contracts";
 import {
   createDaClient,
   createFdcError,
@@ -23,7 +26,6 @@ import {
   getAddress,
   http,
   keccak256,
-  parseAbiParameters,
   type Abi,
   type AbiParameter,
   type Address,
@@ -108,12 +110,13 @@ function required(environment: LiveEnvironment, name: string): string {
 }
 
 function canonicalAbiParameters(signature: string) {
-  const trimmed = signature.trim();
-  const normalized =
-    trimmed.startsWith("{") && trimmed.endsWith("}")
-      ? `(${trimmed.slice(1, -1)})`
-      : trimmed;
-  return parseAbiParameters(normalized);
+  let descriptor: unknown;
+  try {
+    descriptor = JSON.parse(signature);
+  } catch {
+    throw new Error("Web2Json ABI descriptor must be valid JSON");
+  }
+  return [Web2JsonAbiParameterV1Schema.parse(descriptor)] as readonly AbiParameter[];
 }
 
 function normalizeConnectedAddress(address: string | undefined): string {

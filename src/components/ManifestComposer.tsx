@@ -2,25 +2,30 @@ import {
   ArrowLeft,
   ArrowRight,
   FileArrowUp,
-  FileCode,
   LockKey,
   Plus,
   Trash,
 } from "@phosphor-icons/react";
 import type { ChangeEvent, MouseEvent } from "react";
-import { useEffect, useRef, useState } from "react";
-import type {
-  ComposerStepV1,
-  Web2JsonDraftQueryRowV1,
-  Web2JsonManifestDraftV1,
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  CreateRunResultV1Schema,
+  type ComposerStepV1,
+  type Web2JsonDraftQueryRowV1,
+  type Web2JsonManifestDraftV1,
 } from "../../packages/contracts/src";
 import {
   createEthUsdComposerDraft,
   deriveTrustFromSourceUrl,
+  finalizeWeb2JsonManifestDraft,
   importWeb2JsonManifestDraft,
+  validateComposerTransformFields,
   validateComposerTrustFields,
   validateComposerSourceUrl,
+  type ComposerFinalizationIssue,
 } from "../../packages/domain/src";
+import { createComposerDraftStore } from "../services/composer-draft-store";
+import type { RunSurfaceServices } from "../services/run-surface";
 
 const COMPOSER_STEPS: readonly ComposerStepV1[] = [
   "source",
@@ -37,6 +42,33 @@ type TrustDirtyState = {
 };
 
 const CLEAN_TRUST: TrustDirtyState = { host: false, path: false, query: false };
+const UNAVAILABLE_DRAFT_STORAGE = {
+  getItem(): string | null {
+    throw new DOMException("Storage unavailable", "SecurityError");
+  },
+  setItem(): void {
+    throw new DOMException("Storage unavailable", "SecurityError");
+  },
+  removeItem(): void {
+    throw new DOMException("Storage unavailable", "SecurityError");
+  },
+};
+
+function browserDraftStorage() {
+  try {
+    const storage = globalThis.localStorage;
+    const prototype = globalThis.Storage?.prototype;
+    if (!storage) return UNAVAILABLE_DRAFT_STORAGE;
+    if (!prototype) return storage;
+    return {
+      getItem: (key: string) => prototype.getItem.call(storage, key),
+      setItem: (key: string, value: string) => prototype.setItem.call(storage, key, value),
+      removeItem: (key: string) => prototype.removeItem.call(storage, key),
+    };
+  } catch {
+    return UNAVAILABLE_DRAFT_STORAGE;
+  }
+}
 
 function displayStep(step: ComposerStepV1): string {
   return step.charAt(0).toUpperCase() + step.slice(1);
@@ -73,10 +105,10 @@ function randomUuid(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function blankDraft(): Web2JsonManifestDraftV1 {
+function blankDraft(step: ComposerStepV1 = "source"): Web2JsonManifestDraftV1 {
   return {
     version: "1",
-    step: "source",
+    step,
     updatedAt: new Date().toISOString(),
     createIdempotencyKey: `composer_${randomUuid()}`,
     fields: {
@@ -94,13 +126,16 @@ function blankDraft(): Web2JsonManifestDraftV1 {
   };
 }
 
-function initialDraft(): Web2JsonManifestDraftV1 {
+function newDraft(step = stepFromLocation()): Web2JsonManifestDraftV1 {
   const base = {
     updatedAt: new Date().toISOString(),
     createIdempotencyKey: `composer_${randomUuid()}`,
   };
   const template = new URLSearchParams(globalThis.location?.search ?? "").get("template");
-  return template === "eth-usd" ? createEthUsdComposerDraft(base) : blankDraft();
+  const created = template === "eth-usd"
+    ? createEthUsdComposerDraft(base)
+    : blankDraft(step);
+  return { ...created, step };
 }
 
 function updateRow(
@@ -207,40 +242,75 @@ function QueryRows({
   );
 }
 
-function UnavailableStep({ step }: { step: "transform" | "submit" }) {
-  return (
-    <section className="composer-panel composer-unavailable" aria-labelledby="composer-unavailable-title">
-      <span className="entry-state-icon" aria-hidden="true"><FileCode size={34} /></span>
-      <div>
-        <span className="section-label">Slice 015B</span>
-        <h2 id="composer-unavailable-title">{displayStep(step)} is not available yet</h2>
-        <p>
-          {step === "transform"
-            ? "JQ, ABI signature, canonical preview, and local draft recovery arrive in the next Composer slice."
-            : "Run creation remains locked until Transform and the final manifest validation are implemented."}
-        </p>
-      </div>
-    </section>
-  );
-}
-
 export function ManifestComposer({
   onConnect,
   onStart,
+  projectToken,
+  services,
+  onManifestValidated,
+  onRunCreated,
 }: {
   onConnect(): void;
   onStart(): void;
+  projectToken: string;
+  services: Pick<RunSurfaceServices, "createRun">;
+  onManifestValidated(outcome: "accepted" | "rejected"): void;
+  onRunCreated(runId: string): void;
 }) {
-  const [step, setStep] = useState(stepFromLocation);
-  const [draft, setDraft] = useState(initialDraft);
+  const draftStore = useMemo(
+    () => createComposerDraftStore(browserDraftStorage()),
+    [],
+  );
+  const [startup] = useState(() => {
+    const loaded = draftStore.load();
+    const requestedStep = stepFromLocation();
+    if (loaded.state === "restored") {
+      return {
+        draft: loaded.draft as Web2JsonManifestDraftV1 | null,
+        step: loaded.draft.step,
+        restoreState: "restored" as const,
+        storageUnavailable: false,
+      };
+    }
+    if (loaded.state === "rejected") {
+      return {
+        draft: null,
+        step: requestedStep,
+        restoreState: "rejected" as const,
+        storageUnavailable: false,
+      };
+    }
+    return {
+      draft: newDraft(requestedStep) as Web2JsonManifestDraftV1 | null,
+      step: requestedStep,
+      restoreState: "fresh" as const,
+      storageUnavailable: loaded.state === "unavailable",
+    };
+  });
+  const [step, setStep] = useState<ComposerStepV1>(startup.step);
+  const [draft, setDraft] = useState<Web2JsonManifestDraftV1 | null>(startup.draft);
+  const [restoreState, setRestoreState] = useState(startup.restoreState);
+  const [storageUnavailable, setStorageUnavailable] = useState(
+    startup.storageUnavailable,
+  );
   const [sourceError, setSourceError] = useState("");
+  const [jqError, setJqError] = useState("");
+  const [abiError, setAbiError] = useState("");
   const [hostError, setHostError] = useState("");
   const [pathError, setPathError] = useState("");
   const [queryKeyErrors, setQueryKeyErrors] = useState<Record<string, string>>({});
   const [importError, setImportError] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [focusField, setFocusField] = useState<"sourceUrl" | "jq" | "abiSignature" | null>(null);
   const trustDirty = useRef<TrustDirtyState>({ ...CLEAN_TRUST });
   const trustValidationAttempted = useRef(false);
   const startRecorded = useRef(false);
+  const submissionPending = useRef(false);
+  const sourceRef = useRef<HTMLInputElement>(null);
+  const jqRef = useRef<HTMLTextAreaElement>(null);
+  const abiRef = useRef<HTMLTextAreaElement>(null);
+  const hasTemplate = new URLSearchParams(globalThis.location?.search ?? "").get("template") === "eth-usd";
 
   const recordStartOnce = () => {
     if (startRecorded.current) return;
@@ -250,8 +320,11 @@ export function ManifestComposer({
 
   useEffect(() => {
     const restoreStep = () => {
-      const restored = stepFromLocation();
+      const locationStep = stepFromLocation();
       const requested = new URLSearchParams(globalThis.location.search).get("step");
+      const restored = restoreState === "restored" && draft
+        ? draft.step
+        : locationStep;
       if (requested !== restored) {
         globalThis.history.replaceState({}, "", stepHref(restored));
       }
@@ -260,16 +333,38 @@ export function ManifestComposer({
     restoreStep();
     globalThis.addEventListener("popstate", restoreStep);
     return () => globalThis.removeEventListener("popstate", restoreStep);
-  }, []);
+  }, [draft, restoreState]);
+
+  useEffect(() => {
+    if (!focusField) return;
+    const target = focusField === "sourceUrl"
+      ? sourceRef.current
+      : focusField === "jq"
+        ? jqRef.current
+        : abiRef.current;
+    target?.focus();
+    setFocusField(null);
+  }, [focusField, step]);
+
+  const persistDraft = (next: Web2JsonManifestDraftV1) => {
+    const result = draftStore.save(next);
+    setStorageUnavailable(result.state !== "stored");
+  };
+
+  const replaceDraft = (next: Web2JsonManifestDraftV1) => {
+    setDraft(next);
+    persistDraft(next);
+  };
 
   const setFields = (
     updater: (fields: Web2JsonManifestDraftV1["fields"]) => Web2JsonManifestDraftV1["fields"],
   ) => {
-    setDraft((current) => ({
-      ...current,
+    if (!draft) return;
+    replaceDraft({
+      ...draft,
       updatedAt: new Date().toISOString(),
-      fields: updater(current.fields),
-    }));
+      fields: updater(draft.fields),
+    });
   };
 
   const applyTrustValidation = (fields: Web2JsonManifestDraftV1["fields"]): boolean => {
@@ -306,18 +401,26 @@ export function ManifestComposer({
 
   const navigateStep = (event: MouseEvent<HTMLAnchorElement>, next: ComposerStepV1) => {
     event.preventDefault();
-    globalThis.history.pushState({}, "", stepHref(next));
-    setDraft((current) => ({ ...current, step: next, updatedAt: new Date().toISOString() }));
-    setStep(next);
+    goToStep(next);
   };
 
-  const goToStep = (next: ComposerStepV1) => {
+  const goToStep = (
+    next: ComposerStepV1,
+    base: Web2JsonManifestDraftV1 | null = draft,
+  ) => {
     globalThis.history.pushState({}, "", stepHref(next));
-    setDraft((current) => ({ ...current, step: next, updatedAt: new Date().toISOString() }));
+    if (base) {
+      replaceDraft({
+        ...base,
+        step: next,
+        updatedAt: new Date().toISOString(),
+      });
+    }
     setStep(next);
   };
 
   const addQueryRow = (kind: "source" | "expected") => {
+    if (!draft) return;
     const row: Web2JsonDraftQueryRowV1 = {
       id: `${kind}-query-${randomUuid()}`,
       key: "",
@@ -341,6 +444,7 @@ export function ManifestComposer({
     field: "key" | "value",
     value: string,
   ) => {
+    if (!draft) return;
     if (kind === "expected") trustDirty.current.query = true;
     const fieldName = kind === "source" ? "queryRows" : "expectedQueryRows";
     const nextFields = {
@@ -354,6 +458,7 @@ export function ManifestComposer({
   };
 
   const removeQueryRow = (kind: "source" | "expected", id: string) => {
+    if (!draft) return;
     if (kind === "expected") trustDirty.current.query = true;
     const fieldName = kind === "source" ? "queryRows" : "expectedQueryRows";
     const nextFields = {
@@ -367,33 +472,41 @@ export function ManifestComposer({
   };
 
   const continueFromSource = () => {
+    if (!draft) return;
     const validation = validateComposerSourceUrl(draft.fields.sourceUrl);
     if (!validation.valid) {
       setSourceError(validation.issue.message);
       return;
     }
     const derived = deriveTrustFromSourceUrl(draft.fields.sourceUrl);
-    setFields((fields) => ({
-      ...fields,
-      expectedHost: trustDirty.current.host ? fields.expectedHost : derived.expectedHost,
-      expectedPathPrefix: trustDirty.current.path
-        ? fields.expectedPathPrefix
-        : derived.expectedPathPrefix,
-      expectedQueryRows: trustDirty.current.query
-        ? fields.expectedQueryRows
-        : queryRowsFromSource(fields.queryRows, derived.expectedQueryRows),
-    }));
+    const derivedDraft = {
+      ...draft,
+      fields: {
+        ...draft.fields,
+        expectedHost: trustDirty.current.host
+          ? draft.fields.expectedHost
+          : derived.expectedHost,
+        expectedPathPrefix: trustDirty.current.path
+          ? draft.fields.expectedPathPrefix
+          : derived.expectedPathPrefix,
+        expectedQueryRows: trustDirty.current.query
+          ? draft.fields.expectedQueryRows
+          : queryRowsFromSource(draft.fields.queryRows, derived.expectedQueryRows),
+      },
+    };
     setSourceError("");
-    goToStep("transform");
+    goToStep("transform", derivedDraft);
   };
 
   const continueFromTrust = () => {
+    if (!draft) return;
     trustValidationAttempted.current = true;
     if (!applyTrustValidation(draft.fields)) return;
     goToStep("submit");
   };
 
   const importManifest = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!draft) return;
     const input = event.currentTarget;
     const selected = input.files?.[0];
     if (!selected) return;
@@ -405,7 +518,7 @@ export function ManifestComposer({
         createIdempotencyKey: draft.createIdempotencyKey,
       });
       trustDirty.current = { host: true, path: true, query: true };
-      setDraft({ ...imported, step });
+      replaceDraft({ ...imported, step });
       setSourceError("");
       setHostError("");
       setPathError("");
@@ -417,6 +530,130 @@ export function ManifestComposer({
       input.value = "";
     }
   };
+
+  const continueFromTransform = () => {
+    if (!draft) return;
+    const validation = validateComposerTransformFields({
+      jq: draft.fields.jq,
+      abiSignature: draft.fields.abiSignature,
+    });
+    if (!validation.valid) {
+      setJqError(
+        validation.issues.find(({ field }) => field === "jq")?.message ?? "",
+      );
+      setAbiError(
+        validation.issues.find(({ field }) => field === "abiSignature")?.message ?? "",
+      );
+      return;
+    }
+    setJqError("");
+    setAbiError("");
+    const canonicalDraft = {
+      ...draft,
+      fields: {
+        ...draft.fields,
+        abiSignature: validation.canonicalAbiSignature,
+      },
+    };
+    goToStep("trust", canonicalDraft);
+  };
+
+  const applyFinalizationIssues = (
+    issues: readonly ComposerFinalizationIssue[],
+  ) => {
+    setSourceError(issues.find(({ field }) => field === "sourceUrl")?.message ?? "");
+    setJqError(issues.find(({ field }) => field === "jq")?.message ?? "");
+    setAbiError(issues.find(({ field }) => field === "abiSignature")?.message ?? "");
+    setHostError(issues.find(({ field }) => field === "expectedHost")?.message ?? "");
+    setPathError(
+      issues.find(({ field }) => field === "expectedPathPrefix")?.message ?? "",
+    );
+  };
+
+  const focusFirstInvalidField = (field: string) => {
+    if (field === "sourceUrl" || field.startsWith("queryRows")) {
+      goToStep("source");
+      setFocusField("sourceUrl");
+      return;
+    }
+    if (field === "jq" || field === "abiSignature") {
+      goToStep("transform");
+      setFocusField(field);
+      return;
+    }
+    goToStep("trust");
+  };
+
+  const submitManifest = async () => {
+    if (!draft || submissionPending.current) return;
+    if (!projectToken) {
+      onConnect();
+      return;
+    }
+
+    const finalized = finalizeWeb2JsonManifestDraft(draft);
+    if (!finalized.valid) {
+      onManifestValidated("rejected");
+      applyFinalizationIssues(finalized.issues);
+      focusFirstInvalidField(finalized.issues[0]?.field ?? "sourceUrl");
+      return;
+    }
+
+    onManifestValidated("accepted");
+    submissionPending.current = true;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      if (!services.createRun) {
+        throw new Error("Run creation service is unavailable");
+      }
+      const rawResult = await services.createRun({
+        projectToken,
+        manifest: finalized.manifest,
+        idempotencyKey: draft.createIdempotencyKey,
+      });
+      const parsed = CreateRunResultV1Schema.safeParse(rawResult);
+      if (!parsed.success) {
+        throw new Error("Invalid create-run response contract");
+      }
+      draftStore.clear();
+      const destination = `/runs/${encodeURIComponent(parsed.data.runId)}?step=preflight`;
+      globalThis.history.pushState({}, "", destination);
+      onRunCreated(parsed.data.runId);
+    } catch {
+      setSubmitError(
+        "Run could not be created. Retry uses the same saved request identity.",
+      );
+      submissionPending.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  const startFresh = () => {
+    draftStore.clear();
+    const fresh = blankDraft("source");
+    setRestoreState("fresh");
+    setStep("source");
+    globalThis.history.replaceState({}, "", stepHref("source"));
+    replaceDraft(fresh);
+  };
+
+  const discardAndStartTemplate = () => {
+    draftStore.clear();
+    const template = {
+      ...createEthUsdComposerDraft({
+        updatedAt: new Date().toISOString(),
+        createIdempotencyKey: `composer_${randomUuid()}`,
+      }),
+      step: "source" as const,
+    };
+    setRestoreState("fresh");
+    setStep("source");
+    globalThis.history.replaceState({}, "", stepHref("source"));
+    replaceDraft(template);
+  };
+
+  const preview = draft ? finalizeWeb2JsonManifestDraft(draft) : null;
 
   return (
     <main
@@ -448,7 +685,39 @@ export function ManifestComposer({
         ))}
       </nav>
 
-      {step === "source" ? (
+      {restoreState === "rejected" ? (
+        <section className="composer-panel composer-recovery" aria-label="Draft recovery">
+          <div className="composer-alert" role="alert">
+            <strong>Saved draft could not be restored.</strong>
+            <span>The local value was rejected as a whole. No partial fields were loaded.</span>
+            <button className="entry-secondary" type="button" onClick={startFresh}>
+              Start fresh
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {draft && restoreState === "restored" ? (
+        <div className="composer-draft-notice" role="status">
+          <div>
+            <strong>Draft restored.</strong>
+            <span>Your last local Composer step and edits are ready.</span>
+          </div>
+          {hasTemplate ? (
+            <button className="entry-secondary" type="button" onClick={discardAndStartTemplate}>
+              Discard restored draft and start ETH/USD
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {draft && storageUnavailable ? (
+        <p className="composer-storage-note" role="status">
+          Storage unavailable. Edits stay local to this tab and won&apos;t survive reload.
+        </p>
+      ) : null}
+
+      {draft && step === "source" ? (
         <section className="composer-panel" aria-labelledby="composer-source-title">
           <div className="composer-panel-heading">
             <div>
@@ -473,6 +742,7 @@ export function ManifestComposer({
             <label className="composer-field composer-field-wide">
               <span>Source URL</span>
               <input
+                ref={sourceRef}
                 type="url"
                 inputMode="url"
                 autoComplete="url"
@@ -514,7 +784,75 @@ export function ManifestComposer({
         </section>
       ) : null}
 
-      {step === "trust" ? (
+      {draft && step === "transform" ? (
+        <section className="composer-panel" aria-labelledby="composer-transform-title">
+          <div className="composer-panel-heading">
+            <div>
+              <span className="section-label">Step 2 · Transform</span>
+              <h2 id="composer-transform-title">Describe the deterministic result</h2>
+              <p>Set the JQ projection and the official JSON ABI-parameter descriptor used by Web2Json.</p>
+            </div>
+            <span className="composer-local-badge">Client-side draft</span>
+          </div>
+
+          <div className="composer-form composer-transform-grid">
+            <label className="composer-field composer-field-wide">
+              <span>JQ transform</span>
+              <textarea
+                ref={jqRef}
+                rows={4}
+                spellCheck={false}
+                value={draft.fields.jq}
+                aria-invalid={jqError ? "true" : undefined}
+                aria-describedby={jqError ? "composer-jq-error" : "composer-jq-help"}
+                onChange={(event) => {
+                  setFields((fields) => ({ ...fields, jq: event.target.value }));
+                  if (jqError) setJqError("");
+                }}
+              />
+              <small id="composer-jq-help">Evaluated remotely only after persisted preflight.</small>
+              {jqError ? <span className="composer-error" id="composer-jq-error">{jqError}</span> : null}
+            </label>
+
+            <label className="composer-field composer-field-wide">
+              <span>ABI signature</span>
+              <textarea
+                ref={abiRef}
+                rows={7}
+                spellCheck={false}
+                value={draft.fields.abiSignature}
+                aria-invalid={abiError ? "true" : undefined}
+                aria-describedby={abiError ? "composer-abi-error" : "composer-abi-help"}
+                onChange={(event) => {
+                  setFields((fields) => ({ ...fields, abiSignature: event.target.value }));
+                  if (abiError) setAbiError("");
+                }}
+              />
+              <small id="composer-abi-help">One bounded JSON ABI-parameter descriptor, including tuple components when required.</small>
+              {abiError ? <span className="composer-error" id="composer-abi-error">{abiError}</span> : null}
+            </label>
+          </div>
+
+          {preview?.valid ? (
+            <section className="composer-preview" aria-labelledby="composer-preview-title">
+              <div>
+                <h3 id="composer-preview-title">Canonical manifest preview</h3>
+                <span>Local only · definition bytes, not remote evidence</span>
+              </div>
+              <pre aria-label="Canonical manifest preview — local only">{preview.canonicalJson}</pre>
+            </section>
+          ) : null}
+
+          <div className="composer-actions">
+            <a className="entry-secondary" href={stepHref("source")} onClick={(event) => navigateStep(event, "source")}>Back to Source</a>
+            <button className="entry-primary" type="button" onClick={continueFromTransform}>
+              Continue to Trust <ArrowRight size={18} weight="bold" aria-hidden="true" />
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {draft && step === "trust" ? (
         <section className="composer-panel" aria-labelledby="composer-trust-title">
           <div className="composer-panel-heading">
             <div>
@@ -598,7 +936,75 @@ export function ManifestComposer({
         </section>
       ) : null}
 
-      {step === "transform" || step === "submit" ? <UnavailableStep step={step} /> : null}
+      {draft && step === "submit" ? (
+        <section className="composer-panel" aria-labelledby="composer-submit-title">
+          <div className="composer-panel-heading">
+            <div>
+              <span className="section-label">Step 4 · Submit</span>
+              <h2 id="composer-submit-title">Create the persisted preflight run</h2>
+              <p>Choose the submission intent and fee ceiling. No wallet or relayer effect happens on this step.</p>
+            </div>
+          </div>
+
+          <div className="composer-submit-grid">
+            <label className="composer-field">
+              <span>Submission mode</span>
+              <select
+                value={draft.fields.submissionMode}
+                onChange={(event) => setFields((fields) => ({
+                  ...fields,
+                  submissionMode: event.target.value as Web2JsonManifestDraftV1["fields"]["submissionMode"],
+                }))}
+              >
+                <option value="wallet">Wallet</option>
+                <option value="relayer">Relayer</option>
+                <option value="replay">Replay</option>
+              </select>
+              <small>Fixed in the manifest when the run is created.</small>
+            </label>
+            <label className="composer-field">
+              <span>Fee cap · wei</span>
+              <input
+                inputMode="numeric"
+                autoComplete="off"
+                value={draft.fields.feeCapWei}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (/^\d*$/.test(value)) {
+                    setFields((fields) => ({ ...fields, feeCapWei: value }));
+                  }
+                }}
+              />
+              <small>Canonical unsigned integer; replay may use zero.</small>
+            </label>
+          </div>
+
+          <dl className="composer-submit-summary" aria-label="Run creation summary">
+            <div><dt>Network</dt><dd>Coston2 · chain 114</dd></div>
+            <div><dt>Source</dt><dd>{draft.fields.expectedHost || "Not valid yet"}</dd></div>
+            <div><dt>Next result</dt><dd>Persisted preflight evidence</dd></div>
+          </dl>
+
+          {submitError ? <p className="composer-alert" role="alert">{submitError}</p> : null}
+
+          <div className="composer-actions">
+            <a className="entry-secondary" href={stepHref("trust")} onClick={(event) => navigateStep(event, "trust")}>Back to Trust</a>
+            <button
+              className="entry-primary"
+              type="button"
+              disabled={submitting}
+              onClick={() => void submitManifest()}
+            >
+              {submitting
+                ? "Creating preflight run…"
+                : projectToken
+                  ? "Create preflight run"
+                  : "Connect project to create"}
+              <ArrowRight size={18} weight="bold" aria-hidden="true" />
+            </button>
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

@@ -547,6 +547,7 @@ function ProductEntry({
     () => projectToken ?? sessionProjectToken(),
   );
   const [connectOpen, setConnectOpen] = useState(false);
+  const [createdRunId, setCreatedRunId] = useState<string | null>(null);
   const resolvedToken = projectToken ?? sessionToken;
   const servicePort = useMemo(() => {
     if (services) return services;
@@ -583,6 +584,23 @@ function ProductEntry({
       emitComposerStart("direct");
     }
   };
+  const recordManifestValidation = (outcome: "accepted" | "rejected") => {
+    emitProductEvent({
+      name: "MANIFEST_VALIDATED",
+      metadata: { outcome },
+    });
+  };
+
+  if (createdRunId) {
+    return (
+      <RunCockpit
+        runId={createdRunId}
+        projectToken={resolvedToken}
+        services={servicePort}
+        analytics={analytics}
+      />
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -608,6 +626,10 @@ function ProductEntry({
           <ManifestComposer
             onConnect={() => setConnectOpen(true)}
             onStart={recordDirectStart}
+            projectToken={resolvedToken}
+            services={servicePort}
+            onManifestValidated={recordManifestValidation}
+            onRunCreated={setCreatedRunId}
           />
         )}
       </div>
