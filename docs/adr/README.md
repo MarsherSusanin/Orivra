@@ -1,0 +1,21 @@
+# Proofline ADR index
+
+ADR фиксирует архитектурное решение, которое меняет границы пакетов, trust model, persistence, release path или пользовательский контракт. Новый ADR создаётся до реализации, получает следующий свободный номер и содержит context, decision, consequences и status. Исторические gaps в нумерации допустимы; существующие номера не переиспользуются.
+
+| ADR | Решение |
+|---|---|
+| [0001](0001-proofline-control-plane.md) | Control-plane boundaries и dependency direction |
+| [0002](0002-production-composition-and-evidence.md) | Production composition и typed evidence как release artifact |
+| [0003](0003-persisted-command-outcomes.md) | Persisted command outcomes как orchestration boundary |
+| [0005](0005-one-persisted-release-path.md) | Один persisted release path для CLI, Action и live gates |
+| [0006](0006-mobile-navigation-safe-area.md) | Reserved safe area для fixed mobile navigation |
+| [0007](0007-one-terminal-release-command-graph.md) | Один terminal release command graph на run |
+| [0008](0008-attempt-before-io-and-local-pr-replay.md) | Attempt before I/O и local PR replay |
+| [0009](0009-no-test-custody-code-in-worker-artifact.md) | Test custody code не попадает в worker artifact |
+| [0010](0010-manifest-owned-submission-and-evidence-ui.md) | Submission mode принадлежит manifest; UI выводится из evidence |
+| [0011](0011-authorize-at-final-relayer-effect.md) | Повторная авторизация непосредственно перед relayer effect |
+| [0012](0012-one-persisted-live-gate.md) | Единственный live gate проходит через API/PostgreSQL/worker |
+| [0013](0013-single-deadline-and-bound-evidence.md) | Один deadline и commit/tree-bound release evidence |
+
+Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.
+
