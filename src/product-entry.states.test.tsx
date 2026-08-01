@@ -94,13 +94,12 @@ describe("run discovery states", () => {
     expect(alert).not.toHaveTextContent(projectToken);
   });
 
-  it("exposes /runs/new without collecting partial Composer fields", () => {
+  it("exposes the /runs/new Composer route without losing the 014 entry shell", () => {
     window.history.replaceState({}, "", "/runs/new");
     render(<App services={services()} />);
 
     expect(screen.getByRole("heading", { name: /new web2json run/i })).toBeVisible();
-    expect(screen.getByRole("heading", { name: /composer is the next product step/i })).toBeVisible();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /composer steps/i })).toBeVisible();
     expect(screen.getByRole("link", { name: /back to runs/i })).toHaveAttribute("href", "/runs");
   });
 

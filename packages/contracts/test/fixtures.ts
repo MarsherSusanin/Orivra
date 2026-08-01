@@ -31,6 +31,31 @@ export const validManifest = {
   },
 } as const;
 
+export const validComposerDraft = {
+  version: "1",
+  step: "source",
+  updatedAt: "2026-08-02T03:00:00.000Z",
+  createIdempotencyKey: "composer_123e4567-e89b-42d3-a456-426614174000",
+  fields: {
+    sourceUrl: validManifest.request.url,
+    queryRows: [
+      { id: "query_currency", key: "currency", value: "USD" },
+      { id: "query_window", key: "window", value: "1h" },
+    ],
+    jq: validManifest.request.jq,
+    abiSignature: validManifest.request.abiSignature,
+    expectedScheme: "https",
+    expectedHost: validManifest.consumer.expectedHost,
+    expectedPathPrefix: validManifest.consumer.expectedPathPrefix,
+    expectedQueryRows: [
+      { id: "expected_currency", key: "currency", value: "USD" },
+      { id: "expected_source", key: "source", value: "primary" },
+    ],
+    submissionMode: validManifest.submission.mode,
+    feeCapWei: validManifest.submission.feeCapWei,
+  },
+} as const;
+
 export const expectedCanonicalUrl =
   "https://api.example.com/prices/eth?currency=USD&source=primary&window=1h";
 

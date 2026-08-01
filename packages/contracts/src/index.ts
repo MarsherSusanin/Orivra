@@ -78,6 +78,103 @@ export const Web2JsonManifestV1Schema = z
 
 export type Web2JsonManifestV1 = z.infer<typeof Web2JsonManifestV1Schema>;
 
+export const ComposerStepV1Schema = z.enum([
+  "source",
+  "transform",
+  "trust",
+  "submit",
+]);
+
+const DraftQueryRowIdV1Schema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9_-]+$/);
+
+export const Web2JsonDraftQueryRowV1Schema = z
+  .object({
+    id: DraftQueryRowIdV1Schema,
+    key: z.string().max(128),
+    value: z.string().max(2_048),
+  })
+  .strict();
+
+function containsUrlCredentials(value: string): boolean {
+  if (value.length === 0) return false;
+  try {
+    const url = new URL(value);
+    return url.username.length > 0 || url.password.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+const DraftSourceUrlV1Schema = z
+  .string()
+  .max(2_048)
+  .refine((value) => !containsUrlCredentials(value), "Draft URLs must not contain credentials");
+
+const DraftExpectedHostV1Schema = z
+  .string()
+  .max(253)
+  .refine(
+    (value) => value.length === 0 || value === value.toLowerCase(),
+    "Draft expected hosts must be normalized to lowercase",
+  );
+
+const DraftPathPrefixV1Schema = z
+  .string()
+  .max(2_048)
+  .refine(
+    (value) => value.length === 0 || value.startsWith("/"),
+    "Draft path prefixes must be empty or start with /",
+  );
+
+const DraftFeeCapV1Schema = z
+  .string()
+  .max(78)
+  .refine(
+    (value) => value.length === 0 || /^(?:0|[1-9]\d*)$/.test(value),
+    "Draft fee caps must be empty or canonical unsigned integers",
+  );
+
+const DraftQueryRowsV1Schema = z.array(Web2JsonDraftQueryRowV1Schema).max(50);
+
+/**
+ * Strict, bounded local editing state. This is never accepted as run evidence;
+ * Web2JsonManifestV1Schema remains the final manifest validator.
+ */
+export const Web2JsonManifestDraftV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    step: ComposerStepV1Schema,
+    updatedAt: z.string().datetime({ offset: true }),
+    createIdempotencyKey: z
+      .string()
+      .regex(
+        /^composer_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      ),
+    fields: z
+      .object({
+        sourceUrl: DraftSourceUrlV1Schema,
+        queryRows: DraftQueryRowsV1Schema,
+        jq: z.string().max(16_384),
+        abiSignature: z.string().max(2_048),
+        expectedScheme: z.literal("https"),
+        expectedHost: DraftExpectedHostV1Schema,
+        expectedPathPrefix: DraftPathPrefixV1Schema,
+        expectedQueryRows: DraftQueryRowsV1Schema,
+        submissionMode: z.enum(["replay", "wallet", "relayer"]),
+        feeCapWei: DraftFeeCapV1Schema,
+      })
+      .strict(),
+  })
+  .strict();
+
+export type ComposerStepV1 = z.infer<typeof ComposerStepV1Schema>;
+export type Web2JsonDraftQueryRowV1 = z.infer<typeof Web2JsonDraftQueryRowV1Schema>;
+export type Web2JsonManifestDraftV1 = z.infer<typeof Web2JsonManifestDraftV1Schema>;
+
 export const DiagnosticV1Schema = z
   .object({
     version: VersionV1Schema,
