@@ -11,6 +11,8 @@ import {
 
 const updatedAt = "2026-08-02T03:00:00.000Z";
 const createIdempotencyKey = "composer_123e4567-e89b-42d3-a456-426614174000";
+const ethUsdAbiSignature =
+  '{"components":[{"internalType":"string","name":"amount","type":"string"},{"internalType":"string","name":"currency","type":"string"}],"name":"data","type":"tuple"}';
 
 const manifest: Web2JsonManifestV1 = {
   version: "1",
@@ -46,7 +48,7 @@ describe("Slice 015A manifest Composer core", () => {
         sourceUrl: "https://api.coinbase.com/v2/prices/ETH-USD/spot",
         queryRows: [],
         jq: ".data | {amount: .amount, currency: .currency}",
-        abiSignature: "{string amount,string currency}",
+        abiSignature: ethUsdAbiSignature,
         expectedScheme: "https",
         expectedHost: "api.coinbase.com",
         expectedPathPrefix: "/v2/prices/ETH-USD/spot",
@@ -55,6 +57,17 @@ describe("Slice 015A manifest Composer core", () => {
         feeCapWei: "20000000000000000",
       },
     });
+
+    const abiDescriptor = JSON.parse(draft.fields.abiSignature);
+    expect(abiDescriptor).toEqual({
+      components: [
+        { internalType: "string", name: "amount", type: "string" },
+        { internalType: "string", name: "currency", type: "string" },
+      ],
+      name: "data",
+      type: "tuple",
+    });
+    expect(JSON.stringify(abiDescriptor)).toBe(ethUsdAbiSignature);
   });
 
   it("strictly imports every manifest field into deterministic sorted editing rows", () => {
