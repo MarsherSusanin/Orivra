@@ -1,11 +1,4 @@
-import {
-  ArrowLeft,
-  ArrowRight,
-  FileArrowUp,
-  LockKey,
-  Plus,
-  Trash,
-} from "@phosphor-icons/react";
+import { ArrowLeft } from "@phosphor-icons/react";
 import type { ChangeEvent, MouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -26,13 +19,15 @@ import {
 } from "../../packages/domain/src";
 import { createComposerDraftStore } from "../services/composer-draft-store";
 import type { RunSurfaceServices } from "../services/run-surface";
+import {
+  COMPOSER_STEPS,
+  ComposerSourceStep,
+  ComposerStepsNav,
+  ComposerSubmitStep,
+  ComposerTransformStep,
+  ComposerTrustStep,
+} from "./ManifestComposerSteps";
 
-const COMPOSER_STEPS: readonly ComposerStepV1[] = [
-  "source",
-  "transform",
-  "trust",
-  "submit",
-];
 const MAX_IMPORT_BYTES = 64 * 1024;
 
 type TrustDirtyState = {
@@ -68,10 +63,6 @@ function browserDraftStorage() {
   } catch {
     return UNAVAILABLE_DRAFT_STORAGE;
   }
-}
-
-function displayStep(step: ComposerStepV1): string {
-  return step.charAt(0).toUpperCase() + step.slice(1);
 }
 
 function stepFromLocation(): ComposerStepV1 {
@@ -159,87 +150,6 @@ function queryRowsFromSource(
   return [...merged.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value], index) => ({ id: `expected-query-${index}`, key, value }));
-}
-
-function QueryRows({
-  rows,
-  kind,
-  keyErrors,
-  onAdd,
-  onChange,
-  onRemove,
-}: {
-  rows: readonly Web2JsonDraftQueryRowV1[];
-  kind: "source" | "expected";
-  keyErrors?: Readonly<Record<string, string>>;
-  onAdd(): void;
-  onChange(id: string, field: "key" | "value", value: string): void;
-  onRemove(id: string): void;
-}) {
-  const expected = kind === "expected";
-  const groupName = expected ? "Expected query" : "Source query";
-  const labelPrefix = expected ? "Expected query" : "Query";
-  return (
-    <fieldset className="composer-query" aria-label={groupName}>
-      <legend className="visually-hidden">{groupName}</legend>
-      <div className="composer-field-heading">
-        <strong>{groupName}</strong>
-        <button
-          className="composer-add"
-          type="button"
-          onClick={onAdd}
-          aria-label={expected ? "Add expected query" : "Add query parameter"}
-        >
-          <Plus size={15} weight="bold" aria-hidden="true" />Add parameter
-        </button>
-      </div>
-      {rows.length === 0 ? (
-        <p className="composer-empty-row">No explicit query parameters.</p>
-      ) : (
-        <div className="composer-query-rows">
-          {rows.map((row) => (
-            <div className="composer-query-row" key={row.id}>
-              <label>
-                <span>{labelPrefix} key</span>
-                <input
-                  aria-label={`${labelPrefix} key`}
-                  aria-invalid={keyErrors?.[row.id] ? "true" : undefined}
-                  aria-describedby={keyErrors?.[row.id] ? `query-key-error-${row.id}` : undefined}
-                  autoComplete="off"
-                  maxLength={128}
-                  value={row.key}
-                  onChange={(event) => onChange(row.id, "key", event.target.value)}
-                />
-                {keyErrors?.[row.id] ? (
-                  <span className="composer-error" id={`query-key-error-${row.id}`}>
-                    {keyErrors[row.id]}
-                  </span>
-                ) : null}
-              </label>
-              <label>
-                <span>{labelPrefix} value</span>
-                <input
-                  aria-label={`${labelPrefix} value`}
-                  autoComplete="off"
-                  maxLength={2048}
-                  value={row.value}
-                  onChange={(event) => onChange(row.id, "value", event.target.value)}
-                />
-              </label>
-              <button
-                className="composer-remove"
-                type="button"
-                onClick={() => onRemove(row.id)}
-                aria-label={expected ? "Remove expected query" : "Remove query parameter"}
-              >
-                <Trash size={17} aria-hidden="true" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </fieldset>
-  );
 }
 
 export function ManifestComposer({
@@ -670,20 +580,11 @@ export function ManifestComposer({
         <a className="composer-back" href="/runs"><ArrowLeft size={17} aria-hidden="true" />Back to runs</a>
       </header>
 
-      <nav className="composer-steps" aria-label="Composer steps">
-        {COMPOSER_STEPS.map((item, index) => (
-          <a
-            className={step === item ? "is-current" : ""}
-            href={stepHref(item)}
-            aria-current={step === item ? "step" : undefined}
-            onClick={(event) => navigateStep(event, item)}
-            key={item}
-          >
-            <span aria-hidden="true">{index + 1}</span>
-            {displayStep(item)}
-          </a>
-        ))}
-      </nav>
+      <ComposerStepsNav
+        step={step}
+        stepHref={stepHref}
+        onNavigate={navigateStep}
+      />
 
       {restoreState === "rejected" ? (
         <section className="composer-panel composer-recovery" aria-label="Draft recovery">
@@ -718,292 +619,111 @@ export function ManifestComposer({
       ) : null}
 
       {draft && step === "source" ? (
-        <section className="composer-panel" aria-labelledby="composer-source-title">
-          <div className="composer-panel-heading">
-            <div>
-              <span className="section-label">Step 1 · Source</span>
-              <h2 id="composer-source-title">Choose the public response</h2>
-              <p>Proofline accepts one secure GET source. The browser only records this request definition.</p>
-            </div>
-            <label className="composer-import">
-              <FileArrowUp size={18} aria-hidden="true" />Import manifest
-              <input
-                aria-label="Import manifest"
-                type="file"
-                accept="application/json,.json"
-                onChange={(event) => void importManifest(event)}
-              />
-            </label>
-          </div>
-
-          {importError ? <p className="composer-alert" role="alert">{importError}</p> : null}
-
-          <div className="composer-form">
-            <label className="composer-field composer-field-wide">
-              <span>Source URL</span>
-              <input
-                ref={sourceRef}
-                type="url"
-                inputMode="url"
-                autoComplete="url"
-                placeholder="https://data.example.org/public/data"
-                value={draft.fields.sourceUrl}
-                aria-invalid={sourceError ? "true" : undefined}
-                aria-describedby={sourceError ? "source-url-error source-browser-note" : "source-browser-note"}
-                onChange={(event) => {
-                  setFields((fields) => ({ ...fields, sourceUrl: event.target.value }));
-                  if (sourceError) setSourceError("");
-                }}
-              />
-              {sourceError ? <span className="composer-error" id="source-url-error">{sourceError}</span> : null}
-            </label>
-
-            <QueryRows
-              kind="source"
-              rows={draft.fields.queryRows}
-              onAdd={() => addQueryRow("source")}
-              onChange={(id, field, value) => changeQueryRow("source", id, field, value)}
-              onRemove={(id) => removeQueryRow("source", id)}
-            />
-          </div>
-
-          <div className="composer-security-note" id="source-browser-note">
-            <LockKey size={19} aria-hidden="true" />
-            <div>
-              <strong>No browser request</strong>
-              <span>Remote access happens during server-side preflight after the run is persisted.</span>
-            </div>
-          </div>
-
-          <div className="composer-actions">
-            <button className="entry-text-button" type="button" onClick={onConnect}>Connect project</button>
-            <button className="entry-primary" type="button" onClick={continueFromSource}>
-              Continue to Transform <ArrowRight size={18} weight="bold" aria-hidden="true" />
-            </button>
-          </div>
-        </section>
+        <ComposerSourceStep
+          fields={draft.fields}
+          sourceError={sourceError}
+          importError={importError}
+          sourceRef={sourceRef}
+          onImportManifest={(event) => void importManifest(event)}
+          onSourceChange={(value) => {
+            setFields((fields) => ({ ...fields, sourceUrl: value }));
+            if (sourceError) setSourceError("");
+          }}
+          onConnect={onConnect}
+          onContinue={continueFromSource}
+          onAddQuery={addQueryRow}
+          onChangeQuery={changeQueryRow}
+          onRemoveQuery={removeQueryRow}
+        />
       ) : null}
 
       {draft && step === "transform" ? (
-        <section className="composer-panel" aria-labelledby="composer-transform-title">
-          <div className="composer-panel-heading">
-            <div>
-              <span className="section-label">Step 2 · Transform</span>
-              <h2 id="composer-transform-title">Describe the deterministic result</h2>
-              <p>Set the JQ projection and the official JSON ABI-parameter descriptor used by Web2Json.</p>
-            </div>
-            <span className="composer-local-badge">Client-side draft</span>
-          </div>
-
-          <div className="composer-form composer-transform-grid">
-            <label className="composer-field composer-field-wide">
-              <span>JQ transform</span>
-              <textarea
-                ref={jqRef}
-                rows={4}
-                spellCheck={false}
-                value={draft.fields.jq}
-                aria-invalid={jqError ? "true" : undefined}
-                aria-describedby={jqError ? "composer-jq-error" : "composer-jq-help"}
-                onChange={(event) => {
-                  setFields((fields) => ({ ...fields, jq: event.target.value }));
-                  if (jqError) setJqError("");
-                }}
-              />
-              <small id="composer-jq-help">Evaluated remotely only after persisted preflight.</small>
-              {jqError ? <span className="composer-error" id="composer-jq-error">{jqError}</span> : null}
-            </label>
-
-            <label className="composer-field composer-field-wide">
-              <span>ABI signature</span>
-              <textarea
-                ref={abiRef}
-                rows={7}
-                spellCheck={false}
-                value={draft.fields.abiSignature}
-                aria-invalid={abiError ? "true" : undefined}
-                aria-describedby={abiError ? "composer-abi-error" : "composer-abi-help"}
-                onChange={(event) => {
-                  setFields((fields) => ({ ...fields, abiSignature: event.target.value }));
-                  if (abiError) setAbiError("");
-                }}
-              />
-              <small id="composer-abi-help">One bounded JSON ABI-parameter descriptor, including tuple components when required.</small>
-              {abiError ? <span className="composer-error" id="composer-abi-error">{abiError}</span> : null}
-            </label>
-          </div>
-
-          {preview?.valid ? (
-            <section className="composer-preview" aria-labelledby="composer-preview-title">
-              <div>
-                <h3 id="composer-preview-title">Canonical manifest preview</h3>
-                <span>Local only · definition bytes, not remote evidence</span>
-              </div>
-              <pre aria-label="Canonical manifest preview — local only">{preview.canonicalJson}</pre>
-            </section>
-          ) : null}
-
-          <div className="composer-actions">
-            <a className="entry-secondary" href={stepHref("source")} onClick={(event) => navigateStep(event, "source")}>Back to Source</a>
-            <button className="entry-primary" type="button" onClick={continueFromTransform}>
-              Continue to Trust <ArrowRight size={18} weight="bold" aria-hidden="true" />
-            </button>
-          </div>
-        </section>
+        <ComposerTransformStep
+          fields={draft.fields}
+          jqError={jqError}
+          abiError={abiError}
+          jqRef={jqRef}
+          abiRef={abiRef}
+          canonicalPreview={preview?.valid ? preview.canonicalJson : undefined}
+          stepHref={stepHref}
+          onNavigate={navigateStep}
+          onJqChange={(value) => {
+            setFields((fields) => ({ ...fields, jq: value }));
+            if (jqError) setJqError("");
+          }}
+          onAbiChange={(value) => {
+            setFields((fields) => ({ ...fields, abiSignature: value }));
+            if (abiError) setAbiError("");
+          }}
+          onContinue={continueFromTransform}
+        />
       ) : null}
 
       {draft && step === "trust" ? (
-        <section className="composer-panel" aria-labelledby="composer-trust-title">
-          <div className="composer-panel-heading">
-            <div>
-              <span className="section-label">Step 3 · Trust</span>
-              <h2 id="composer-trust-title">Pin the URL invariants</h2>
-              <p>A valid proof is only trusted when the consumer also enforces where the response came from.</p>
-            </div>
-          </div>
-
-          <div className="composer-form composer-trust-grid">
-            <label className="composer-field">
-              <span>Expected scheme</span>
-              <input value={draft.fields.expectedScheme} readOnly />
-              <small>HTTPS is required.</small>
-            </label>
-            <label className="composer-field">
-              <span>Expected host</span>
-              <input
-                autoComplete="off"
-                value={draft.fields.expectedHost}
-                aria-invalid={hostError ? "true" : undefined}
-                aria-describedby={hostError ? "expected-host-error" : undefined}
-                onChange={(event) => {
-                  trustDirty.current.host = true;
-                  const nextFields = { ...draft.fields, expectedHost: event.target.value };
-                  setFields(() => nextFields);
-                  if (trustValidationAttempted.current) applyTrustValidation(nextFields);
-                }}
-                onBlur={() => {
-                  const validation = validateComposerTrustFields(draft.fields);
-                  setHostError(
-                    validation.valid
-                      ? ""
-                      : validation.issues.find(({ field }) => field === "expectedHost")?.message ?? "",
-                  );
-                }}
-              />
-              {hostError ? <span className="composer-error" id="expected-host-error">{hostError}</span> : null}
-            </label>
-            <label className="composer-field composer-field-wide">
-              <span>Expected path prefix</span>
-              <input
-                autoComplete="off"
-                value={draft.fields.expectedPathPrefix}
-                aria-invalid={pathError ? "true" : undefined}
-                aria-describedby={pathError ? "expected-path-error" : undefined}
-                onChange={(event) => {
-                  trustDirty.current.path = true;
-                  const nextFields = { ...draft.fields, expectedPathPrefix: event.target.value };
-                  setFields(() => nextFields);
-                  if (trustValidationAttempted.current) applyTrustValidation(nextFields);
-                  else if (pathError) setPathError("");
-                }}
-                onBlur={() => {
-                  const validation = validateComposerTrustFields(draft.fields);
-                  setPathError(
-                    validation.valid
-                      ? ""
-                      : validation.issues.find(({ field }) => field === "expectedPathPrefix")?.message ?? "",
-                  );
-                }}
-              />
-              {pathError ? <span className="composer-error" id="expected-path-error">{pathError}</span> : null}
-            </label>
-            <QueryRows
-              kind="expected"
-              rows={draft.fields.expectedQueryRows}
-              keyErrors={queryKeyErrors}
-              onAdd={() => addQueryRow("expected")}
-              onChange={(id, field, value) => changeQueryRow("expected", id, field, value)}
-              onRemove={(id) => removeQueryRow("expected", id)}
-            />
-          </div>
-
-          <div className="composer-actions">
-            <a className="entry-secondary" href={stepHref("source")} onClick={(event) => navigateStep(event, "source")}>Back to Source</a>
-            <button className="entry-primary" type="button" onClick={continueFromTrust}>
-              Continue to Submit <ArrowRight size={18} weight="bold" aria-hidden="true" />
-            </button>
-          </div>
-        </section>
+        <ComposerTrustStep
+          fields={draft.fields}
+          hostError={hostError}
+          pathError={pathError}
+          queryKeyErrors={queryKeyErrors}
+          stepHref={stepHref}
+          onNavigate={navigateStep}
+          onHostChange={(value) => {
+            trustDirty.current.host = true;
+            const nextFields = { ...draft.fields, expectedHost: value };
+            setFields(() => nextFields);
+            if (trustValidationAttempted.current) applyTrustValidation(nextFields);
+          }}
+          onHostBlur={() => {
+            const validation = validateComposerTrustFields(draft.fields);
+            setHostError(
+              validation.valid
+                ? ""
+                : validation.issues.find(({ field }) =>
+                  field === "expectedHost")?.message ?? "",
+            );
+          }}
+          onPathChange={(value) => {
+            trustDirty.current.path = true;
+            const nextFields = { ...draft.fields, expectedPathPrefix: value };
+            setFields(() => nextFields);
+            if (trustValidationAttempted.current) applyTrustValidation(nextFields);
+            else if (pathError) setPathError("");
+          }}
+          onPathBlur={() => {
+            const validation = validateComposerTrustFields(draft.fields);
+            setPathError(
+              validation.valid
+                ? ""
+                : validation.issues.find(({ field }) =>
+                  field === "expectedPathPrefix")?.message ?? "",
+            );
+          }}
+          onContinue={continueFromTrust}
+          onAddQuery={addQueryRow}
+          onChangeQuery={changeQueryRow}
+          onRemoveQuery={removeQueryRow}
+        />
       ) : null}
 
       {draft && step === "submit" ? (
-        <section className="composer-panel" aria-labelledby="composer-submit-title">
-          <div className="composer-panel-heading">
-            <div>
-              <span className="section-label">Step 4 · Submit</span>
-              <h2 id="composer-submit-title">Create the persisted preflight run</h2>
-              <p>Choose the submission intent and fee ceiling. No wallet or relayer effect happens on this step.</p>
-            </div>
-          </div>
-
-          <div className="composer-submit-grid">
-            <label className="composer-field">
-              <span>Submission mode</span>
-              <select
-                value={draft.fields.submissionMode}
-                onChange={(event) => setFields((fields) => ({
-                  ...fields,
-                  submissionMode: event.target.value as Web2JsonManifestDraftV1["fields"]["submissionMode"],
-                }))}
-              >
-                <option value="wallet">Wallet</option>
-                <option value="relayer">Relayer</option>
-                <option value="replay">Replay</option>
-              </select>
-              <small>Fixed in the manifest when the run is created.</small>
-            </label>
-            <label className="composer-field">
-              <span>Fee cap · wei</span>
-              <input
-                inputMode="numeric"
-                autoComplete="off"
-                value={draft.fields.feeCapWei}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (/^\d*$/.test(value)) {
-                    setFields((fields) => ({ ...fields, feeCapWei: value }));
-                  }
-                }}
-              />
-              <small>Canonical unsigned integer; replay may use zero.</small>
-            </label>
-          </div>
-
-          <dl className="composer-submit-summary" aria-label="Run creation summary">
-            <div><dt>Network</dt><dd>Coston2 · chain 114</dd></div>
-            <div><dt>Source</dt><dd>{draft.fields.expectedHost || "Not valid yet"}</dd></div>
-            <div><dt>Next result</dt><dd>Persisted preflight evidence</dd></div>
-          </dl>
-
-          {submitError ? <p className="composer-alert" role="alert">{submitError}</p> : null}
-
-          <div className="composer-actions">
-            <a className="entry-secondary" href={stepHref("trust")} onClick={(event) => navigateStep(event, "trust")}>Back to Trust</a>
-            <button
-              className="entry-primary"
-              type="button"
-              disabled={submitting}
-              onClick={() => void submitManifest()}
-            >
-              {submitting
-                ? "Creating preflight run…"
-                : projectToken
-                  ? "Create preflight run"
-                  : "Connect project to create"}
-              <ArrowRight size={18} weight="bold" aria-hidden="true" />
-            </button>
-          </div>
-        </section>
+        <ComposerSubmitStep
+          fields={draft.fields}
+          projectConnected={Boolean(projectToken)}
+          submitting={submitting}
+          submitError={submitError}
+          stepHref={stepHref}
+          onNavigate={navigateStep}
+          onSubmissionModeChange={(submissionMode) => setFields((fields) => ({
+            ...fields,
+            submissionMode,
+          }))}
+          onFeeCapChange={(value) => {
+            if (/^\d*$/.test(value)) {
+              setFields((fields) => ({ ...fields, feeCapWei: value }));
+            }
+          }}
+          onSubmit={() => void submitManifest()}
+        />
       ) : null}
     </main>
   );
