@@ -26,7 +26,7 @@ const metadataByName = {
 
 function event(
   name: ProductEventNameV1,
-  sessionId = "session_primary",
+  sessionId = "session_11111111-1111-4111-8111-111111111111",
   offsetMs = 0,
 ): ProductEventV1 {
   return ProductEventV1Schema.parse({
@@ -36,6 +36,10 @@ function event(
     name,
     metadata: metadataByName[name],
   });
+}
+
+function indexedSessionId(index: number): string {
+  return `session_00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
 }
 
 function memoryStorage(initial: string | null = null) {
@@ -53,7 +57,7 @@ describe("versioned local product analytics queue", () => {
     const storage = memoryStorage();
     const analytics = createLocalProductAnalytics({ storage });
     const emitted = Array.from({ length: 503 }, (_, index) =>
-      event("COMPOSER_STARTED", `session_${index}`, index),
+      event("COMPOSER_STARTED", indexedSessionId(index), index),
     );
 
     for (const item of emitted) analytics.emit(item);
@@ -99,25 +103,27 @@ describe("versioned local product analytics queue", () => {
 
 describe("deterministic product funnel", () => {
   it("counts a duplicated, completed journey once per session in canonical step order", () => {
+    const completeSession = "session_22222222-2222-4222-8222-222222222222";
+    const failedSession = "session_33333333-3333-4333-8333-333333333333";
     const completeNames: ProductEventNameV1[] = [
       "COMPOSER_STARTED",
       "MANIFEST_VALIDATED",
       "PREFLIGHT_COMPLETED",
       "SUBMISSION_REQUESTED",
       "PROOF_AVAILABLE",
+      "PROOF_AVAILABLE",
       "SAFE_CODEGEN_GENERATED",
       "BUNDLE_REPLAYED",
     ];
     const events = [
-      ...completeNames.map((name, index) => event(name, "session_complete", index)),
-      event("PROOF_AVAILABLE", "session_complete", 20),
-      event("RUN_RESUMED", "session_complete", 21),
-      event("COMPOSER_STARTED", "session_failed", 30),
-      event("MANIFEST_VALIDATED", "session_failed", 31),
-      event("PREFLIGHT_COMPLETED", "session_failed", 32),
-      event("SUBMISSION_REQUESTED", "session_failed", 33),
-      event("PROOF_AVAILABLE", "session_failed", 34),
-      event("CONSUMER_VERIFICATION_FAILED", "session_failed", 35),
+      ...completeNames.map((name, index) => event(name, completeSession, index)),
+      event("RUN_RESUMED", completeSession, 21),
+      event("COMPOSER_STARTED", failedSession, 30),
+      event("MANIFEST_VALIDATED", failedSession, 31),
+      event("PREFLIGHT_COMPLETED", failedSession, 32),
+      event("SUBMISSION_REQUESTED", failedSession, 33),
+      event("PROOF_AVAILABLE", failedSession, 34),
+      event("CONSUMER_VERIFICATION_FAILED", failedSession, 35),
     ];
 
     const first = reduceProductFunnel(events);
@@ -141,6 +147,44 @@ describe("deterministic product funnel", () => {
         { name: "BUNDLE_REPLAYED", sessions: 1 },
         { name: "RUN_RESUMED", sessions: 1 },
       ],
+    });
+  });
+
+  it("does not complete replay-only, out-of-order, backwards-time, or backwards-duplicate sessions", () => {
+    const success: ProductEventNameV1[] = [
+      "COMPOSER_STARTED",
+      "MANIFEST_VALIDATED",
+      "PREFLIGHT_COMPLETED",
+      "SUBMISSION_REQUESTED",
+      "PROOF_AVAILABLE",
+      "SAFE_CODEGEN_GENERATED",
+      "BUNDLE_REPLAYED",
+    ];
+    const replayOnly = "session_44444444-4444-4444-8444-444444444444";
+    const outOfOrder = "session_55555555-5555-4555-8555-555555555555";
+    const backwardsTime = "session_66666666-6666-4666-8666-666666666666";
+    const backwardsDuplicate = "session_77777777-7777-4777-8777-777777777777";
+    const events = [
+      event("BUNDLE_REPLAYED", replayOnly, 0),
+      ...[
+        "COMPOSER_STARTED",
+        "PREFLIGHT_COMPLETED",
+        "MANIFEST_VALIDATED",
+        "SUBMISSION_REQUESTED",
+        "PROOF_AVAILABLE",
+        "SAFE_CODEGEN_GENERATED",
+        "BUNDLE_REPLAYED",
+      ].map((name, index) => event(name as ProductEventNameV1, outOfOrder, 100 + index)),
+      ...success.map((name, index) =>
+        event(name, backwardsTime, index === 4 ? 199 : 200 + index),
+      ),
+      ...success.map((name, index) => event(name, backwardsDuplicate, 300 + index)),
+      event("MANIFEST_VALIDATED", backwardsDuplicate, 308),
+    ];
+
+    expect(reduceProductFunnel(events)).toMatchObject({
+      sessions: 4,
+      completedSessions: 0,
     });
   });
 });

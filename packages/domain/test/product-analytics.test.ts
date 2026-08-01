@@ -9,7 +9,7 @@ import {
 
 const resumed = ProductEventV1Schema.parse({
   version: "1",
-  sessionId: "session_resume",
+  sessionId: "session_88888888-8888-4888-8888-888888888888",
   occurredAt: "2026-08-02T02:00:00.000Z",
   name: "RUN_RESUMED",
   metadata: { priorStatus: "active" },

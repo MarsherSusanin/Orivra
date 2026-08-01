@@ -1,22 +1,39 @@
 // @vitest-environment node
 
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { GenericContainer, Wait } from "testcontainers";
 import { describe, expect, it } from "vitest";
 
 const enabled = process.env.PROOFLINE_TESTCONTAINERS === "1";
-const migrationPath = fileURLToPath(
-  new URL("../../db/migrations/001_initial.sql", import.meta.url),
+const migrationsDirectory = fileURLToPath(
+  new URL("../../db/migrations/", import.meta.url),
 );
 const previousSchemaPath = fileURLToPath(
   new URL("./fixtures/000_previous.sql", import.meta.url),
 );
 
+async function loadMigrations() {
+  const names = (await readdir(migrationsDirectory))
+    .filter((name) => /^\d{3}_.+\.sql$/.test(name))
+    .sort();
+  expect(names).toEqual([
+    "001_initial.sql",
+    "002_one_active_submission.sql",
+    "003_run_discovery.sql",
+  ]);
+  return Promise.all(
+    names.map(async (name) => ({
+      name,
+      sql: await readFile(`${migrationsDirectory}/${name}`, "utf8"),
+    })),
+  );
+}
+
 describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
   it(
-    "migrates empty and previous schemas idempotently and enforces append-only events",
+    "runs 001, 002, and 003 on empty and previous schemas repeatedly",
     async () => {
       const container = await new GenericContainer("postgres:16-alpine")
         .withEnvironment({
@@ -43,9 +60,30 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
 
       try {
         await client.connect();
-        const migration = await readFile(migrationPath, "utf8");
-        await client.query(migration);
-        await client.query(migration);
+        const migrations = await loadMigrations();
+        const executed: string[] = [];
+        const applyAll = async () => {
+          for (const migration of migrations) {
+            await client.query(migration.sql);
+            executed.push(migration.name);
+          }
+        };
+
+        await applyAll();
+        await applyAll();
+        expect(executed).toEqual([
+          "001_initial.sql",
+          "002_one_active_submission.sql",
+          "003_run_discovery.sql",
+          "001_initial.sql",
+          "002_one_active_submission.sql",
+          "003_run_discovery.sql",
+        ]);
+
+        const emptyVersions = await client.query<{ version: number }>(
+          "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
+        );
+        expect(emptyVersions.rows.map(({ version }) => version)).toEqual([1, 2, 3]);
 
         const tables = await client.query<{ table_name: string }>(
           "SELECT table_name FROM information_schema.tables WHERE table_schema = 'proofline_private'",
@@ -110,7 +148,22 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
 
         await client.query("DROP SCHEMA proofline_private CASCADE");
         await client.query(await readFile(previousSchemaPath, "utf8"));
-        await client.query(migration);
+        executed.length = 0;
+        await applyAll();
+        await applyAll();
+        expect(executed).toEqual([
+          "001_initial.sql",
+          "002_one_active_submission.sql",
+          "003_run_discovery.sql",
+          "001_initial.sql",
+          "002_one_active_submission.sql",
+          "003_run_discovery.sql",
+        ]);
+
+        const previousVersions = await client.query<{ version: number }>(
+          "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
+        );
+        expect(previousVersions.rows.map(({ version }) => version)).toEqual([0, 1, 2, 3]);
         const upgradedTables = await client.query<{ table_name: string }>(
           "SELECT table_name FROM information_schema.tables WHERE table_schema = 'proofline_private'",
         );
@@ -125,6 +178,15 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
             "share_tokens",
           ]),
         );
+        const discoveryIndex = await client.query<{ indexname: string }>(
+          `SELECT indexname
+           FROM pg_indexes
+           WHERE schemaname = 'proofline_private'
+             AND indexname = 'runs_project_id_updated_at_id_idx'`,
+        );
+        expect(discoveryIndex.rows).toEqual([
+          { indexname: "runs_project_id_updated_at_id_idx" },
+        ]);
       } finally {
         await client.end();
         await container.stop();

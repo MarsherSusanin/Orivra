@@ -111,6 +111,9 @@ describe("run discovery states", () => {
     expect(analytics.emit).toHaveBeenCalledOnce();
     expect(analytics.emit).toHaveBeenCalledWith(
       expect.objectContaining({
+        sessionId: expect.stringMatching(
+          /^session_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        ),
         name: "COMPOSER_STARTED",
         metadata: { entryPoint: "runs" },
       }),

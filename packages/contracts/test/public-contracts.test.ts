@@ -174,7 +174,7 @@ describe("remaining wire schemas", () => {
 describe("ProductEventV1Schema", () => {
   const common = {
     version: "1",
-    sessionId: "session_01JYXW5ZC6K9JSGG0TQ7V8N3PH",
+    sessionId: "session_123e4567-e89b-42d3-a456-426614174000",
     occurredAt: "2026-08-02T02:10:00.000Z",
   };
 
@@ -218,6 +218,24 @@ describe("ProductEventV1Schema", () => {
     ["extra envelope fields", { ...events[0], token: `project_${"a".repeat(64)}` }],
   ])("rejects %s", (_caseName, candidate) => {
     expect(ProductEventV1Schema.safeParse(candidate).success).toBe(false);
+  });
+
+  it("accepts a bounded, generated analytics session identifier", () => {
+    expect(ProductEventV1Schema.safeParse(events[0]).success).toBe(true);
+  });
+
+  it.each([
+    ["project-token markers", "session_project_deadbeef"],
+    ["share-token markers", "session_share_deadbeef"],
+    ["URLs", "session_https://proofline.test/runs/run_private"],
+    ["transaction-looking hashes", `0x${"c".repeat(64)}`],
+    ["private-key-looking hex", "d".repeat(64)],
+    ["labeled private material", `private_${"e".repeat(64)}`],
+    ["overlong values", `session_${"f".repeat(65)}`],
+  ])("rejects session IDs containing %s", (_caseName, sessionId) => {
+    expect(
+      ProductEventV1Schema.safeParse({ ...events[0], sessionId }).success,
+    ).toBe(false);
   });
 });
 
