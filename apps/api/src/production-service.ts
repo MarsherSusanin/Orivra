@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
   DiagnosticV1Schema,
+  PreflightReportV1Schema,
   RunEventV1Schema,
   RunListPageV1Schema,
   RunProjectionV1Schema,
@@ -10,6 +11,7 @@ import {
 } from "@proofline/contracts";
 import {
   canonicalSerializeProofBundle,
+  canonicalSerializePreflightReport,
   generateSafeWeb2JsonConsumer,
   projectRun,
   replayProofBundle,
@@ -535,6 +537,91 @@ export function createProductionProoflineService(input: {
           : {}),
       };
       return { ...row.projection, ...releaseEvidence };
+    },
+
+    async getPreflightReport(context: Record<string, unknown>) {
+      const runId = requireRunId(context.runId);
+      const result = await input.pool.query(
+        `SELECT run.id, run.project_id, run.projection,
+                artifact.canonical_bytes, artifact.sha256
+         FROM proofline_private.runs AS run
+         LEFT JOIN LATERAL (
+           SELECT canonical_bytes, sha256
+           FROM proofline_private.run_artifacts
+           WHERE run_id = run.id AND kind = 'preflight-report-v1'
+           LIMIT 1
+         ) AS artifact ON true
+         WHERE run.id = $1 AND run.project_id = $2
+         LIMIT 1`,
+        [runId, context.projectId],
+      );
+      if (!result.rowCount) {
+        throw Object.assign(new Error("Run not found"), { status: 404 });
+      }
+      const row = result.rows[0];
+      if (row.canonical_bytes === null || row.canonical_bytes === undefined) {
+        const projection =
+          row.projection && typeof row.projection === "object"
+            ? (row.projection as Record<string, unknown>)
+            : {};
+        const stages =
+          projection.stages && typeof projection.stages === "object"
+            ? (projection.stages as Record<string, unknown>)
+            : {};
+        const pending =
+          projection.terminal !== true &&
+          stages.preflight !== "completed" &&
+          stages.preflight !== "failed";
+        throw Object.assign(
+          new Error(
+            pending
+              ? "Preflight report is still pending"
+              : "Preflight report is unavailable for this run",
+          ),
+          {
+            status: 409,
+            code: pending
+              ? "PREFLIGHT_REPORT_PENDING"
+              : "PREFLIGHT_REPORT_UNAVAILABLE",
+          },
+        );
+      }
+
+      const invalid = () =>
+        Object.assign(new Error("Persisted preflight report is invalid"), {
+          status: 500,
+          code: "PREFLIGHT_REPORT_INVALID",
+        });
+      try {
+        if (!(row.canonical_bytes instanceof Uint8Array)) throw invalid();
+        if (!(row.sha256 instanceof Uint8Array)) throw invalid();
+        const canonicalBytes = Buffer.from(row.canonical_bytes);
+        const storedDigest = Buffer.from(row.sha256);
+        const actualDigest = createHash("sha256").update(canonicalBytes).digest();
+        if (storedDigest.length !== 32 || !storedDigest.equals(actualDigest)) {
+          throw invalid();
+        }
+        const decoded: unknown = JSON.parse(canonicalBytes.toString("utf8"));
+        const report = PreflightReportV1Schema.parse(decoded);
+        if (report.runId !== runId) throw invalid();
+        if (
+          canonicalSerializePreflightReport(report) !==
+          canonicalBytes.toString("utf8")
+        ) {
+          throw invalid();
+        }
+        return report;
+      } catch (cause) {
+        if (
+          cause &&
+          typeof cause === "object" &&
+          "code" in cause &&
+          (cause as { code?: unknown }).code === "PREFLIGHT_REPORT_INVALID"
+        ) {
+          throw cause;
+        }
+        throw invalid();
+      }
     },
 
     async listRuns(context: Record<string, unknown>) {

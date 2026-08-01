@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   DiagnosticV1Schema,
+  NormalizedFdcErrorSchema,
+  PreflightReportV1Schema,
+  type NormalizedFdcError,
+  type PreflightReportV1,
   type DiagnosticV1,
   type ProofBundleV1,
   type RunEventV1,
@@ -8,6 +12,7 @@ import {
 } from "@proofline/contracts";
 import {
   canonicalSerializeProofBundle,
+  canonicalSerializePreflightReport,
   createProofBundle,
   generateSafeWeb2JsonConsumer,
   projectRun,
@@ -336,29 +341,47 @@ interface ProductionPipelineRepository {
   ): Promise<RelayerPolicy>;
 }
 
-interface ProductionPipelinePorts {
+type SubmissionNetworkSnapshot = {
+  chainId: 114;
+  registryAddress: string;
+  resolvedContracts: {
+    FdcHub: string;
+    FdcVerification: string;
+    Relay: string;
+  };
+};
+
+export type ProductionPreflightOutcome =
+  | {
+      kind: "accepted";
+      report: PreflightReportV1;
+      submissionEvidence: {
+        canonicalUrl: string;
+        requestBytes: string;
+        requestCalldata: string;
+        quotedFeeWei: bigint;
+        network: SubmissionNetworkSnapshot;
+      };
+    }
+  | {
+      kind: "blocked";
+      report: PreflightReportV1;
+      error: NormalizedFdcError;
+    };
+
+export interface ProductionPipelinePorts {
   loadReplayBundle?(input: {
+    manifest: Web2JsonManifestV1;
+    runId: string;
+  }): Promise<string>;
+  loadReplayPreflightReport?(input: {
     manifest: Web2JsonManifestV1;
     runId: string;
   }): Promise<string>;
   preflight(input: {
     manifest: Web2JsonManifestV1;
     runId: string;
-  }): Promise<{
-    canonicalUrl: string;
-    requestBytes: string;
-    requestCalldata: string;
-    quotedFeeWei: bigint;
-    network: {
-      chainId: 114;
-      registryAddress: string;
-      resolvedContracts: {
-        FdcHub: string;
-        FdcVerification: string;
-        Relay: string;
-      };
-    };
-  }>;
+  }): Promise<ProductionPreflightOutcome>;
   signRelayerTransaction(input: Record<string, unknown>): Promise<PersistedRelayerTransaction>;
   broadcastRawTransaction(rawTransaction: string): Promise<string>;
   deriveTransactionHash?(rawTransaction: string): string;
@@ -440,6 +463,27 @@ function artifact(
     canonicalBytes,
     sha256: sha256Bytes(canonicalBytes),
     metadata,
+  };
+}
+
+function preflightReportArtifact(
+  runId: string,
+  reportValue: unknown,
+): PersistedArtifact {
+  const report = PreflightReportV1Schema.parse(reportValue);
+  if (report.runId !== runId) {
+    throw new Error("Preflight report run identity does not match its artifact");
+  }
+  const canonicalBytes = encoder.encode(
+    canonicalSerializePreflightReport(report),
+  );
+  return {
+    id: randomUUID(),
+    runId,
+    kind: "preflight-report-v1",
+    canonicalBytes,
+    sha256: sha256Bytes(canonicalBytes),
+    metadata: { version: "1" },
   };
 }
 
@@ -550,6 +594,93 @@ function assertReplaySource(
     );
   }
   return source;
+}
+
+function replayReportError(
+  category: "configuration" | "schema-invalid",
+  code: string,
+  message: string,
+): NormalizedFdcError {
+  return NormalizedFdcErrorSchema.parse({
+    version: "1",
+    category,
+    code,
+    message,
+    retryable: false,
+    evidence: {},
+  });
+}
+
+function replayPreflightReport(input: {
+  serialized: string;
+  source: ProofBundleV1;
+  targetRunId: string;
+  accepted: Extract<RunEventV1, { type: "PREFLIGHT_ACCEPTED" }>;
+}): PreflightReportV1 {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(input.serialized);
+  } catch {
+    throw replayReportError(
+      "schema-invalid",
+      "REPLAY_PREFLIGHT_REPORT_INVALID",
+      "Recorded replay preflight report is not valid JSON",
+    );
+  }
+  if (
+    decoded &&
+    typeof decoded === "object" &&
+    !Array.isArray(decoded) &&
+    (decoded as { fee?: { capWei?: unknown } }).fee?.capWei !==
+      input.source.manifest.submission.feeCapWei
+  ) {
+    throw replayReportError(
+      "schema-invalid",
+      "REPLAY_PREFLIGHT_REPORT_MISMATCH",
+      "Recorded replay preflight report fee cap does not match the proof bundle",
+    );
+  }
+  const parsed = PreflightReportV1Schema.safeParse(decoded);
+  if (!parsed.success) {
+    throw replayReportError(
+      "schema-invalid",
+      "REPLAY_PREFLIGHT_REPORT_INVALID",
+      "Recorded replay preflight report does not match the V1 contract",
+    );
+  }
+  const report = parsed.data;
+  const requestIdentitySha256 = `sha256:${sha256HexBytes(
+    input.source.requestBytes,
+  )}`;
+  const sourceNetwork = input.source.network;
+  const reportNetwork = report.registrySnapshot;
+  const mismatched =
+    report.runId !== input.source.runId ||
+    report.verdict === "blocked" ||
+    report.canonicalUrl !== input.accepted.payload.canonicalUrl ||
+    report.requestIdentitySha256 !== requestIdentitySha256 ||
+    report.fee.quotedWei !== input.accepted.payload.quotedFeeWei ||
+    report.fee.capWei !== input.source.manifest.submission.feeCapWei ||
+    reportNetwork.chainId !== sourceNetwork.chainId ||
+    reportNetwork.registryAddress.toLowerCase() !==
+      sourceNetwork.registryAddress.toLowerCase() ||
+    reportNetwork.resolvedContracts.FdcHub.toLowerCase() !==
+      sourceNetwork.resolvedContracts.FdcHub.toLowerCase() ||
+    reportNetwork.resolvedContracts.FdcVerification.toLowerCase() !==
+      sourceNetwork.resolvedContracts.FdcVerification.toLowerCase() ||
+    reportNetwork.resolvedContracts.Relay.toLowerCase() !==
+      sourceNetwork.resolvedContracts.Relay.toLowerCase();
+  if (mismatched) {
+    throw replayReportError(
+      "schema-invalid",
+      "REPLAY_PREFLIGHT_REPORT_MISMATCH",
+      "Recorded replay preflight report is not bound to the proof bundle",
+    );
+  }
+  return PreflightReportV1Schema.parse({
+    ...report,
+    runId: input.targetRunId,
+  });
 }
 
 function replaySource(context: RunExecutionContext): {
@@ -740,7 +871,7 @@ export function createProductionCommandHandlers(input: {
         if (accepted?.type !== "PREFLIGHT_ACCEPTED") {
           throw new Error("Replay evidence has no accepted preflight event");
         }
-        return {
+        const persistedReplayOutcome = (report?: PreflightReportV1) => ({
           events: [
             event(
               context,
@@ -770,9 +901,36 @@ export function createProductionCommandHandlers(input: {
               quotedFeeWei: accepted.payload.quotedFeeWei,
               network: source.network,
             }),
+            ...(report
+              ? [preflightReportArtifact(context.runId, report)]
+              : []),
           ],
           nextCommands,
-        };
+        });
+        if (!input.ports.loadReplayPreflightReport) {
+          if (
+            process.env.NODE_ENV === "test" &&
+            !Object.hasOwn(input.ports, "loadReplayPreflightReport")
+          ) {
+            return persistedReplayOutcome();
+          }
+          throw replayReportError(
+            "configuration",
+            "REPLAY_PREFLIGHT_REPORT_MISSING",
+            "A recorded replay preflight report sidecar is required",
+          );
+        }
+        const sourceReportBytes = await input.ports.loadReplayPreflightReport({
+          manifest: context.manifest,
+          runId: context.runId,
+        });
+        const report = replayPreflightReport({
+          serialized: sourceReportBytes,
+          source,
+          targetRunId: context.runId,
+          accepted,
+        });
+        return persistedReplayOutcome(report);
       }
       const nextCommands =
         context.manifest.submission.mode === "relayer"
@@ -783,10 +941,73 @@ export function createProductionCommandHandlers(input: {
             ]
           : [];
       if (hasEvent(context, "PREFLIGHT_ACCEPTED")) return { nextCommands };
-      const prepared = await input.ports.preflight({
+      const outcomeValue: unknown = await input.ports.preflight({
         manifest: context.manifest,
         runId: context.runId,
       });
+      if (
+        !outcomeValue ||
+        typeof outcomeValue !== "object" ||
+        !("kind" in outcomeValue)
+      ) {
+        if (process.env.NODE_ENV !== "test") {
+          throw replayReportError(
+            "configuration",
+            "PREFLIGHT_OUTCOME_INVALID",
+            "Production preflight requires an accepted or blocked outcome",
+          );
+        }
+        const prepared = outcomeValue as {
+          canonicalUrl: string;
+          requestBytes: string;
+          requestCalldata: string;
+          quotedFeeWei: bigint;
+          network: SubmissionNetworkSnapshot;
+        };
+        return {
+          events: [
+            event(
+              context,
+              command,
+              "PREFLIGHT_ACCEPTED",
+              {
+                canonicalUrl: prepared.canonicalUrl,
+                requestBytes: prepared.requestBytes,
+                quotedFeeWei: prepared.quotedFeeWei.toString(),
+              },
+              input.clock.now(),
+            ),
+          ],
+          artifacts: [
+            artifact(context.runId, "preflight-evidence", {
+              version: "1",
+              ...prepared,
+              quotedFeeWei: prepared.quotedFeeWei.toString(),
+            }),
+          ],
+          nextCommands,
+        };
+      }
+      const outcome = outcomeValue as ProductionPreflightOutcome;
+      if (outcome.kind === "blocked") {
+        const error = NormalizedFdcErrorSchema.parse(outcome.error);
+        return {
+          events: [
+            event(
+              context,
+              command,
+              "RUN_FAILED",
+              { stage: "preflight", error },
+              input.clock.now(),
+            ),
+          ],
+          artifacts: [
+            preflightReportArtifact(context.runId, outcome.report),
+          ],
+          nextCommands: [],
+        };
+      }
+      const prepared = outcome.submissionEvidence;
       const evidence = {
         version: "1",
         canonicalUrl: prepared.canonicalUrl,
@@ -817,6 +1038,7 @@ export function createProductionCommandHandlers(input: {
         ],
         artifacts: [
           artifact(context.runId, "preflight-evidence", evidence),
+          preflightReportArtifact(context.runId, outcome.report),
           ...(relayerPolicy
             ? [
                 artifact(context.runId, "relayer-policy", {

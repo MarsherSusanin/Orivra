@@ -1,9 +1,13 @@
 import type {
   CreateRunResultV1,
+  PreflightReportV1,
   RunListPageV1,
   Web2JsonManifestV1,
 } from "../../packages/contracts/src";
-import { CreateRunResultV1Schema } from "../../packages/contracts/src";
+import {
+  CreateRunResultV1Schema,
+  PreflightReportV1Schema,
+} from "../../packages/contracts/src";
 
 const LAST_RUN_KEY = "proofline:last-run";
 const COSTON2_CHAIN_ID = "0x72";
@@ -152,6 +156,17 @@ export function createRunClient(input: {
 
     getRun(runId: string) {
       return request<Record<string, unknown>>(`/runs/${encodeURIComponent(runId)}`);
+    },
+
+    async getPreflightReport(runId: string): Promise<PreflightReportV1> {
+      const result = await request<unknown>(
+        `/runs/${encodeURIComponent(runId)}/preflight`,
+      );
+      const parsed = PreflightReportV1Schema.safeParse(result);
+      if (!parsed.success) {
+        throw new Error("Proofline returned an invalid preflight report contract");
+      }
+      return parsed.data;
     },
 
     async events(runId: string, after: number) {

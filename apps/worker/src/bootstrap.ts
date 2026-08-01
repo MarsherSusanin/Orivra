@@ -95,6 +95,15 @@ export function createProductionWorker(input: {
         "utf8",
       );
     },
+    async loadReplayPreflightReport() {
+      return readFile(
+        required(
+          environment,
+          "PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH",
+        ),
+        "utf8",
+      );
+    },
   };
   const rawPipelineHandlers = createProductionCommandHandlers({
     repository,

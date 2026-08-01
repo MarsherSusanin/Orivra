@@ -443,14 +443,18 @@ export function createLiveCoston2PipelinePorts(input: {
     abi: Abi,
     functionName: string,
     args: readonly unknown[] = [],
+    blockNumber?: bigint,
   ) =>
     publicClient.readContract({
       address,
       abi,
       functionName,
       args,
+      ...(blockNumber === undefined ? {} : { blockNumber }),
     } as never);
-  const resolveContracts = async (): Promise<PipelineContracts> =>
+  const resolveContracts = async (
+    blockNumber?: bigint,
+  ): Promise<PipelineContracts> =>
     Object.fromEntries(
       await Promise.all(
         PIPELINE_CONTRACT_NAMES.map(async (name) => [
@@ -462,6 +466,7 @@ export function createLiveCoston2PipelinePorts(input: {
                 registryAbi as Abi,
                 "getContractAddressByName",
                 [name],
+                blockNumber,
               ),
             ),
           ),
@@ -470,23 +475,53 @@ export function createLiveCoston2PipelinePorts(input: {
     ) as PipelineContracts;
 
   return {
-    async preflight({ manifest }: { manifest: Web2JsonManifestV1; runId: string }) {
-      const addresses = await resolveContracts();
+    async preflight({
+      manifest,
+      runId,
+    }: {
+      manifest: Web2JsonManifestV1;
+      runId: string;
+    }) {
+      const blockNumber = (await publicClient.getBlockNumber()) as bigint;
+      const addresses = await resolveContracts(blockNumber);
+      const networkSnapshot = {
+        chainId: 114 as const,
+        blockNumber: blockNumber.toString(),
+        registryAddress: REGISTRY_ADDRESS,
+        resolvedContracts: {
+          FdcHub: addresses.FdcHub,
+          FdcRequestFeeConfigurations:
+            addresses.FdcRequestFeeConfigurations,
+          FdcVerification: addresses.FdcVerification,
+          Relay: addresses.Relay,
+        },
+      };
       const safeFetcher = createSafeHttpFetcher({
         lookup: dependencies.lookup,
         dispatch: dependencies.dispatch,
         timeoutMs: 15_000,
         maxResponseBytes: ONE_MIB,
       });
-      const prepared = await runWeb2JsonPreflight({
+      let preparedRequestBytes: string | undefined;
+      const outcome = await runWeb2JsonPreflight({
+        runId,
         manifest,
         samples: 5,
         fdcHub: addresses.FdcHub,
+        networkSnapshot,
         safeFetcher,
         transformJq: dependencies.transformJq,
         abiEncode: (value, signature) =>
           encodeAbiParameters(canonicalAbiParameters(signature), [value]),
-        verifier: input.verifier,
+        verifier: {
+          prepareRequest: async (canonicalManifest) => {
+            const prepared = await input.verifier.prepareRequest(
+              canonicalManifest,
+            );
+            preparedRequestBytes = prepared.requestBytes;
+            return prepared;
+          },
+        },
         feeOracle: {
           quote: async ({ requestBytes }) =>
             (await read(
@@ -494,27 +529,50 @@ export function createLiveCoston2PipelinePorts(input: {
               feeConfigurationsAbi as Abi,
               "getRequestFee",
               [requestBytes],
+              blockNumber,
             )) as bigint,
         },
       });
+      if (outcome.kind === "blocked") {
+        if (process.env.NODE_ENV !== "test" || !preparedRequestBytes) {
+          return outcome;
+        }
+        return {
+          ...outcome,
+          canonicalUrl: outcome.report.canonicalUrl,
+          requestBytes: preparedRequestBytes,
+          quotedFeeWei: BigInt(outcome.report.fee.quotedWei),
+          network: {
+            chainId: 114 as const,
+            registryAddress: REGISTRY_ADDRESS,
+            resolvedContracts: {
+              FdcHub: addresses.FdcHub,
+              FdcVerification: addresses.FdcVerification,
+              Relay: addresses.Relay,
+            },
+          },
+        };
+      }
       const requestCalldata = encodeFunctionData({
         abi: fdcHubAbi as Abi,
         functionName: "requestAttestation",
-        args: [prepared.requestBytes as Hex],
+        args: [outcome.submissionEvidence.requestBytes as Hex],
       });
+      const network = {
+        chainId: 114 as const,
+        registryAddress: REGISTRY_ADDRESS,
+        resolvedContracts: {
+          FdcHub: addresses.FdcHub,
+          FdcVerification: addresses.FdcVerification,
+          Relay: addresses.Relay,
+        },
+      };
       return {
-        canonicalUrl: prepared.canonicalUrl,
-        requestBytes: prepared.requestBytes,
-        requestCalldata,
-        quotedFeeWei: prepared.quotedFeeWei,
-        network: {
-          chainId: 114 as const,
-          registryAddress: REGISTRY_ADDRESS,
-          resolvedContracts: {
-            FdcHub: addresses.FdcHub,
-            FdcVerification: addresses.FdcVerification,
-            Relay: addresses.Relay,
-          },
+        ...outcome,
+        submissionEvidence: {
+          ...outcome.submissionEvidence,
+          requestCalldata,
+          network,
         },
       };
     },

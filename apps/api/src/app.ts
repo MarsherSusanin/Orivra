@@ -104,6 +104,7 @@ function isSharedRead(request: Request, pathname: string): boolean {
     request.method === "GET" &&
     (/^\/v1\/runs\/[^/]+$/.test(pathname) ||
       /^\/v1\/runs\/[^/]+\/events$/.test(pathname) ||
+      /^\/v1\/runs\/[^/]+\/preflight$/.test(pathname) ||
       /^\/v1\/runs\/[^/]+\/bundle$/.test(pathname))
   );
 }
@@ -239,6 +240,12 @@ export function createProoflineApi(input: {
         }
         if (request.method === "GET" && /^\/v1\/runs\/[^/]+$/.test(url.pathname)) {
           return json(await input.service.getRun(context));
+        }
+        if (
+          request.method === "GET" &&
+          /^\/v1\/runs\/[^/]+\/preflight$/.test(url.pathname)
+        ) {
+          return json(await input.service.getPreflightReport(context));
         }
         if (
           request.method === "GET" &&
