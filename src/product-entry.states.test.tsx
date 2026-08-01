@@ -70,7 +70,10 @@ describe("run discovery states", () => {
       "/runs/new?template=eth-usd",
     );
     for (const label of ["Requests", "Consumers", "CI", "Settings"]) {
-      expect(screen.getByRole("button", { name: label })).toBeDisabled();
+      const item = screen.getByRole("button", { name: label });
+      expect(item).toHaveAttribute("aria-disabled", "true");
+      expect(item).not.toBeDisabled();
+      expect(item).not.toHaveAttribute("href");
     }
   });
 
