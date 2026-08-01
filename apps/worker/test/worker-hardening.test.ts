@@ -141,6 +141,119 @@ describe("worker command failure boundaries", () => {
     );
   });
 
+  it("persists and logs only stable categorized failure copy and allow-listed evidence", async () => {
+    const privateMessage =
+      "Stripe pi_123 failed for sk_live_private at https://storage.googleapis.com/run?X-Goog-Credential=private&X-Goog-Signature=signed&GoogleAccessId=owner";
+    const repository = {
+      claimNextCommand: vi.fn().mockResolvedValue(claimed()),
+      completeCommand: vi.fn(),
+      retryCommand: vi.fn().mockResolvedValue(undefined),
+    };
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const worker = createRunWorker({
+      environment: "test",
+      mode: "replay",
+      repository,
+      handlers: {
+        PREPARE_WEB2JSON: vi.fn().mockRejectedValue({
+          category: "transport",
+          code: "VERIFIER_TRANSPORT_FAILED",
+          retryable: true,
+          message: privateMessage,
+          evidence: {
+            stage: "preflight",
+            attempt: 2,
+            retryAfterSeconds: 15,
+            url: "https://example.com/private?X-Goog-Security-Token=secret",
+            stack: "private adapter stack",
+            payload: { stripeCustomer: "cus_123", arbitrary: true },
+          },
+        }),
+      },
+      logger,
+    });
+
+    await expect(worker.processOne()).resolves.toBe(true);
+    const safeFailure = {
+      category: "transport",
+      code: "VERIFIER_TRANSPORT_FAILED",
+      retryable: true,
+      message: "Worker command failed",
+      evidence: {
+        stage: "preflight",
+        attempt: 2,
+        retryAfterSeconds: 15,
+      },
+      commandId: "command_1",
+    };
+    expect(repository.retryCommand).toHaveBeenCalledWith(
+      "command_1",
+      "claim_1",
+      safeFailure,
+    );
+    expect(logger.error).toHaveBeenCalledWith({
+      event: "WORKER_COMMAND_FAILED",
+      ...safeFailure,
+    });
+    const persistedAndLogged = JSON.stringify([
+      repository.retryCommand.mock.calls,
+      logger.error.mock.calls,
+    ]);
+    expect(persistedAndLogged).not.toMatch(
+      /Stripe|pi_123|sk_live|storage\.googleapis|X-Goog|GoogleAccessId|private adapter stack|cus_123|arbitrary/i,
+    );
+  });
+
+  it("persists and logs stable uncategorized failure copy without message, URL, stack, or payload leakage", async () => {
+    const cause = Object.assign(
+      new Error(
+        "Stripe raw adapter failure sk_live_private https://example.com/private?X-Goog-Signature=signed",
+      ),
+      {
+        stack: "private adapter stack",
+        payload: { customer: "cus_123" },
+      },
+    );
+    const repository = {
+      claimNextCommand: vi.fn().mockResolvedValue(claimed()),
+      completeCommand: vi.fn(),
+      retryCommand: vi.fn().mockResolvedValue(undefined),
+    };
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const worker = createRunWorker({
+      environment: "test",
+      mode: "replay",
+      repository,
+      handlers: { PREPARE_WEB2JSON: vi.fn().mockRejectedValue(cause) },
+      logger,
+    });
+
+    await expect(worker.processOne()).resolves.toBe(true);
+    const safeFailure = {
+      version: "1",
+      category: "transport",
+      code: "FDC_TRANSPORT",
+      retryable: true,
+      message: "Worker command failed",
+      evidence: { commandId: "command_1" },
+    };
+    expect(repository.retryCommand).toHaveBeenCalledWith(
+      "command_1",
+      "claim_1",
+      safeFailure,
+    );
+    expect(logger.error).toHaveBeenCalledWith({
+      event: "WORKER_COMMAND_FAILED",
+      ...safeFailure,
+    });
+    expect(JSON.stringify([
+      repository.retryCommand.mock.calls,
+      logger.error.mock.calls,
+    ])).not.toMatch(
+      /Stripe|sk_live|example\.com|X-Goog|private adapter stack|cus_123/i,
+    );
+  });
+
   it("logs completion only after repository completion succeeds", async () => {
     const order: string[] = [];
     const repository = {

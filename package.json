@@ -21,6 +21,7 @@
     "test:live:coston2": "vitest run --config vitest.live.config.ts",
     "test:coverage": "vitest run --coverage",
     "test:coverage:backend": "vitest run --config vitest.coverage.backend.config.ts",
+    "test:coverage:worker": "vitest run --config vitest.coverage.worker.config.ts",
     "test:coverage:web": "vitest run --config vitest.coverage.web.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

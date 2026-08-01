@@ -5,6 +5,7 @@ import * as contracts from "../src/index";
 import {
   attentionPreflightReport,
   blockedPreflightReport,
+  signedUrlCredentialQueryNames,
   validPreflightReport,
 } from "./fixtures";
 
@@ -66,6 +67,31 @@ describe("Slice 016A public preflight report schemas", () => {
         canonicalUrl,
       }).success,
     ).toBe(false);
+  });
+
+  it.each(signedUrlCredentialQueryNames)(
+    "rejects signed-URL credential query name %s from the public report",
+    (credentialName) => {
+      const canonicalUrl = new URL(validPreflightReport.canonicalUrl);
+      canonicalUrl.searchParams.set(credentialName, "public-looking");
+      expect(
+        requiredSchema("PreflightReportV1Schema").safeParse({
+          ...clone(validPreflightReport),
+          canonicalUrl: canonicalUrl.toString(),
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it("allows a legitimate signatureVersion query name in a public report", () => {
+    const canonicalUrl = new URL(validPreflightReport.canonicalUrl);
+    canonicalUrl.searchParams.set("signatureVersion", "4");
+    expect(
+      requiredSchema("PreflightReportV1Schema").safeParse({
+        ...clone(validPreflightReport),
+        canonicalUrl: canonicalUrl.toString(),
+      }).success,
+    ).toBe(true);
   });
 
   it.each([

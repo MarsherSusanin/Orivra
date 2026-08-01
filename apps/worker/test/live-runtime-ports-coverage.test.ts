@@ -179,6 +179,7 @@ describe("live Coston2 pipeline port coverage", () => {
           blockNumber: "12345678",
           resolvedContracts: {
             FdcHub: ADDRESSES.FdcHub,
+            FdcRequestFeeConfigurations: ADDRESSES.FdcRequestFeeConfigurations,
             FdcVerification: ADDRESSES.FdcVerification,
             Relay: ADDRESSES.Relay,
           },

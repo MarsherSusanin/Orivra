@@ -5,6 +5,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { encodeFunctionData, type Abi } from "viem";
+import fdcHubAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFdcHub.sol/IFdcHub.json";
 import {
   RUN_ID,
   OCCURRED_AT,
@@ -31,6 +33,14 @@ const TRANSACTION_HASH = `0x${"9".repeat(64)}`;
 const FDC_HUB = "0x3333333333333333333333333333333333333333";
 const FDC_VERIFICATION = "0x1111111111111111111111111111111111111111";
 const RELAY = "0x4444444444444444444444444444444444444444";
+
+function requestAttestationCalldata(requestBytes: `0x${string}`) {
+  return encodeFunctionData({
+    abi: fdcHubAbi as Abi,
+    functionName: "requestAttestation",
+    args: [requestBytes],
+  });
+}
 
 const immutableActionEnvironment = {
   PROOFLINE_API_URL: "https://proofline.invalid",
@@ -329,7 +339,7 @@ function liveGraphHarness() {
         submissionEvidence: {
           canonicalUrl: expectedCanonicalUrl,
           requestBytes,
-          requestCalldata: "0xfeedcafe",
+          requestCalldata: requestAttestationCalldata(requestBytes),
           quotedFeeWei: 12_345n,
           network: {
             chainId: 114 as const,
@@ -355,7 +365,7 @@ function liveGraphHarness() {
         transactionHash: TRANSACTION_HASH,
         chainId: 114,
         target: FDC_HUB,
-        calldata: "0xfeedcafe",
+        calldata: requestAttestationCalldata("0x574542324a534f4e"),
         valueWei: 12_345n,
       };
     },

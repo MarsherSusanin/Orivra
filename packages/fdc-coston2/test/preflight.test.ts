@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   RUN_ID,
   exactTrustManifest,
+  signedUrlCredentialQueryNames,
   validPreflightReport,
 } from "../../contracts/test/fixtures";
 import {
@@ -146,6 +147,47 @@ describe("manifest secret rejection", () => {
         request: { ...exactTrustManifest.request, url },
       }),
     ).toThrow(/secret|credential|public/i);
+  });
+
+  it.each(signedUrlCredentialQueryNames)(
+    "rejects signed-URL credential name %s in either manifest query source",
+    (credentialName) => {
+      const sourceUrl = new URL(exactTrustManifest.request.url);
+      sourceUrl.searchParams.set(credentialName, "public-looking");
+      expect(() =>
+        assertManifestHasNoSecrets({
+          ...exactTrustManifest,
+          request: { ...exactTrustManifest.request, url: sourceUrl.toString() },
+        }),
+      ).toThrow(/secret|credential|public/i);
+      expect(() =>
+        assertManifestHasNoSecrets({
+          ...exactTrustManifest,
+          request: {
+            ...exactTrustManifest.request,
+            query: {
+              ...exactTrustManifest.request.query,
+              [credentialName]: "public-looking",
+            },
+          },
+        }),
+      ).toThrow(/secret|credential|public/i);
+    },
+  );
+
+  it("allows the legitimate signatureVersion query name", () => {
+    expect(() =>
+      assertManifestHasNoSecrets({
+        ...exactTrustManifest,
+        request: {
+          ...exactTrustManifest.request,
+          query: {
+            ...exactTrustManifest.request.query,
+            signatureVersion: "4",
+          },
+        },
+      }),
+    ).not.toThrow();
   });
 
   it("allows ordinary public query names and values", () => {

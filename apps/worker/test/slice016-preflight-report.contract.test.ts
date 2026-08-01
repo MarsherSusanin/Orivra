@@ -2,6 +2,8 @@
 
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { encodeFunctionData, type Abi } from "viem";
+import fdcHubAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFdcHub.sol/IFdcHub.json";
 import {
   OCCURRED_AT,
   RUN_ID,
@@ -13,6 +15,7 @@ import {
 } from "../../../packages/contracts/test/fixtures";
 import {
   canonicalSerializeProofBundle,
+  canonicalizeManifestUrl,
   createProofBundle,
   projectRun,
 } from "@proofline/domain";
@@ -24,6 +27,14 @@ import {
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const TARGET_RUN_ID = "run_01JYXW5ZC6K9JSGG0TQ7V8N3PX";
 const decoder = new TextDecoder();
+
+function requestAttestationCalldata(requestBytes: `0x${string}`) {
+  return encodeFunctionData({
+    abi: fdcHubAbi as Abi,
+    functionName: "requestAttestation",
+    args: [requestBytes],
+  });
+}
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -76,6 +87,7 @@ function handlerHarness(input: {
   };
   const ports: any = {
     preflight: vi.fn(input.preflight),
+    signRelayerTransaction: vi.fn(),
     ...(input.loadReplayBundle
       ? { loadReplayBundle: vi.fn(input.loadReplayBundle) }
       : {}),
@@ -109,7 +121,7 @@ function acceptedOutcome(input: {
     version: "1",
     canonicalUrl: validPreflightReport.canonicalUrl,
     requestBytes: "0x1234abcd",
-    requestCalldata: "0xfeedcafe",
+    requestCalldata: requestAttestationCalldata("0x1234abcd"),
     quotedFeeWei: 12_345_000_000_000_000n,
     network: {
       chainId: 114,
@@ -117,6 +129,9 @@ function acceptedOutcome(input: {
       registryAddress: validPreflightReport.registrySnapshot.registryAddress,
       resolvedContracts: {
         FdcHub: validPreflightReport.registrySnapshot.resolvedContracts.FdcHub,
+        FdcRequestFeeConfigurations:
+          validPreflightReport.registrySnapshot.resolvedContracts
+            .FdcRequestFeeConfigurations,
         FdcVerification:
           validPreflightReport.registrySnapshot.resolvedContracts.FdcVerification,
         Relay: validPreflightReport.registrySnapshot.resolvedContracts.Relay,
@@ -131,6 +146,64 @@ function acceptedOutcome(input: {
       ...(input.submissionEvidence ?? {}),
     },
   };
+}
+
+const TRUST_DIAGNOSTICS = {
+  PREFLIGHT_TRUST_HOST_MISMATCH: {
+    summary: "The expected consumer host does not match the canonical request host.",
+    remediation: "Set Trust host to the exact normalized source host.",
+  },
+  PREFLIGHT_TRUST_PATH_MISMATCH: {
+    summary: "The expected consumer path does not cover the canonical request path.",
+    remediation: "Set a segment-safe path prefix that covers the source path.",
+  },
+  PREFLIGHT_TRUST_QUERY_MISMATCH: {
+    summary: "The expected consumer query does not match every effective request input.",
+    remediation: "Make the Trust query exactly match the canonical request query.",
+  },
+} as const;
+
+type TrustBlocker = keyof typeof TRUST_DIAGNOSTICS;
+
+function trustBlockedOutcome(blockers: TrustBlocker[]) {
+  const diagnostics = blockers.map((code) => ({
+    version: "1",
+    code,
+    severity: "error",
+    confidence: "high",
+    summary: TRUST_DIAGNOSTICS[code].summary,
+    evidence: { reportFields: ["canonicalUrl"] },
+    remediation: TRUST_DIAGNOSTICS[code].remediation,
+  }));
+  return {
+    kind: "blocked",
+    report: {
+      ...structuredClone(validPreflightReport),
+      verdict: "blocked",
+      blockers,
+      diagnostics,
+    },
+    error: {
+      version: "1",
+      category: "configuration",
+      code: blockers[0],
+      message: diagnostics[0].summary,
+      retryable: false,
+      evidence: structuredClone(diagnostics[0].evidence),
+    },
+  };
+}
+
+async function expectBoundaryRejection(
+  fixture: ReturnType<typeof handlerHarness>,
+  expected: Record<string, unknown>,
+) {
+  await expect(fixture.handlers.RUN_PREFLIGHT(command())).rejects.toMatchObject(
+    expected,
+  );
+  expect(fixture.ports.signRelayerTransaction).not.toHaveBeenCalled();
+  expect(fixture.repository.persistRelayerTransaction).not.toHaveBeenCalled();
+  expect(fixture.repository.markRelayerBroadcast).not.toHaveBeenCalled();
 }
 
 function blockedOutcome(report: any = blockedPreflightReport) {
@@ -195,7 +268,7 @@ describe("Slice 016A worker preflight artifact boundary", () => {
     );
     expect(artifactJson(outcome, "preflight-evidence")).toMatchObject({
       requestBytes: "0x1234abcd",
-      requestCalldata: "0xfeedcafe",
+      requestCalldata: requestAttestationCalldata("0x1234abcd"),
       quotedFeeWei: "12345000000000000",
       network: {
         chainId: 114,
@@ -203,6 +276,13 @@ describe("Slice 016A worker preflight artifact boundary", () => {
         registryAddress: validPreflightReport.registrySnapshot.registryAddress,
         resolvedContracts: {
           FdcHub: validPreflightReport.registrySnapshot.resolvedContracts.FdcHub,
+          FdcRequestFeeConfigurations:
+            validPreflightReport.registrySnapshot.resolvedContracts
+              .FdcRequestFeeConfigurations,
+          FdcVerification:
+            validPreflightReport.registrySnapshot.resolvedContracts
+              .FdcVerification,
+          Relay: validPreflightReport.registrySnapshot.resolvedContracts.Relay,
         },
       },
     });
@@ -246,7 +326,7 @@ describe("Slice 016A worker preflight artifact boundary", () => {
           version: "1",
           category: "configuration",
           code: "PREFLIGHT_FEE_CAP_EXCEEDED",
-          message: "Preflight is blocked by the fee cap.",
+          message: "The registry fee quote exceeds the manifest fee cap.",
           retryable: false,
           evidence: { reportFields: ["fee"] },
         },
@@ -333,11 +413,178 @@ describe("Slice 016A worker preflight artifact boundary", () => {
     });
   });
 
+  it("rejects a self-consistent accepted URL that is not the persisted manifest canonical URL", async () => {
+    expect(canonicalizeManifestUrl(exactTrustManifest)).toBe(
+      validPreflightReport.canonicalUrl,
+    );
+    const outcome = acceptedOutcome();
+    const forgedCanonicalUrl =
+      "https://api.example.com/prices/eth?currency=USD&source=primary&window=4h";
+    outcome.report.canonicalUrl = forgedCanonicalUrl;
+    outcome.submissionEvidence.canonicalUrl = forgedCanonicalUrl;
+    const fixture = handlerHarness({ preflight: async () => outcome });
+
+    await expectBoundaryRejection(fixture, {
+      category: "schema-invalid",
+      code: "PREFLIGHT_SUBMISSION_EVIDENCE_MISMATCH",
+      retryable: false,
+    });
+  });
+
+  it.each([
+    ["host", { expectedHost: "mirror.example.net" }],
+    ["path", { expectedPathPrefix: "/trusted/" }],
+    ["query", { expectedQuery: { currency: "USD", source: "backup" } }],
+  ])(
+    "rejects accepted evidence when persisted consumer Trust derives a %s blocker",
+    async (_label, consumerOverride) => {
+      const manifest = {
+        ...exactTrustManifest,
+        consumer: { ...exactTrustManifest.consumer, ...consumerOverride },
+      };
+      const fixture = handlerHarness({
+        manifest,
+        preflight: async () => acceptedOutcome(),
+      });
+
+      await expectBoundaryRejection(fixture, {
+        category: "schema-invalid",
+        code: "PREFLIGHT_SUBMISSION_EVIDENCE_MISMATCH",
+        retryable: false,
+      });
+    },
+  );
+
+  it("accepts exactly the Trust blockers derived from the persisted manifest", async () => {
+    const manifest = {
+      ...exactTrustManifest,
+      consumer: {
+        ...exactTrustManifest.consumer,
+        expectedHost: "mirror.example.net",
+        expectedPathPrefix: "/trusted/",
+        expectedQuery: { currency: "USD", source: "backup" },
+      },
+    };
+    const exactBlockers: TrustBlocker[] = [
+      "PREFLIGHT_TRUST_HOST_MISMATCH",
+      "PREFLIGHT_TRUST_PATH_MISMATCH",
+      "PREFLIGHT_TRUST_QUERY_MISMATCH",
+    ];
+    const fixture = handlerHarness({
+      manifest,
+      preflight: async () => trustBlockedOutcome(exactBlockers),
+    });
+
+    await expect(fixture.handlers.RUN_PREFLIGHT(command())).resolves.toMatchObject({
+      events: [expect.objectContaining({ type: "RUN_FAILED" })],
+      nextCommands: [],
+    });
+  });
+
+  it.each([
+    [
+      "missing",
+      {
+        ...exactTrustManifest,
+        consumer: {
+          ...exactTrustManifest.consumer,
+          expectedHost: "mirror.example.net",
+          expectedPathPrefix: "/trusted/",
+        },
+      },
+      ["PREFLIGHT_TRUST_HOST_MISMATCH"],
+    ],
+    [
+      "spurious",
+      exactTrustManifest,
+      ["PREFLIGHT_TRUST_HOST_MISMATCH"],
+    ],
+  ] as const)(
+    "rejects a blocked report with %s persisted-manifest Trust blockers",
+    async (_label, manifest, reportedBlockers) => {
+      const fixture = handlerHarness({
+        manifest,
+        preflight: async () => trustBlockedOutcome([...reportedBlockers]),
+      });
+
+      await expectBoundaryRejection(fixture, {
+        category: "schema-invalid",
+        code: "PREFLIGHT_BLOCKED_ERROR_MISMATCH",
+        retryable: false,
+      });
+    },
+  );
+
+  it.each([
+    ["arbitrary hex", "0xfeedcafe"],
+    ["calldata for different request bytes", requestAttestationCalldata("0xdeadbeef")],
+  ])(
+    "rejects %s before returning a child command or signing",
+    async (_label, requestCalldata) => {
+      const outcome = acceptedOutcome({
+        submissionEvidence: { requestCalldata },
+      });
+      const fixture = handlerHarness({
+        manifest: {
+          ...exactTrustManifest,
+          submission: { ...exactTrustManifest.submission, mode: "relayer" },
+        },
+        preflight: async () => outcome,
+      });
+
+      await expectBoundaryRejection(fixture, {
+        category: "schema-invalid",
+        code: "PREFLIGHT_SUBMISSION_EVIDENCE_MISMATCH",
+        retryable: false,
+      });
+    },
+  );
+
+  it.each([
+    ["missing", (outcome: any) => {
+      delete outcome.submissionEvidence.network.resolvedContracts
+        .FdcRequestFeeConfigurations;
+    }],
+    ["mismatched", (outcome: any) => {
+      outcome.submissionEvidence.network.resolvedContracts
+        .FdcRequestFeeConfigurations =
+        "0x9999999999999999999999999999999999999999";
+    }],
+  ])(
+    "rejects accepted evidence with %s FdcRequestFeeConfigurations",
+    async (_label, mutate) => {
+      const outcome = acceptedOutcome();
+      mutate(outcome);
+      const fixture = handlerHarness({ preflight: async () => outcome });
+
+      await expectBoundaryRejection(fixture, {
+        category: "schema-invalid",
+        code: "PREFLIGHT_SUBMISSION_EVIDENCE_MISMATCH",
+        retryable: false,
+      });
+    },
+  );
+
   it("requires the blocked error code to name the same blocker and error diagnostic", async () => {
     const outcome = blockedOutcome();
     outcome.error.code = "PREFLIGHT_ABI_INCOMPATIBLE";
     const fixture = handlerHarness({ preflight: async () => outcome });
     await expect(fixture.handlers.RUN_PREFLIGHT(command())).rejects.toMatchObject({
+      category: "schema-invalid",
+      code: "PREFLIGHT_BLOCKED_ERROR_MISMATCH",
+      retryable: false,
+    });
+  });
+
+  it.each([
+    "Preflight is blocked by the fee cap.",
+    "Stripe payment_intent pi_123 failed for customer cus_123.",
+  ])("rejects a blocked error message that is not the diagnostic summary: %s", async (message) => {
+    const outcome = blockedOutcome();
+    outcome.error.message = message;
+    const fixture = handlerHarness({ preflight: async () => outcome });
+
+    await expectBoundaryRejection(fixture, {
       category: "schema-invalid",
       code: "PREFLIGHT_BLOCKED_ERROR_MISMATCH",
       retryable: false,

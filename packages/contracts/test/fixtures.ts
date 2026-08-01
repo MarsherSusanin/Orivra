@@ -61,6 +61,19 @@ export const validComposerDraft = {
 export const expectedCanonicalUrl =
   "https://api.example.com/prices/eth?currency=USD&source=primary&window=1h";
 
+export const signedUrlCredentialQueryNames = [
+  "X-Goog-Signature",
+  "X-Goog-Credential",
+  "X-Goog-Security-Token",
+  "GoogleAccessId",
+  "X-Amz-Signature",
+  "X-Amz-Credential",
+  "X-Amz-Security-Token",
+  "Signature",
+  "Credential",
+  "SecurityToken",
+] as const;
+
 /**
  * Slice 016 fixture whose consumer Trust policy covers the exact effective URL.
  * The historical validManifest remains unchanged for earlier bundle fixtures.

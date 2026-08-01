@@ -2,6 +2,8 @@
 
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { encodeFunctionData, type Abi } from "viem";
+import fdcHubAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFdcHub.sol/IFdcHub.json";
 import {
   RUN_ID,
   OCCURRED_AT,
@@ -36,6 +38,14 @@ const relayerManifest = {
   ...exactTrustManifest,
   submission: { ...exactTrustManifest.submission, mode: "relayer" as const },
 };
+
+function requestAttestationCalldata(requestBytes: `0x${string}`) {
+  return encodeFunctionData({
+    abi: fdcHubAbi as Abi,
+    functionName: "requestAttestation",
+    args: [requestBytes],
+  });
+}
 
 function productionHandlerFactory(): (...args: any[]) => any {
   const factory = (workerModule as Record<string, unknown>)
@@ -123,7 +133,7 @@ function createFixture() {
         submissionEvidence: {
           canonicalUrl: expectedCanonicalUrl,
           requestBytes,
-          requestCalldata: "0xfeedcafe",
+          requestCalldata: requestAttestationCalldata(requestBytes),
           quotedFeeWei: 12_345n,
           network: {
             chainId: 114,
@@ -131,6 +141,9 @@ function createFixture() {
             registryAddress,
             resolvedContracts: {
               FdcHub: fdcHub,
+              FdcRequestFeeConfigurations:
+                validPreflightReport.registrySnapshot.resolvedContracts
+                  .FdcRequestFeeConfigurations,
               FdcVerification: fdcVerification,
               Relay: relay,
             },
@@ -148,7 +161,7 @@ function createFixture() {
         commandFingerprint: `sha256:${"b".repeat(64)}`,
         chainId: 114,
         target: fdcHub,
-        calldata: "0xfeedcafe",
+        calldata: requestAttestationCalldata("0x574542324a534f4e"),
         valueWei: 12_345n,
       };
     }),
@@ -162,7 +175,7 @@ function createFixture() {
         transactionHash,
         chainId: 114,
         target: fdcHub,
-        calldata: "0xfeedcafe",
+        calldata: requestAttestationCalldata("0x574542324a534f4e"),
         valueWei: 12_345n,
       };
     }),
