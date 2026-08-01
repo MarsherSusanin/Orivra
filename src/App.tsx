@@ -5,6 +5,10 @@ import {
   createProductEventEmitter,
   type ProductAnalyticsPort,
 } from "./services/product-analytics";
+import {
+  startComposerJourneyFromRuns,
+  startDirectComposerJourney,
+} from "./services/composer-journey";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { EvidenceStrip } from "./components/EvidenceStrip";
 import { ManifestComposer } from "./components/ManifestComposer";
@@ -564,11 +568,20 @@ function ProductEntry({
     setSessionToken(token);
     setConnectOpen(false);
   };
-  const recordStart = () => {
+  const emitComposerStart = (entryPoint: "runs" | "direct") => {
     emitProductEvent({
       name: "COMPOSER_STARTED",
-      metadata: { entryPoint: route === "runs" ? "runs" : "direct" },
+      metadata: { entryPoint },
     });
+  };
+  const recordRunsStart = () => {
+    startComposerJourneyFromRuns(browserSessionStorage());
+    emitComposerStart("runs");
+  };
+  const recordDirectStart = () => {
+    if (startDirectComposerJourney(browserSessionStorage())) {
+      emitComposerStart("direct");
+    }
   };
 
   return (
@@ -585,7 +598,7 @@ function ProductEntry({
             services={servicePort}
             projectToken={resolvedToken}
             onConnect={() => setConnectOpen(true)}
-            onStart={recordStart}
+            onStart={recordRunsStart}
             onResume={(run) => emitProductEvent({
               name: "RUN_RESUMED",
               metadata: { priorStatus: run.status },
@@ -594,7 +607,7 @@ function ProductEntry({
         ) : (
           <ManifestComposer
             onConnect={() => setConnectOpen(true)}
-            onStart={recordStart}
+            onStart={recordDirectStart}
           />
         )}
       </div>
