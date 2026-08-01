@@ -23,6 +23,60 @@ const OpaqueCursorSchema = z
 
 const StringMapSchema = z.record(z.string().min(1), z.string());
 
+export interface Web2JsonAbiParameterV1 {
+  name: string;
+  type: string;
+  internalType?: string;
+  components?: Web2JsonAbiParameterV1[];
+}
+
+const ABI_SIGNATURE_MAX_CHARACTERS = 2_048;
+const ABI_TUPLE_MAX_DEPTH = 8;
+const ABI_TUPLE_TYPE_PATTERN = /^tuple(?:\[(?:0|[1-9]\d*)?\])*$/;
+
+function abiParameterSchema(
+  remainingTupleDepth: number,
+): z.ZodType<Web2JsonAbiParameterV1> {
+  const childSchema =
+    remainingTupleDepth === 0
+      ? z.never()
+      : abiParameterSchema(remainingTupleDepth - 1);
+
+  return z
+    .object({
+      name: z.string().min(1).max(128),
+      type: z.string().min(1).max(128),
+      internalType: z.string().min(1).max(256).optional(),
+      components: z.array(childSchema).min(1).max(64).optional(),
+    })
+    .strict()
+    .superRefine((parameter, context) => {
+      const isTuple = ABI_TUPLE_TYPE_PATTERN.test(parameter.type);
+      if (isTuple !== (parameter.components !== undefined)) {
+        context.addIssue({
+          code: "custom",
+          path: ["components"],
+          message: isTuple
+            ? "Tuple ABI parameters require components."
+            : "Only tuple ABI parameters may declare components.",
+        });
+      }
+    });
+}
+
+export const Web2JsonAbiParameterV1Schema = abiParameterSchema(
+  ABI_TUPLE_MAX_DEPTH,
+);
+
+function isValidWeb2JsonAbiSignature(value: string): boolean {
+  if (value.length > ABI_SIGNATURE_MAX_CHARACTERS) return false;
+  try {
+    return Web2JsonAbiParameterV1Schema.safeParse(JSON.parse(value)).success;
+  } catch {
+    return false;
+  }
+}
+
 function isSafePublicHttpsUrl(value: string): boolean {
   try {
     const url = new URL(value);
@@ -45,7 +99,14 @@ const Web2JsonRequestV1Schema = z
     url: z.string().refine(isSafePublicHttpsUrl, "Expected a public HTTPS URL on port 443"),
     query: StringMapSchema,
     jq: z.string().min(1),
-    abiSignature: z.string().min(1),
+    abiSignature: z
+      .string()
+      .min(1)
+      .max(ABI_SIGNATURE_MAX_CHARACTERS)
+      .refine(
+        isValidWeb2JsonAbiSignature,
+        "Expected a bounded JSON ABI-parameter descriptor",
+      ),
   })
   .strict();
 
@@ -77,6 +138,26 @@ export const Web2JsonManifestV1Schema = z
   .strict();
 
 export type Web2JsonManifestV1 = z.infer<typeof Web2JsonManifestV1Schema>;
+
+const CreateRunIdV1Schema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/);
+
+export const CreateRunResultV1Schema = z
+  .object({
+    status: z.literal("accepted"),
+    runId: CreateRunIdV1Schema,
+    location: z.string().min(1).max(137),
+  })
+  .strict()
+  .refine((result) => result.location === `/v1/runs/${result.runId}`, {
+    path: ["location"],
+    message: "Location must identify the accepted persisted run.",
+  });
+
+export type CreateRunResultV1 = z.infer<typeof CreateRunResultV1Schema>;
 
 export const ComposerStepV1Schema = z.enum([
   "source",

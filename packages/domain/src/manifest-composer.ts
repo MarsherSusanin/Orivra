@@ -1,10 +1,12 @@
 import {
+  Web2JsonAbiParameterV1Schema,
   Web2JsonManifestDraftV1Schema,
   Web2JsonManifestV1Schema,
   type Web2JsonDraftQueryRowV1,
   type Web2JsonManifestDraftV1,
   type Web2JsonManifestV1,
 } from "@proofline/contracts";
+import { canonicalJson } from "./canonical-json";
 
 export type ComposerSourceIssueCode =
   | "SOURCE_URL_INVALID"
@@ -56,6 +58,46 @@ export interface ComposerTrustIssue {
 export type ComposerTrustValidation =
   | { valid: true }
   | { valid: false; issues: ComposerTrustIssue[] };
+
+export type ComposerFinalizationIssueCode =
+  | ComposerSourceIssueCode
+  | ComposerTrustIssueCode
+  | "SOURCE_URL_QUERY_DUPLICATE"
+  | "SOURCE_QUERY_KEY_REQUIRED"
+  | "SOURCE_QUERY_KEY_DUPLICATE"
+  | "TRANSFORM_JQ_REQUIRED"
+  | "TRANSFORM_ABI_JSON_INVALID"
+  | "TRANSFORM_ABI_DESCRIPTOR_INVALID"
+  | "TRUST_HOST_MISMATCH"
+  | "TRUST_PATH_NOT_COVERED"
+  | "TRUST_QUERY_MISMATCH"
+  | "SUBMISSION_FEE_CAP_REQUIRED";
+
+export interface ComposerFinalizationIssue {
+  field: string;
+  code: ComposerFinalizationIssueCode;
+  message: string;
+}
+
+export type ComposerTransformValidation =
+  | { valid: true; canonicalAbiSignature: string }
+  | { valid: false; issues: ComposerFinalizationIssue[] };
+
+export type Web2JsonManifestFinalization =
+  | {
+      valid: true;
+      manifest: Web2JsonManifestV1;
+      canonicalJson: string;
+    }
+  | { valid: false; issues: ComposerFinalizationIssue[] };
+
+export type ComposerDraftDecodeResult =
+  | { state: "empty" }
+  | { state: "restored"; draft: Web2JsonManifestDraftV1 }
+  | {
+      state: "rejected";
+      reason: "corrupt" | "unsupported-version" | "oversized" | "invalid";
+    };
 
 const SOURCE_ISSUES: Record<ComposerSourceIssueCode, ComposerSourceIssue> = {
   SOURCE_URL_INVALID: {
@@ -110,6 +152,12 @@ const TRUST_ISSUES = {
     message: "Expected path prefix must start with /.",
   },
 } as const satisfies Record<string, ComposerTrustIssue>;
+
+const MAX_DRAFT_UTF8_BYTES = 65_536;
+
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
 
 function invalidSource(code: ComposerSourceIssueCode): ComposerSourceValidation {
   return { valid: false, issue: { ...SOURCE_ISSUES[code] } };
@@ -287,4 +335,267 @@ export function createEthUsdComposerDraft(
     },
     input,
   );
+}
+
+export function validateComposerTransformFields(fields: {
+  jq: string;
+  abiSignature: string;
+}): ComposerTransformValidation {
+  const issues: ComposerFinalizationIssue[] = [];
+  if (fields.jq.trim() === "") {
+    issues.push({
+      field: "jq",
+      code: "TRANSFORM_JQ_REQUIRED",
+      message: "Enter a JQ transform.",
+    });
+  }
+
+  let descriptor: unknown;
+  try {
+    descriptor = JSON.parse(fields.abiSignature);
+  } catch {
+    issues.push({
+      field: "abiSignature",
+      code: "TRANSFORM_ABI_JSON_INVALID",
+      message: "Enter a valid JSON ABI-parameter descriptor.",
+    });
+    return { valid: false, issues };
+  }
+
+  const parsedDescriptor = Web2JsonAbiParameterV1Schema.safeParse(descriptor);
+  if (!parsedDescriptor.success) {
+    issues.push({
+      field: "abiSignature",
+      code: "TRANSFORM_ABI_DESCRIPTOR_INVALID",
+      message: "Use the official bounded ABI-parameter descriptor shape.",
+    });
+  }
+
+  if (issues.length > 0 || !parsedDescriptor.success) {
+    return { valid: false, issues };
+  }
+
+  return {
+    valid: true,
+    canonicalAbiSignature: canonicalJson(parsedDescriptor.data),
+  };
+}
+
+interface QueryRowsResult {
+  query: Record<string, string>;
+  issues: ComposerFinalizationIssue[];
+}
+
+function queryRowsToMap(
+  rows: readonly Web2JsonDraftQueryRowV1[],
+): QueryRowsResult {
+  const query = Object.create(null) as Record<string, string>;
+  const issues: ComposerFinalizationIssue[] = [];
+
+  rows.forEach((row, index) => {
+    const key = row.key.trim();
+    if (key === "") {
+      issues.push({
+        field: `queryRows.${index}.key`,
+        code: "SOURCE_QUERY_KEY_REQUIRED",
+        message: "Source query keys cannot be blank.",
+      });
+    } else if (Object.hasOwn(query, key)) {
+      issues.push({
+        field: `queryRows.${index}.key`,
+        code: "SOURCE_QUERY_KEY_DUPLICATE",
+        message: "Source query keys must be unique.",
+      });
+    } else {
+      query[key] = row.value;
+    }
+  });
+
+  return { query, issues };
+}
+
+function rowsToSafeMap(
+  rows: readonly Web2JsonDraftQueryRowV1[],
+): Record<string, string> {
+  const query = Object.create(null) as Record<string, string>;
+  for (const row of rows) query[row.key.trim()] = row.value;
+  return query;
+}
+
+function sourceUrlQuery(source: URL): QueryRowsResult {
+  const query = Object.create(null) as Record<string, string>;
+  const issues: ComposerFinalizationIssue[] = [];
+
+  for (const [key, value] of source.searchParams) {
+    if (Object.hasOwn(query, key)) {
+      issues.push({
+        field: "sourceUrl",
+        code: "SOURCE_URL_QUERY_DUPLICATE",
+        message: "Source URL query keys must be unique.",
+      });
+    } else {
+      query[key] = value;
+    }
+  }
+
+  return { query, issues };
+}
+
+function mergeQueryMaps(
+  base: Readonly<Record<string, string>>,
+  overrides: Readonly<Record<string, string>>,
+): Record<string, string> {
+  return Object.assign(Object.create(null), base, overrides) as Record<
+    string,
+    string
+  >;
+}
+
+function pathPrefixCovers(pathname: string, prefix: string): boolean {
+  return (
+    prefix === "/" ||
+    pathname === prefix ||
+    pathname.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`)
+  );
+}
+
+function queryMapsEqual(
+  left: Readonly<Record<string, string>>,
+  right: Readonly<Record<string, string>>,
+): boolean {
+  return canonicalJson(left) === canonicalJson(right);
+}
+
+export function finalizeWeb2JsonManifestDraft(
+  draft: Web2JsonManifestDraftV1,
+): Web2JsonManifestFinalization {
+  const sourceValidation = validateComposerSourceUrl(draft.fields.sourceUrl);
+  if (!sourceValidation.valid) {
+    return {
+      valid: false,
+      issues: [{ ...sourceValidation.issue }],
+    };
+  }
+
+  const source = new URL(draft.fields.sourceUrl);
+  const urlQuery = sourceUrlQuery(source);
+  const editorQuery = queryRowsToMap(draft.fields.queryRows);
+  const expectedQuery = rowsToSafeMap(draft.fields.expectedQueryRows);
+  const transform = validateComposerTransformFields({
+    jq: draft.fields.jq,
+    abiSignature: draft.fields.abiSignature,
+  });
+  const trust = validateComposerTrustFields({
+    expectedScheme: draft.fields.expectedScheme,
+    expectedHost: draft.fields.expectedHost,
+    expectedPathPrefix: draft.fields.expectedPathPrefix,
+    expectedQueryRows: draft.fields.expectedQueryRows,
+  });
+  const effectiveQuery = mergeQueryMaps(urlQuery.query, editorQuery.query);
+  const issues: ComposerFinalizationIssue[] = [
+    ...urlQuery.issues,
+    ...editorQuery.issues,
+    ...(transform.valid ? [] : transform.issues),
+    ...(trust.valid ? [] : trust.issues),
+  ];
+
+  if (draft.fields.expectedHost !== source.hostname.toLowerCase()) {
+    issues.push({
+      field: "expectedHost",
+      code: "TRUST_HOST_MISMATCH",
+      message: "Expected host must exactly match the normalized source host.",
+    });
+  }
+  if (!pathPrefixCovers(source.pathname, draft.fields.expectedPathPrefix)) {
+    issues.push({
+      field: "expectedPathPrefix",
+      code: "TRUST_PATH_NOT_COVERED",
+      message: "Expected path prefix must cover the complete source path segment.",
+    });
+  }
+  if (!queryMapsEqual(expectedQuery, effectiveQuery)) {
+    issues.push({
+      field: "expectedQueryRows",
+      code: "TRUST_QUERY_MISMATCH",
+      message: "Expected query must exactly match every effective request query value.",
+    });
+  }
+  if (draft.fields.feeCapWei === "") {
+    issues.push({
+      field: "feeCapWei",
+      code: "SUBMISSION_FEE_CAP_REQUIRED",
+      message: "Enter a submission fee cap in wei.",
+    });
+  }
+
+  if (issues.length > 0 || !transform.valid) {
+    return { valid: false, issues };
+  }
+
+  const manifest = {
+    version: "1",
+    attestationType: "Web2Json",
+    network: "coston2",
+    request: {
+      method: "GET",
+      url: draft.fields.sourceUrl,
+      query: editorQuery.query,
+      jq: draft.fields.jq,
+      abiSignature: transform.canonicalAbiSignature,
+    },
+    consumer: {
+      expectedScheme: "https",
+      expectedHost: draft.fields.expectedHost,
+      expectedPathPrefix: draft.fields.expectedPathPrefix,
+      expectedQuery,
+    },
+    submission: {
+      mode: draft.fields.submissionMode,
+      feeCapWei: draft.fields.feeCapWei,
+    },
+  } as const satisfies Web2JsonManifestV1;
+  Web2JsonManifestV1Schema.parse(manifest);
+
+  return {
+    valid: true,
+    manifest,
+    canonicalJson: canonicalJson(manifest),
+  };
+}
+
+export function serializeComposerDraftV1(
+  draft: Web2JsonManifestDraftV1,
+): string {
+  return JSON.stringify(Web2JsonManifestDraftV1Schema.parse(draft));
+}
+
+export function decodeComposerDraftV1(
+  raw: string | null,
+): ComposerDraftDecodeResult {
+  if (raw === null) return { state: "empty" };
+  if (utf8ByteLength(raw) > MAX_DRAFT_UTF8_BYTES) {
+    return { state: "rejected", reason: "oversized" };
+  }
+
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(raw);
+  } catch {
+    return { state: "rejected", reason: "corrupt" };
+  }
+
+  if (
+    typeof decoded === "object" &&
+    decoded !== null &&
+    !Array.isArray(decoded) &&
+    Object.hasOwn(decoded, "version") &&
+    (decoded as { version: unknown }).version !== "1"
+  ) {
+    return { state: "rejected", reason: "unsupported-version" };
+  }
+
+  const parsed = Web2JsonManifestDraftV1Schema.safeParse(decoded);
+  return parsed.success
+    ? { state: "restored", draft: parsed.data }
+    : { state: "rejected", reason: "invalid" };
 }

@@ -17,10 +17,17 @@ export {
 } from "./product-analytics";
 export {
   createEthUsdComposerDraft,
+  decodeComposerDraftV1,
   deriveTrustFromSourceUrl,
+  finalizeWeb2JsonManifestDraft,
   importWeb2JsonManifestDraft,
+  serializeComposerDraftV1,
   validateComposerTrustFields,
   validateComposerSourceUrl,
+  validateComposerTransformFields,
+  type ComposerDraftDecodeResult,
+  type ComposerFinalizationIssue,
+  type ComposerFinalizationIssueCode,
   type ComposerSourceIssue,
   type ComposerSourceIssueCode,
   type ComposerSourceValidation,
@@ -28,6 +35,8 @@ export {
   type ComposerTrustIssue,
   type ComposerTrustIssueCode,
   type ComposerTrustValidation,
+  type ComposerTransformValidation,
   type CreateComposerDraftInput,
   type ImportWeb2JsonManifestDraftInput,
+  type Web2JsonManifestFinalization,
 } from "./manifest-composer";
