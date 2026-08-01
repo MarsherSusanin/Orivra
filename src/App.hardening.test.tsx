@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { EvidenceStrip } from "./components/EvidenceStrip";
 import { RunTimeline } from "./components/RunTimeline";
-import { initialRunStages } from "./data/run";
+import { evidenceItems, initialRunStages } from "./data/run";
 import {
   TEST_HYDRATED_RUN,
   TEST_RUN_ID,
@@ -199,7 +199,7 @@ describe("cockpit evidence and timeline interactions", () => {
       value: { writeText },
       configurable: true,
     });
-    render(<EvidenceStrip />);
+    render(<EvidenceStrip items={evidenceItems} />);
     await user.click(screen.getByRole("button", { name: /copy transaction hash/i }));
     expect(writeText).toHaveBeenCalledWith(
       "0x9f3e0000000000000000000000007ab2c1d4",
