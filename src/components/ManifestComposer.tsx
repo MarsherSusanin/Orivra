@@ -18,6 +18,7 @@ import {
   createEthUsdComposerDraft,
   deriveTrustFromSourceUrl,
   importWeb2JsonManifestDraft,
+  validateComposerTrustFields,
   validateComposerSourceUrl,
 } from "../../packages/domain/src";
 
@@ -128,12 +129,14 @@ function queryRowsFromSource(
 function QueryRows({
   rows,
   kind,
+  keyErrors,
   onAdd,
   onChange,
   onRemove,
 }: {
   rows: readonly Web2JsonDraftQueryRowV1[];
   kind: "source" | "expected";
+  keyErrors?: Readonly<Record<string, string>>;
   onAdd(): void;
   onChange(id: string, field: "key" | "value", value: string): void;
   onRemove(id: string): void;
@@ -165,11 +168,18 @@ function QueryRows({
                 <span>{labelPrefix} key</span>
                 <input
                   aria-label={`${labelPrefix} key`}
+                  aria-invalid={keyErrors?.[row.id] ? "true" : undefined}
+                  aria-describedby={keyErrors?.[row.id] ? `query-key-error-${row.id}` : undefined}
                   autoComplete="off"
                   maxLength={128}
                   value={row.key}
                   onChange={(event) => onChange(row.id, "key", event.target.value)}
                 />
+                {keyErrors?.[row.id] ? (
+                  <span className="composer-error" id={`query-key-error-${row.id}`}>
+                    {keyErrors[row.id]}
+                  </span>
+                ) : null}
               </label>
               <label>
                 <span>{labelPrefix} value</span>
@@ -214,13 +224,29 @@ function UnavailableStep({ step }: { step: "transform" | "submit" }) {
   );
 }
 
-export function ManifestComposer({ onConnect }: { onConnect(): void }) {
+export function ManifestComposer({
+  onConnect,
+  onStart,
+}: {
+  onConnect(): void;
+  onStart(): void;
+}) {
   const [step, setStep] = useState(stepFromLocation);
   const [draft, setDraft] = useState(initialDraft);
   const [sourceError, setSourceError] = useState("");
+  const [hostError, setHostError] = useState("");
   const [pathError, setPathError] = useState("");
+  const [queryKeyErrors, setQueryKeyErrors] = useState<Record<string, string>>({});
   const [importError, setImportError] = useState("");
   const trustDirty = useRef<TrustDirtyState>({ ...CLEAN_TRUST });
+  const trustValidationAttempted = useRef(false);
+  const startRecorded = useRef(false);
+
+  const recordStartOnce = () => {
+    if (startRecorded.current) return;
+    startRecorded.current = true;
+    onStart();
+  };
 
   useEffect(() => {
     const restoreStep = () => {
@@ -246,6 +272,38 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
     }));
   };
 
+  const applyTrustValidation = (fields: Web2JsonManifestDraftV1["fields"]): boolean => {
+    const validation = validateComposerTrustFields({
+      expectedScheme: fields.expectedScheme,
+      expectedHost: fields.expectedHost,
+      expectedPathPrefix: fields.expectedPathPrefix,
+      expectedQueryRows: fields.expectedQueryRows,
+    });
+    if (validation.valid) {
+      setHostError("");
+      setPathError("");
+      setQueryKeyErrors({});
+      return true;
+    }
+
+    let nextHostError = "";
+    let nextPathError = "";
+    const nextQueryKeyErrors: Record<string, string> = {};
+    for (const issue of validation.issues) {
+      if (issue.field === "expectedHost") nextHostError = issue.message;
+      else if (issue.field === "expectedPathPrefix") nextPathError = issue.message;
+      else {
+        const match = /^expectedQueryRows\.(\d+)\.key$/.exec(issue.field);
+        const row = match ? fields.expectedQueryRows[Number(match[1])] : undefined;
+        if (row) nextQueryKeyErrors[row.id] = issue.message;
+      }
+    }
+    setHostError(nextHostError);
+    setPathError(nextPathError);
+    setQueryKeyErrors(nextQueryKeyErrors);
+    return false;
+  };
+
   const navigateStep = (event: MouseEvent<HTMLAnchorElement>, next: ComposerStepV1) => {
     event.preventDefault();
     globalThis.history.pushState({}, "", stepHref(next));
@@ -266,13 +324,15 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
       value: "",
     };
     if (kind === "expected") trustDirty.current.query = true;
-    setFields((fields) => ({
-      ...fields,
-      [kind === "source" ? "queryRows" : "expectedQueryRows"]: [
-        ...fields[kind === "source" ? "queryRows" : "expectedQueryRows"],
-        row,
-      ],
-    }));
+    const fieldName = kind === "source" ? "queryRows" : "expectedQueryRows";
+    const nextFields = {
+      ...draft.fields,
+      [fieldName]: [...draft.fields[fieldName], row],
+    };
+    setFields(() => nextFields);
+    if (kind === "expected" && trustValidationAttempted.current) {
+      applyTrustValidation(nextFields);
+    }
   };
 
   const changeQueryRow = (
@@ -283,19 +343,27 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
   ) => {
     if (kind === "expected") trustDirty.current.query = true;
     const fieldName = kind === "source" ? "queryRows" : "expectedQueryRows";
-    setFields((fields) => ({
-      ...fields,
-      [fieldName]: updateRow(fields[fieldName], id, field, value),
-    }));
+    const nextFields = {
+      ...draft.fields,
+      [fieldName]: updateRow(draft.fields[fieldName], id, field, value),
+    };
+    setFields(() => nextFields);
+    if (kind === "expected" && trustValidationAttempted.current) {
+      applyTrustValidation(nextFields);
+    }
   };
 
   const removeQueryRow = (kind: "source" | "expected", id: string) => {
     if (kind === "expected") trustDirty.current.query = true;
     const fieldName = kind === "source" ? "queryRows" : "expectedQueryRows";
-    setFields((fields) => ({
-      ...fields,
-      [fieldName]: fields[fieldName].filter((row) => row.id !== id),
-    }));
+    const nextFields = {
+      ...draft.fields,
+      [fieldName]: draft.fields[fieldName].filter((row) => row.id !== id),
+    };
+    setFields(() => nextFields);
+    if (kind === "expected" && trustValidationAttempted.current) {
+      applyTrustValidation(nextFields);
+    }
   };
 
   const continueFromSource = () => {
@@ -320,11 +388,8 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
   };
 
   const continueFromTrust = () => {
-    if (!draft.fields.expectedPathPrefix.startsWith("/")) {
-      setPathError("Expected path prefix must start with /.");
-      return;
-    }
-    setPathError("");
+    trustValidationAttempted.current = true;
+    if (!applyTrustValidation(draft.fields)) return;
     goToStep("submit");
   };
 
@@ -342,7 +407,9 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
       trustDirty.current = { host: true, path: true, query: true };
       setDraft({ ...imported, step });
       setSourceError("");
+      setHostError("");
       setPathError("");
+      setQueryKeyErrors({});
       setImportError("");
     } catch {
       setImportError("Manifest is invalid and could not be imported. Use a Web2JsonManifestV1 JSON file.");
@@ -352,7 +419,11 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
   };
 
   return (
-    <main className="entry-layout new-run-entry">
+    <main
+      className="entry-layout new-run-entry"
+      onChangeCapture={recordStartOnce}
+      onClickCapture={recordStartOnce}
+    >
       <header className="entry-heading">
         <div>
           <span className="section-label">Manifest Composer</span>
@@ -464,11 +535,24 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
               <input
                 autoComplete="off"
                 value={draft.fields.expectedHost}
+                aria-invalid={hostError ? "true" : undefined}
+                aria-describedby={hostError ? "expected-host-error" : undefined}
                 onChange={(event) => {
                   trustDirty.current.host = true;
-                  setFields((fields) => ({ ...fields, expectedHost: event.target.value.toLowerCase() }));
+                  const nextFields = { ...draft.fields, expectedHost: event.target.value };
+                  setFields(() => nextFields);
+                  if (trustValidationAttempted.current) applyTrustValidation(nextFields);
+                }}
+                onBlur={() => {
+                  const validation = validateComposerTrustFields(draft.fields);
+                  setHostError(
+                    validation.valid
+                      ? ""
+                      : validation.issues.find(({ field }) => field === "expectedHost")?.message ?? "",
+                  );
                 }}
               />
+              {hostError ? <span className="composer-error" id="expected-host-error">{hostError}</span> : null}
             </label>
             <label className="composer-field composer-field-wide">
               <span>Expected path prefix</span>
@@ -479,20 +563,26 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
                 aria-describedby={pathError ? "expected-path-error" : undefined}
                 onChange={(event) => {
                   trustDirty.current.path = true;
-                  setFields((fields) => ({ ...fields, expectedPathPrefix: event.target.value }));
-                  if (pathError) setPathError("");
+                  const nextFields = { ...draft.fields, expectedPathPrefix: event.target.value };
+                  setFields(() => nextFields);
+                  if (trustValidationAttempted.current) applyTrustValidation(nextFields);
+                  else if (pathError) setPathError("");
                 }}
-                onBlur={() => setPathError(
-                  draft.fields.expectedPathPrefix.startsWith("/")
-                    ? ""
-                    : "Expected path prefix must start with /.",
-                )}
+                onBlur={() => {
+                  const validation = validateComposerTrustFields(draft.fields);
+                  setPathError(
+                    validation.valid
+                      ? ""
+                      : validation.issues.find(({ field }) => field === "expectedPathPrefix")?.message ?? "",
+                  );
+                }}
               />
               {pathError ? <span className="composer-error" id="expected-path-error">{pathError}</span> : null}
             </label>
             <QueryRows
               kind="expected"
               rows={draft.fields.expectedQueryRows}
+              keyErrors={queryKeyErrors}
               onAdd={() => addQueryRow("expected")}
               onChange={(id, field, value) => changeQueryRow("expected", id, field, value)}
               onRemove={(id) => removeQueryRow("expected", id)}

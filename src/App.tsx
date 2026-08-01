@@ -592,7 +592,10 @@ function ProductEntry({
             })}
           />
         ) : (
-          <ManifestComposer onConnect={() => setConnectOpen(true)} />
+          <ManifestComposer
+            onConnect={() => setConnectOpen(true)}
+            onStart={recordStart}
+          />
         )}
       </div>
       {connectOpen ? (
