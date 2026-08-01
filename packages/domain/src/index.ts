@@ -15,3 +15,15 @@ export {
   type ProductAnalyticsPort,
   type ProductFunnelV1,
 } from "./product-analytics";
+export {
+  createEthUsdComposerDraft,
+  deriveTrustFromSourceUrl,
+  importWeb2JsonManifestDraft,
+  validateComposerSourceUrl,
+  type ComposerSourceIssue,
+  type ComposerSourceIssueCode,
+  type ComposerSourceValidation,
+  type ComposerTrustFields,
+  type CreateComposerDraftInput,
+  type ImportWeb2JsonManifestDraftInput,
+} from "./manifest-composer";
