@@ -16,6 +16,6 @@ ADR фиксирует архитектурное решение, которое
 | [0011](0011-authorize-at-final-relayer-effect.md) | Повторная авторизация непосредственно перед relayer effect |
 | [0012](0012-one-persisted-live-gate.md) | Единственный live gate проходит через API/PostgreSQL/worker |
 | [0013](0013-single-deadline-and-bound-evidence.md) | Один deadline и commit/tree-bound release evidence |
+| [0014](0014-local-composer-draft-boundary.md) | Versioned local Composer draft и один idempotent create boundary |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.
-
