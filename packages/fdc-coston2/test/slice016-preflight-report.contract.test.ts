@@ -95,6 +95,54 @@ describe("Slice 016A FDC preflight public evidence outcomes", () => {
     expect(adapterPorts.feeOracle.quote).toHaveBeenCalledOnce();
   });
 
+  it("classifies five successful but different ABI encodings as nondeterministic only", async () => {
+    const adapterPorts = ports([
+      { price: 2500.125 },
+      { price: 2500.125 },
+      { price: 2500.125 },
+      { price: 2500.125 },
+      { price: 2501 },
+    ]);
+    adapterPorts.abiEncode.mockImplementation((value: any) =>
+      value.value === 2_501_000_000 ? "0x1235" : "0x1234",
+    );
+
+    const outcome = await runWeb2JsonPreflight(input(adapterPorts));
+
+    expect(outcome).toMatchObject({
+      kind: "blocked",
+      report: {
+        verdict: "blocked",
+        determinism: { passed: false, distinctFingerprints: 2 },
+        abiCompatibility: {
+          compatible: true,
+          checkedSamples: 5,
+          encodedBytes: 2,
+          encodedSha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        },
+        blockers: ["PREFLIGHT_SOURCE_NONDETERMINISTIC"],
+        diagnostics: [
+          expect.objectContaining({
+            code: "PREFLIGHT_SOURCE_NONDETERMINISTIC",
+            severity: "error",
+          }),
+        ],
+      },
+      error: {
+        code: "PREFLIGHT_SOURCE_NONDETERMINISTIC",
+      },
+    });
+    expect((outcome as any).report.blockers).not.toContain(
+      "PREFLIGHT_ABI_INCOMPATIBLE",
+    );
+    expect((outcome as any).report.diagnostics).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "PREFLIGHT_ABI_INCOMPATIBLE" }),
+      ]),
+    );
+    expect(adapterPorts.abiEncode).toHaveBeenCalledTimes(5);
+  });
+
   it("collects five real samples before publishing an ABI-incompatible blocked report", async () => {
     const adapterPorts = ports();
     adapterPorts.abiEncode.mockImplementation(() => {

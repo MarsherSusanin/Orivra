@@ -53,6 +53,22 @@ describe("Slice 016A public preflight report schemas", () => {
   });
 
   it.each([
+    "https://user:password@api.example.com/prices/eth",
+    "https://api.example.com/prices/eth?api_key=public-looking",
+    "https://api.example.com/prices/eth?authorization=Bearer%20verifier-private",
+    `https://api.example.com/prices/eth?source=project_${"a".repeat(64)}`,
+    `https://api.example.com/prices/eth?source=share_${"b".repeat(64)}`,
+    `https://api.example.com/prices/eth?source=0x${"c".repeat(64)}`,
+  ])("rejects a secret-bearing canonical URL: %s", (canonicalUrl) => {
+    expect(
+      requiredSchema("PreflightReportV1Schema").safeParse({
+        ...clone(validPreflightReport),
+        canonicalUrl,
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each([
     ["four samples", validPreflightReport.sampleFingerprints.slice(0, 4)],
     [
       "six samples",
@@ -123,6 +139,123 @@ describe("Slice 016A public preflight report schemas", () => {
       },
     ],
   ])("rejects inconsistent verdict evidence: %s", (_label, candidate) => {
+    expect(
+      requiredSchema("PreflightReportV1Schema").safeParse(candidate).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    [
+      "ready warning diagnostic",
+      {
+        ...clone(validPreflightReport),
+        diagnostics: [clone(attentionPreflightReport.diagnostics[0])],
+      },
+    ],
+    [
+      "ready info diagnostic",
+      {
+        ...clone(validPreflightReport),
+        diagnostics: [{
+          ...clone(attentionPreflightReport.diagnostics[0]),
+          severity: "info",
+        }],
+      },
+    ],
+    [
+      "attention without its warning diagnostic",
+      { ...clone(attentionPreflightReport), diagnostics: [] },
+    ],
+    [
+      "attention with an error diagnostic",
+      {
+        ...clone(attentionPreflightReport),
+        diagnostics: [{
+          ...clone(attentionPreflightReport.diagnostics[0]),
+          severity: "error",
+        }],
+      },
+    ],
+    [
+      "attention with a spurious JQ warning",
+      {
+        ...clone(attentionPreflightReport),
+        diagnostics: [
+          clone(attentionPreflightReport.diagnostics[0]),
+          {
+            ...clone(attentionPreflightReport.diagnostics[0]),
+            code: "PREFLIGHT_JQ_SHAPE_TRUNCATED",
+            evidence: { reportFields: ["jqPreview"] },
+          },
+        ],
+      },
+    ],
+    [
+      "attention diagnostic pointing at the wrong evidence",
+      {
+        ...clone(attentionPreflightReport),
+        diagnostics: [{
+          ...clone(attentionPreflightReport.diagnostics[0]),
+          evidence: { reportFields: ["jqPreview"] },
+        }],
+      },
+    ],
+    [
+      "blocked report with a spurious warning",
+      {
+        ...clone(blockedPreflightReport),
+        diagnostics: [
+          ...clone(blockedPreflightReport.diagnostics),
+          clone(attentionPreflightReport.diagnostics[0]),
+        ],
+      },
+    ],
+    [
+      "blocked report with a duplicate error diagnostic",
+      {
+        ...clone(blockedPreflightReport),
+        diagnostics: [
+          ...clone(blockedPreflightReport.diagnostics),
+          ...clone(blockedPreflightReport.diagnostics),
+        ],
+      },
+    ],
+    [
+      "blocked diagnostic pointing at the wrong evidence",
+      {
+        ...clone(blockedPreflightReport),
+        diagnostics: [{
+          ...clone(blockedPreflightReport.diagnostics[0]),
+          evidence: { reportFields: ["fee"] },
+        }],
+      },
+    ],
+  ])("rejects non-exact verdict diagnostics: %s", (_label, candidate) => {
+    expect(
+      requiredSchema("PreflightReportV1Schema").safeParse(candidate).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    [
+      "withinCap=false below the cap",
+      {
+        ...clone(validPreflightReport),
+        fee: { ...clone(validPreflightReport.fee), withinCap: false },
+      },
+    ],
+    [
+      "withinCap=true above the cap",
+      {
+        ...clone(validPreflightReport),
+        fee: {
+          ...clone(validPreflightReport.fee),
+          quotedWei: (BigInt(validPreflightReport.fee.capWei) + 1n).toString(),
+          withinCap: true,
+        },
+      },
+    ],
+  ])("rejects inconsistent fee evidence: %s", (_label, candidate) => {
     expect(
       requiredSchema("PreflightReportV1Schema").safeParse(candidate).success,
     ).toBe(false);

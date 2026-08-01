@@ -7,6 +7,7 @@ import {
   RUN_ID,
   makeBundleInput,
   makeRunEvents,
+  validPreflightReport,
   validManifest,
 } from "../../../packages/contracts/test/fixtures";
 import {
@@ -96,6 +97,32 @@ function command(kind: string, payload: Record<string, unknown> = {}) {
 }
 
 function replayHarness(serialized: string, manifest = replayBundle().manifest) {
+  const source = JSON.parse(serialized) as any;
+  const accepted = source.events.find((item: any) => item.type === "PREFLIGHT_ACCEPTED");
+  const report = {
+    ...structuredClone(validPreflightReport),
+    runId: source.runId,
+    canonicalUrl: accepted.payload.canonicalUrl,
+    requestIdentitySha256: `sha256:${createHash("sha256")
+      .update(Buffer.from(source.requestBytes.slice(2), "hex"))
+      .digest("hex")}`,
+    registrySnapshot: {
+      ...structuredClone(validPreflightReport.registrySnapshot),
+      chainId: source.network.chainId,
+      registryAddress: source.network.registryAddress,
+      resolvedContracts: {
+        ...structuredClone(validPreflightReport.registrySnapshot.resolvedContracts),
+        FdcHub: source.network.resolvedContracts.FdcHub,
+        FdcVerification: source.network.resolvedContracts.FdcVerification,
+        Relay: source.network.resolvedContracts.Relay,
+      },
+    },
+    fee: {
+      ...structuredClone(validPreflightReport.fee),
+      quotedWei: accepted.payload.quotedFeeWei,
+      capWei: manifest.submission.feeCapWei,
+    },
+  };
   const state = {
     events: [targetCreated(manifest)] as any[],
     artifacts: [] as any[],
@@ -115,6 +142,7 @@ function replayHarness(serialized: string, manifest = replayBundle().manifest) {
   };
   const ports = {
     loadReplayBundle: vi.fn(async () => serialized),
+    loadReplayPreflightReport: vi.fn(async () => JSON.stringify(report)),
   };
   const handlers = createProductionCommandHandlers({
     repository: repository as any,
@@ -145,6 +173,7 @@ describe("Slice 007 replay command graph coverage", () => {
           },
         },
         { kind: "preflight-evidence" },
+        { kind: "preflight-report-v1" },
       ],
       nextCommands: [{ kind: "APPLY_REPLAY_EVIDENCE" }],
     });

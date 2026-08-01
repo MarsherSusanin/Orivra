@@ -161,22 +161,34 @@ describe("live Coston2 pipeline port coverage", () => {
   it("runs registry-backed preflight and relayer signing through injected adapters", async () => {
     const fixture = harness();
     const preflight = await fixture.ports.preflight({
-      manifest: validManifest,
+      manifest: exactTrustManifest,
       runId: "run_ports",
     });
     expect(preflight).toMatchObject({
-      canonicalUrl: expectedCanonicalUrl,
-      requestBytes: "0x574542324a534f4e",
-      quotedFeeWei: 12_345n,
-      network: {
-        chainId: 114,
-        resolvedContracts: {
-          FdcHub: ADDRESSES.FdcHub,
-          FdcVerification: ADDRESSES.FdcVerification,
-          Relay: ADDRESSES.Relay,
+      kind: "accepted",
+      report: {
+        verdict: "ready",
+        canonicalUrl: expectedCanonicalUrl,
+      },
+      submissionEvidence: {
+        canonicalUrl: expectedCanonicalUrl,
+        requestBytes: "0x574542324a534f4e",
+        quotedFeeWei: 12_345n,
+        network: {
+          chainId: 114,
+          blockNumber: "12345678",
+          resolvedContracts: {
+            FdcHub: ADDRESSES.FdcHub,
+            FdcVerification: ADDRESSES.FdcVerification,
+            Relay: ADDRESSES.Relay,
+          },
         },
       },
     });
+    expect(preflight).not.toHaveProperty("canonicalUrl");
+    expect(preflight).not.toHaveProperty("requestBytes");
+    expect(preflight).not.toHaveProperty("quotedFeeWei");
+    expect(preflight).not.toHaveProperty("network");
     expect(fixture.dependencies.dispatch).toHaveBeenCalledTimes(5);
     expect(fixture.dependencies.transformJq).toHaveBeenCalledTimes(5);
 

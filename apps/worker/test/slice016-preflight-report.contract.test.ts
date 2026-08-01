@@ -1,10 +1,12 @@
 // @vitest-environment node
 
 import { createHash } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   OCCURRED_AT,
   RUN_ID,
+  attentionPreflightReport,
+  blockedPreflightReport,
   exactTrustManifest,
   makeBundleInput,
   validPreflightReport,
@@ -22,6 +24,10 @@ import {
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const TARGET_RUN_ID = "run_01JYXW5ZC6K9JSGG0TQ7V8N3PX";
 const decoder = new TextDecoder();
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function created(runId: string, manifest: unknown) {
   return {
@@ -68,14 +74,14 @@ function handlerHarness(input: {
     persistRelayerTransaction: vi.fn(),
     markRelayerBroadcast: vi.fn(),
   };
-  const ports = {
+  const ports: any = {
     preflight: vi.fn(input.preflight),
-    loadReplayBundle: input.loadReplayBundle
-      ? vi.fn(input.loadReplayBundle)
-      : undefined,
-    loadReplayPreflightReport: input.loadReplayPreflightReport
-      ? vi.fn(input.loadReplayPreflightReport)
-      : undefined,
+    ...(input.loadReplayBundle
+      ? { loadReplayBundle: vi.fn(input.loadReplayBundle) }
+      : {}),
+    ...(input.loadReplayPreflightReport
+      ? { loadReplayPreflightReport: vi.fn(input.loadReplayPreflightReport) }
+      : {}),
   };
   const handlers = createProductionCommandHandlers({
     repository: repository as any,
@@ -95,6 +101,60 @@ function artifactJson(outcome: any, kind: string) {
   return JSON.parse(decoder.decode(bytes));
 }
 
+function acceptedOutcome(input: {
+  report?: any;
+  submissionEvidence?: any;
+} = {}) {
+  const submissionEvidence = {
+    version: "1",
+    canonicalUrl: validPreflightReport.canonicalUrl,
+    requestBytes: "0x1234abcd",
+    requestCalldata: "0xfeedcafe",
+    quotedFeeWei: 12_345_000_000_000_000n,
+    network: {
+      chainId: 114,
+      blockNumber: validPreflightReport.registrySnapshot.blockNumber,
+      registryAddress: validPreflightReport.registrySnapshot.registryAddress,
+      resolvedContracts: {
+        FdcHub: validPreflightReport.registrySnapshot.resolvedContracts.FdcHub,
+        FdcVerification:
+          validPreflightReport.registrySnapshot.resolvedContracts.FdcVerification,
+        Relay: validPreflightReport.registrySnapshot.resolvedContracts.Relay,
+      },
+    },
+  };
+  return {
+    kind: "accepted",
+    report: structuredClone(input.report ?? validPreflightReport),
+    submissionEvidence: {
+      ...submissionEvidence,
+      ...(input.submissionEvidence ?? {}),
+    },
+  };
+}
+
+function blockedOutcome(report: any = blockedPreflightReport) {
+  const publicReport = structuredClone(report);
+  const blocker = publicReport.blockers[0] ?? "PREFLIGHT_SOURCE_NONDETERMINISTIC";
+  const diagnostic = publicReport.diagnostics.find(
+    (item: any) => item.code === blocker,
+  ) ?? structuredClone(blockedPreflightReport.diagnostics[0]);
+  return {
+    kind: "blocked",
+    report: publicReport,
+    error: {
+      version: "1",
+      category: blocker === "PREFLIGHT_SOURCE_NONDETERMINISTIC"
+        ? "schema-invalid"
+        : "configuration",
+      code: blocker,
+      message: diagnostic.summary,
+      retryable: false,
+      evidence: structuredClone(diagnostic.evidence),
+    },
+  };
+}
+
 describe("Slice 016A worker preflight artifact boundary", () => {
   it("atomically returns compact acceptance, one public report, private evidence and the authorized child", async () => {
     const relayerManifest = {
@@ -103,23 +163,7 @@ describe("Slice 016A worker preflight artifact boundary", () => {
     };
     const fixture = handlerHarness({
       manifest: relayerManifest,
-      preflight: async () => ({
-        kind: "accepted",
-        report: validPreflightReport,
-        submissionEvidence: {
-          version: "1",
-          canonicalUrl: validPreflightReport.canonicalUrl,
-          requestBytes: "0x1234abcd",
-          requestCalldata: "0xfeedcafe",
-          quotedFeeWei: 12_345_000_000_000_000n,
-          network: {
-            chainId: 114,
-            registryAddress: validPreflightReport.registrySnapshot.registryAddress,
-            resolvedContracts:
-              validPreflightReport.registrySnapshot.resolvedContracts,
-          },
-        },
-      }),
+      preflight: async () => acceptedOutcome(),
     });
 
     const outcome = await fixture.handlers.RUN_PREFLIGHT(command());
@@ -153,6 +197,14 @@ describe("Slice 016A worker preflight artifact boundary", () => {
       requestBytes: "0x1234abcd",
       requestCalldata: "0xfeedcafe",
       quotedFeeWei: "12345000000000000",
+      network: {
+        chainId: 114,
+        blockNumber: validPreflightReport.registrySnapshot.blockNumber,
+        registryAddress: validPreflightReport.registrySnapshot.registryAddress,
+        resolvedContracts: {
+          FdcHub: validPreflightReport.registrySnapshot.resolvedContracts.FdcHub,
+        },
+      },
     });
     expect(outcome.nextCommands).toEqual([
       expect.objectContaining({
@@ -221,8 +273,109 @@ describe("Slice 016A worker preflight artifact boundary", () => {
       "preflight-report-v1",
     ]);
     expect(artifactJson(outcome, "preflight-report-v1")).toEqual(report);
+    expect(JSON.stringify(artifactJson(outcome, "preflight-report-v1"))).not.toMatch(
+      /requestBytes|requestCalldata|feedcafe|private|authorization|stack/i,
+    );
     expect(outcome.nextCommands).toEqual([]);
   });
+
+  it.each([
+    ["accepted discriminator with blocked report", () => ({
+      ...acceptedOutcome({ report: blockedPreflightReport }),
+    })],
+    ["blocked discriminator with ready report", () => blockedOutcome(validPreflightReport)],
+    ["blocked discriminator with attention report", () => blockedOutcome(attentionPreflightReport)],
+  ])("rejects %s", async (_label, makeOutcome) => {
+    const fixture = handlerHarness({ preflight: async () => makeOutcome() });
+    await expect(fixture.handlers.RUN_PREFLIGHT(command())).rejects.toMatchObject({
+      category: "schema-invalid",
+      code: "PREFLIGHT_OUTCOME_DISCRIMINATOR_MISMATCH",
+      retryable: false,
+    });
+  });
+
+  it.each([
+    ["run id", (outcome: any) => { outcome.report.runId = "run_other"; }],
+    ["canonical URL", (outcome: any) => {
+      outcome.submissionEvidence.canonicalUrl = "https://mirror.example.net/prices/eth";
+    }],
+    ["request bytes SHA-256", (outcome: any) => {
+      outcome.submissionEvidence.requestBytes = "0xdeadbeef";
+    }],
+    ["quoted fee", (outcome: any) => {
+      outcome.submissionEvidence.quotedFeeWei = 1n;
+    }],
+    ["manifest fee cap", (outcome: any) => {
+      outcome.report.fee.capWei = "20000000000000001";
+    }],
+    ["network chain", (outcome: any) => {
+      outcome.submissionEvidence.network.chainId = 1;
+    }],
+    ["network block", (outcome: any) => {
+      outcome.submissionEvidence.network.blockNumber = "12345679";
+    }],
+    ["registry address", (outcome: any) => {
+      outcome.submissionEvidence.network.registryAddress =
+        "0x9999999999999999999999999999999999999999";
+    }],
+    ["registry-resolved FdcHub", (outcome: any) => {
+      outcome.submissionEvidence.network.resolvedContracts.FdcHub =
+        "0x9999999999999999999999999999999999999999";
+    }],
+  ])("rejects accepted evidence with mismatched %s", async (_label, mutate) => {
+    const outcome = acceptedOutcome();
+    mutate(outcome);
+    const fixture = handlerHarness({ preflight: async () => outcome });
+    await expect(fixture.handlers.RUN_PREFLIGHT(command())).rejects.toMatchObject({
+      category: "schema-invalid",
+      code: "PREFLIGHT_SUBMISSION_EVIDENCE_MISMATCH",
+      retryable: false,
+    });
+  });
+
+  it("requires the blocked error code to name the same blocker and error diagnostic", async () => {
+    const outcome = blockedOutcome();
+    outcome.error.code = "PREFLIGHT_ABI_INCOMPATIBLE";
+    const fixture = handlerHarness({ preflight: async () => outcome });
+    await expect(fixture.handlers.RUN_PREFLIGHT(command())).rejects.toMatchObject({
+      category: "schema-invalid",
+      code: "PREFLIGHT_BLOCKED_ERROR_MISMATCH",
+      retryable: false,
+    });
+  });
+
+  it.each([
+    ["private error evidence", (outcome: any) => {
+      outcome.error.evidence = { requestBytes: "0x1234abcd" };
+    }],
+    ["private submission evidence", (outcome: any) => {
+      outcome.submissionEvidence = acceptedOutcome().submissionEvidence;
+    }],
+  ])("rejects blocked outcomes containing %s", async (_label, mutate) => {
+    const outcome = blockedOutcome();
+    mutate(outcome);
+    const fixture = handlerHarness({ preflight: async () => outcome });
+    await expect(fixture.handlers.RUN_PREFLIGHT(command())).rejects.toMatchObject({
+      category: "schema-invalid",
+      code: "PREFLIGHT_BLOCKED_PRIVATE_EVIDENCE",
+      retryable: false,
+    });
+  });
+
+  it.each(["test", "development", "production"])(
+    "rejects a legacy flat preflight outcome when NODE_ENV=%s",
+    async (nodeEnv) => {
+      vi.stubEnv("NODE_ENV", nodeEnv);
+      const fixture = handlerHarness({
+        preflight: async () => acceptedOutcome().submissionEvidence,
+      });
+      await expect(fixture.handlers.RUN_PREFLIGHT(command())).rejects.toMatchObject({
+        category: "configuration",
+        code: "PREFLIGHT_OUTCOME_INVALID",
+        retryable: false,
+      });
+    },
+  );
 
   it("lets the command repository retry transport failures without a partial artifact outcome", async () => {
     const completeCommand = vi.fn();
@@ -396,20 +549,24 @@ describe("Slice 016A replay report sidecar", () => {
     });
   });
 
-  it("fails closed when a replay bundle has no recorded report sidecar", async () => {
-    const source = replaySource();
-    const fixture = handlerHarness({
-      runId: TARGET_RUN_ID,
-      manifest: source.manifest,
-      loadReplayBundle: async () => canonicalSerializeProofBundle(source),
-    });
+  it.each(["test", "development", "production"])(
+    "fails closed without a replay report sidecar when NODE_ENV=%s",
+    async (nodeEnv) => {
+      vi.stubEnv("NODE_ENV", nodeEnv);
+      const source = replaySource();
+      const fixture = handlerHarness({
+        runId: TARGET_RUN_ID,
+        manifest: source.manifest,
+        loadReplayBundle: async () => canonicalSerializeProofBundle(source),
+      });
 
-    await expect(
-      fixture.handlers.RUN_PREFLIGHT(command(TARGET_RUN_ID)),
-    ).rejects.toMatchObject({
-      category: "configuration",
-      code: "REPLAY_PREFLIGHT_REPORT_MISSING",
-      retryable: false,
-    });
-  });
+      await expect(
+        fixture.handlers.RUN_PREFLIGHT(command(TARGET_RUN_ID)),
+      ).rejects.toMatchObject({
+        category: "configuration",
+        code: "REPLAY_PREFLIGHT_REPORT_MISSING",
+        retryable: false,
+      });
+    },
+  );
 });

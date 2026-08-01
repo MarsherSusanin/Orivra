@@ -1,12 +1,14 @@
 // @vitest-environment node
 
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   RUN_ID,
   OCCURRED_AT,
+  exactTrustManifest,
   expectedCanonicalUrl,
   validDiagnostic,
-  validManifest,
+  validPreflightReport,
 } from "../../../packages/contracts/test/fixtures";
 import { appendRunEvents, projectRun } from "@proofline/domain";
 import * as workerModule from "../src/worker";
@@ -31,8 +33,8 @@ const fdcHub = "0x3333333333333333333333333333333333333333";
 const fdcVerification = "0x1111111111111111111111111111111111111111";
 const relay = "0x4444444444444444444444444444444444444444";
 const relayerManifest = {
-  ...validManifest,
-  submission: { ...validManifest.submission, mode: "relayer" as const },
+  ...exactTrustManifest,
+  submission: { ...exactTrustManifest.submission, mode: "relayer" as const },
 };
 
 function productionHandlerFactory(): (...args: any[]) => any {
@@ -104,18 +106,34 @@ function createFixture() {
   const ports = {
     preflight: vi.fn(async () => {
       trace.push("preflight");
+      const requestBytes = "0x574542324a534f4e";
       return {
-        canonicalUrl: expectedCanonicalUrl,
-        requestBytes: "0x574542324a534f4e",
-        requestCalldata: "0xfeedcafe",
-        quotedFeeWei: 12_345n,
-        network: {
-          chainId: 114,
-          registryAddress,
-          resolvedContracts: {
-            FdcHub: fdcHub,
-            FdcVerification: fdcVerification,
-            Relay: relay,
+        kind: "accepted",
+        report: {
+          ...structuredClone(validPreflightReport),
+          requestIdentitySha256: `sha256:${createHash("sha256")
+            .update(Buffer.from(requestBytes.slice(2), "hex"))
+            .digest("hex")}`,
+          fee: {
+            quotedWei: "12345",
+            capWei: relayerManifest.submission.feeCapWei,
+            withinCap: true,
+          },
+        },
+        submissionEvidence: {
+          canonicalUrl: expectedCanonicalUrl,
+          requestBytes,
+          requestCalldata: "0xfeedcafe",
+          quotedFeeWei: 12_345n,
+          network: {
+            chainId: 114,
+            blockNumber: validPreflightReport.registrySnapshot.blockNumber,
+            registryAddress,
+            resolvedContracts: {
+              FdcHub: fdcHub,
+              FdcVerification: fdcVerification,
+              Relay: relay,
+            },
           },
         },
       };
