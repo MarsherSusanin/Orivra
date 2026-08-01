@@ -28,6 +28,7 @@ npm run dev
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/001_initial.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/002_one_active_submission.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/003_run_discovery.sql
 ```
 
 Автоматизированного production migration runner и down migrations в репозитории нет. Перед инфраструктурным rollout необходимо выбрать владельца миграций и backup/restore процедуру; до этого безопасная стратегия изменения схемы — additive migration и roll-forward.
@@ -180,4 +181,3 @@ Upstream Coston2 outage блокирует release. Override возможен т
 - Не откатывайте journal или migration destructive SQL вручную.
 - При ошибке приложения верните предыдущий совместимый artifact; при ошибке схемы выпускайте forward migration либо восстанавливайте подтверждённый backup по процедуре выбранной платформы.
 - После любого production edit или изменения candidate tree повторите обе независимые verification waves на новом tree hash.
-

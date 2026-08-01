@@ -1,9 +1,14 @@
 import { ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  createLocalProductAnalytics,
+  type ProductAnalyticsPort,
+} from "@proofline/domain";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { EvidenceStrip } from "./components/EvidenceStrip";
 import { ProjectTokenDialog } from "./components/ProjectTokenDialog";
 import { RunTimeline } from "./components/RunTimeline";
+import { NewRunEntry, RunsIndex } from "./components/RunsIndex";
 import { Sidebar } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { VerificationDialog } from "./components/VerificationDialog";
@@ -19,13 +24,14 @@ import {
   type RunSurfaceServices,
 } from "./services/run-surface";
 
-const COCKPIT_RUN_ID = "run_01JYXW5ZC6K9JSGG0TQ7V8N3PH";
 const PROJECT_TOKEN_KEY = "proofline:project-token";
+const ANALYTICS_SESSION_KEY = "proofline:analytics-session";
 
 export type AppProps = {
   runId?: string;
   projectToken?: string;
   services?: RunSurfaceServices;
+  analytics?: ProductAnalyticsPort;
 };
 
 function sessionProjectToken(): string {
@@ -38,11 +44,23 @@ function sessionProjectToken(): string {
 
 function deepRouteRunId(): string | null {
   const match = /^\/runs\/([^/]+)\/?$/.exec(globalThis.location?.pathname ?? "");
-  if (!match) return null;
+  if (!match || match[1] === "new") return null;
   try {
     return decodeURIComponent(match[1]);
   } catch {
     return null;
+  }
+}
+
+function analyticsSessionId(): string {
+  try {
+    const stored = globalThis.sessionStorage?.getItem(ANALYTICS_SESSION_KEY);
+    if (stored) return stored;
+    const created = globalThis.crypto?.randomUUID?.() ?? `session-${Date.now()}`;
+    globalThis.sessionStorage?.setItem(ANALYTICS_SESSION_KEY, created);
+    return created;
+  } catch {
+    return globalThis.crypto?.randomUUID?.() ?? `session-${Date.now()}`;
   }
 }
 
@@ -93,7 +111,7 @@ function safeHydrationError(cause: unknown): string {
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]");
 }
 
-export function App({ runId, projectToken, services }: AppProps = {}) {
+function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
   const [diagnosticExpanded, setDiagnosticExpanded] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [bundleState, setBundleState] = useState<"idle" | "running" | "verified" | "error">("idle");
@@ -118,7 +136,7 @@ export function App({ runId, projectToken, services }: AppProps = {}) {
   }, [resolvedToken, services]);
   const [resumedRun] = useState(() => servicePort.resume?.() ?? null);
   const [activeRunId] = useState(
-    () => runId ?? routeRunId ?? resumedRun?.runId ?? COCKPIT_RUN_ID,
+    () => runId ?? routeRunId ?? resumedRun?.runId ?? "",
   );
   const shouldHydrate = Boolean(
     servicePort.hydrateRun &&
@@ -208,6 +226,47 @@ export function App({ runId, projectToken, services }: AppProps = {}) {
     [hydratedRun],
   );
 
+  if (routeRunId && !resolvedToken) {
+    return (
+      <div className="app-shell">
+        <Sidebar />
+        <div className="shell-main entry-shell-main">
+          <Topbar title="Locked run" attestationType="Web2Json" mode="new" />
+          <main className="entry-layout">
+            <section className="entry-state">
+              <h1>Connect project to open run</h1>
+              <p>Proofline needs a session-scoped project token to load this persisted run.</p>
+            </section>
+          </main>
+        </div>
+        <ProjectTokenDialog onConnect={connectProject} />
+      </div>
+    );
+  }
+
+  if (shouldHydrate && !hydratedRun) {
+    const unavailable = hydrationError.length > 0;
+    return (
+      <div className="app-shell">
+        <Sidebar />
+        <div className="shell-main entry-shell-main">
+          <Topbar
+            title={unavailable ? "Run unavailable" : "Loading run"}
+            attestationType="Web2Json"
+            mode="new"
+          />
+          <main className="entry-layout">
+            <section className={`entry-state${unavailable ? " is-error" : ""}`} role={unavailable ? "alert" : undefined}>
+              <h1>{unavailable && /404|not found/i.test(hydrationError) ? "Run not found" : unavailable ? "Run unavailable" : "Loading run…"}</h1>
+              <p>{unavailable ? hydrationError : "Reading the persisted lifecycle and evidence."}</p>
+              {unavailable ? <a className="entry-secondary" href="/runs">Back to runs</a> : null}
+            </section>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <Sidebar />
@@ -261,9 +320,83 @@ export function App({ runId, projectToken, services }: AppProps = {}) {
           onVerified={() => setHydrationRevision((value) => value + 1)}
         />
       ) : null}
-      {routeRunId && !resolvedToken ? (
-        <ProjectTokenDialog onConnect={connectProject} />
-      ) : null}
     </div>
   );
+}
+
+function ProductEntry({
+  projectToken,
+  services,
+  analytics,
+  route,
+}: AppProps & { route: "runs" | "new" }) {
+  const [sessionToken, setSessionToken] = useState(
+    () => projectToken ?? sessionProjectToken(),
+  );
+  const [connectOpen, setConnectOpen] = useState(false);
+  const resolvedToken = projectToken ?? sessionToken;
+  const servicePort = useMemo(() => {
+    if (services) return services;
+    if (import.meta.env.MODE === "test") return createTestSurfaceServices();
+    return createLiveSurfaceServices({
+      baseUrl: import.meta.env.VITE_PROOFLINE_API_BASE_URL ?? "/api",
+      projectToken: resolvedToken,
+    });
+  }, [resolvedToken, services]);
+  const analyticsPort = useMemo(() => {
+    if (analytics) return analytics;
+    return createLocalProductAnalytics({ storage: globalThis.localStorage });
+  }, [analytics]);
+
+  const connectProject = (token: string) => {
+    try {
+      globalThis.sessionStorage?.setItem(PROJECT_TOKEN_KEY, token);
+    } catch {
+      // The current in-memory session remains usable when storage is denied.
+    }
+    setSessionToken(token);
+    setConnectOpen(false);
+  };
+  const recordStart = () => {
+    analyticsPort.emit({
+      version: "1",
+      sessionId: analyticsSessionId(),
+      occurredAt: new Date().toISOString(),
+      name: "COMPOSER_STARTED",
+      metadata: { entryPoint: route === "runs" ? "runs" : "direct" },
+    });
+  };
+
+  return (
+    <div className="app-shell">
+      <Sidebar />
+      <div className="shell-main entry-shell-main">
+        <Topbar
+          title={route === "runs" ? "Runs" : "New Web2Json run"}
+          attestationType="Web2Json"
+          mode={route === "runs" ? "index" : "new"}
+        />
+        {route === "runs" ? (
+          <RunsIndex
+            services={servicePort}
+            projectToken={resolvedToken}
+            onConnect={() => setConnectOpen(true)}
+            onStart={recordStart}
+          />
+        ) : (
+          <NewRunEntry onConnect={() => setConnectOpen(true)} />
+        )}
+      </div>
+      {connectOpen ? <ProjectTokenDialog onConnect={connectProject} /> : null}
+    </div>
+  );
+}
+
+export function App(props: AppProps = {}) {
+  const pathname = globalThis.location?.pathname ?? "/";
+  const routedRun = deepRouteRunId();
+  if (props.runId || routedRun || (import.meta.env.MODE === "test" && pathname === "/")) {
+    return <RunCockpit {...props} />;
+  }
+  return <ProductEntry {...props} route={pathname === "/runs/new" ? "new" : "runs"} />;
 }

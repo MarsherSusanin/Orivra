@@ -2,7 +2,10 @@ import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
   DiagnosticV1Schema,
   RunEventV1Schema,
+  RunListPageV1Schema,
+  RunProjectionV1Schema,
   Web2JsonManifestV1Schema,
+  type RunStageNameV1,
   type RunEventV1,
 } from "@proofline/contracts";
 import {
@@ -25,6 +28,57 @@ function requireRunId(value: unknown): string {
     throw Object.assign(new Error("Run id is required"), { status: 400 });
   }
   return value;
+}
+
+const RUN_STAGES = [
+  "preflight",
+  "request",
+  "round",
+  "proof",
+  "verify",
+  "consumer",
+] as const satisfies readonly RunStageNameV1[];
+
+type RunListCursor = { updatedAt: string; id: string };
+
+function decodeRunListCursor(value: unknown): RunListCursor | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(String(value), "base64url").toString("utf8"),
+    ) as Record<string, unknown>;
+    if (
+      Object.keys(decoded).length !== 2 ||
+      typeof decoded.updatedAt !== "string" ||
+      !Number.isFinite(Date.parse(decoded.updatedAt)) ||
+      typeof decoded.id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        decoded.id,
+      )
+    ) {
+      throw new Error("invalid cursor");
+    }
+    return { updatedAt: new Date(decoded.updatedAt).toISOString(), id: decoded.id };
+  } catch {
+    throw Object.assign(new Error("Run list cursor is invalid"), {
+      status: 400,
+      code: "INVALID_RUN_LIST_CURSOR",
+    });
+  }
+}
+
+function encodeRunListCursor(value: RunListCursor): string {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
+
+function runCurrentStage(
+  stages: Record<RunStageNameV1, string>,
+): RunStageNameV1 {
+  return (
+    RUN_STAGES.find((stage) => stages[stage] === "active" || stages[stage] === "failed") ??
+    [...RUN_STAGES].reverse().find((stage) => stages[stage] === "completed") ??
+    "preflight"
+  );
 }
 
 function isUniqueViolation(value: unknown): value is {
@@ -481,6 +535,88 @@ export function createProductionProoflineService(input: {
           : {}),
       };
       return { ...row.projection, ...releaseEvidence };
+    },
+
+    async listRuns(context: Record<string, unknown>) {
+      const cursor = decodeRunListCursor(context.cursor);
+      const limit = Number(context.limit ?? 20);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+        throw Object.assign(new Error("Run list limit is invalid"), {
+          status: 400,
+          code: "INVALID_RUN_LIST_QUERY",
+        });
+      }
+      const values: unknown[] = [context.projectId];
+      const predicates = ["run.project_id = $1"];
+      const status = context.status;
+      const failedSql = `(run.projection ? 'terminalFailure' OR run.projection->'stages'->>'consumer' = 'failed')`;
+      if (status === "active") {
+        predicates.push(`COALESCE((run.projection->>'terminal')::boolean, false) = false`);
+      } else if (status === "completed") {
+        predicates.push(`COALESCE((run.projection->>'terminal')::boolean, false) = true`);
+        predicates.push(`NOT ${failedSql}`);
+      } else if (status === "failed") {
+        predicates.push(failedSql);
+      } else if (status !== undefined) {
+        throw Object.assign(new Error("Run list status is invalid"), {
+          status: 400,
+          code: "INVALID_RUN_LIST_QUERY",
+        });
+      }
+      if (cursor) {
+        values.push(cursor.updatedAt, cursor.id);
+        predicates.push(
+          `(run.updated_at, run.id) < ($${values.length - 1}::timestamptz, $${values.length}::uuid)`,
+        );
+      }
+      values.push(limit + 1);
+      const result = await input.pool.query(
+        `SELECT run.id, run.manifest, run.projection, run.last_sequence,
+                run.created_at, run.updated_at
+         FROM proofline_private.runs AS run
+         WHERE ${predicates.join(" AND ")}
+         ORDER BY run.updated_at DESC, run.id DESC
+         LIMIT $${values.length}`,
+        values,
+      );
+      const pageRows = result.rows.slice(0, limit);
+      const runs = pageRows.map((row) => {
+        const manifest = Web2JsonManifestV1Schema.parse(row.manifest);
+        const projection = RunProjectionV1Schema.parse(row.projection);
+        const hasFailedStage = RUN_STAGES.some(
+          (stage) => projection.stages[stage] === "failed",
+        );
+        return {
+          version: "1" as const,
+          runId: String(row.id),
+          network: manifest.network,
+          sourceHost: new URL(manifest.request.url).hostname.toLowerCase(),
+          submissionMode: manifest.submission.mode,
+          currentStage: runCurrentStage(projection.stages),
+          status: hasFailedStage
+            ? ("failed" as const)
+            : projection.terminal
+              ? ("completed" as const)
+              : ("active" as const),
+          createdAt: new Date(String(row.created_at)).toISOString(),
+          updatedAt: new Date(String(row.updated_at)).toISOString(),
+          lastSequence: Number(row.last_sequence),
+          resumable: !projection.terminal,
+        };
+      });
+      const last = pageRows.at(-1);
+      return RunListPageV1Schema.parse({
+        version: "1",
+        runs,
+        ...(result.rows.length > limit && last
+          ? {
+              nextCursor: encodeRunListCursor({
+                updatedAt: new Date(String(last.updated_at)).toISOString(),
+                id: String(last.id),
+              }),
+            }
+          : {}),
+      });
     },
 
     async listEvents(context: Record<string, unknown>) {

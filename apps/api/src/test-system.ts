@@ -219,6 +219,82 @@ export function createHermeticProoflineSystem(input: {
       return { ...projectRun(stored.events), diagnostics: stored.diagnostics };
     },
 
+    async listRuns(context: {
+      projectId: string;
+      status?: "active" | "completed" | "failed";
+      cursor?: string;
+      limit: number;
+    }) {
+      let offset = 0;
+      if (context.cursor) {
+        try {
+          const parsed = JSON.parse(
+            Buffer.from(context.cursor, "base64url").toString("utf8"),
+          ) as Record<string, unknown>;
+          if (!Number.isSafeInteger(parsed.offset) || Number(parsed.offset) < 0) {
+            throw new Error("invalid offset");
+          }
+          offset = Number(parsed.offset);
+        } catch {
+          throw Object.assign(new Error("Run list cursor is invalid"), {
+            status: 400,
+            code: "INVALID_RUN_LIST_CURSOR",
+          });
+        }
+      }
+      const stageNames = [
+        "preflight",
+        "request",
+        "round",
+        "proof",
+        "verify",
+        "consumer",
+      ] as const;
+      const summaries = [...db.runs.values()]
+        .filter((stored) => stored.projectId === context.projectId)
+        .map((stored) => {
+          const projection = projectRun(stored.events);
+          const failed = stageNames.some((stage) => projection.stages[stage] === "failed");
+          const status = failed ? "failed" as const : projection.terminal ? "completed" as const : "active" as const;
+          const currentStage =
+            stageNames.find((stage) => projection.stages[stage] === "active" || projection.stages[stage] === "failed") ??
+            [...stageNames].reverse().find((stage) => projection.stages[stage] === "completed") ??
+            "preflight";
+          const updatedAt = stored.events.at(-1)?.occurredAt ?? occurredAt;
+          return {
+            version: "1" as const,
+            runId: stored.runId,
+            network: stored.manifest.network,
+            sourceHost: new URL(stored.manifest.request.url).hostname.toLowerCase(),
+            submissionMode: stored.manifest.submission.mode,
+            currentStage,
+            status,
+            createdAt: stored.events[0].occurredAt,
+            updatedAt,
+            lastSequence: projection.sequence,
+            resumable: !projection.terminal,
+          };
+        })
+        .filter((summary) => !context.status || summary.status === context.status)
+        .sort((left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt) || right.runId.localeCompare(left.runId),
+        );
+      const runs = summaries.slice(offset, offset + context.limit);
+      const nextOffset = offset + runs.length;
+      return {
+        version: "1" as const,
+        runs,
+        ...(nextOffset < summaries.length
+          ? {
+              nextCursor: Buffer.from(
+                JSON.stringify({ offset: nextOffset }),
+                "utf8",
+              ).toString("base64url"),
+            }
+          : {}),
+      };
+    },
+
     async listEvents(context: { runId: string; after: number }) {
       const events = run(context.runId).events.filter(
         (event) => event.sequence > context.after,

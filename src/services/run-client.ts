@@ -1,4 +1,7 @@
-import type { Web2JsonManifestV1 } from "../../packages/contracts/src";
+import type {
+  RunListPageV1,
+  Web2JsonManifestV1,
+} from "../../packages/contracts/src";
 
 const LAST_RUN_KEY = "proofline:last-run";
 const COSTON2_CHAIN_ID = "0x72";
@@ -118,6 +121,19 @@ export function createRunClient(input: {
   }
 
   return {
+    listRuns(filters: {
+      status?: "active" | "completed" | "failed";
+      cursor?: string;
+      limit?: number;
+    } = {}) {
+      const query = new URLSearchParams();
+      if (filters.status) query.set("status", filters.status);
+      if (filters.cursor) query.set("cursor", filters.cursor);
+      if (filters.limit !== undefined) query.set("limit", String(filters.limit));
+      const suffix = query.size > 0 ? `?${query.toString()}` : "";
+      return request<RunListPageV1>(`/runs${suffix}`);
+    },
+
     async createRun(manifest: Web2JsonManifestV1, idempotencyKey: string) {
       const result = await request<{ runId: string; location?: string }>("/runs", {
         method: "POST",

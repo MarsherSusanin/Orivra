@@ -1,4 +1,5 @@
 import { createRunClient } from "./run-client";
+import type { RunListPageV1 } from "../../packages/contracts/src";
 import type { ProjectionStages, RunStage } from "../data/run";
 
 export type VerificationCheck = {
@@ -24,6 +25,13 @@ export type RunServiceContext = {
 
 export type HydrateRunContext = RunServiceContext & {
   after: number;
+};
+
+export type ListRunsContext = {
+  projectToken: string;
+  status?: "active" | "completed" | "failed";
+  cursor?: string;
+  limit?: number;
 };
 
 export type RunDiagnosticView = {
@@ -66,6 +74,7 @@ export interface RunSurfaceServices {
   exportBundle(context: RunServiceContext): Promise<string>;
   replayBundle(bundle: string): Promise<{ byteIdentical: boolean }>;
   hydrateRun?(context: HydrateRunContext): Promise<HydratedRunView>;
+  listRuns?(context: ListRunsContext): Promise<RunListPageV1>;
   resume?(): { runId: string; after: number } | null;
 }
 
@@ -375,6 +384,15 @@ export function createLiveSurfaceServices(input: {
   }
 
   return {
+    async listRuns(context) {
+      assertContext({ runId: "run-list", projectToken: context.projectToken });
+      return client.listRuns({
+        status: context.status,
+        cursor: context.cursor,
+        limit: context.limit,
+      });
+    },
+
     async verifyConsumer(context) {
       assertContext(context);
       const accepted = await client.verifyConsumer(
@@ -439,6 +457,9 @@ export function createTestSurfaceServices(): RunSurfaceServices {
     throw new Error("The deterministic Web adapter is available only in test mode");
   }
   return {
+    async listRuns() {
+      return { version: "1", runs: [] };
+    },
     async verifyConsumer() {
       return {
         summary: "Consumer needs one fix",

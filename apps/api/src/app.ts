@@ -43,6 +43,17 @@ const ConsumerArtifactBodySchema = z
 const ShareBodySchema = z
   .object({ expiresAt: z.string().datetime({ offset: true }).optional() })
   .strict();
+const RunListStatusSchema = z.enum(["active", "completed", "failed"]);
+const RunListCursorSchema = z
+  .string()
+  .min(16)
+  .max(1024)
+  .regex(/^[A-Za-z0-9_-]+$/);
+const RunListLimitSchema = z
+  .string()
+  .regex(/^[1-9]\d*$/)
+  .transform(Number)
+  .refine((value) => value <= 50);
 
 function json(value: unknown, status = 200, headers?: HeadersInit): Response {
   const body = typeof value === "string" ? value : JSON.stringify(value);
@@ -120,6 +131,30 @@ function commandBodySchema(
   return undefined;
 }
 
+function runListQuery(url: URL):
+  | {
+      status: "active" | "completed" | "failed" | undefined;
+      cursor: string | undefined;
+      limit: number;
+    }
+  | null {
+  const allowed = new Set(["status", "cursor", "limit"]);
+  for (const key of url.searchParams.keys()) {
+    if (!allowed.has(key) || url.searchParams.getAll(key).length !== 1) return null;
+  }
+
+  const statusValue = url.searchParams.get("status") ?? undefined;
+  const cursorValue = url.searchParams.get("cursor") ?? undefined;
+  const limitValue = url.searchParams.get("limit") ?? undefined;
+  const status = RunListStatusSchema.optional().safeParse(statusValue);
+  const cursor = RunListCursorSchema.optional().safeParse(cursorValue);
+  const limit = limitValue === undefined
+    ? { success: true as const, data: 20 }
+    : RunListLimitSchema.safeParse(limitValue);
+  if (!status.success || !cursor.success || !limit.success) return null;
+  return { status: status.data, cursor: cursor.data, limit: limit.data };
+}
+
 export function createProoflineApi(input: {
   service: ProoflineApiService;
   authenticate(rawToken: string): Promise<AuthContext | null>;
@@ -190,6 +225,17 @@ export function createProoflineApi(input: {
         }
         if (request.method === "POST" && url.pathname === "/v1/replays") {
           return json(await input.service.replay(context), 201);
+        }
+        if (request.method === "GET" && url.pathname === "/v1/runs") {
+          const query = runListQuery(url);
+          if (!query) {
+            return error(
+              400,
+              "INVALID_RUN_LIST_QUERY",
+              "Run list query must contain one valid status, cursor, or limit",
+            );
+          }
+          return json(await input.service.listRuns({ projectId, ...query }));
         }
         if (request.method === "GET" && /^\/v1\/runs\/[^/]+$/.test(url.pathname)) {
           return json(await input.service.getRun(context));
