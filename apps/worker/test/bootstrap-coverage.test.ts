@@ -104,7 +104,10 @@ describe("production worker bootstrap coverage", () => {
     expect(fixture.repository.retryCommand).toHaveBeenCalledWith(
       "command-preflight",
       "claim-1",
-      expect.objectContaining({ message: expect.stringMatching(/run id/i) }),
+      expect.objectContaining({ message: "Worker command failed" }),
+    );
+    expect(JSON.stringify(fixture.repository.retryCommand.mock.calls)).not.toMatch(
+      /run id/i,
     );
   });
 

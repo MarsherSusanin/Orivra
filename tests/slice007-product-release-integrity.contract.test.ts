@@ -10,6 +10,7 @@ import fdcHubAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/
 import {
   RUN_ID,
   OCCURRED_AT,
+  exactTrustManifest,
   expectedCanonicalUrl,
   makeBundleInput,
   validManifest,
@@ -262,8 +263,8 @@ describe("Slice 007 persisted Action release identity", () => {
 
 function liveGraphHarness() {
   const manifest = {
-    ...validManifest,
-    submission: { ...validManifest.submission, mode: "relayer" as const },
+    ...exactTrustManifest,
+    submission: { ...exactTrustManifest.submission, mode: "relayer" as const },
   };
   const state = {
     events: [

@@ -42,6 +42,28 @@ describe("worker production composition hardening", () => {
       }),
     ).not.toThrow();
   });
+
+  it.each([
+    ["retry attempts", { maxAttempts: 0 }, /maxAttempts.*positive integer/i],
+    ["lease heartbeat", { leaseHeartbeatMs: Number.NaN }, /leaseHeartbeatMs.*positive/i],
+  ])("rejects an invalid %s bound before claiming work", (_label, override, error) => {
+    const claimNextCommand = vi.fn();
+    expect(() =>
+      createRunWorker({
+        environment: "test",
+        mode: "replay",
+        repository: {
+          claimNextCommand,
+          completeCommand: vi.fn(),
+          retryCommand: vi.fn(),
+        },
+        handlers: {},
+        logger: { info: vi.fn(), error: vi.fn() },
+        ...override,
+      }),
+    ).toThrow(error);
+    expect(claimNextCommand).not.toHaveBeenCalled();
+  });
 });
 
 describe("worker command failure boundaries", () => {
@@ -139,6 +161,51 @@ describe("worker command failure boundaries", () => {
       "claim_1",
       expect.objectContaining({ message: "Worker command failed" }),
     );
+  });
+
+  it("downgrades unrecognized categorized failures to bounded transport evidence", async () => {
+    const repository = {
+      claimNextCommand: vi.fn().mockResolvedValue(claimed()),
+      completeCommand: vi.fn(),
+      retryCommand: vi.fn().mockResolvedValue(undefined),
+    };
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const worker = createRunWorker({
+      environment: "test",
+      mode: "replay",
+      repository,
+      handlers: {
+        PREPARE_WEB2JSON: vi.fn().mockRejectedValue({
+          category: "stripe-private",
+          code: "lowercase-private-code",
+          retryable: true,
+          message: "customer cus_123",
+          evidence: {
+            stage: "INVALID STAGE",
+            attempt: -1,
+            retryAfterSeconds: Number.POSITIVE_INFINITY,
+          },
+        }),
+      },
+      logger,
+    });
+
+    await worker.processOne();
+    expect(repository.retryCommand).toHaveBeenCalledWith(
+      "command_1",
+      "claim_1",
+      {
+        category: "transport",
+        retryable: true,
+        message: "Worker command failed",
+        evidence: {},
+        commandId: "command_1",
+      },
+    );
+    expect(JSON.stringify([
+      repository.retryCommand.mock.calls,
+      logger.error.mock.calls,
+    ])).not.toMatch(/stripe-private|lowercase-private-code|cus_123|INVALID STAGE/);
   });
 
   it("persists and logs only stable categorized failure copy and allow-listed evidence", async () => {

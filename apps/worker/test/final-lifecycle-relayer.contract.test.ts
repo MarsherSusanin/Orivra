@@ -213,6 +213,7 @@ describe("Slice 005 bounded worker failure evidence", () => {
       retryCommand: vi.fn(),
       renewLease: vi.fn(),
     };
+    const logger = { info: vi.fn(), error: vi.fn() };
     const worker = (createRunWorker as any)({
       environment: "test",
       mode: "replay",
@@ -227,24 +228,39 @@ describe("Slice 005 bounded worker failure evidence", () => {
           evidence: { votingRound: 4752 },
         }),
       },
-      logger: { info: vi.fn(), error: vi.fn() },
+      logger,
     });
 
     await worker.processOne();
     expect(repository.retryCommand).toHaveBeenCalledWith(
       "command_1",
       "claim_1",
-      expect.objectContaining({
+      {
         category: "not-finalized",
         code: "COMMAND_RETRY_EXHAUSTED",
         retryable: false,
         terminal: true,
-        evidence: expect.objectContaining({
+        message: "Worker command failed",
+        commandId: "command_1",
+        evidence: {
           originalCode: "RELAY_FINALIZATION_PENDING",
-          votingRound: 4752,
-        }),
-      }),
+        },
+      },
     );
+    expect(logger.error).toHaveBeenCalledWith({
+      event: "WORKER_COMMAND_FAILED",
+      category: "not-finalized",
+      code: "COMMAND_RETRY_EXHAUSTED",
+      retryable: false,
+      terminal: true,
+      message: "Worker command failed",
+      commandId: "command_1",
+      evidence: { originalCode: "RELAY_FINALIZATION_PENDING" },
+    });
+    expect(JSON.stringify([
+      repository.retryCommand.mock.calls,
+      logger.error.mock.calls,
+    ])).not.toMatch(/Relay is pending|votingRound|4752/);
   });
 
   it("renews a lease repeatedly while a bounded handler is still active", async () => {
@@ -282,6 +298,66 @@ describe("Slice 005 bounded worker failure evidence", () => {
     expect(repository.renewLease.mock.calls.length).toBeGreaterThanOrEqual(3);
     finish();
     await pending;
+  });
+
+  it("retries without completing when lease renewal fails during a command", async () => {
+    vi.useFakeTimers();
+    let finish!: () => void;
+    const repository = {
+      claimNextCommand: vi.fn().mockResolvedValue({
+        claimToken: "claim_lease_failure",
+        command: {
+          id: "command_lease_failure",
+          kind: "POLL_TRANSACTION_RECEIPT",
+          runId: RUN_ID,
+          attempts: 1,
+          payload: {},
+        },
+      }),
+      completeCommand: vi.fn(),
+      retryCommand: vi.fn(),
+      renewLease: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValue(
+          new Error("private lease backend https://db.invalid?token=secret"),
+        ),
+    };
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const worker = createRunWorker({
+      environment: "test",
+      mode: "replay",
+      repository,
+      leaseHeartbeatMs: 10,
+      handlers: {
+        POLL_TRANSACTION_RECEIPT: vi.fn(
+          () => new Promise<void>((resolve) => (finish = resolve)),
+        ),
+      },
+      logger,
+    });
+
+    const pending = worker.processOne();
+    await vi.advanceTimersByTimeAsync(15);
+    finish();
+    await pending;
+
+    expect(repository.completeCommand).not.toHaveBeenCalled();
+    expect(repository.retryCommand).toHaveBeenCalledWith(
+      "command_lease_failure",
+      "claim_lease_failure",
+      expect.objectContaining({
+        category: "transport",
+        code: "FDC_TRANSPORT",
+        retryable: true,
+        message: "Worker command failed",
+        evidence: { commandId: "command_lease_failure" },
+      }),
+    );
+    expect(JSON.stringify([
+      repository.retryCommand.mock.calls,
+      logger.error.mock.calls,
+    ])).not.toMatch(/private lease backend|db\.invalid|token=secret/i);
   });
 });
 

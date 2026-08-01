@@ -68,6 +68,33 @@ function encodedResponse(url = expectedCanonicalUrl): Hex {
   );
 }
 
+function relayerSigningInput(
+  policyOverride: Partial<{
+    projectFeeCapWei: bigint;
+    globalFeeCapWei: bigint;
+    quotaRemaining: number;
+    balanceFloorWei: bigint;
+  }> = {},
+) {
+  return {
+    projectId: "project-1",
+    runId: "run_ports",
+    idempotencyKey: "submission-1",
+    manifest: validManifest,
+    chainId: 114,
+    target: ADDRESSES.FdcHub,
+    calldata: "0xfeedcafe",
+    valueWei: 12_345n,
+    policy: {
+      projectFeeCapWei: BigInt(validManifest.submission.feeCapWei),
+      globalFeeCapWei: 20_000_000_000_000_000n,
+      quotaRemaining: 1,
+      balanceFloorWei: 1_000n,
+      ...policyOverride,
+    },
+  };
+}
+
 function harness() {
   const readContract = vi.fn(async (request: any) => {
     const name = request.functionName;
@@ -143,10 +170,16 @@ function harness() {
 
 describe("live Coston2 pipeline port coverage", () => {
   it.each([
-    ["private key", { PROOFLINE_COSTON2_PRIVATE_KEY: "" }],
-    ["global cap", { PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "not-a-number" }],
-    ["balance floor", { PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "-1" }],
-  ])("rejects invalid %s before constructing clients", (_label, override) => {
+    ["private key", { PROOFLINE_COSTON2_PRIVATE_KEY: "" }, /missing/i],
+    [
+      "global cap",
+      { PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "not-a-number" },
+      /unsigned/i,
+    ],
+    ["balance floor", { PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "-1" }, /unsigned/i],
+    ["receipt timeout", { PROOFLINE_RECEIPT_POLL_TIMEOUT_MS: "0" }, /positive/i],
+    ["DA timeout", { PROOFLINE_DA_TIMEOUT_MS: "30001" }, /exceed 30000/i],
+  ])("rejects invalid %s before constructing clients", (_label, override, error) => {
     const createPublicClient = vi.fn();
     expect(() =>
       createLiveCoston2PipelinePorts({
@@ -154,7 +187,7 @@ describe("live Coston2 pipeline port coverage", () => {
         verifier: { prepareRequest: vi.fn() },
         dependencies: { createPublicClient },
       }),
-    ).toThrow(/configuration|missing|unsigned/i);
+    ).toThrow(error);
     expect(createPublicClient).not.toHaveBeenCalled();
   });
 
@@ -193,22 +226,9 @@ describe("live Coston2 pipeline port coverage", () => {
     expect(fixture.dependencies.dispatch).toHaveBeenCalledTimes(5);
     expect(fixture.dependencies.transformJq).toHaveBeenCalledTimes(5);
 
-    const signed = await fixture.ports.signRelayerTransaction({
-      projectId: "project-1",
-      runId: "run_ports",
-      idempotencyKey: "submission-1",
-      manifest: validManifest,
-      chainId: 114,
-      target: ADDRESSES.FdcHub,
-      calldata: "0xfeedcafe",
-      valueWei: 12_345n,
-      policy: {
-        projectFeeCapWei: BigInt(validManifest.submission.feeCapWei),
-        globalFeeCapWei: 20_000_000_000_000_000n,
-        quotaRemaining: 1,
-        balanceFloorWei: 1_000n,
-      },
-    });
+    const signed = await fixture.ports.signRelayerTransaction(
+      relayerSigningInput(),
+    );
     expect(signed).toMatchObject({
       projectId: "project-1",
       runId: "run_ports",
@@ -222,6 +242,40 @@ describe("live Coston2 pipeline port coverage", () => {
     await expect(fixture.ports.broadcastRawTransaction("0x02f8")).resolves.toBe(
       TRANSACTION_HASH,
     );
+  });
+
+  it("rejects malformed persisted relayer policy before nonce or signing", async () => {
+    const fixture = harness();
+
+    await expect(
+      fixture.ports.signRelayerTransaction(
+        relayerSigningInput({ quotaRemaining: 0 }),
+      ),
+    ).rejects.toMatchObject({
+      category: "schema-invalid",
+      code: "RELAYER_POLICY_EVIDENCE_INVALID",
+      retryable: false,
+    });
+    expect(fixture.publicClient.getBalance).not.toHaveBeenCalled();
+    expect(fixture.publicClient.getTransactionCount).not.toHaveBeenCalled();
+    expect(fixture.walletClient.signTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects persisted relayer policy drift before wallet effects", async () => {
+    const fixture = harness();
+
+    await expect(
+      fixture.ports.signRelayerTransaction(
+        relayerSigningInput({ globalFeeCapWei: 1n }),
+      ),
+    ).rejects.toMatchObject({
+      category: "configuration",
+      code: "RELAYER_POLICY_CONFIGURATION_DRIFT",
+      retryable: false,
+    });
+    expect(fixture.publicClient.getBalance).not.toHaveBeenCalled();
+    expect(fixture.publicClient.getTransactionCount).not.toHaveBeenCalled();
+    expect(fixture.walletClient.signTransaction).not.toHaveBeenCalled();
   });
 
   it("pins every registry resolution and fee quote to one explicit block snapshot", async () => {
@@ -252,6 +306,23 @@ describe("live Coston2 pipeline port coverage", () => {
           FdcVerification: ADDRESSES.FdcVerification,
           Relay: ADDRESSES.Relay,
         },
+      },
+    });
+  });
+
+  it("returns a Trust-blocked preflight without constructing submission evidence", async () => {
+    const fixture = harness();
+
+    await expect(
+      fixture.ports.preflight({
+        manifest: validManifest,
+        runId: "run_trust_blocked",
+      }),
+    ).resolves.toMatchObject({
+      kind: "blocked",
+      report: {
+        verdict: "blocked",
+        blockers: ["PREFLIGHT_TRUST_QUERY_MISMATCH"],
       },
     });
   });

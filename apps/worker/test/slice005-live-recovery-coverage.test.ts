@@ -68,6 +68,39 @@ describe("Slice 005 relayer recovery ports", () => {
     ).resolves.toBe(false);
   });
 
+  it.each([
+    Object.assign(new Error("receipt unavailable"), {
+      name: "TransactionReceiptNotFoundError",
+    }),
+    Object.assign(new Error("receipt timeout"), {
+      name: "WaitForTransactionReceiptTimeoutError",
+    }),
+    new Error("transaction receipt was not found by the RPC"),
+    new Error("not found"),
+  ])("treats every supported RPC missing-transaction form as absent", async (cause) => {
+    const fixture = recoveryPorts({
+      getTransaction: vi.fn().mockRejectedValue(cause),
+    });
+
+    await expect(
+      fixture.ports.resolveRecordedTransaction(transactionHash),
+    ).resolves.toBe(false);
+  });
+
+  it("treats a non-object RPC rejection as indeterminate rather than absent", async () => {
+    const fixture = recoveryPorts({
+      getTransaction: vi.fn().mockRejectedValue("not found"),
+    });
+
+    await expect(
+      fixture.ports.resolveRecordedTransaction(transactionHash),
+    ).rejects.toMatchObject({
+      category: "transport",
+      code: "RELAYER_TRANSACTION_LOOKUP_FAILED",
+      retryable: true,
+    });
+  });
+
   it("normalizes an indeterminate recovery lookup without leaking RPC detail", async () => {
     const fixture = recoveryPorts({
       getTransaction: vi

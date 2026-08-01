@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resolve } from "node:path";
 
 const mocks = vi.hoisted(() => {
   const pool = { end: vi.fn(async () => undefined) };
@@ -125,6 +126,74 @@ describe("Slice 005 production worker configuration", () => {
     });
     expect(mocks.createRunWorker).toHaveBeenCalledWith(
       expect.objectContaining({ maxAttempts: 3, leaseHeartbeatMs: 2_500 }),
+    );
+  });
+
+  it("loads configured replay evidence files and supplies a working default clock", async () => {
+    const replayFixture = resolve("packages/contracts/test/fixtures.ts");
+    createProductionWorker({
+      environment: environment({
+        PROOFLINE_REPLAY_BUNDLE_PATH: replayFixture,
+        PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: replayFixture,
+      }),
+      pool: mocks.pool,
+      verifier: { prepareRequest: vi.fn() },
+      createRepository: mocks.createRepository as any,
+      createPipelinePorts: mocks.createPipelinePorts as any,
+    });
+
+    const composition = mocks.createHandlers.mock.calls.at(-1)?.[0] as any;
+    await expect(composition.ports.loadReplayBundle()).resolves.toContain(
+      "validManifest",
+    );
+    await expect(
+      composition.ports.loadReplayPreflightReport(),
+    ).resolves.toContain("validPreflightReport");
+    expect(composition.clock.now()).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("forwards a run-scoped persisted command to its production handler", async () => {
+    const rawHandler = vi.fn().mockResolvedValue({ nextCommands: [] });
+    mocks.createHandlers.mockReturnValueOnce({ RUN_PREFLIGHT: rawHandler });
+    createProductionWorker({
+      environment: environment(),
+      pool: mocks.pool,
+      verifier: { prepareRequest: vi.fn() },
+      createRepository: mocks.createRepository as any,
+      createPipelinePorts: mocks.createPipelinePorts as any,
+      logger: { info: vi.fn(), error: vi.fn() },
+    });
+    const workerInput = mocks.createRunWorker.mock.calls.at(-1)?.[0] as any;
+    const command = {
+      id: "command-preflight",
+      kind: "RUN_PREFLIGHT",
+      runId: "run-1",
+      payload: {},
+    };
+
+    await expect(workerInput.handlers.RUN_PREFLIGHT(command)).resolves.toEqual({
+      nextCommands: [],
+    });
+    expect(rawHandler).toHaveBeenCalledWith(command);
+  });
+
+  it("uses structured JSON for the default production logger", () => {
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    createProductionWorker({
+      environment: environment(),
+      pool: mocks.pool,
+      verifier: { prepareRequest: vi.fn() },
+      createRepository: mocks.createRepository as any,
+      createPipelinePorts: mocks.createPipelinePorts as any,
+    });
+    const logger = (mocks.createRunWorker.mock.calls.at(-1)?.[0] as any).logger;
+
+    logger.info({ event: "WORKER_READY" });
+    logger.error({ event: "WORKER_FAILED", code: "SAFE_CODE" });
+    expect(consoleInfo).toHaveBeenCalledWith('{"event":"WORKER_READY"}');
+    expect(consoleError).toHaveBeenCalledWith(
+      '{"event":"WORKER_FAILED","code":"SAFE_CODE"}',
     );
   });
 });
