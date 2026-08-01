@@ -13,13 +13,19 @@ import {
 import {
   canonicalSerializeProofBundle,
   canonicalSerializePreflightReport,
+  canonicalizeManifestUrl,
   createProofBundle,
   generateSafeWeb2JsonConsumer,
   projectRun,
   replayProofBundle,
 } from "@proofline/domain";
-import { calculateVotingRoundId } from "@proofline/fdc-coston2";
-import { normalizeFdcError, redactEvidence } from "@proofline/fdc-coston2";
+import {
+  calculateVotingRoundId,
+  deriveWeb2JsonPreflightTrustBlockers,
+} from "@proofline/fdc-coston2";
+import { normalizeFdcError } from "@proofline/fdc-coston2";
+import { encodeFunctionData, type Abi, type Hex } from "viem";
+import fdcHubAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFdcHub.sol/IFdcHub.json";
 
 export interface WorkerCommand {
   id: string;
@@ -73,22 +79,72 @@ export function validateWorkerComposition(input: WorkerComposition): void {
   }
 }
 
+const SAFE_FAILURE_CATEGORIES = new Set([
+  "configuration",
+  "transport",
+  "timeout",
+  "not-finalized",
+  "consensus-miss",
+  "schema-invalid",
+  "proof-invalid",
+  "consumer-invariant",
+]);
+
+function safeFailureEvidence(value: unknown): Record<string, unknown> {
+  const source =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  const evidence: Record<string, unknown> = {};
+  if (
+    typeof source.stage === "string" &&
+    /^[a-z][a-z0-9-]{0,63}$/.test(source.stage)
+  ) {
+    evidence.stage = source.stage;
+  }
+  if (
+    typeof source.attempt === "number" &&
+    Number.isSafeInteger(source.attempt) &&
+    source.attempt >= 0
+  ) {
+    evidence.attempt = source.attempt;
+  }
+  if (
+    typeof source.retryAfterSeconds === "number" &&
+    Number.isFinite(source.retryAfterSeconds) &&
+    source.retryAfterSeconds >= 0
+  ) {
+    evidence.retryAfterSeconds = source.retryAfterSeconds;
+  }
+  return evidence;
+}
+
 function safeFailure(cause: unknown, commandId: string): Record<string, unknown> {
   if (cause && typeof cause === "object" && "category" in cause) {
     const source = cause as Record<string, unknown>;
-    return redactEvidence({
-      category: source.category,
-      ...(typeof source.code === "string" ? { code: source.code } : {}),
+    const category =
+      typeof source.category === "string" &&
+      SAFE_FAILURE_CATEGORIES.has(source.category)
+        ? source.category
+        : "transport";
+    return {
+      category,
+      ...(typeof source.code === "string" &&
+      /^[A-Z][A-Z0-9_]{0,127}$/.test(source.code)
+        ? { code: source.code }
+        : {}),
       retryable: source.retryable === true,
-      message: source.message ?? "Worker command failed",
-      evidence:
-        source.evidence && typeof source.evidence === "object"
-          ? source.evidence
-          : {},
+      message: "Worker command failed",
+      evidence: safeFailureEvidence(source.evidence),
       commandId,
-    }) as Record<string, unknown>;
+    };
   }
-  return normalizeFdcError(cause, { commandId });
+  const normalized = normalizeFdcError(cause, { commandId });
+  return {
+    ...normalized,
+    message: "Worker command failed",
+    evidence: { commandId },
+  };
 }
 
 export function createRunWorker(input: {
@@ -347,7 +403,7 @@ type SubmissionNetworkSnapshot = {
   registryAddress: string;
   resolvedContracts: {
     FdcHub: string;
-    FdcRequestFeeConfigurations?: string;
+    FdcRequestFeeConfigurations: string;
     FdcVerification: string;
     Relay: string;
   };
@@ -616,6 +672,31 @@ const BLOCKED_PREFLIGHT_CATEGORY = {
   PREFLIGHT_TRUST_QUERY_MISMATCH: "configuration",
 } as const;
 
+const TRUST_PREFLIGHT_BLOCKERS = new Set([
+  "PREFLIGHT_TRUST_HOST_MISMATCH",
+  "PREFLIGHT_TRUST_PATH_MISMATCH",
+  "PREFLIGHT_TRUST_QUERY_MISMATCH",
+]);
+
+function reportedTrustBlockers(report: PreflightReportV1): string[] {
+  return report.blockers.filter((blocker) =>
+    TRUST_PREFLIGHT_BLOCKERS.has(blocker),
+  );
+}
+
+function requestAttestationCalldata(requestBytes: string): string | null {
+  if (!canonicalHex(requestBytes)) return null;
+  try {
+    return encodeFunctionData({
+      abi: fdcHubAbi as Abi,
+      functionName: "requestAttestation",
+      args: [requestBytes as Hex],
+    });
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Treats every pipeline-port value as untrusted and binds the complete live
  * outcome before the command handler constructs any durable mutation.
@@ -641,6 +722,14 @@ function validateProductionPreflightOutcome(input: {
     );
   }
   const report = parsedReport.data;
+  const persistedCanonicalUrl = canonicalizeManifestUrl(input.context.manifest);
+  const persistedTrustBlockers = deriveWeb2JsonPreflightTrustBlockers(
+    input.context.manifest,
+    persistedCanonicalUrl,
+  );
+  const trustBlockersMatch =
+    JSON.stringify(reportedTrustBlockers(report)) ===
+    JSON.stringify(persistedTrustBlockers);
 
   if (
     (value.kind === "accepted" && report.verdict === "blocked") ||
@@ -681,12 +770,15 @@ function validateProductionPreflightOutcome(input: {
       ];
     if (
       report.runId !== input.context.runId ||
+      report.canonicalUrl !== persistedCanonicalUrl ||
+      !trustBlockersMatch ||
       report.fee.capWei !== input.context.manifest.submission.feeCapWei ||
       !report.blockers.includes(error.code as never) ||
       !diagnostic ||
       !category ||
       error.category !== category ||
       error.retryable ||
+      error.message !== diagnostic.summary ||
       JSON.stringify(error.evidence) !== JSON.stringify(diagnostic.evidence)
     ) {
       throw preflightBoundaryError(
@@ -714,12 +806,17 @@ function validateProductionPreflightOutcome(input: {
   const quotedFeeWei = evidence?.quotedFeeWei;
   const requestBytes = evidence?.requestBytes;
   const requestCalldata = evidence?.requestCalldata;
+  const expectedRequestCalldata =
+    typeof requestBytes === "string"
+      ? requestAttestationCalldata(requestBytes)
+      : null;
   const reportSnapshot = report.registrySnapshot;
   const reportedContracts = reportSnapshot.resolvedContracts;
-  const optionalFeeConfiguration =
-    resolvedContracts?.FdcRequestFeeConfigurations;
   const evidenceMismatch =
     report.runId !== input.context.runId ||
+    report.canonicalUrl !== persistedCanonicalUrl ||
+    !trustBlockersMatch ||
+    persistedTrustBlockers.length !== 0 ||
     report.verdict === "blocked" ||
     report.blockers.length !== 0 ||
     report.diagnostics.some((diagnostic) => diagnostic.severity === "error") ||
@@ -740,6 +837,8 @@ function validateProductionPreflightOutcome(input: {
     `sha256:${canonicalHex(requestBytes) ? sha256HexBytes(requestBytes) : ""}` !==
       report.requestIdentitySha256 ||
     !canonicalHex(requestCalldata) ||
+    !expectedRequestCalldata ||
+    !sameHex(requestCalldata, expectedRequestCalldata) ||
     typeof quotedFeeWei !== "bigint" ||
     quotedFeeWei < 0n ||
     quotedFeeWei.toString() !== report.fee.quotedWei ||
@@ -768,9 +867,8 @@ function validateProductionPreflightOutcome(input: {
       normalizedAddress(reportedContracts.FdcVerification) ||
     normalizedAddress(resolvedContracts.Relay) !==
       normalizedAddress(reportedContracts.Relay) ||
-    (optionalFeeConfiguration !== undefined &&
-      normalizedAddress(optionalFeeConfiguration) !==
-        normalizedAddress(reportedContracts.FdcRequestFeeConfigurations));
+    normalizedAddress(resolvedContracts.FdcRequestFeeConfigurations) !==
+      normalizedAddress(reportedContracts.FdcRequestFeeConfigurations);
   if (evidenceMismatch) {
     throw preflightBoundaryError(
       "PREFLIGHT_SUBMISSION_EVIDENCE_MISMATCH",
@@ -800,7 +898,7 @@ function preflightEvidence(context: RunExecutionContext) {
       registryAddress: string;
       resolvedContracts: {
         FdcHub: string;
-        FdcRequestFeeConfigurations?: string;
+        FdcRequestFeeConfigurations: string;
         FdcVerification: string;
         Relay: string;
       };
