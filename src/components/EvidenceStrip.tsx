@@ -1,8 +1,8 @@
 import { ArrowSquareOut, Check, Copy } from "@phosphor-icons/react";
 import { useState } from "react";
-import { evidenceItems, type EvidenceItem } from "../data/run";
+import type { EvidenceItem } from "../data/run";
 
-export function EvidenceStrip({ items = evidenceItems }: { items?: readonly EvidenceItem[] }) {
+export function EvidenceStrip({ items }: { items: readonly EvidenceItem[] | undefined }) {
   const [copied, setCopied] = useState(false);
   const copyHash = async (value: string) => {
     await navigator.clipboard?.writeText(value);
@@ -11,7 +11,11 @@ export function EvidenceStrip({ items = evidenceItems }: { items?: readonly Evid
   };
   return (
     <section className="evidence-strip" aria-label="Run evidence">
-      {items.map((item) => (
+      {items === undefined ? (
+        <div className="evidence-unavailable" role="status">Run evidence is unavailable.</div>
+      ) : items.length === 0 ? (
+        <div className="evidence-unavailable" role="status">No run evidence has been recorded.</div>
+      ) : items.map((item) => (
         <div className="evidence-item" key={item.label}>
           <span className="evidence-label">{item.label}</span>
           <span className="evidence-value">

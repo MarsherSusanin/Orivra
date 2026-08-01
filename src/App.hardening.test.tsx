@@ -4,10 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { EvidenceStrip } from "./components/EvidenceStrip";
 import { RunTimeline } from "./components/RunTimeline";
-import { evidenceItems, initialRunStages } from "./data/run";
 import {
+  TEST_EVIDENCE_ITEMS,
   TEST_HYDRATED_RUN,
   TEST_RUN_ID,
+  TEST_RUN_STAGES,
 } from "./test/cockpit-fixture";
 
 const projectToken = `project_${"a".repeat(64)}`;
@@ -199,7 +200,7 @@ describe("cockpit evidence and timeline interactions", () => {
       value: { writeText },
       configurable: true,
     });
-    render(<EvidenceStrip items={evidenceItems} />);
+    render(<EvidenceStrip items={TEST_EVIDENCE_ITEMS} />);
     await user.click(screen.getByRole("button", { name: /copy transaction hash/i }));
     expect(writeText).toHaveBeenCalledWith(
       "0x9f3e0000000000000000000000007ab2c1d4",
@@ -226,7 +227,7 @@ describe("cockpit evidence and timeline interactions", () => {
     render(
       <RunTimeline
         stages={[
-          ...initialRunStages.slice(0, -1),
+          ...TEST_RUN_STAGES.slice(0, -1),
           {
             key: "consumer",
             label: "Consumer",

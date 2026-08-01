@@ -1,17 +1,6 @@
 import { CaretRight, Warning } from "@phosphor-icons/react";
 import type { RunDiagnosticView } from "../services/run-surface";
 
-const defaultDiagnostic: RunDiagnosticView = {
-  code: "CONSUMER_INVARIANT_MISSING",
-  severity: "warning",
-  confidence: "high",
-  summary: "Missing consumer host invariant",
-  evidence: {
-    detail: "Proof request host is api.example.com; the consumer has no matching assertion.",
-  },
-  remediation: "The consumer verifies the proof but does not enforce the expected source host.",
-};
-
 function sentenceCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -34,11 +23,18 @@ export function DiagnosticsPanel({
   onToggle: () => void;
   diagnostics?: readonly RunDiagnosticView[];
 }) {
-  const diagnostic = diagnostics === undefined ? defaultDiagnostic : diagnostics[0];
+  const diagnostic = diagnostics?.[0];
   return (
     <aside className="diagnostics" aria-labelledby="diagnostics-title">
       <p className="section-label" id="diagnostics-title">Diagnostics</p>
-      {diagnostic ? <section className="diagnostic-card">
+      {diagnostics === undefined ? (
+        <section className="diagnostic-card diagnostic-unavailable" aria-label="Diagnostics unavailable">
+          <div className="diagnostic-heading">
+            <h2>Diagnostics unavailable</h2>
+          </div>
+          <p className="diagnostic-copy">Diagnostics are pending persisted run evidence.</p>
+        </section>
+      ) : diagnostic ? <section className="diagnostic-card">
         <div className="diagnostic-heading">
           <Warning className="warning-icon" size={44} aria-hidden="true" />
           <h2>{diagnostic.summary}</h2>

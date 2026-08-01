@@ -2,7 +2,7 @@ import { ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass } from "@p
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createLocalProductAnalytics,
-  getOrCreateAnalyticsSessionId,
+  createProductEventEmitter,
   type ProductAnalyticsPort,
 } from "./services/product-analytics";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
@@ -52,6 +52,30 @@ function browserSessionStorage() {
   } catch {
     return UNAVAILABLE_STORAGE;
   }
+}
+
+function browserCrypto() {
+  try {
+    return globalThis.crypto;
+  } catch {
+    return undefined;
+  }
+}
+
+function useProductEventEmitter(analytics: ProductAnalyticsPort | undefined) {
+  const analyticsPort = useMemo(() => {
+    if (analytics) return analytics;
+    return createLocalProductAnalytics({ storage: browserLocalStorage() });
+  }, [analytics]);
+
+  return useMemo(
+    () => createProductEventEmitter({
+      analytics: analyticsPort,
+      storage: browserSessionStorage(),
+      crypto: browserCrypto(),
+    }),
+    [analyticsPort],
+  );
 }
 
 function sessionProjectToken(): string {
@@ -119,7 +143,7 @@ function safeHydrationError(cause: unknown): string {
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]");
 }
 
-function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
+function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {}) {
   const [diagnosticExpanded, setDiagnosticExpanded] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [bundleState, setBundleState] = useState<"idle" | "running" | "verified" | "error">("idle");
@@ -132,8 +156,10 @@ function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
   const [hydrationError, setHydrationError] = useState("");
   const [hydrationRevision, setHydrationRevision] = useState(0);
   const verifyTrigger = useRef<HTMLButtonElement>(null);
+  const recordedProofRuns = useRef(new Set<string>());
   const [routeRunId] = useState(deepRouteRunId);
   const resolvedToken = projectToken ?? sessionToken;
+  const emitProductEvent = useProductEventEmitter(analytics);
   const servicePort = useMemo(() => {
     if (services) return services;
     if (import.meta.env.MODE === "test") return createTestSurfaceServices();
@@ -166,6 +192,16 @@ function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
           after,
         });
         if (cancelled) return;
+        if (
+          run.stages.proof === "completed" &&
+          !recordedProofRuns.current.has(run.runId)
+        ) {
+          recordedProofRuns.current.add(run.runId);
+          emitProductEvent({
+            name: "PROOF_AVAILABLE",
+            metadata: { source: "live" },
+          });
+        }
         setHydratedRun(run);
         setHydrationError("");
         if (!run.terminal) {
@@ -184,7 +220,7 @@ function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
     };
   // `hydratedRun` is intentionally read as the cursor without making each response restart the effect.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRunId, hydrationRevision, resolvedToken, servicePort, shouldHydrate]);
+  }, [activeRunId, emitProductEvent, hydrationRevision, resolvedToken, servicePort, shouldHydrate]);
 
   const connectProject = (token: string) => {
     try {
@@ -204,16 +240,35 @@ function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
     setBundleState("running");
     setBundleError("");
     setBundleSource(null);
+    let outcomeRecorded = false;
     try {
       const bundle = await servicePort.exportBundle({
         runId: activeRunId,
         projectToken: resolvedToken,
       });
       const replay = await servicePort.replayBundle(bundle);
-      if (!replay.byteIdentical) throw new Error("Replay bytes differ from the exported bundle");
+      if (!replay.byteIdentical) {
+        emitProductEvent({
+          name: "BUNDLE_REPLAYED",
+          metadata: { outcome: "mismatch" },
+        });
+        outcomeRecorded = true;
+        throw new Error("Replay bytes differ from the exported bundle");
+      }
       setBundleSource(bundle);
       setBundleState("verified");
+      emitProductEvent({
+        name: "BUNDLE_REPLAYED",
+        metadata: { outcome: "byte-identical" },
+      });
+      outcomeRecorded = true;
     } catch (cause) {
+      if (!outcomeRecorded) {
+        emitProductEvent({
+          name: "BUNDLE_REPLAYED",
+          metadata: { outcome: "rejected" },
+        });
+      }
       const message = cause instanceof Error ? cause.message : "Bundle export failed";
       setBundleError(message.replace(/(?:project|share)_[a-f0-9]{64}/gi, "[REDACTED]"));
       setBundleState("error");
@@ -342,6 +397,7 @@ function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
           services={servicePort}
           onClose={closeVerification}
           onVerified={() => setHydrationRevision((value) => value + 1)}
+          onProductEvent={emitProductEvent}
         />
       ) : null}
     </div>
@@ -368,10 +424,7 @@ function ProductEntry({
       storage: browserLocalStorage(),
     });
   }, [resolvedToken, services]);
-  const analyticsPort = useMemo(() => {
-    if (analytics) return analytics;
-    return createLocalProductAnalytics({ storage: browserLocalStorage() });
-  }, [analytics]);
+  const emitProductEvent = useProductEventEmitter(analytics);
 
   const connectProject = (token: string) => {
     try {
@@ -383,15 +436,7 @@ function ProductEntry({
     setConnectOpen(false);
   };
   const recordStart = () => {
-    const sessionId = getOrCreateAnalyticsSessionId({
-      storage: browserSessionStorage(),
-      crypto: globalThis.crypto,
-    });
-    if (!sessionId) return;
-    analyticsPort.emit({
-      version: "1",
-      sessionId,
-      occurredAt: new Date().toISOString(),
+    emitProductEvent({
       name: "COMPOSER_STARTED",
       metadata: { entryPoint: route === "runs" ? "runs" : "direct" },
     });
@@ -412,6 +457,10 @@ function ProductEntry({
             projectToken={resolvedToken}
             onConnect={() => setConnectOpen(true)}
             onStart={recordStart}
+            onResume={(run) => emitProductEvent({
+              name: "RUN_RESUMED",
+              metadata: { priorStatus: run.status },
+            })}
           />
         ) : (
           <NewRunEntry onConnect={() => setConnectOpen(true)} />

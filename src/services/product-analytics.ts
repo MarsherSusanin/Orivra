@@ -1,4 +1,7 @@
-import { ProductAnalyticsSessionIdV1Schema } from "@proofline/contracts";
+import {
+  ProductAnalyticsSessionIdV1Schema,
+  type ProductEventV1,
+} from "@proofline/contracts";
 import {
   createLocalProductAnalytics,
   type ProductAnalyticsPort,
@@ -11,6 +14,12 @@ type SessionCrypto = Pick<Crypto, "randomUUID">;
 
 export { createLocalProductAnalytics };
 export type { ProductAnalyticsPort };
+
+export type ProductEventInputV1 = ProductEventV1 extends infer TEvent
+  ? TEvent extends ProductEventV1
+    ? Pick<TEvent, "name" | "metadata">
+    : never
+  : never;
 
 export function getOrCreateAnalyticsSessionId({
   storage,
@@ -36,4 +45,33 @@ export function getOrCreateAnalyticsSessionId({
   } catch {
     return null;
   }
+}
+
+export function createProductEventEmitter({
+  analytics,
+  storage,
+  crypto,
+  now = () => new Date().toISOString(),
+}: {
+  analytics: ProductAnalyticsPort;
+  storage: SessionStorage | undefined;
+  crypto: SessionCrypto | undefined;
+  now?: () => string;
+}) {
+  let sessionId: string | null | undefined;
+
+  return (event: ProductEventInputV1): void => {
+    try {
+      sessionId ??= getOrCreateAnalyticsSessionId({ storage, crypto });
+      if (!sessionId) return;
+      analytics.emit({
+        version: "1",
+        sessionId,
+        occurredAt: now(),
+        ...event,
+      } as ProductEventV1);
+    } catch {
+      // Product analytics is deliberately fail-open for the primary journey.
+    }
+  };
 }

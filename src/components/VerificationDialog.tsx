@@ -6,6 +6,7 @@ import type {
   RunServiceContext,
   RunSurfaceServices,
 } from "../services/run-surface";
+import type { ProductEventInputV1 } from "../services/product-analytics";
 
 type VerificationStatus = "idle" | "running" | "complete" | "error";
 
@@ -21,11 +22,13 @@ export function VerificationDialog({
   services,
   onClose,
   onVerified,
+  onProductEvent,
 }: {
   context: RunServiceContext;
   services: RunSurfaceServices;
   onClose: () => void;
   onVerified?: () => void;
+  onProductEvent?: (event: ProductEventInputV1) => void;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -90,6 +93,12 @@ export function VerificationDialog({
       const nextResult = await services.verifyConsumer(context);
       setResult(nextResult);
       setStatus("complete");
+      if (nextResult.checks.some((check) => check.status === "failed")) {
+        onProductEvent?.({
+          name: "CONSUMER_VERIFICATION_FAILED",
+          metadata: { category: "consumer-invariant" },
+        });
+      }
       onVerified?.();
     } catch (cause) {
       setError(safeError(cause));
@@ -101,7 +110,12 @@ export function VerificationDialog({
     setGenerating(true);
     setError("");
     try {
-      setGenerated(await services.generateConsumer(context));
+      const consumer = await services.generateConsumer(context);
+      setGenerated(consumer);
+      onProductEvent?.({
+        name: "SAFE_CODEGEN_GENERATED",
+        metadata: { target: "solidity" },
+      });
     } catch (cause) {
       setError(safeError(cause));
     } finally {

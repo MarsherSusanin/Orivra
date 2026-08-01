@@ -1,11 +1,11 @@
 import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { initialRunStages } from "../data/run";
+import { TEST_RUN_STAGES } from "../test/cockpit-fixture";
 import { RunTimeline } from "./RunTimeline";
 
 function renderTimelineScroller() {
-  const { container } = render(<RunTimeline stages={initialRunStages} />);
+  const { container } = render(<RunTimeline stages={TEST_RUN_STAGES} />);
   const scroller = container.querySelector<HTMLElement>(".timeline-scroller");
 
   expect(scroller).not.toBeNull();

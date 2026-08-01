@@ -40,10 +40,22 @@ function stageState(run: RunSummaryV1, stage: (typeof STAGES)[number]) {
   return run.status === "failed" ? "failed" : run.status === "completed" ? "complete" : "active";
 }
 
-function RunCard({ run }: { run: RunSummaryV1 }) {
+function RunCard({
+  run,
+  onResume,
+}: {
+  run: RunSummaryV1;
+  onResume(run: RunSummaryV1): void;
+}) {
   return (
     <li>
-      <a className="run-card" href={`/runs/${encodeURIComponent(run.runId)}`}>
+      <a
+        className="run-card"
+        href={`/runs/${encodeURIComponent(run.runId)}`}
+        onClick={() => {
+          if (run.resumable) onResume(run);
+        }}
+      >
         <div className="run-card-main">
           <span className="run-source-icon" aria-hidden="true"><FileCode size={23} /></span>
           <div>
@@ -75,11 +87,13 @@ export function RunsIndex({
   projectToken,
   onConnect,
   onStart,
+  onResume,
 }: {
   services: RunSurfaceServices;
   projectToken: string;
   onConnect(): void;
   onStart(): void;
+  onResume(run: RunSummaryV1): void;
 }) {
   const status = routeFilter();
   const [runs, setRuns] = useState<RunSummaryV1[]>([]);
@@ -203,7 +217,7 @@ export function RunsIndex({
             <span>{runs.length} shown</span>
           </div>
           <ul className="run-list">
-            {runs.map((run) => <RunCard run={run} key={run.runId} />)}
+            {runs.map((run) => <RunCard run={run} onResume={onResume} key={run.runId} />)}
           </ul>
           {nextCursor ? (
             <button className="load-more" type="button" disabled={state === "loading-more"} onClick={() => void loadMore()}>

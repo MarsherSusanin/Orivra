@@ -1,16 +1,17 @@
 import { CaretDown, CaretRight, FileCode, GlobeHemisphereWest } from "@phosphor-icons/react";
 
 export function Topbar({
-  title = "ETH/USD snapshot",
+  title,
   network = "Coston2",
   attestationType = "Web2Json",
   mode = "detail",
 }: {
-  title?: string;
+  title: string | undefined;
   network?: string;
   attestationType?: string;
   mode?: "detail" | "index" | "new";
 }) {
+  const breadcrumbTitle = title?.trim() || "Run unavailable";
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -25,7 +26,7 @@ export function Topbar({
         <div className="breadcrumbs" aria-label="Breadcrumb">
           {mode === "index" ? <span>Runs</span> : <a href="/runs">Runs</a>}
           {mode !== "index" ? <CaretRight size={15} aria-hidden="true" /> : null}
-          {mode !== "index" ? <span>{title}</span> : null}
+          {mode !== "index" ? <span>{breadcrumbTitle}</span> : null}
         </div>
       </div>
       <div className="topbar-right">
