@@ -1,7 +1,9 @@
 import type {
+  CreateRunResultV1,
   RunListPageV1,
   Web2JsonManifestV1,
 } from "../../packages/contracts/src";
+import { CreateRunResultV1Schema } from "../../packages/contracts/src";
 
 const LAST_RUN_KEY = "proofline:last-run";
 const COSTON2_CHAIN_ID = "0x72";
@@ -54,9 +56,7 @@ function redact(message: string, projectToken: string): string {
     .split(projectToken)
     .join("[REDACTED]")
     .replace(/(?:project|share)_[a-f0-9]{64}/gi, "[REDACTED]")
-    .replace(/0x[a-f0-9]{64}/gi, (value) =>
-      TRANSACTION_HASH.test(value) ? value : "[REDACTED]",
-    );
+    .replace(/0x[a-f0-9]{64}/gi, "[REDACTED]");
 }
 
 async function responseError(response: Response, projectToken: string): Promise<Error> {
@@ -135,14 +135,19 @@ export function createRunClient(input: {
     },
 
     async createRun(manifest: Web2JsonManifestV1, idempotencyKey: string) {
-      const result = await request<{ runId: string; location?: string }>("/runs", {
+      const result = await request<unknown>("/runs", {
         method: "POST",
         body: { manifest },
         idempotencyKey,
       });
-      safeStorageSet(storage, LAST_RUN_KEY, result.runId);
-      safeStorageSet(storage, sequenceKey(result.runId), "0");
-      return result;
+      const parsed = CreateRunResultV1Schema.safeParse(result);
+      if (!parsed.success) {
+        throw new Error("Proofline returned an invalid create-run response contract");
+      }
+      const accepted: CreateRunResultV1 = parsed.data;
+      safeStorageSet(storage, LAST_RUN_KEY, accepted.runId);
+      safeStorageSet(storage, sequenceKey(accepted.runId), "0");
+      return accepted;
     },
 
     getRun(runId: string) {

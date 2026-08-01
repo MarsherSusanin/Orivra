@@ -332,7 +332,9 @@ export function ComposerTransformStep({
             <h3 id="composer-preview-title">Canonical manifest preview</h3>
             <span>Local only · definition bytes, not remote evidence</span>
           </div>
-          <pre aria-label="Canonical manifest preview — local only">{canonicalPreview}</pre>
+          <pre aria-label="Canonical manifest preview — local only" tabIndex={0}>
+            {canonicalPreview}
+          </pre>
         </section>
       ) : null}
 

@@ -918,6 +918,11 @@ a {
   word-break: break-word;
 }
 
+.composer-preview pre:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 4px;
+}
+
 .composer-submit-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

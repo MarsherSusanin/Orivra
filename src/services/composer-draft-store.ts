@@ -46,7 +46,13 @@ function containsSensitiveData(value: unknown): boolean {
   const draftFields = fields as Record<string, unknown>;
   if (hasUrlCredentials(draftFields.sourceUrl)) return true;
 
-  for (const candidate of [draftFields.sourceUrl, draftFields.jq, draftFields.abiSignature]) {
+  for (const candidate of [
+    draftFields.sourceUrl,
+    draftFields.jq,
+    draftFields.abiSignature,
+    draftFields.expectedHost,
+    draftFields.expectedPathPrefix,
+  ]) {
     if (
       typeof candidate === "string" &&
       (OPAQUE_TOKEN.test(candidate) ||
@@ -118,6 +124,19 @@ export function createComposerDraftStore(storage: DraftStoragePort) {
     save(draft: unknown): DraftSaveResult {
       if (containsSensitiveData(draft)) {
         return { state: "rejected", reason: "sensitive-data" };
+      }
+
+      let raw: string | undefined;
+      try {
+        raw = JSON.stringify(draft);
+      } catch {
+        return { state: "rejected", reason: "invalid" };
+      }
+      if (raw === undefined) {
+        return { state: "rejected", reason: "invalid" };
+      }
+      if (utf8ByteLength(raw) > MAX_DRAFT_UTF8_BYTES) {
+        return { state: "rejected", reason: "oversized" };
       }
 
       let bytes: string;
