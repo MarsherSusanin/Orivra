@@ -40,3 +40,8 @@ export {
   type ImportWeb2JsonManifestDraftInput,
   type Web2JsonManifestFinalization,
 } from "./manifest-composer";
+export {
+  canonicalSerializePreflightReport,
+  createRedactedJsonShape,
+  fingerprintCanonicalJson,
+} from "./preflight-report";

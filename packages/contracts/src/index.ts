@@ -159,6 +159,277 @@ export const CreateRunResultV1Schema = z
 
 export type CreateRunResultV1 = z.infer<typeof CreateRunResultV1Schema>;
 
+const Sha256EnvelopeSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const MAX_PREFLIGHT_REPORT_UTF8_BYTES = 65_536;
+const PRIVATE_REPORT_TEXT_PATTERN =
+  /(?:project|share)_[A-Za-z0-9_-]{32,}|Bearer\s+[^\s;,]+|0x[a-fA-F0-9]{64}/i;
+
+function isSafePublicReportText(value: string): boolean {
+  return !PRIVATE_REPORT_TEXT_PATTERN.test(value);
+}
+
+const SafePublicSummarySchema = z
+  .string()
+  .min(1)
+  .max(512)
+  .refine(isSafePublicReportText, "Private-looking values are not public report text");
+const SafePublicRemediationSchema = z
+  .string()
+  .min(1)
+  .max(1_024)
+  .refine(isSafePublicReportText, "Private-looking values are not public report text");
+
+export const RedactedJsonShapeNodeV1Schema = z
+  .object({
+    path: z
+      .string()
+      .max(512)
+      .refine((path) => path === "" || path.startsWith("/"), {
+        message: "Shape paths must be root or JSON-pointer-like paths.",
+      }),
+    type: z.enum(["null", "boolean", "number", "string", "array", "object"]),
+  })
+  .strict();
+
+export const RedactedJsonShapeV1Schema = z
+  .object({
+    truncated: z.boolean(),
+    nodes: z.array(RedactedJsonShapeNodeV1Schema).min(1).max(256),
+  })
+  .strict()
+  .superRefine((shape, context) => {
+    for (let index = 1; index < shape.nodes.length; index += 1) {
+      if (shape.nodes[index - 1].path >= shape.nodes[index].path) {
+        context.addIssue({
+          code: "custom",
+          path: ["nodes", index, "path"],
+          message: "Shape node paths must be strictly ordered and unique.",
+        });
+      }
+    }
+  });
+
+export type RedactedJsonShapeNodeV1 = z.infer<
+  typeof RedactedJsonShapeNodeV1Schema
+>;
+export type RedactedJsonShapeV1 = z.infer<typeof RedactedJsonShapeV1Schema>;
+
+export const PreflightDiagnosticCodeV1Schema = z.enum([
+  "PREFLIGHT_SOURCE_NONDETERMINISTIC",
+  "PREFLIGHT_ABI_INCOMPATIBLE",
+  "PREFLIGHT_FEE_CAP_EXCEEDED",
+  "PREFLIGHT_TRUST_HOST_MISMATCH",
+  "PREFLIGHT_TRUST_PATH_MISMATCH",
+  "PREFLIGHT_TRUST_QUERY_MISMATCH",
+  "PREFLIGHT_RESPONSE_SHAPE_TRUNCATED",
+  "PREFLIGHT_JQ_SHAPE_TRUNCATED",
+]);
+
+export type PreflightDiagnosticCodeV1 = z.infer<
+  typeof PreflightDiagnosticCodeV1Schema
+>;
+
+export const PreflightReportFieldV1Schema = z.enum([
+  "verdict",
+  "canonicalUrl",
+  "requestIdentitySha256",
+  "sampleFingerprints",
+  "determinism",
+  "responseShape",
+  "jqPreview",
+  "abiCompatibility",
+  "registrySnapshot",
+  "fee",
+  "blockers",
+  "diagnostics",
+]);
+
+export const PreflightDiagnosticV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    code: PreflightDiagnosticCodeV1Schema,
+    severity: z.enum(["info", "warning", "error"]),
+    confidence: z.enum(["low", "medium", "high"]),
+    summary: SafePublicSummarySchema,
+    evidence: z
+      .object({
+        reportFields: z
+          .array(PreflightReportFieldV1Schema)
+          .min(1)
+          .max(12)
+          .refine(
+            (fields) => new Set(fields).size === fields.length,
+            "Diagnostic report field references must be unique",
+          ),
+      })
+      .strict(),
+    remediation: SafePublicRemediationSchema,
+  })
+  .strict();
+
+export type PreflightDiagnosticV1 = z.infer<
+  typeof PreflightDiagnosticV1Schema
+>;
+
+const PreflightBlockerV1Schema = z.enum([
+  "PREFLIGHT_SOURCE_NONDETERMINISTIC",
+  "PREFLIGHT_ABI_INCOMPATIBLE",
+  "PREFLIGHT_FEE_CAP_EXCEEDED",
+  "PREFLIGHT_TRUST_HOST_MISMATCH",
+  "PREFLIGHT_TRUST_PATH_MISMATCH",
+  "PREFLIGHT_TRUST_QUERY_MISMATCH",
+]);
+
+export type PreflightBlockerV1 = z.infer<typeof PreflightBlockerV1Schema>;
+
+const PreflightAbiCompatibilityV1Schema = z
+  .object({
+    compatible: z.boolean(),
+    checkedSamples: z.literal(5),
+    encodedBytes: z.number().int().nonnegative().max(1_048_576).optional(),
+    encodedSha256: Sha256EnvelopeSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (evidence) =>
+      evidence.compatible ===
+      (evidence.encodedBytes !== undefined && evidence.encodedSha256 !== undefined),
+    "Compatible ABI evidence requires encoded size and checksum.",
+  );
+
+const PreflightRegistrySnapshotV1Schema = z
+  .object({
+    chainId: z.literal(114),
+    blockNumber: CanonicalUnsignedIntegerSchema,
+    registryAddress: AddressSchema,
+    resolvedContracts: z
+      .object({
+        FdcHub: AddressSchema,
+        FdcRequestFeeConfigurations: AddressSchema,
+        FdcVerification: AddressSchema,
+        Relay: AddressSchema,
+      })
+      .strict(),
+  })
+  .strict();
+
+const PreflightFeeV1Schema = z
+  .object({
+    quotedWei: CanonicalUnsignedIntegerSchema,
+    capWei: CanonicalUnsignedIntegerSchema,
+    withinCap: z.boolean(),
+  })
+  .strict()
+  .refine(
+    (fee) => fee.withinCap === (BigInt(fee.quotedWei) <= BigInt(fee.capWei)),
+    "Fee cap result must match quoted and capped wei values.",
+  );
+
+function serializedPreflightReportBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+}
+
+export const PreflightReportV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    runId: CreateRunIdV1Schema,
+    verdict: z.enum(["ready", "attention", "blocked"]),
+    canonicalUrl: z
+      .string()
+      .max(2_048)
+      .refine(isSafePublicHttpsUrl, "Expected a public canonical HTTPS URL"),
+    requestIdentitySha256: Sha256EnvelopeSchema,
+    sampleFingerprints: z.array(Sha256EnvelopeSchema).length(5),
+    determinism: z
+      .object({
+        passed: z.boolean(),
+        distinctFingerprints: z.number().int().min(1).max(5),
+      })
+      .strict(),
+    responseShape: RedactedJsonShapeV1Schema,
+    jqPreview: RedactedJsonShapeV1Schema,
+    abiCompatibility: PreflightAbiCompatibilityV1Schema,
+    registrySnapshot: PreflightRegistrySnapshotV1Schema,
+    fee: PreflightFeeV1Schema,
+    blockers: z
+      .array(PreflightBlockerV1Schema)
+      .max(6)
+      .refine(
+        (blockers) => new Set(blockers).size === blockers.length,
+        "Preflight blockers must be unique",
+      ),
+    diagnostics: z.array(PreflightDiagnosticV1Schema).max(16),
+  })
+  .strict()
+  .superRefine((report, context) => {
+    const distinctFingerprints = new Set(report.sampleFingerprints).size;
+    if (
+      report.determinism.distinctFingerprints !== distinctFingerprints ||
+      report.determinism.passed !== (distinctFingerprints === 1)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["determinism"],
+        message: "Determinism must match the five ordered fingerprints.",
+      });
+    }
+
+    const blockerSet = new Set(report.blockers);
+    const errorDiagnosticCodes = new Set(
+      report.diagnostics
+        .filter((diagnostic) => diagnostic.severity === "error")
+        .map((diagnostic) => diagnostic.code),
+    );
+    if (
+      (report.verdict === "blocked") !== (report.blockers.length > 0) ||
+      report.blockers.some((blocker) => !errorDiagnosticCodes.has(blocker))
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["blockers"],
+        message: "Blocked verdicts require matching error diagnostics.",
+      });
+    }
+
+    const requiredBlockers: Array<[boolean, PreflightBlockerV1]> = [
+      [!report.determinism.passed, "PREFLIGHT_SOURCE_NONDETERMINISTIC"],
+      [!report.abiCompatibility.compatible, "PREFLIGHT_ABI_INCOMPATIBLE"],
+      [!report.fee.withinCap, "PREFLIGHT_FEE_CAP_EXCEEDED"],
+    ];
+    if (
+      requiredBlockers.some(
+        ([required, blocker]) => required && !blockerSet.has(blocker),
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["blockers"],
+        message: "Failed preflight evidence requires its stable blocker.",
+      });
+    }
+
+    const truncated = report.responseShape.truncated || report.jqPreview.truncated;
+    if (
+      (report.verdict === "ready" && truncated) ||
+      (report.verdict === "attention" && !truncated)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["verdict"],
+        message: "Truncated public shapes require an attention verdict.",
+      });
+    }
+
+    if (serializedPreflightReportBytes(report) > MAX_PREFLIGHT_REPORT_UTF8_BYTES) {
+      context.addIssue({
+        code: "custom",
+        message: "Preflight report must not exceed 65536 serialized UTF-8 bytes.",
+      });
+    }
+  });
+
+export type PreflightReportV1 = z.infer<typeof PreflightReportV1Schema>;
+
 export const ComposerStepV1Schema = z.enum([
   "source",
   "transform",
