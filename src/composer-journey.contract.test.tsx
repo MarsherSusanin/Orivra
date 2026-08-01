@@ -117,7 +117,9 @@ describe("Composer journey analytics contract", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue to transform/i }));
 
     expect(source).toHaveValue("https://api.example.org/public");
-    expect(window.location.search).toContain("step=transform");
-    expect(screen.getByRole("heading", { name: /transform is not available yet/i })).toBeVisible();
+    expect(new URLSearchParams(window.location.search).get("step")).toBe("transform");
+    expect(screen.getByRole("heading", { name: /describe the deterministic result/i })).toBeVisible();
+    expect(screen.getByLabelText(/jq transform/i)).toBeEnabled();
+    expect(screen.getByLabelText(/abi signature/i)).toBeEnabled();
   });
 });

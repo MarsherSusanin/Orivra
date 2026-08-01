@@ -101,7 +101,7 @@ describe("Slice 015B local Transform surface", () => {
     const abi = screen.getByLabelText(/abi signature/i);
     await user.clear(jq);
     await user.clear(abi);
-    await user.type(abi, "{uint256 value}");
+    fireEvent.change(abi, { target: { value: "{uint256 value}" } });
     await user.click(screen.getByRole("button", { name: /continue to trust/i }));
 
     expect(jq).toHaveAttribute("aria-invalid", "true");
@@ -113,7 +113,7 @@ describe("Slice 015B local Transform surface", () => {
 
     await user.type(jq, ".data");
     await user.clear(abi);
-    await user.type(abi, templateAbi);
+    fireEvent.change(abi, { target: { value: templateAbi } });
     await user.click(screen.getByRole("button", { name: /continue to trust/i }));
     expect(new URLSearchParams(window.location.search).get("step")).toBe("trust");
   });
@@ -129,7 +129,9 @@ describe("Slice 015B strict local draft recovery", () => {
     );
     await user.click(screen.getByRole("button", { name: /continue to transform/i }));
     await user.type(screen.getByLabelText(/jq transform/i), ".data");
-    await user.type(screen.getByLabelText(/abi signature/i), VALID_ABI_SIGNATURE);
+    fireEvent.change(screen.getByLabelText(/abi signature/i), {
+      target: { value: VALID_ABI_SIGNATURE },
+    });
 
     await waitFor(() => {
       const persisted = localStorage.getItem(DRAFT_KEY);
