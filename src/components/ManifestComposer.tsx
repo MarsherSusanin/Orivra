@@ -316,7 +316,7 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
         : queryRowsFromSource(fields.queryRows, derived.expectedQueryRows),
     }));
     setSourceError("");
-    goToStep("trust");
+    goToStep("transform");
   };
 
   const continueFromTrust = () => {
@@ -325,7 +325,7 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
       return;
     }
     setPathError("");
-    goToStep("transform");
+    goToStep("submit");
   };
 
   const importManifest = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -405,7 +405,7 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
                 type="url"
                 inputMode="url"
                 autoComplete="url"
-                placeholder="https://api.example.com/public/data"
+                placeholder="https://data.example.org/public/data"
                 value={draft.fields.sourceUrl}
                 aria-invalid={sourceError ? "true" : undefined}
                 aria-describedby={sourceError ? "source-url-error source-browser-note" : "source-browser-note"}
@@ -437,7 +437,7 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
           <div className="composer-actions">
             <button className="entry-text-button" type="button" onClick={onConnect}>Connect project</button>
             <button className="entry-primary" type="button" onClick={continueFromSource}>
-              Continue to Trust <ArrowRight size={18} weight="bold" aria-hidden="true" />
+              Continue to Transform <ArrowRight size={18} weight="bold" aria-hidden="true" />
             </button>
           </div>
         </section>
@@ -502,7 +502,7 @@ export function ManifestComposer({ onConnect }: { onConnect(): void }) {
           <div className="composer-actions">
             <a className="entry-secondary" href={stepHref("source")} onClick={(event) => navigateStep(event, "source")}>Back to Source</a>
             <button className="entry-primary" type="button" onClick={continueFromTrust}>
-              Continue to Transform <ArrowRight size={18} weight="bold" aria-hidden="true" />
+              Continue to Submit <ArrowRight size={18} weight="bold" aria-hidden="true" />
             </button>
           </div>
         </section>
