@@ -132,6 +132,34 @@ describe("production truth at unhydrated component boundaries", () => {
 });
 
 describe("ProductEventV1 journey instrumentation", () => {
+  it("emits direct COMPOSER_STARTED once after the first explicit Composer action", async () => {
+    window.history.replaceState({}, "", "/runs/new?step=source");
+    const analytics = collector();
+    const user = userEvent.setup();
+    const view = render(
+      <StrictMode>
+        <App services={surfaceServices()} analytics={analytics.port} />
+      </StrictMode>,
+    );
+
+    expect(eventsNamed(analytics.events, "COMPOSER_STARTED")).toHaveLength(0);
+    await user.type(screen.getByLabelText(/source url/i), "https://api.example.org/public");
+    expect(eventsNamed(analytics.events, "COMPOSER_STARTED")).toEqual([
+      expect.objectContaining({
+        name: "COMPOSER_STARTED",
+        metadata: { entryPoint: "direct" },
+      }),
+    ]);
+
+    await user.click(screen.getByRole("button", { name: /add query parameter/i }));
+    view.rerender(
+      <StrictMode>
+        <App services={surfaceServices()} analytics={analytics.port} />
+      </StrictMode>,
+    );
+    expect(eventsNamed(analytics.events, "COMPOSER_STARTED")).toHaveLength(1);
+  });
+
   it("emits RUN_RESUMED once and only when a resumable run is explicitly opened", async () => {
     window.history.replaceState({}, "", "/runs");
     const analytics = collector();

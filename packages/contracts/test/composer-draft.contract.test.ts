@@ -8,6 +8,26 @@ import {
 } from "../src/index";
 import { validComposerDraft, validManifest } from "./fixtures";
 
+const MAX_DRAFT_UTF8_BYTES = 65_536;
+
+function serializedDraftBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+}
+
+function draftWithQueryValues(count: number, value: string) {
+  return {
+    ...validComposerDraft,
+    fields: {
+      ...validComposerDraft.fields,
+      queryRows: Array.from({ length: count }, (_, index) => ({
+        id: `bounded_${index}`,
+        key: `key_${index}`,
+        value,
+      })),
+    },
+  };
+}
+
 describe("Web2JsonManifestDraftV1Schema", () => {
   it("accepts one strict, incomplete and bounded local editing envelope", () => {
     const incomplete = {
@@ -183,5 +203,19 @@ describe("Web2JsonManifestDraftV1Schema", () => {
       ...validComposerDraft,
       fields: { ...validComposerDraft.fields, sourceUrl: "" },
     }).success).toBe(true);
+  });
+
+  it("accepts a draft whose aggregate serialized UTF-8 size stays within 64 KiB", () => {
+    const candidate = draftWithQueryValues(20, "a".repeat(1_000));
+    expect(serializedDraftBytes(candidate)).toBeLessThanOrEqual(MAX_DRAFT_UTF8_BYTES);
+    expect(Web2JsonManifestDraftV1Schema.safeParse(candidate).success).toBe(true);
+  });
+
+  it.each([
+    ["ASCII", draftWithQueryValues(40, "a".repeat(1_800))],
+    ["multibyte UTF-8", draftWithQueryValues(34, "é".repeat(1_000))],
+  ])("rejects aggregate %s drafts larger than 64 KiB", (_encoding, candidate) => {
+    expect(serializedDraftBytes(candidate)).toBeGreaterThan(MAX_DRAFT_UTF8_BYTES);
+    expect(Web2JsonManifestDraftV1Schema.safeParse(candidate).success).toBe(false);
   });
 });

@@ -225,3 +225,34 @@ describe("Slice 015A Composer flow order", () => {
     ).toHaveAttribute("aria-current", "step");
   });
 });
+
+describe("Slice 015A Trust validation gate", () => {
+  it("keeps invalid host and query invariants inline until both are corrected", async () => {
+    const user = userEvent.setup();
+    renderComposer("/runs/new?template=eth-usd&step=trust&status=active");
+
+    const host = screen.getByLabelText(/expected host/i);
+    await user.clear(host);
+    await user.type(host, "bad host");
+    await user.click(screen.getByRole("button", { name: /add expected query/i }));
+    const expectedQuery = screen.getByRole("group", { name: /expected query/i });
+    const key = within(expectedQuery).getAllByLabelText(/expected query key/i).at(-1)!;
+    fireEvent.change(key, { target: { value: "   " } });
+
+    await user.click(screen.getByRole("button", { name: /continue to submit/i }));
+
+    expect(host).toHaveAttribute("aria-invalid", "true");
+    expect(host).toHaveAccessibleDescription(/valid hostname/i);
+    expect(key).toHaveAttribute("aria-invalid", "true");
+    expect(key).toHaveAccessibleDescription(/query keys cannot be blank/i);
+    expect(new URLSearchParams(window.location.search).get("step")).toBe("trust");
+
+    await user.clear(host);
+    await user.type(host, "api.coinbase.com");
+    await user.clear(key);
+    await user.type(key, "currency");
+    await user.click(screen.getByRole("button", { name: /continue to submit/i }));
+
+    expect(new URLSearchParams(window.location.search).get("step")).toBe("submit");
+  });
+});
