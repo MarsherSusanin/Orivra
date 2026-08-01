@@ -1,4 +1,5 @@
 import {
+  isSafePublicUrlQueryEntry,
   PreflightReportV1Schema,
   Web2JsonManifestV1Schema,
   type NormalizedFdcError,
@@ -17,35 +18,8 @@ import { createHash } from "node:crypto";
 import { createFdcError } from "./errors";
 import { assertSafeWeb2JsonUrl } from "./safe-http";
 
-const CREDENTIAL_QUERY_NAMES = new Set([
-  "apikey",
-  "token",
-  "authorization",
-  "auth",
-  "secret",
-  "privatekey",
-  "accesstoken",
-  "clientsecret",
-  "password",
-  "xamzcredential",
-  "xamzsignature",
-  "authorizationtoken",
-  "credential",
-  "jwt",
-  "xamzsecuritytoken",
-]);
-
-const PRIVATE_QUERY_VALUE =
-  /(?:project|share)_[A-Za-z0-9_-]{32,}|Bearer\s+[^\s;,]+|^0x[a-fA-F0-9]{64}$/i;
-
-function isCredentialQueryName(value: string): boolean {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const withoutVersionSuffix = normalized.replace(/v\d+$/, "");
-  return CREDENTIAL_QUERY_NAMES.has(withoutVersionSuffix);
-}
-
 function assertPublicQueryEntry(key: string, value: string): void {
-  if (isCredentialQueryName(key) || PRIVATE_QUERY_VALUE.test(value.trim())) {
+  if (!isSafePublicUrlQueryEntry(key, value)) {
     throw new Error("Public Web2Json query cannot contain secret credentials");
   }
 }
@@ -155,10 +129,11 @@ function expectedQueryEntries(
   );
 }
 
-function trustBlockers(
-  manifest: Web2JsonManifestV1,
+export function deriveWeb2JsonPreflightTrustBlockers(
+  manifestValue: Web2JsonManifestV1,
   canonicalUrl: string,
 ): PreflightBlockerV1[] {
+  const manifest = Web2JsonManifestV1Schema.parse(manifestValue);
   const source = new URL(canonicalUrl);
   const blockers: PreflightBlockerV1[] = [];
   if (manifest.consumer.expectedHost !== source.hostname.toLowerCase()) {
@@ -350,7 +325,7 @@ export async function runWeb2JsonPreflight(
     blockers.push("PREFLIGHT_SOURCE_NONDETERMINISTIC");
   }
   if (!abiCompatible) blockers.push("PREFLIGHT_ABI_INCOMPATIBLE");
-  blockers.push(...trustBlockers(manifest, canonicalUrl));
+  blockers.push(...deriveWeb2JsonPreflightTrustBlockers(manifest, canonicalUrl));
   if (!withinCap) blockers.push("PREFLIGHT_FEE_CAP_EXCEEDED");
 
   const shapeDiagnostics = truncationDiagnostics({

@@ -109,24 +109,47 @@ const PUBLIC_URL_CREDENTIAL_QUERY_NAMES = new Set([
   "credential",
   "jwt",
   "xamzsecuritytoken",
+  "xgoogsignature",
+  "xgoogcredential",
+  "xgoogsecuritytoken",
+  "googleaccessid",
+  "signature",
+  "securitytoken",
 ]);
 
 const PRIVATE_URL_QUERY_VALUE_PATTERN =
   /(?:project|share)_[A-Za-z0-9_-]{32,}|Bearer\s+[^\s;,]+|^0x[a-fA-F0-9]{64}$/i;
 
-function isCredentialQueryName(value: string): boolean {
+/**
+ * Classifies public URL query names that carry credentials or signed-URL
+ * authorization material. Separators and a trailing version suffix do not
+ * make a credential name public; ordinary names such as `signatureVersion`
+ * remain valid.
+ */
+export function isPublicUrlCredentialQueryName(value: string): boolean {
   const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
   return PUBLIC_URL_CREDENTIAL_QUERY_NAMES.has(normalized.replace(/v\d+$/, ""));
+}
+
+export function isPrivateUrlQueryValue(value: string): boolean {
+  return PRIVATE_URL_QUERY_VALUE_PATTERN.test(value.trim());
+}
+
+export function isSafePublicUrlQueryEntry(
+  name: string,
+  value: string,
+): boolean {
+  return (
+    !isPublicUrlCredentialQueryName(name) &&
+    !isPrivateUrlQueryValue(value)
+  );
 }
 
 function isSafePublicPreflightUrl(value: string): boolean {
   if (!isSafePublicHttpsUrl(value)) return false;
   const url = new URL(value);
   for (const [key, queryValue] of url.searchParams) {
-    if (
-      isCredentialQueryName(key) ||
-      PRIVATE_URL_QUERY_VALUE_PATTERN.test(queryValue.trim())
-    ) {
+    if (!isSafePublicUrlQueryEntry(key, queryValue)) {
       return false;
     }
   }
