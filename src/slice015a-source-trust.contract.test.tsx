@@ -150,16 +150,23 @@ describe("Slice 015A inline validation", () => {
     expect(path).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByText(/path prefix.*\//i)).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: /add expected query/i }));
     const expectedQuery = screen.getByRole("group", { name: /expected query/i });
+    expect(within(expectedQuery).getByDisplayValue("asset")).toBeVisible();
+    expect(within(expectedQuery).getByDisplayValue("ETH")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /add expected query/i }));
     const key = within(expectedQuery).getAllByLabelText(/expected query key/i).at(-1)!;
     const value = within(expectedQuery).getAllByLabelText(/expected query value/i).at(-1)!;
-    await user.type(key, "asset");
-    await user.type(value, "ETH");
-    expect(key).toHaveValue("asset");
-    expect(value).toHaveValue("ETH");
-    await user.click(within(expectedQuery).getByRole("button", { name: /remove expected query/i }));
-    expect(within(expectedQuery).queryByDisplayValue("asset")).not.toBeInTheDocument();
+    await user.type(key, "currency");
+    await user.type(value, "USD");
+    expect(key).toHaveValue("currency");
+    expect(value).toHaveValue("USD");
+    await user.click(
+      within(expectedQuery).getAllByRole("button", { name: /remove expected query/i }).at(-1)!,
+    );
+    expect(within(expectedQuery).queryByDisplayValue("currency")).not.toBeInTheDocument();
+    expect(within(expectedQuery).getByDisplayValue("asset")).toBeVisible();
+    expect(within(expectedQuery).getByDisplayValue("ETH")).toBeVisible();
   });
 
   it("exposes every essential Source control by label and keyboard", async () => {
