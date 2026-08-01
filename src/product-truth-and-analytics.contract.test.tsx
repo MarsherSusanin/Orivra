@@ -188,13 +188,15 @@ describe("ProductEventV1 journey instrumentation", () => {
     ]);
   });
 
-  it("emits one PROOF_AVAILABLE for repeated confirmed hydration in StrictMode", async () => {
+  it("does not emit PROOF_AVAILABLE for historical completed proof on initial hydration or remount", async () => {
     const analytics = collector();
     const hydrateRun = vi.fn().mockResolvedValue(
-      hydratedRun({ terminal: false }),
+      hydratedRun({ terminal: true }),
     );
     const services = surfaceServices({ hydrateRun });
 
+    // Verifier correction: initial completed state is historical evidence, not an
+    // observed not-completed -> completed product transition.
     const view = render(
       <StrictMode>
         <App
@@ -208,11 +210,10 @@ describe("ProductEventV1 journey instrumentation", () => {
 
     expect(eventsNamed(analytics.events, "PROOF_AVAILABLE")).toHaveLength(0);
     await screen.findByRole("heading", { name: "Persisted Web2Json run" });
-    await waitFor(
-      () => expect(hydrateRun.mock.calls.length).toBeGreaterThanOrEqual(3),
-      { timeout: 2_800 },
-    );
-    view.rerender(
+    expect(eventsNamed(analytics.events, "PROOF_AVAILABLE")).toHaveLength(0);
+    view.unmount();
+
+    render(
       <StrictMode>
         <App
           runId={runId}
@@ -222,14 +223,89 @@ describe("ProductEventV1 journey instrumentation", () => {
         />
       </StrictMode>,
     );
-
-    expect(eventsNamed(analytics.events, "PROOF_AVAILABLE")).toEqual([
-      expect.objectContaining({
-        name: "PROOF_AVAILABLE",
-        metadata: { source: "live" },
-      }),
-    ]);
+    await screen.findByRole("heading", { name: "Persisted Web2Json run" });
+    expect(eventsNamed(analytics.events, "PROOF_AVAILABLE")).toHaveLength(0);
   });
+
+  it.each([
+    ["replay", "replay"],
+    ["wallet", "live"],
+    ["relayer", "live"],
+  ] as const)(
+    "emits one PROOF_AVAILABLE for an observed %s transition with %s metadata",
+    async (submissionMode, source) => {
+      const analytics = collector();
+      const before = {
+        ...hydratedRun({
+          sequence: 4,
+          terminal: false,
+          stages: {
+            preflight: "completed",
+            request: "completed",
+            round: "completed",
+            proof: "active",
+            verify: "pending",
+            consumer: "pending",
+          },
+        }),
+        submissionMode,
+      } as HydratedRunView;
+      const after = {
+        ...hydratedRun({ sequence: 5, terminal: true }),
+        submissionMode,
+      } as HydratedRunView;
+      const beforeServices = surfaceServices({
+        hydrateRun: vi.fn().mockResolvedValue(before),
+      });
+      const afterServices = surfaceServices({
+        hydrateRun: vi.fn().mockResolvedValue(after),
+      });
+
+      const view = render(
+        <StrictMode>
+          <App
+            runId={runId}
+            projectToken={projectToken}
+            services={beforeServices}
+            analytics={analytics.port}
+          />
+        </StrictMode>,
+      );
+      await screen.findByRole("heading", { name: "Persisted Web2Json run" });
+      expect(eventsNamed(analytics.events, "PROOF_AVAILABLE")).toHaveLength(0);
+
+      view.rerender(
+        <StrictMode>
+          <App
+            runId={runId}
+            projectToken={projectToken}
+            services={afterServices}
+            analytics={analytics.port}
+          />
+        </StrictMode>,
+      );
+      await waitFor(() =>
+        expect(eventsNamed(analytics.events, "PROOF_AVAILABLE")).toHaveLength(1),
+      );
+      view.rerender(
+        <StrictMode>
+          <App
+            runId={runId}
+            projectToken={projectToken}
+            services={afterServices}
+            analytics={analytics.port}
+          />
+        </StrictMode>,
+      );
+
+      expect(eventsNamed(analytics.events, "PROOF_AVAILABLE")).toEqual([
+        expect.objectContaining({
+          name: "PROOF_AVAILABLE",
+          metadata: { source },
+        }),
+      ]);
+    },
+  );
 
   it("records an actual invariant failure and successful safe codegen exactly once", async () => {
     const user = userEvent.setup();
