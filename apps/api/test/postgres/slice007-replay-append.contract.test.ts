@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -11,6 +12,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   makeBundleInput,
+  validPreflightReport,
 } from "../../../../packages/contracts/test/fixtures";
 import {
   canonicalSerializeProofBundle,
@@ -40,6 +42,41 @@ function terminalReplayBundle(persistedManifest?: Record<string, any>) {
       : event,
   );
   return createProofBundle({ ...input, manifest, events });
+}
+
+function boundPreflightReport(source: ReturnType<typeof terminalReplayBundle>) {
+  const accepted = source.events.find(
+    (event) => event.type === "PREFLIGHT_ACCEPTED",
+  );
+  if (accepted?.type !== "PREFLIGHT_ACCEPTED") {
+    throw new Error("Replay fixture has no accepted preflight event");
+  }
+  return {
+    ...structuredClone(validPreflightReport),
+    runId: source.runId,
+    canonicalUrl: accepted.payload.canonicalUrl,
+    requestIdentitySha256: `sha256:${createHash("sha256")
+      .update(Buffer.from(source.requestBytes.slice(2), "hex"))
+      .digest("hex")}`,
+    registrySnapshot: {
+      ...structuredClone(validPreflightReport.registrySnapshot),
+      chainId: source.network.chainId,
+      registryAddress: source.network.registryAddress,
+      resolvedContracts: {
+        ...structuredClone(validPreflightReport.registrySnapshot.resolvedContracts),
+        FdcHub: source.network.resolvedContracts.FdcHub,
+        FdcVerification: source.network.resolvedContracts.FdcVerification,
+        Relay: source.network.resolvedContracts.Relay,
+      },
+    },
+    fee: {
+      quotedWei: accepted.payload.quotedFeeWei,
+      capWei: source.manifest.submission.feeCapWei,
+      withinCap:
+        BigInt(accepted.payload.quotedFeeWei) <=
+        BigInt(source.manifest.submission.feeCapWei),
+    },
+  };
 }
 
 describe.runIf(enabled)(
@@ -111,6 +148,7 @@ describe.runIf(enabled)(
         .loadRunExecutionContext(created.runId);
       const source = terminalReplayBundle(persistedCreated.manifest);
       const serialized = canonicalSerializeProofBundle(source);
+      const sourceReport = boundPreflightReport(source);
       const preflightClaim = await repositoryBeforeRestart.claimNextCommand();
       expect(preflightClaim).toMatchObject({
         command: { kind: "RUN_PREFLIGHT", runId: created.runId },
@@ -119,6 +157,9 @@ describe.runIf(enabled)(
         repository: repositoryBeforeRestart,
         ports: {
           loadReplayBundle: vi.fn(async () => serialized),
+          loadReplayPreflightReport: vi.fn(async () =>
+            JSON.stringify(sourceReport),
+          ),
         } as any,
         clock: { now: () => OCCURRED_AT },
       }) as Record<string, (command: any) => Promise<any>>;
@@ -139,8 +180,25 @@ describe.runIf(enabled)(
         "PREFLIGHT_ACCEPTED",
       ]);
       expect(preApply.artifacts.map((item) => item.kind)).toEqual(
-        expect.arrayContaining(["replay-source", "preflight-evidence"]),
+        expect.arrayContaining([
+          "replay-source",
+          "preflight-evidence",
+          "preflight-report-v1",
+        ]),
       );
+      const persistedReportArtifact = preApply.artifacts.find(
+        (item) => item.kind === "preflight-report-v1",
+      );
+      expect(persistedReportArtifact).toBeDefined();
+      expect(persistedReportArtifact?.runId).toBe(created.runId);
+      expect(Buffer.from(persistedReportArtifact!.sha256)).toEqual(
+        createHash("sha256")
+          .update(Buffer.from(persistedReportArtifact!.canonicalBytes))
+          .digest(),
+      );
+      expect(
+        JSON.parse(Buffer.from(persistedReportArtifact!.canonicalBytes).toString("utf8")),
+      ).toEqual({ ...sourceReport, runId: created.runId });
 
       const repositoryAfterRestart = createPostgresCommandRepository({ pool });
       const applyClaim = await repositoryAfterRestart.claimNextCommand();
@@ -220,6 +278,7 @@ describe.runIf(enabled)(
           expect.arrayContaining([
             "replay-source",
             "preflight-evidence",
+            "preflight-report-v1",
             "proof-evidence",
             "verification-evidence",
             "consumer-evidence",
