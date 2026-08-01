@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Web2JsonManifestDraftV1 } from "../../packages/contracts/src";
+import {
+  Web2JsonManifestDraftV1Schema,
+  type Web2JsonManifestDraftV1,
+} from "../../packages/contracts/src";
 import { validComposerDraft } from "../../packages/contracts/test/fixtures";
 import {
   COMPOSER_DRAFT_STORAGE_KEY_V1,
@@ -33,6 +36,70 @@ function draftWithQuery(key: string, value: string): Web2JsonManifestDraftV1 {
       queryRows: [{ id: "sensitive-row", key, value }],
     },
   } as unknown as Web2JsonManifestDraftV1;
+}
+
+type TrustStringField = "expectedHost" | "expectedPathPrefix";
+
+const TRUST_STRING_FIELDS = {
+  expectedHost: {
+    ordinary: "api.example.com",
+    embed: (value: string) => `${value}.example`,
+  },
+  expectedPathPrefix: {
+    ordinary: "/prices/eth",
+    embed: (value: string) => `/public/${value}`,
+  },
+} satisfies Record<
+  TrustStringField,
+  { ordinary: string; embed(value: string): string }
+>;
+
+const RECOGNIZED_PRIVATE_MATERIAL = [
+  ["project token", `project_${"a".repeat(64)}`],
+  ["share token", `share_${"b".repeat(64)}`],
+  ["Bearer credential", "bearer super-secret-credential"],
+  ["private key", `0x${"c".repeat(64)}`],
+] as const;
+
+function draftWithTrustString(
+  field: TrustStringField,
+  value: string,
+): Web2JsonManifestDraftV1 {
+  return {
+    ...structuredClone(validComposerDraft),
+    fields: {
+      ...structuredClone(validComposerDraft.fields),
+      [field]: value,
+    },
+  } as unknown as Web2JsonManifestDraftV1;
+}
+
+function serializedUtf8Bytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+}
+
+function draftWithExactSerializedBytes(targetBytes: number) {
+  const draft = {
+    ...structuredClone(validComposerDraft),
+    fields: {
+      ...structuredClone(validComposerDraft.fields),
+      queryRows: Array.from({ length: 32 }, (_, index) => ({
+        id: `bounded-row-${index}`,
+        key: `field-${index}`,
+        value: "",
+      })),
+    },
+  };
+  let remaining = targetBytes - serializedUtf8Bytes(draft);
+  expect(remaining).toBeGreaterThanOrEqual(0);
+  for (const row of draft.fields.queryRows) {
+    const fill = Math.min(2_048, remaining);
+    row.value = "x".repeat(fill);
+    remaining -= fill;
+  }
+  expect(remaining).toBe(0);
+  expect(serializedUtf8Bytes(draft)).toBe(targetBytes);
+  return draft;
 }
 
 describe("bounded local Composer draft store", () => {
@@ -85,6 +152,90 @@ describe("bounded local Composer draft store", () => {
     expect(result).toEqual({ state: "rejected", reason: "sensitive-data" });
     expect(memory.storage.setItem).not.toHaveBeenCalled();
     expect(memory.values.size).toBe(0);
+  });
+
+  it.each(
+    (Object.keys(TRUST_STRING_FIELDS) as TrustStringField[]).flatMap((field) =>
+      RECOGNIZED_PRIVATE_MATERIAL.map(([label, material]) => [
+        field,
+        label,
+        TRUST_STRING_FIELDS[field].embed(material),
+      ] as const),
+    ),
+  )("refuses %s containing recognized %s material on save", (field, _label, value) => {
+    const draft = draftWithTrustString(field, value);
+    expect(
+      Web2JsonManifestDraftV1Schema.safeParse(draft).success,
+      "The fixture must remain field-schema-valid so the draft-store privacy boundary is exercised",
+    ).toBe(true);
+    const memory = memoryStorage();
+
+    expect(createComposerDraftStore(memory.storage).save(draft)).toEqual({
+      state: "rejected",
+      reason: "sensitive-data",
+    });
+    expect(memory.storage.setItem).not.toHaveBeenCalled();
+    expect(memory.values.size).toBe(0);
+  });
+
+  it.each(
+    (Object.keys(TRUST_STRING_FIELDS) as TrustStringField[]).flatMap((field) =>
+      RECOGNIZED_PRIVATE_MATERIAL.map(([label, material]) => [
+        field,
+        label,
+        TRUST_STRING_FIELDS[field].embed(material),
+      ] as const),
+    ),
+  )("purges %s containing recognized %s material on load", (field, _label, value) => {
+    const draft = draftWithTrustString(field, value);
+    expect(Web2JsonManifestDraftV1Schema.safeParse(draft).success).toBe(true);
+    const memory = memoryStorage(JSON.stringify(draft));
+
+    expect(createComposerDraftStore(memory.storage).load()).toMatchObject({
+      state: "rejected",
+    });
+    expect(memory.values.has(COMPOSER_DRAFT_STORAGE_KEY_V1)).toBe(false);
+    expect(memory.storage.removeItem).toHaveBeenCalledWith(
+      COMPOSER_DRAFT_STORAGE_KEY_V1,
+    );
+  });
+
+  it("does not reject ordinary values in every persisted Trust string field", () => {
+    const draft = structuredClone(
+      validComposerDraft,
+    ) as unknown as Web2JsonManifestDraftV1;
+    for (const field of Object.keys(TRUST_STRING_FIELDS) as TrustStringField[]) {
+      draft.fields[field] = TRUST_STRING_FIELDS[field].ordinary;
+    }
+    const memory = memoryStorage();
+    const store = createComposerDraftStore(memory.storage);
+
+    expect(store.save(draft)).toEqual({ state: "stored" });
+    expect(store.load()).toEqual({ state: "restored", draft });
+  });
+
+  it("classifies aggregate UTF-8 overflow before schema serialization at the exact boundary", () => {
+    const boundary = draftWithExactSerializedBytes(65_536);
+    const oversized = draftWithExactSerializedBytes(65_537);
+    expect(Web2JsonManifestDraftV1Schema.safeParse(boundary).success).toBe(true);
+    expect(Web2JsonManifestDraftV1Schema.safeParse(oversized).success).toBe(false);
+
+    const boundaryMemory = memoryStorage();
+    expect(createComposerDraftStore(boundaryMemory.storage).save(boundary)).toEqual({
+      state: "stored",
+    });
+    expect(
+      new TextEncoder().encode(
+        boundaryMemory.values.get(COMPOSER_DRAFT_STORAGE_KEY_V1),
+      ).byteLength,
+    ).toBe(65_536);
+
+    const oversizedMemory = memoryStorage();
+    expect(createComposerDraftStore(oversizedMemory.storage).save(oversized)).toEqual({
+      state: "rejected",
+      reason: "oversized",
+    });
+    expect(oversizedMemory.storage.setItem).not.toHaveBeenCalled();
   });
 
   it("refuses URL credentials and forbidden response/error extension fields", () => {

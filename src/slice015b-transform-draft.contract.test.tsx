@@ -16,6 +16,9 @@ const DRAFT_KEY = "proofline:composer-draft:v1";
 const projectToken = `project_${"a".repeat(64)}`;
 const templateAbi =
   '{"components":[{"internalType":"string","name":"amount","type":"string"},{"internalType":"string","name":"currency","type":"string"}],"name":"data","type":"tuple"}';
+const browserWindow = window as typeof window & {
+  happyDOM: { setViewport(viewport: { width: number; height: number }): void };
+};
 
 function services(overrides: Record<string, unknown> = {}): RunSurfaceServices {
   return {
@@ -52,6 +55,7 @@ function renderComposer(path: string, options: {
 }
 
 afterEach(() => {
+  browserWindow.happyDOM.setViewport({ width: 1024, height: 768 });
   window.history.replaceState({}, "", "/");
   localStorage.clear();
   sessionStorage.clear();
@@ -116,6 +120,18 @@ describe("Slice 015B local Transform surface", () => {
     fireEvent.change(abi, { target: { value: templateAbi } });
     await user.click(screen.getByRole("button", { name: /continue to trust/i }));
     expect(new URLSearchParams(window.location.search).get("step")).toBe("trust");
+  });
+
+  it("keeps the mobile canonical preview in keyboard order with its local-only label", () => {
+    browserWindow.happyDOM.setViewport({ width: 390, height: 844 });
+    renderComposer("/runs/new?template=eth-usd&step=transform");
+
+    const preview = screen.getByLabelText(/canonical manifest preview.*local only/i);
+    expect(preview).toHaveAttribute("tabindex", "0");
+    expect(preview).toHaveAccessibleName(/canonical manifest preview.*local only/i);
+    expect(screen.getByText(/local only.*not remote evidence/i)).toBeVisible();
+    preview.focus();
+    expect(preview).toHaveFocus();
   });
 });
 

@@ -16,6 +16,7 @@ const transaction: WalletTransaction = {
   value: "0x3039",
 };
 const transactionHash = `0x${"b".repeat(64)}`;
+const privateHex = `0x${"d".repeat(64)}`;
 
 function jsonResponse(body: unknown, status = 200, statusText = "") {
   return new Response(JSON.stringify(body), {
@@ -115,6 +116,32 @@ describe("run client storage and response hardening", () => {
     const error = await client.getRun("run_1").catch((cause) => cause);
     expect(String(error)).toContain(expected);
     expect(String(error)).not.toMatch(/project_[a-f0-9]{64}/i);
+  });
+
+  it("redacts 32-byte hex material from an HTTP error body instead of preserving it as a transaction hash", async () => {
+    const client = clientWith(
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          { error: { message: `Upstream included ${privateHex}` } },
+          502,
+          "Bad Gateway",
+        ),
+      ),
+    );
+
+    const failure = await client.getRun("run_1").catch((cause) => cause);
+    expect(String(failure)).toContain("[REDACTED]");
+    expect(String(failure)).not.toContain(privateHex);
+  });
+
+  it("redacts 32-byte hex material from transport errors instead of preserving it as a transaction hash", async () => {
+    const client = clientWith(
+      vi.fn().mockRejectedValue(new Error(`Transport leaked ${privateHex}`)),
+    );
+
+    const failure = await client.getRun("run_1").catch((cause) => cause);
+    expect(String(failure)).toContain("[REDACTED]");
+    expect(String(failure)).not.toContain(privateHex);
   });
 
   it("supports both direct and nested wallet transaction responses", async () => {

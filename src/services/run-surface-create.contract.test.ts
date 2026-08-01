@@ -35,12 +35,26 @@ function response(body: unknown, status = 202) {
   });
 }
 
-function live() {
+function live(storage: Pick<Storage, "getItem" | "setItem"> = {
+  getItem: () => null,
+  setItem: () => undefined,
+}) {
   return createLiveSurfaceServices({
     baseUrl: "https://api.proofline.test/api",
     projectToken,
-    storage: { getItem: () => null, setItem: () => undefined },
+    storage,
   });
+}
+
+function resumeStorage() {
+  const values = new Map<string, string>();
+  return {
+    values,
+    storage: {
+      getItem: vi.fn((key: string) => values.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => values.set(key, value)),
+    },
+  };
 }
 
 afterEach(() => {
@@ -110,14 +124,18 @@ describe("persisted run creation surface port", () => {
       "mismatched response location",
       { status: "accepted", runId, location: "/v1/runs/run_other" },
     ],
-  ])("rejects an invalid %s before it reaches navigation", async (_label, body) => {
+    ["missing response fields", { status: "accepted" }],
+  ])("rejects an invalid %s before navigation or resume persistence", async (_label, body) => {
+    const resume = resumeStorage();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(body)));
     await expect(
-      createRunPort(live())({
+      createRunPort(live(resume.storage))({
         projectToken,
         manifest: validManifest,
         idempotencyKey: "composer_123e4567-e89b-42d3-a456-426614174000",
       }),
     ).rejects.toThrow(/run|response|contract|invalid/i);
+    expect(resume.storage.setItem).not.toHaveBeenCalled();
+    expect(resume.values.size).toBe(0);
   });
 });
