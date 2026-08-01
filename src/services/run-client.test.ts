@@ -20,7 +20,11 @@ describe("browser run client", () => {
   it("creates, incrementally watches, verifies, generates, bundles, and replays with one project token", async () => {
     const fetch = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ runId: "run_1" }, 202))
+      .mockResolvedValueOnce(jsonResponse({
+        status: "accepted",
+        runId: "run_1",
+        location: "/v1/runs/run_1",
+      }, 202))
       .mockResolvedValueOnce(jsonResponse({ events: [{ sequence: 2 }], nextAfter: 2 }))
       .mockResolvedValueOnce(jsonResponse({ accepted: true }, 202))
       .mockResolvedValueOnce(jsonResponse({ source: "contract Safe {}", sha256: "a".repeat(64) }))
@@ -37,7 +41,11 @@ describe("browser run client", () => {
       },
     });
 
-    expect(await client.createRun(validManifest, "create-1")).toMatchObject({ runId: "run_1" });
+    expect(await client.createRun(validManifest, "create-1")).toEqual({
+      status: "accepted",
+      runId: "run_1",
+      location: "/v1/runs/run_1",
+    });
     expect(storage.get("proofline:last-run")).toBe("run_1");
     expect(await client.events("run_1", 1)).toMatchObject({ nextAfter: 2 });
     await client.verifyConsumer("run_1", "verify-1");

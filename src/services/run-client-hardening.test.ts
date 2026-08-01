@@ -37,7 +37,11 @@ function clientWith(fetch: typeof globalThis.fetch, storage?: Pick<Storage, "get
 
 describe("run client storage and response hardening", () => {
   it("continues a run when privacy-mode storage writes throw", async () => {
-    const fetch = vi.fn().mockResolvedValue(jsonResponse({ runId: "run_1" }, 202));
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({
+      status: "accepted",
+      runId: "run_1",
+      location: "/v1/runs/run_1",
+    }, 202));
     const client = clientWith(fetch, {
       getItem: () => null,
       setItem: () => {
@@ -46,7 +50,9 @@ describe("run client storage and response hardening", () => {
     });
 
     await expect(client.createRun(validManifest, "create-1")).resolves.toEqual({
+      status: "accepted",
       runId: "run_1",
+      location: "/v1/runs/run_1",
     });
     expect(fetch.mock.calls[0][0]).toBe("https://api.proofline.test/v1/runs");
   });
