@@ -5,11 +5,15 @@ export function Topbar({
   network = "Coston2",
   attestationType = "Web2Json",
   mode = "detail",
+  proofAvailable = false,
+  statusLabel,
 }: {
   title: string | undefined;
   network?: string;
   attestationType?: string;
   mode?: "detail" | "index" | "new";
+  proofAvailable?: boolean;
+  statusLabel?: string;
 }) {
   const breadcrumbTitle = title?.trim() || "Run unavailable";
   return (
@@ -30,7 +34,12 @@ export function Topbar({
         </div>
       </div>
       <div className="topbar-right">
-        {mode === "detail" ? <span className="proof-status"><span className="status-dot" aria-hidden="true" />Proof available</span> : null}
+        {mode === "detail" ? (
+          <span className={`proof-status${proofAvailable ? "" : " is-progress"}`}>
+            <span className="status-dot" aria-hidden="true" />
+            {proofAvailable ? "Proof available" : (statusLabel ?? "Run status unavailable")}
+          </span>
+        ) : null}
         <span className="attestation-type"><FileCode size={24} aria-hidden="true" />{attestationType}</span>
       </div>
     </header>

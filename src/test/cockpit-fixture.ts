@@ -8,8 +8,8 @@ export const TEST_RUN_STAGES: RunStage[] = [
   { key: "preflight", label: "Preflight", state: "complete", status: "Completed", time: "12:04:11", duration: "3s" },
   { key: "request", label: "Request", state: "complete", status: "Submitted", time: "12:04:14", duration: "12s" },
   { key: "round", label: "Round", state: "complete", status: "Finalized", time: "12:05:56", duration: "1m 42s" },
-  { key: "proof", label: "Proof", state: "active", status: "Available", time: "12:06:08", duration: "12s" },
-  { key: "verify", label: "Verify", state: "pending", status: "Pending", time: "—", duration: "—" },
+  { key: "proof", label: "Proof", state: "complete", status: "Available", time: "12:06:08", duration: "12s" },
+  { key: "verify", label: "Verify", state: "active", status: "In progress", time: "—", duration: "—" },
   { key: "consumer", label: "Consumer", state: "pending", status: "Pending", time: "—", duration: "—" },
 ];
 
@@ -32,14 +32,14 @@ export const TEST_HYDRATED_RUN: HydratedRunView = {
   attestationType: "Web2Json",
   network: "coston2",
   startedAt: "2025-05-15T12:04:11.000Z",
-  sequence: 4,
+  sequence: 5,
   terminal: false,
   stages: {
     preflight: "completed",
     request: "completed",
     round: "completed",
-    proof: "active",
-    verify: "pending",
+    proof: "completed",
+    verify: "active",
     consumer: "pending",
   },
   stageDetails: {

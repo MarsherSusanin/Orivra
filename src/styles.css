@@ -557,7 +557,57 @@ a {
 }
 
 .new-run-entry .entry-state {
-  margin-top: 42px;
+  margin-top: 28px;
+}
+
+.composer-steps {
+  display: grid;
+  max-width: 760px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin: 25px auto 0;
+}
+
+.composer-steps a {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 13px;
+  color: var(--muted);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: rgba(17, 29, 38, 0.54);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.composer-steps a:hover,
+.composer-steps a:focus-visible,
+.composer-steps a.is-current {
+  color: var(--cyan-soft);
+  border-color: rgba(45, 200, 243, 0.46);
+  outline: none;
+}
+
+.composer-steps a.is-current {
+  background: rgba(45, 200, 243, 0.065);
+}
+
+.composer-steps a span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  color: var(--faint);
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 11px;
+}
+
+.composer-steps a.is-current span {
+  color: var(--cyan);
 }
 
 .topbar-left {
@@ -615,6 +665,17 @@ a {
   border: 1px solid rgba(85, 215, 120, 0.75);
   border-radius: var(--radius-sm);
   font-size: 16px;
+}
+
+.proof-status.is-progress {
+  color: var(--cyan-soft);
+  border-color: rgba(45, 200, 243, 0.48);
+  background: rgba(45, 200, 243, 0.035);
+}
+
+.proof-status.is-progress .status-dot {
+  background: var(--cyan);
+  box-shadow: 0 0 15px rgba(45, 200, 243, 0.24);
 }
 
 .status-dot {
@@ -957,6 +1018,28 @@ a {
   color: var(--amber);
   font-size: 12px;
   text-align: center;
+}
+
+.stage-waiting-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(143, 157, 168, 0.035);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.stage-waiting-state.is-active {
+  color: var(--cyan-soft);
+  border-color: rgba(45, 200, 243, 0.38);
+}
+
+.stage-waiting-state.is-failed {
+  color: var(--amber);
+  border-color: rgba(244, 186, 8, 0.42);
 }
 
 .hydration-error {
@@ -1766,6 +1849,11 @@ a {
   .run-filters {
     overflow-x: auto;
     padding-bottom: 4px;
+  }
+
+  .composer-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 18px;
   }
 
   .entry-state {

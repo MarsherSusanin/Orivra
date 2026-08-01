@@ -167,7 +167,7 @@ describe("live run hydration", () => {
 
     expect(first).toMatchObject({
       title: "Explicit run title",
-      diagnostics: [{ severity: "warning", confidence: "medium" }],
+      diagnostics: undefined,
       evidence: projection.evidence,
       stages: { proof: "pending", verify: "pending" },
     });
@@ -200,7 +200,7 @@ describe("live run hydration", () => {
         verify: "pending",
         consumer: "pending",
       },
-      diagnostics: [],
+      diagnostics: undefined,
       evidence: {},
     });
   });

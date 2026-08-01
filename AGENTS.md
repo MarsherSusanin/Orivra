@@ -39,6 +39,8 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
 - The accepted source is `proofline-run-cockpit-reference.png`.
 - Preserve the Run Cockpit hierarchy: fixed navigation rail, compact top bar, central attestation timeline, right diagnostics rail, one dominant `Verify consumer` action, and bottom evidence strip.
 - Preserve the flow `Proof available` → consumer verification → evidence-backed invariant result → safe consumer generation.
+- Show `Proof available`, consumer verification and bundle export only after the persisted proof stage is `completed`; earlier states surface the current stage without implying proof readiness.
+- Keep the Composer step and expanded diagnostics panel in restorable URL state so reload, back and forward preserve the user's context.
 - Keep the dark graphite palette, cyan active state, green completed state, amber diagnostic state, thin dividers, compact developer-tool density, and code-native English UI copy.
 - Build Web UI in `src/`. Treat an accepted generated mock as source of truth for layout, component anatomy, density, spacing, color, typography, visible content and hierarchy.
 - Before substantial visual changes, use Product Design `get-context` when the visual source is unclear or conflicts with the current goal.

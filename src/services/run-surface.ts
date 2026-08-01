@@ -52,6 +52,8 @@ export type RunEvidenceView = {
   explorerUrl?: string;
 };
 
+export type SubmissionModeView = "replay" | "wallet" | "relayer";
+
 export type HydratedRunView = {
   runId: string;
   title: string;
@@ -64,7 +66,8 @@ export type HydratedRunView = {
   stageDetails?: Partial<
     Record<keyof ProjectionStages, Pick<RunStage, "time" | "duration">>
   >;
-  diagnostics: RunDiagnosticView[];
+  submissionMode?: SubmissionModeView;
+  diagnostics?: RunDiagnosticView[];
   evidence: RunEvidenceView;
 };
 
@@ -204,31 +207,46 @@ function projectionStages(value: unknown): ProjectionStages {
   ) as ProjectionStages;
 }
 
-function diagnosticsFrom(value: unknown): RunDiagnosticView[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((candidate) => {
+function diagnosticsFrom(value: unknown): RunDiagnosticView[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const diagnostics: RunDiagnosticView[] = [];
+  for (const candidate of value) {
     const diagnostic = objectValue(candidate);
     const code = stringValue(diagnostic?.code);
     const summary = stringValue(diagnostic?.summary);
-    if (!diagnostic || !code || !summary) return [];
+    if (!diagnostic || !code || !summary) return undefined;
     const severity = diagnostic.severity;
     const confidence = diagnostic.confidence;
-    return [{
+    if (
+      severity !== "info" &&
+      severity !== "warning" &&
+      severity !== "error"
+    ) return undefined;
+    if (
+      confidence !== "low" &&
+      confidence !== "medium" &&
+      confidence !== "high"
+    ) return undefined;
+    if (diagnostic.evidence !== undefined && !objectValue(diagnostic.evidence)) {
+      return undefined;
+    }
+    diagnostics.push({
       version: stringValue(diagnostic.version),
       code,
       summary,
-      severity:
-        severity === "info" || severity === "warning" || severity === "error"
-          ? severity
-          : "warning",
-      confidence:
-        confidence === "low" || confidence === "medium" || confidence === "high"
-          ? confidence
-          : "medium",
+      severity,
+      confidence,
       evidence: objectValue(diagnostic.evidence) ?? undefined,
       remediation: stringValue(diagnostic.remediation),
-    }];
-  });
+    });
+  }
+  return diagnostics;
+}
+
+function submissionModeFrom(value: unknown): SubmissionModeView | undefined {
+  return value === "replay" || value === "wallet" || value === "relayer"
+    ? value
+    : undefined;
 }
 
 function eventRecords(values: unknown): Record<string, unknown>[] {
@@ -316,6 +334,7 @@ function hydrateView(
   const created = eventOfType(events, "RUN_CREATED");
   const manifest = objectValue(eventPayload(created).manifest);
   const submission = eventPayload(eventOfType(events, "REQUEST_SUBMITTED"));
+  const manifestSubmission = objectValue(manifest?.submission);
   const round = eventPayload(eventOfType(events, "ROUND_FINALIZED"));
   const preflight = eventPayload(eventOfType(events, "PREFLIGHT_ACCEPTED"));
   const runEvidence = objectValue(run.evidence) ?? {};
@@ -331,9 +350,19 @@ function hydrateView(
     return Number.isFinite(duration) ? formatDuration(duration) : undefined;
   })();
   const diagnostics = diagnosticsFrom(run.diagnostics);
-  const consumerEventDiagnostics = diagnosticsFrom(
-    eventPayload(eventOfType(events, "CONSUMER_VERIFIED")).diagnostics,
-  );
+  const consumerEvent = eventOfType(events, "CONSUMER_VERIFIED");
+  const consumerEventEvidence = eventPayload(consumerEvent);
+  const consumerEventDiagnostics = diagnosticsFrom(consumerEventEvidence.diagnostics);
+  const validConsumerEventDiagnostics =
+    consumerEventDiagnostics &&
+    (consumerEventDiagnostics.length > 0 || typeof consumerEventEvidence.passed === "boolean")
+      ? consumerEventDiagnostics
+      : undefined;
+  const trustedDiagnostics = diagnostics && diagnostics.length > 0
+    ? diagnostics
+    : consumerEvent && validConsumerEventDiagnostics !== undefined
+      ? validConsumerEventDiagnostics
+      : undefined;
   return {
     runId,
     title: titleFrom(run, events),
@@ -348,7 +377,11 @@ function hydrateView(
     terminal: run.terminal === true,
     stages: projectionStages(run.stages),
     stageDetails: stageDetailsFrom(events),
-    diagnostics: diagnostics.length > 0 ? diagnostics : consumerEventDiagnostics,
+    submissionMode:
+      submissionModeFrom(run.submissionMode) ??
+      submissionModeFrom(manifestSubmission?.mode) ??
+      submissionModeFrom(submission.mode),
+    diagnostics: trustedDiagnostics,
     evidence: {
       transactionHash,
       votingRound:

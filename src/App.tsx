@@ -143,8 +143,75 @@ function safeHydrationError(cause: unknown): string {
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]");
 }
 
+const RUN_STAGE_ORDER = [
+  "preflight",
+  "request",
+  "round",
+  "proof",
+  "verify",
+  "consumer",
+] as const;
+
+function sentenceCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function currentStage(stages: HydratedRunView["stages"]) {
+  const failed = RUN_STAGE_ORDER.find((stage) => stages[stage] === "failed");
+  const active = RUN_STAGE_ORDER.find((stage) => stages[stage] === "active");
+  const incomplete = RUN_STAGE_ORDER.find((stage) => stages[stage] !== "completed");
+  const stage = failed ?? active ?? incomplete ?? "consumer";
+  return { stage, state: stages[stage] };
+}
+
+function pendingActionCopy(stage: string, state: string) {
+  const label = sentenceCase(stage);
+  if (state === "failed") {
+    return {
+      title: `${label} failed.`,
+      description: `Review the persisted ${stage} evidence before continuing this run.`,
+    };
+  }
+  if (state === "active") {
+    return {
+      title: `${label} is in progress.`,
+      description: `Proofline is waiting for the persisted ${stage} transition to complete.`,
+    };
+  }
+  return {
+    title: `Waiting for ${stage}.`,
+    description: `The ${stage} stage has not started yet. Existing evidence remains available below.`,
+  };
+}
+
+function diagnosticsPanelFromLocation(): boolean {
+  return new URLSearchParams(globalThis.location?.search ?? "").get("panel") === "diagnostics";
+}
+
+function writeDiagnosticsPanel(open: boolean): void {
+  const url = new URL(globalThis.location.href);
+  if (open) url.searchParams.set("panel", "diagnostics");
+  else url.searchParams.delete("panel");
+  globalThis.history.pushState(
+    {},
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
+type ProofObservation = {
+  sequence: number;
+  state: HydratedRunView["stages"]["proof"];
+};
+
+function proofStateRank(state: ProofObservation["state"]): number {
+  if (state === "pending") return 0;
+  if (state === "active") return 1;
+  return 2;
+}
+
 function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {}) {
-  const [diagnosticExpanded, setDiagnosticExpanded] = useState(false);
+  const [diagnosticExpanded, setDiagnosticExpanded] = useState(diagnosticsPanelFromLocation);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [bundleState, setBundleState] = useState<"idle" | "running" | "verified" | "error">("idle");
   const [bundleSource, setBundleSource] = useState<string | null>(null);
@@ -156,6 +223,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const [hydrationError, setHydrationError] = useState("");
   const [hydrationRevision, setHydrationRevision] = useState(0);
   const verifyTrigger = useRef<HTMLButtonElement>(null);
+  const observedProofState = useRef(new Map<string, ProofObservation>());
   const recordedProofRuns = useRef(new Set<string>());
   const [routeRunId] = useState(deepRouteRunId);
   const resolvedToken = projectToken ?? sessionToken;
@@ -180,6 +248,12 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   );
 
   useEffect(() => {
+    const restorePanel = () => setDiagnosticExpanded(diagnosticsPanelFromLocation());
+    globalThis.addEventListener("popstate", restorePanel);
+    return () => globalThis.removeEventListener("popstate", restorePanel);
+  }, []);
+
+  useEffect(() => {
     if (!shouldHydrate || !servicePort.hydrateRun) return;
     let cancelled = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -192,14 +266,31 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
           after,
         });
         if (cancelled) return;
-        if (
-          run.stages.proof === "completed" &&
-          !recordedProofRuns.current.has(run.runId)
-        ) {
+        const previousProof = observedProofState.current.get(run.runId);
+        const proofCompletedNow =
+          previousProof !== undefined &&
+          run.sequence > previousProof.sequence &&
+          (previousProof.state === "pending" || previousProof.state === "active") &&
+          run.stages.proof === "completed";
+        if (proofCompletedNow && !recordedProofRuns.current.has(run.runId)) {
           recordedProofRuns.current.add(run.runId);
           emitProductEvent({
             name: "PROOF_AVAILABLE",
-            metadata: { source: "live" },
+            metadata: { source: run.submissionMode === "replay" ? "replay" : "live" },
+          });
+        }
+        if (
+          previousProof === undefined ||
+          (
+            run.sequence > previousProof.sequence &&
+            previousProof.state !== "completed" &&
+            previousProof.state !== "failed" &&
+            proofStateRank(run.stages.proof) >= proofStateRank(previousProof.state)
+          )
+        ) {
+          observedProofState.current.set(run.runId, {
+            sequence: run.sequence,
+            state: run.stages.proof,
           });
         }
         setHydratedRun(run);
@@ -234,6 +325,12 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const closeVerification = () => {
     setVerificationOpen(false);
     verifyTrigger.current?.focus();
+  };
+
+  const toggleDiagnostics = () => {
+    const nextExpanded = !diagnosticExpanded;
+    writeDiagnosticsPanel(nextExpanded);
+    setDiagnosticExpanded(nextExpanded);
   };
 
   const exportBundle = async () => {
@@ -345,12 +442,22 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const startedAt = displayStartedAt(hydratedRun.startedAt);
   const timeline = timelineFromProjection(hydratedRun.stages, hydratedRun.stageDetails);
   const consumerFailed = hydratedRun.stages.consumer === "failed";
+  const proofAvailable = hydratedRun.stages.proof === "completed";
+  const activeStage = currentStage(hydratedRun.stages);
+  const activeStageLabel = sentenceCase(activeStage.stage);
+  const waitingCopy = pendingActionCopy(activeStage.stage, activeStage.state);
 
   return (
     <div className="app-shell">
       <Sidebar />
       <div className="shell-main">
-        <Topbar title={title} network={network} attestationType={attestationType} />
+        <Topbar
+          title={title}
+          network={network}
+          attestationType={attestationType}
+          proofAvailable={proofAvailable}
+          statusLabel={`${activeStageLabel} ${activeStage.state}`}
+        />
         <main className="run-layout" id="run">
           <section className="run-primary" aria-labelledby="run-title">
             <header className="run-heading">
@@ -363,31 +470,43 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
             <section className="next-action" aria-labelledby="next-action-title">
               <span className="next-action-icon" aria-hidden="true"><FileMagnifyingGlass size={51} /></span>
               <div className="next-action-content">
-                <h2 id="next-action-title">Proof is ready.</h2>
-                <p>Verify your consumer contract before consuming the attestation.</p>
-                <button ref={verifyTrigger} className="verify-button" type="button" onClick={() => setVerificationOpen(true)}>{consumerFailed ? "Retry verification" : "Verify consumer"}<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
-                <div className="action-footer">
-                  <span>Next step: Verify consumer invariants and enforcement.</span>
-                  {bundleState === "verified" && bundleSource ? (
-                    <a
-                      className="bundle-download"
-                      href={`data:application/json;charset=utf-8,${encodeURIComponent(bundleSource)}`}
-                      download={`${activeRunId}.proofline.json`}
-                    >
-                      <CheckCircle size={16} weight="fill" aria-hidden="true" />Bundle verified
-                    </a>
-                  ) : (
-                    <button className="bundle-action" type="button" disabled={bundleState === "running"} onClick={exportBundle}>
-                      <DownloadSimple size={16} aria-hidden="true" />
-                      {bundleState === "running" ? "Verifying bundle…" : "Export bundle"}
-                    </button>
-                  )}
-                </div>
-                {bundleState === "error" ? <p className="bundle-error" role="alert">{bundleError}</p> : null}
+                {proofAvailable ? (
+                  <>
+                    <h2 id="next-action-title">Proof is ready.</h2>
+                    <p>Verify your consumer contract before consuming the attestation.</p>
+                    <button ref={verifyTrigger} className="verify-button" type="button" onClick={() => setVerificationOpen(true)}>{consumerFailed ? "Retry verification" : "Verify consumer"}<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
+                    <div className="action-footer">
+                      <span>Next step: Verify consumer invariants and enforcement.</span>
+                      {bundleState === "verified" && bundleSource ? (
+                        <a
+                          className="bundle-download"
+                          href={`data:application/json;charset=utf-8,${encodeURIComponent(bundleSource)}`}
+                          download={`${activeRunId}.proofline.json`}
+                        >
+                          <CheckCircle size={16} weight="fill" aria-hidden="true" />Bundle verified
+                        </a>
+                      ) : (
+                        <button className="bundle-action" type="button" disabled={bundleState === "running"} onClick={exportBundle}>
+                          <DownloadSimple size={16} aria-hidden="true" />
+                          {bundleState === "running" ? "Verifying bundle…" : "Export bundle"}
+                        </button>
+                      )}
+                    </div>
+                    {bundleState === "error" ? <p className="bundle-error" role="alert">{bundleError}</p> : null}
+                  </>
+                ) : (
+                  <>
+                    <h2 id="next-action-title">{waitingCopy.title}</h2>
+                    <p>{waitingCopy.description}</p>
+                    <span className={`stage-waiting-state is-${activeStage.state}`}>
+                      {activeStageLabel} · {sentenceCase(activeStage.state)}
+                    </span>
+                  </>
+                )}
               </div>
             </section>
           </section>
-          <DiagnosticsPanel diagnostics={hydratedRun?.diagnostics} expanded={diagnosticExpanded} onToggle={() => setDiagnosticExpanded((value) => !value)} />
+          <DiagnosticsPanel diagnostics={hydratedRun.diagnostics} expanded={diagnosticExpanded} onToggle={toggleDiagnostics} />
           <EvidenceStrip items={evidence} />
         </main>
       </div>
