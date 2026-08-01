@@ -139,6 +139,11 @@ const DraftFeeCapV1Schema = z
   );
 
 const DraftQueryRowsV1Schema = z.array(Web2JsonDraftQueryRowV1Schema).max(50);
+const MAX_DRAFT_UTF8_BYTES = 65_536;
+
+function serializedUtf8Bytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+}
 
 /**
  * Strict, bounded local editing state. This is never accepted as run evidence;
@@ -169,7 +174,15 @@ export const Web2JsonManifestDraftV1Schema = z
       })
       .strict(),
   })
-  .strict();
+  .strict()
+  .superRefine((draft, context) => {
+    if (serializedUtf8Bytes(draft) > MAX_DRAFT_UTF8_BYTES) {
+      context.addIssue({
+        code: "custom",
+        message: "Draft must not exceed 65536 serialized UTF-8 bytes.",
+      });
+    }
+  });
 
 export type ComposerStepV1 = z.infer<typeof ComposerStepV1Schema>;
 export type Web2JsonDraftQueryRowV1 = z.infer<typeof Web2JsonDraftQueryRowV1Schema>;

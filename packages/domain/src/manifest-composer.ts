@@ -39,6 +39,24 @@ export interface ComposerTrustFields {
   expectedQueryRows: Web2JsonDraftQueryRowV1[];
 }
 
+export type ComposerTrustIssueCode =
+  | "TRUST_HOST_REQUIRED"
+  | "TRUST_HOST_INVALID"
+  | "TRUST_HOST_NOT_NORMALIZED"
+  | "TRUST_PATH_PREFIX_INVALID"
+  | "TRUST_QUERY_KEY_REQUIRED"
+  | "TRUST_QUERY_KEY_DUPLICATE";
+
+export interface ComposerTrustIssue {
+  field: string;
+  code: ComposerTrustIssueCode;
+  message: string;
+}
+
+export type ComposerTrustValidation =
+  | { valid: true }
+  | { valid: false; issues: ComposerTrustIssue[] };
+
 const SOURCE_ISSUES: Record<ComposerSourceIssueCode, ComposerSourceIssue> = {
   SOURCE_URL_INVALID: {
     field: "sourceUrl",
@@ -66,6 +84,32 @@ const SOURCE_ISSUES: Record<ComposerSourceIssueCode, ComposerSourceIssue> = {
     message: "Remove the URL fragment.",
   },
 };
+
+const HOSTNAME_PATTERN =
+  /^(?=.{1,253}$)(?:\[[0-9A-Fa-f:.]+\]|(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*)$/;
+
+const TRUST_ISSUES = {
+  hostRequired: {
+    field: "expectedHost",
+    code: "TRUST_HOST_REQUIRED",
+    message: "Enter the expected source host.",
+  },
+  hostInvalid: {
+    field: "expectedHost",
+    code: "TRUST_HOST_INVALID",
+    message: "Enter a valid hostname without a scheme, path, port, or credentials.",
+  },
+  hostNotNormalized: {
+    field: "expectedHost",
+    code: "TRUST_HOST_NOT_NORMALIZED",
+    message: "Use the lowercase normalized host.",
+  },
+  pathInvalid: {
+    field: "expectedPathPrefix",
+    code: "TRUST_PATH_PREFIX_INVALID",
+    message: "Expected path prefix must start with /.",
+  },
+} as const satisfies Record<string, ComposerTrustIssue>;
 
 function invalidSource(code: ComposerSourceIssueCode): ComposerSourceValidation {
   return { valid: false, issue: { ...SOURCE_ISSUES[code] } };
@@ -132,6 +176,47 @@ export function deriveTrustFromSourceUrl(sourceUrl: string): ComposerTrustFields
     expectedPathPrefix: source.pathname,
     expectedQueryRows: sortedQueryRows(urlQueryMap(source), "expected-query"),
   };
+}
+
+export function validateComposerTrustFields(
+  fields: ComposerTrustFields,
+): ComposerTrustValidation {
+  const issues: ComposerTrustIssue[] = [];
+  const host = fields.expectedHost.trim();
+
+  if (host === "") {
+    issues.push({ ...TRUST_ISSUES.hostRequired });
+  } else if (!HOSTNAME_PATTERN.test(host)) {
+    issues.push({ ...TRUST_ISSUES.hostInvalid });
+  } else if (fields.expectedHost !== host || host !== host.toLowerCase()) {
+    issues.push({ ...TRUST_ISSUES.hostNotNormalized });
+  }
+
+  if (!/^\/[^?#]*$/.test(fields.expectedPathPrefix)) {
+    issues.push({ ...TRUST_ISSUES.pathInvalid });
+  }
+
+  const queryKeys = new Set<string>();
+  fields.expectedQueryRows.forEach((row, index) => {
+    const key = row.key.trim();
+    if (key === "") {
+      issues.push({
+        field: `expectedQueryRows.${index}.key`,
+        code: "TRUST_QUERY_KEY_REQUIRED",
+        message: "Expected query keys cannot be blank.",
+      });
+    } else if (queryKeys.has(key)) {
+      issues.push({
+        field: `expectedQueryRows.${index}.key`,
+        code: "TRUST_QUERY_KEY_DUPLICATE",
+        message: "Expected query keys must be unique.",
+      });
+    } else {
+      queryKeys.add(key);
+    }
+  });
+
+  return issues.length === 0 ? { valid: true } : { valid: false, issues };
 }
 
 function draftFromManifest(
