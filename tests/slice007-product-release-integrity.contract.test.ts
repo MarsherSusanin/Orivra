@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +11,7 @@ import {
   expectedCanonicalUrl,
   makeBundleInput,
   validManifest,
+  validPreflightReport,
 } from "../packages/contracts/test/fixtures";
 import {
   appendRunEvents,
@@ -310,18 +312,37 @@ function liveGraphHarness() {
   };
   const ports = {
     async preflight() {
+      const requestBytes = "0x574542324a534f4e";
       return {
-        canonicalUrl: expectedCanonicalUrl,
-        requestBytes: "0x574542324a534f4e",
-        requestCalldata: "0xfeedcafe",
-        quotedFeeWei: 12_345n,
-        network: {
-          chainId: 114 as const,
-          registryAddress: "0x2222222222222222222222222222222222222222",
-          resolvedContracts: {
-            FdcHub: FDC_HUB,
-            FdcVerification: FDC_VERIFICATION,
-            Relay: RELAY,
+        kind: "accepted" as const,
+        report: {
+          ...structuredClone(validPreflightReport),
+          requestIdentitySha256: `sha256:${createHash("sha256")
+            .update(Buffer.from(requestBytes.slice(2), "hex"))
+            .digest("hex")}`,
+          fee: {
+            quotedWei: "12345",
+            capWei: manifest.submission.feeCapWei,
+            withinCap: true,
+          },
+        },
+        submissionEvidence: {
+          canonicalUrl: expectedCanonicalUrl,
+          requestBytes,
+          requestCalldata: "0xfeedcafe",
+          quotedFeeWei: 12_345n,
+          network: {
+            chainId: 114 as const,
+            blockNumber: validPreflightReport.registrySnapshot.blockNumber,
+            registryAddress: validPreflightReport.registrySnapshot.registryAddress,
+            resolvedContracts: {
+              FdcHub: FDC_HUB,
+              FdcRequestFeeConfigurations:
+                validPreflightReport.registrySnapshot.resolvedContracts
+                  .FdcRequestFeeConfigurations,
+              FdcVerification: FDC_VERIFICATION,
+              Relay: RELAY,
+            },
           },
         },
       };
