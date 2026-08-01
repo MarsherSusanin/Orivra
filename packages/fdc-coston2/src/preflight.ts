@@ -340,10 +340,7 @@ export async function runWeb2JsonPreflight(
 
   const distinctFingerprints = new Set(sampleFingerprints).size;
   const representativeEncoding = encodedSamples[0];
-  abiCompatible =
-    abiCompatible &&
-    encodedSamples.length === 5 &&
-    encodedSamples.every((encoded) => encoded === representativeEncoding);
+  abiCompatible = abiCompatible && encodedSamples.length === 5;
   const responseShape = createRedactedJsonShape(sourceSamples[0]);
   const jqPreview = createRedactedJsonShape(transformedSamples[0]);
   const feeCapWei = BigInt(manifest.submission.feeCapWei);
@@ -360,10 +357,8 @@ export async function runWeb2JsonPreflight(
     responseShapeTruncated: responseShape.truncated,
     jqShapeTruncated: jqPreview.truncated,
   });
-  const diagnostics = [
-    ...blockers.map(blockerDiagnostic),
-    ...shapeDiagnostics,
-  ];
+  const diagnostics =
+    blockers.length > 0 ? blockers.map(blockerDiagnostic) : shapeDiagnostics;
   const verdict =
     blockers.length > 0
       ? "blocked"

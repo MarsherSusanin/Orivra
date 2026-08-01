@@ -93,6 +93,46 @@ function isSafePublicHttpsUrl(value: string): boolean {
   }
 }
 
+const PUBLIC_URL_CREDENTIAL_QUERY_NAMES = new Set([
+  "apikey",
+  "token",
+  "authorization",
+  "auth",
+  "secret",
+  "privatekey",
+  "accesstoken",
+  "clientsecret",
+  "password",
+  "xamzcredential",
+  "xamzsignature",
+  "authorizationtoken",
+  "credential",
+  "jwt",
+  "xamzsecuritytoken",
+]);
+
+const PRIVATE_URL_QUERY_VALUE_PATTERN =
+  /(?:project|share)_[A-Za-z0-9_-]{32,}|Bearer\s+[^\s;,]+|^0x[a-fA-F0-9]{64}$/i;
+
+function isCredentialQueryName(value: string): boolean {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return PUBLIC_URL_CREDENTIAL_QUERY_NAMES.has(normalized.replace(/v\d+$/, ""));
+}
+
+function isSafePublicPreflightUrl(value: string): boolean {
+  if (!isSafePublicHttpsUrl(value)) return false;
+  const url = new URL(value);
+  for (const [key, queryValue] of url.searchParams) {
+    if (
+      isCredentialQueryName(key) ||
+      PRIVATE_URL_QUERY_VALUE_PATTERN.test(queryValue.trim())
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 const Web2JsonRequestV1Schema = z
   .object({
     method: z.literal("GET"),
@@ -282,6 +322,47 @@ const PreflightBlockerV1Schema = z.enum([
 
 export type PreflightBlockerV1 = z.infer<typeof PreflightBlockerV1Schema>;
 
+const PreflightDiagnosticExpectationByCode = {
+  PREFLIGHT_SOURCE_NONDETERMINISTIC: {
+    severity: "error",
+    reportFields: ["sampleFingerprints", "determinism"],
+  },
+  PREFLIGHT_ABI_INCOMPATIBLE: {
+    severity: "error",
+    reportFields: ["abiCompatibility"],
+  },
+  PREFLIGHT_FEE_CAP_EXCEEDED: {
+    severity: "error",
+    reportFields: ["fee"],
+  },
+  PREFLIGHT_TRUST_HOST_MISMATCH: {
+    severity: "error",
+    reportFields: ["canonicalUrl"],
+  },
+  PREFLIGHT_TRUST_PATH_MISMATCH: {
+    severity: "error",
+    reportFields: ["canonicalUrl"],
+  },
+  PREFLIGHT_TRUST_QUERY_MISMATCH: {
+    severity: "error",
+    reportFields: ["canonicalUrl"],
+  },
+  PREFLIGHT_RESPONSE_SHAPE_TRUNCATED: {
+    severity: "warning",
+    reportFields: ["responseShape"],
+  },
+  PREFLIGHT_JQ_SHAPE_TRUNCATED: {
+    severity: "warning",
+    reportFields: ["jqPreview"],
+  },
+} as const satisfies Record<
+  PreflightDiagnosticCodeV1,
+  {
+    severity: "warning" | "error";
+    reportFields: readonly z.infer<typeof PreflightReportFieldV1Schema>[];
+  }
+>;
+
 const PreflightAbiCompatibilityV1Schema = z
   .object({
     compatible: z.boolean(),
@@ -337,7 +418,10 @@ export const PreflightReportV1Schema = z
     canonicalUrl: z
       .string()
       .max(2_048)
-      .refine(isSafePublicHttpsUrl, "Expected a public canonical HTTPS URL"),
+      .refine(
+        isSafePublicPreflightUrl,
+        "Expected a public canonical HTTPS URL without credentials",
+      ),
     requestIdentitySha256: Sha256EnvelopeSchema,
     sampleFingerprints: z.array(Sha256EnvelopeSchema).length(5),
     determinism: z
@@ -375,48 +459,91 @@ export const PreflightReportV1Schema = z
     }
 
     const blockerSet = new Set(report.blockers);
-    const errorDiagnosticCodes = new Set(
-      report.diagnostics
-        .filter((diagnostic) => diagnostic.severity === "error")
-        .map((diagnostic) => diagnostic.code),
+    const diagnosticCodes = report.diagnostics.map(
+      (diagnostic) => diagnostic.code,
     );
-    if (
-      (report.verdict === "blocked") !== (report.blockers.length > 0) ||
-      report.blockers.some((blocker) => !errorDiagnosticCodes.has(blocker))
-    ) {
+    const diagnosticCodeSet = new Set(diagnosticCodes);
+
+    for (let index = 0; index < report.diagnostics.length; index += 1) {
+      const diagnostic = report.diagnostics[index];
+      const expectation = PreflightDiagnosticExpectationByCode[diagnostic.code];
+      if (
+        diagnostic.severity !== expectation.severity ||
+        diagnostic.evidence.reportFields.length !==
+          expectation.reportFields.length ||
+        diagnostic.evidence.reportFields.some(
+          (field, fieldIndex) => field !== expectation.reportFields[fieldIndex],
+        )
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["diagnostics", index],
+          message: "Diagnostic severity and evidence must match its stable code.",
+        });
+      }
+    }
+
+    if (diagnosticCodeSet.size !== diagnosticCodes.length) {
       context.addIssue({
         code: "custom",
-        path: ["blockers"],
-        message: "Blocked verdicts require matching error diagnostics.",
+        path: ["diagnostics"],
+        message: "Preflight diagnostic codes must be unique.",
       });
     }
 
-    const requiredBlockers: Array<[boolean, PreflightBlockerV1]> = [
+    const evidenceBlockers: Array<[boolean, PreflightBlockerV1]> = [
       [!report.determinism.passed, "PREFLIGHT_SOURCE_NONDETERMINISTIC"],
       [!report.abiCompatibility.compatible, "PREFLIGHT_ABI_INCOMPATIBLE"],
       [!report.fee.withinCap, "PREFLIGHT_FEE_CAP_EXCEEDED"],
     ];
     if (
-      requiredBlockers.some(
-        ([required, blocker]) => required && !blockerSet.has(blocker),
+      evidenceBlockers.some(
+        ([failed, blocker]) => blockerSet.has(blocker) !== failed,
       )
     ) {
       context.addIssue({
         code: "custom",
         path: ["blockers"],
-        message: "Failed preflight evidence requires its stable blocker.",
+        message: "Preflight evidence and stable blockers must match exactly.",
       });
     }
 
-    const truncated = report.responseShape.truncated || report.jqPreview.truncated;
-    if (
-      (report.verdict === "ready" && truncated) ||
-      (report.verdict === "attention" && !truncated)
-    ) {
+    const attentionCodes = (
+      [
+        [
+          report.responseShape.truncated,
+          "PREFLIGHT_RESPONSE_SHAPE_TRUNCATED",
+        ],
+        [report.jqPreview.truncated, "PREFLIGHT_JQ_SHAPE_TRUNCATED"],
+      ] as const
+    )
+      .filter(([required]) => required)
+      .map(([, code]) => code);
+
+    const hasExactAttentionDiagnostics =
+      report.diagnostics.length === attentionCodes.length &&
+      attentionCodes.every((code) => diagnosticCodeSet.has(code));
+    const hasExactBlockedDiagnostics =
+      report.diagnostics.length === report.blockers.length &&
+      report.blockers.every((blocker) => diagnosticCodeSet.has(blocker));
+    const verdictEvidenceIsExact =
+      (report.verdict === "ready" &&
+        report.blockers.length === 0 &&
+        attentionCodes.length === 0 &&
+        report.diagnostics.length === 0) ||
+      (report.verdict === "attention" &&
+        report.blockers.length === 0 &&
+        attentionCodes.length > 0 &&
+        hasExactAttentionDiagnostics) ||
+      (report.verdict === "blocked" &&
+        report.blockers.length > 0 &&
+        hasExactBlockedDiagnostics);
+
+    if (!verdictEvidenceIsExact) {
       context.addIssue({
         code: "custom",
         path: ["verdict"],
-        message: "Truncated public shapes require an attention verdict.",
+        message: "Verdict, blockers, diagnostics, and public evidence must match exactly.",
       });
     }
 
