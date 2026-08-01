@@ -28,13 +28,14 @@ function event(
   name: ProductEventNameV1,
   sessionId = "session_11111111-1111-4111-8111-111111111111",
   offsetMs = 0,
+  metadata: unknown = metadataByName[name],
 ): ProductEventV1 {
   return ProductEventV1Schema.parse({
     version: "1",
     sessionId,
     occurredAt: new Date(Date.UTC(2026, 7, 2, 2, 0, 0) + offsetMs).toISOString(),
     name,
-    metadata: metadataByName[name],
+    metadata,
   });
 }
 
@@ -185,6 +186,58 @@ describe("deterministic product funnel", () => {
     expect(reduceProductFunnel(events)).toMatchObject({
       sessions: 4,
       completedSessions: 0,
+    });
+  });
+
+  it("advances to safe handoff only through accepted outcomes and byte-identical replay", () => {
+    const canonicalJourney = (
+      sessionId: string,
+      outcomes: {
+        manifest?: "accepted" | "rejected";
+        preflight?: "accepted" | "rejected";
+        bundle?: "byte-identical" | "mismatch" | "rejected";
+      } = {},
+    ) => [
+      event("COMPOSER_STARTED", sessionId, 0),
+      event("MANIFEST_VALIDATED", sessionId, 1, {
+        outcome: outcomes.manifest ?? "accepted",
+      }),
+      event("PREFLIGHT_COMPLETED", sessionId, 2, {
+        outcome: outcomes.preflight ?? "accepted",
+      }),
+      event("SUBMISSION_REQUESTED", sessionId, 3),
+      event("PROOF_AVAILABLE", sessionId, 4),
+      event("SAFE_CODEGEN_GENERATED", sessionId, 5),
+      event("BUNDLE_REPLAYED", sessionId, 6, {
+        outcome: outcomes.bundle ?? "byte-identical",
+      }),
+    ];
+    const accepted = "session_99999999-9999-4999-8999-999999999999";
+    const manifestRejected = "session_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const preflightRejected = "session_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const bundleMismatch = "session_cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const bundleRejected = "session_dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+    expect(reduceProductFunnel([
+      ...canonicalJourney(accepted),
+      ...canonicalJourney(manifestRejected, { manifest: "rejected" }),
+      ...canonicalJourney(preflightRejected, { preflight: "rejected" }),
+      ...canonicalJourney(bundleMismatch, { bundle: "mismatch" }),
+      ...canonicalJourney(bundleRejected, { bundle: "rejected" }),
+    ])).toMatchObject({
+      sessions: 5,
+      completedSessions: 1,
+      steps: [
+        { name: "COMPOSER_STARTED", sessions: 5 },
+        { name: "MANIFEST_VALIDATED", sessions: 5 },
+        { name: "PREFLIGHT_COMPLETED", sessions: 4 },
+        { name: "SUBMISSION_REQUESTED", sessions: 3 },
+        { name: "PROOF_AVAILABLE", sessions: 3 },
+        { name: "CONSUMER_VERIFICATION_FAILED", sessions: 0 },
+        { name: "SAFE_CODEGEN_GENERATED", sessions: 3 },
+        { name: "BUNDLE_REPLAYED", sessions: 1 },
+        { name: "RUN_RESUMED", sessions: 0 },
+      ],
     });
   });
 });
