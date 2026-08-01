@@ -186,7 +186,8 @@ export function createEthUsdComposerDraft(
         url: "https://api.coinbase.com/v2/prices/ETH-USD/spot",
         query: {},
         jq: ".data | {amount: .amount, currency: .currency}",
-        abiSignature: "{string amount,string currency}",
+        abiSignature:
+          '{"components":[{"internalType":"string","name":"amount","type":"string"},{"internalType":"string","name":"currency","type":"string"}],"name":"data","type":"tuple"}',
       },
       consumer: {
         expectedScheme: "https",
