@@ -1,4 +1,5 @@
 import { ChartBar, Code, FileText, Gear, UsersThree } from "@phosphor-icons/react";
+import { useState } from "react";
 import prooflineMark from "../assets/proofline-mark.png";
 
 const items = [
@@ -10,6 +11,8 @@ const items = [
 ];
 
 export function Sidebar({ active = "Runs" }: { active?: string }) {
+  const [explainedItem, setExplainedItem] = useState<string>();
+
   return (
     <aside className="sidebar" aria-label="Primary navigation">
       <a className="brand-mark" href="/runs" aria-label="Proofline home">
@@ -30,14 +33,23 @@ export function Sidebar({ active = "Runs" }: { active?: string }) {
             </a>
           ) : (
             <button
-              className="nav-item is-disabled"
+              className={`nav-item is-disabled${explainedItem === label ? " is-explaining" : ""}`}
               type="button"
-              disabled
+              aria-label={label}
+              aria-disabled="true"
+              aria-describedby={`nav-${label.toLowerCase()}-unavailable`}
+              onClick={() => setExplainedItem(label)}
               title={`${label} is not available in this build`}
               key={label}
             >
               <Icon size={27} aria-hidden="true" />
               <span>{label}</span>
+              <span
+                className="nav-unavailable-note"
+                id={`nav-${label.toLowerCase()}-unavailable`}
+              >
+                {label} is not available in this build
+              </span>
             </button>
           );
         })}

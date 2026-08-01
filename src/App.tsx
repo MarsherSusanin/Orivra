@@ -2,8 +2,9 @@ import { ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass } from "@p
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createLocalProductAnalytics,
+  getOrCreateAnalyticsSessionId,
   type ProductAnalyticsPort,
-} from "@proofline/domain";
+} from "./services/product-analytics";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { EvidenceStrip } from "./components/EvidenceStrip";
 import { ProjectTokenDialog } from "./components/ProjectTokenDialog";
@@ -25,7 +26,6 @@ import {
 } from "./services/run-surface";
 
 const PROJECT_TOKEN_KEY = "proofline:project-token";
-const ANALYTICS_SESSION_KEY = "proofline:analytics-session";
 
 export type AppProps = {
   runId?: string;
@@ -49,18 +49,6 @@ function deepRouteRunId(): string | null {
     return decodeURIComponent(match[1]);
   } catch {
     return null;
-  }
-}
-
-function analyticsSessionId(): string {
-  try {
-    const stored = globalThis.sessionStorage?.getItem(ANALYTICS_SESSION_KEY);
-    if (stored) return stored;
-    const created = globalThis.crypto?.randomUUID?.() ?? `session-${Date.now()}`;
-    globalThis.sessionStorage?.setItem(ANALYTICS_SESSION_KEY, created);
-    return created;
-  } catch {
-    return globalThis.crypto?.randomUUID?.() ?? `session-${Date.now()}`;
   }
 }
 
@@ -239,7 +227,7 @@ function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
             </section>
           </main>
         </div>
-        <ProjectTokenDialog onConnect={connectProject} />
+        <ProjectTokenDialog onConnect={connectProject} backHref="/runs" />
       </div>
     );
   }
@@ -358,9 +346,14 @@ function ProductEntry({
     setConnectOpen(false);
   };
   const recordStart = () => {
+    const sessionId = getOrCreateAnalyticsSessionId({
+      storage: globalThis.sessionStorage,
+      crypto: globalThis.crypto,
+    });
+    if (!sessionId) return;
     analyticsPort.emit({
       version: "1",
-      sessionId: analyticsSessionId(),
+      sessionId,
       occurredAt: new Date().toISOString(),
       name: "COMPOSER_STARTED",
       metadata: { entryPoint: route === "runs" ? "runs" : "direct" },
@@ -387,7 +380,12 @@ function ProductEntry({
           <NewRunEntry onConnect={() => setConnectOpen(true)} />
         )}
       </div>
-      {connectOpen ? <ProjectTokenDialog onConnect={connectProject} /> : null}
+      {connectOpen ? (
+        <ProjectTokenDialog
+          onConnect={connectProject}
+          onClose={() => setConnectOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

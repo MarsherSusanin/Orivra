@@ -20,6 +20,25 @@ const FUNNEL_STEPS: readonly ProductEventNameV1[] = [
   "RUN_RESUMED",
 ];
 
+const CANONICAL_HANDOFF_STEPS: readonly ProductEventNameV1[] = [
+  "COMPOSER_STARTED",
+  "MANIFEST_VALIDATED",
+  "PREFLIGHT_COMPLETED",
+  "SUBMISSION_REQUESTED",
+  "PROOF_AVAILABLE",
+  "SAFE_CODEGEN_GENERATED",
+  "BUNDLE_REPLAYED",
+];
+
+type SessionFunnelState = {
+  invalid: boolean;
+  lastOccurredAt: number;
+  currentStep: number;
+  reached: Set<ProductEventNameV1>;
+  consumerFailed: boolean;
+  resumed: boolean;
+};
+
 interface ProductAnalyticsStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -117,24 +136,60 @@ export function reduceProductFunnel(
   eventValues: readonly ProductEventV1[],
 ): ProductFunnelV1 {
   const events = eventValues.map((event) => ProductEventV1Schema.parse(event));
-  const sessions = new Set(events.map((event) => event.sessionId));
+  const sessions = new Map<string, SessionFunnelState>();
 
-  const sessionsFor = (name: ProductEventNameV1) =>
-    new Set(
-      events
-        .filter((event) => event.name === name)
-        .map((event) => event.sessionId),
-    );
+  for (const event of events) {
+    const state = sessions.get(event.sessionId) ?? {
+      invalid: false,
+      lastOccurredAt: Number.NEGATIVE_INFINITY,
+      currentStep: -1,
+      reached: new Set<ProductEventNameV1>(),
+      consumerFailed: false,
+      resumed: false,
+    };
+    sessions.set(event.sessionId, state);
+
+    const occurredAt = Date.parse(event.occurredAt);
+    if (occurredAt < state.lastOccurredAt) state.invalid = true;
+    state.lastOccurredAt = Math.max(state.lastOccurredAt, occurredAt);
+
+    if (event.name === "RUN_RESUMED") {
+      state.resumed = true;
+      state.reached.add(event.name);
+      continue;
+    }
+
+    if (event.name === "CONSUMER_VERIFICATION_FAILED") {
+      if (state.currentStep !== 4) state.invalid = true;
+      state.consumerFailed = true;
+      state.reached.add(event.name);
+      continue;
+    }
+
+    const step = CANONICAL_HANDOFF_STEPS.indexOf(event.name);
+    if (step === state.currentStep + 1) {
+      state.currentStep = step;
+      state.reached.add(event.name);
+    } else if (step !== state.currentStep) {
+      state.invalid = true;
+    }
+  }
+
+  const validSessions = Array.from(sessions.values()).filter(
+    (state) => !state.invalid,
+  );
 
   return {
     version: "1",
     sessions: sessions.size,
-    completedSessions: sessionsFor("BUNDLE_REPLAYED").size,
-    failedSessions: sessionsFor("CONSUMER_VERIFICATION_FAILED").size,
-    resumedSessions: sessionsFor("RUN_RESUMED").size,
+    completedSessions: validSessions.filter(
+      (state) => state.currentStep === CANONICAL_HANDOFF_STEPS.length - 1,
+    ).length,
+    failedSessions: validSessions.filter((state) => state.consumerFailed).length,
+    resumedSessions: validSessions.filter((state) => state.resumed).length,
     steps: FUNNEL_STEPS.map((name) => ({
       name,
-      sessions: sessionsFor(name).size,
+      sessions: validSessions.filter((state) => state.reached.has(name)).length,
     })),
   };
 }

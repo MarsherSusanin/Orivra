@@ -248,9 +248,20 @@ export const ProductEventNameV1Schema = z.enum([
   "RUN_RESUMED",
 ]);
 
+export const ProductAnalyticsSessionIdV1Schema = z
+  .string()
+  .regex(
+    /^session_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    "Expected an opaque generated analytics session identifier",
+  );
+
+export type ProductAnalyticsSessionIdV1 = z.infer<
+  typeof ProductAnalyticsSessionIdV1Schema
+>;
+
 const ProductEventCommon = {
   version: VersionV1Schema,
-  sessionId: NonEmptyIdSchema,
+  sessionId: ProductAnalyticsSessionIdV1Schema,
   occurredAt: z.string().datetime({ offset: true }),
 };
 

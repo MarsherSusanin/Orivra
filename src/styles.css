@@ -154,12 +154,45 @@ a {
 
 .nav-item.is-disabled {
   color: #66747e;
-  cursor: not-allowed;
+  cursor: help;
 }
 
-.nav-item.is-disabled:hover {
-  color: #66747e;
-  background: transparent;
+.nav-item.is-disabled:hover,
+.nav-item.is-disabled:focus-visible,
+.nav-item.is-disabled.is-explaining {
+  color: #a9b6bf;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.nav-unavailable-note {
+  position: absolute;
+  z-index: 30;
+  top: 50%;
+  left: calc(100% - 10px);
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 10px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #101b23;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+  font-size: 12px;
+  font-weight: 520;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(-4px);
+  transition: opacity var(--motion), transform var(--motion), visibility var(--motion);
+  visibility: hidden;
+}
+
+.nav-item.is-disabled:hover .nav-unavailable-note,
+.nav-item.is-disabled:focus-visible .nav-unavailable-note,
+.nav-item.is-disabled.is-explaining .nav-unavailable-note {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+  visibility: visible;
 }
 
 .shell-main {
@@ -1245,6 +1278,23 @@ a {
   font-size: 13px;
 }
 
+.project-token-back {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  color: var(--cyan);
+  border-radius: var(--radius-sm);
+}
+
+.project-token-back:hover,
+.project-token-back:focus-visible {
+  color: #fff;
+  background: rgba(45, 200, 243, 0.06);
+  outline: none;
+}
+
 .field-label {
   display: block;
   margin-bottom: 9px;
@@ -1496,6 +1546,15 @@ a {
     clip: rect(0 0 0 0);
   }
 
+  .nav-item .nav-unavailable-note {
+    top: 50%;
+    left: calc(100% - 4px);
+    width: max-content;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+
   .run-layout {
     grid-template-columns: minmax(0, 1fr) 320px;
   }
@@ -1619,6 +1678,20 @@ a {
     inset: 0 12px auto;
     width: auto;
     height: 3px;
+  }
+
+
+  .nav-item .nav-unavailable-note {
+    inset: auto 4px calc(100% - 2px);
+    width: min(220px, calc(100vw - 16px));
+    max-width: none;
+    transform: translateY(4px);
+  }
+
+  .nav-item.is-disabled:hover .nav-unavailable-note,
+  .nav-item.is-disabled:focus-visible .nav-unavailable-note,
+  .nav-item.is-disabled.is-explaining .nav-unavailable-note {
+    transform: translateY(0);
   }
 
   .topbar {
