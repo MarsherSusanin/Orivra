@@ -355,7 +355,7 @@ function hydrateView(
   const consumerEventDiagnostics = diagnosticsFrom(consumerEventEvidence.diagnostics);
   const validConsumerEventDiagnostics =
     consumerEventDiagnostics &&
-    (consumerEventDiagnostics.length > 0 || typeof consumerEventEvidence.passed === "boolean")
+    (consumerEventDiagnostics.length > 0 || consumerEventEvidence.passed === true)
       ? consumerEventDiagnostics
       : undefined;
   const trustedDiagnostics = diagnostics && diagnostics.length > 0

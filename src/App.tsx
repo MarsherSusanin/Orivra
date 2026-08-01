@@ -272,11 +272,20 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
           run.sequence > previousProof.sequence &&
           (previousProof.state === "pending" || previousProof.state === "active") &&
           run.stages.proof === "completed";
-        if (proofCompletedNow && !recordedProofRuns.current.has(run.runId)) {
+        const proofSource = run.submissionMode === "replay"
+          ? "replay"
+          : run.submissionMode === "wallet" || run.submissionMode === "relayer"
+            ? "live"
+            : undefined;
+        if (
+          proofCompletedNow &&
+          proofSource !== undefined &&
+          !recordedProofRuns.current.has(run.runId)
+        ) {
           recordedProofRuns.current.add(run.runId);
           emitProductEvent({
             name: "PROOF_AVAILABLE",
-            metadata: { source: run.submissionMode === "replay" ? "replay" : "live" },
+            metadata: { source: proofSource },
           });
         }
         if (
