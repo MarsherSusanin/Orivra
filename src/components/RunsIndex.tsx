@@ -144,11 +144,18 @@ export function RunsIndex({
       </header>
 
       <nav className="run-filters" aria-label="Filter runs">
-        <a className={!status ? "is-active" : ""} href="/runs">All</a>
+        <a
+          className={!status ? "is-active" : ""}
+          href="/runs"
+          aria-current={!status ? "page" : undefined}
+        >
+          All
+        </a>
         {(["active", "completed", "failed"] as const).map((filter) => (
           <a
             className={status === filter ? "is-active" : ""}
             href={`/runs?status=${filter}`}
+            aria-current={status === filter ? "page" : undefined}
             key={filter}
           >
             {filter[0].toUpperCase() + filter.slice(1)}

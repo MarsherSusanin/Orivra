@@ -3,9 +3,10 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { App } from "./App";
+import { withHydratedRun } from "./test/cockpit-fixture";
 
 function renderWithServices(overrides: Record<string, unknown> = {}) {
-  const services = {
+  const services = withHydratedRun({
     verifyConsumer: vi.fn().mockResolvedValue({
       summary: "Consumer needs one fix",
       code: "EXPECTED_HOST_NOT_ENFORCED",
@@ -23,7 +24,7 @@ function renderWithServices(overrides: Record<string, unknown> = {}) {
     ),
     replayBundle: vi.fn().mockResolvedValue({ byteIdentical: true }),
     ...overrides,
-  };
+  });
   render(
     createElement(App as unknown as React.ComponentType<Record<string, unknown>>, {
       runId: "run_01JYXW5ZC6K9JSGG0TQ7V8N3PH",
@@ -39,7 +40,7 @@ describe("Run Cockpit live surface contract", () => {
     const user = userEvent.setup();
     const services = renderWithServices();
 
-    await user.click(screen.getByRole("button", { name: /verify consumer/i }));
+    await user.click(await screen.findByRole("button", { name: /verify consumer/i }));
     const dialog = screen.getByRole("dialog", { name: "Consumer verification" });
     await user.click(within(dialog).getByRole("button", { name: /run verification/i }));
 
@@ -59,7 +60,7 @@ describe("Run Cockpit live surface contract", () => {
   it("moves focus into the modal, traps Tab, closes on Escape, and restores focus", async () => {
     const user = userEvent.setup();
     renderWithServices();
-    const trigger = screen.getByRole("button", { name: /verify consumer/i });
+    const trigger = await screen.findByRole("button", { name: /verify consumer/i });
     trigger.focus();
     await user.click(trigger);
 
@@ -90,7 +91,7 @@ describe("Run Cockpit live surface contract", () => {
       });
     renderWithServices({ verifyConsumer });
 
-    await user.click(screen.getByRole("button", { name: /verify consumer/i }));
+    await user.click(await screen.findByRole("button", { name: /verify consumer/i }));
     const dialog = screen.getByRole("dialog", { name: "Consumer verification" });
     await user.click(within(dialog).getByRole("button", { name: /run verification/i }));
 
@@ -104,7 +105,7 @@ describe("Run Cockpit live surface contract", () => {
     const user = userEvent.setup();
     const services = renderWithServices();
 
-    await user.click(screen.getByRole("button", { name: /export bundle/i }));
+    await user.click(await screen.findByRole("button", { name: /export bundle/i }));
     expect(services.exportBundle).toHaveBeenCalledOnce();
     expect(services.replayBundle).toHaveBeenCalledWith(
       expect.stringContaining("sha256:"),

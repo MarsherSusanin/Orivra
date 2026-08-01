@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { TEST_RUN_ID, withHydratedRun } from "./test/cockpit-fixture";
 
 function resolvedServices() {
   return {
@@ -23,11 +24,12 @@ async function openCompletedVerification() {
   const user = userEvent.setup();
   render(
     <App
+      runId={TEST_RUN_ID}
       projectToken={`project_${"a".repeat(64)}`}
-      services={resolvedServices()}
+      services={withHydratedRun(resolvedServices())}
     />,
   );
-  const trigger = screen.getByRole("button", { name: /verify consumer/i });
+  const trigger = await screen.findByRole("button", { name: /verify consumer/i });
   await user.click(trigger);
   const dialog = screen.getByRole("dialog", {
     name: "Consumer verification",

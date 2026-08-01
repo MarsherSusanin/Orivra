@@ -5,6 +5,10 @@ import { App } from "./App";
 import { EvidenceStrip } from "./components/EvidenceStrip";
 import { RunTimeline } from "./components/RunTimeline";
 import { initialRunStages } from "./data/run";
+import {
+  TEST_HYDRATED_RUN,
+  TEST_RUN_ID,
+} from "./test/cockpit-fixture";
 
 const projectToken = `project_${"a".repeat(64)}`;
 
@@ -24,6 +28,7 @@ function services(overrides: Record<string, unknown> = {}) {
     }),
     exportBundle: vi.fn().mockResolvedValue('{"version":"1"}'),
     replayBundle: vi.fn().mockResolvedValue({ byteIdentical: true }),
+    hydrateRun: vi.fn().mockResolvedValue(TEST_HYDRATED_RUN),
     resume: vi.fn().mockReturnValue(null),
     ...overrides,
   };
@@ -39,13 +44,14 @@ describe("Run Cockpit bundle and session hardening", () => {
     const user = userEvent.setup();
     render(
       <App
+        runId={TEST_RUN_ID}
         projectToken={projectToken}
         services={services({
           replayBundle: vi.fn().mockResolvedValue({ byteIdentical: false }),
         })}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /export bundle/i }));
+    await user.click(await screen.findByRole("button", { name: /export bundle/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/bytes differ/i);
     expect(screen.queryByText(/bundle verified/i)).not.toBeInTheDocument();
   });
@@ -54,6 +60,7 @@ describe("Run Cockpit bundle and session hardening", () => {
     const user = userEvent.setup();
     render(
       <App
+        runId={TEST_RUN_ID}
         projectToken={projectToken}
         services={services({
           exportBundle: vi
@@ -62,7 +69,7 @@ describe("Run Cockpit bundle and session hardening", () => {
         })}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /export bundle/i }));
+    await user.click(await screen.findByRole("button", { name: /export bundle/i }));
     const alert = await screen.findByRole("alert");
     expect(alert).not.toHaveTextContent(projectToken);
     expect(alert).toHaveTextContent(/\[REDACTED\]/);
@@ -74,9 +81,9 @@ describe("Run Cockpit bundle and session hardening", () => {
       resume: vi.fn().mockReturnValue({ runId: "run_resumed", after: 8 }),
     });
     const user = userEvent.setup();
-    render(<App services={ports} />);
+    render(<App runId="run_resumed" services={ports} />);
 
-    await user.click(screen.getByRole("button", { name: /export bundle/i }));
+    await user.click(await screen.findByRole("button", { name: /export bundle/i }));
     expect(ports.exportBundle).toHaveBeenCalledWith({
       runId: "run_resumed",
       projectToken,
@@ -85,14 +92,20 @@ describe("Run Cockpit bundle and session hardening", () => {
     expect(localStorage.getItem("proofline:project-token")).toBeNull();
   });
 
-  it("continues rendering when sessionStorage access is denied", () => {
+  it("continues rendering when sessionStorage access is denied", async () => {
     const getItem = vi
       .spyOn(Storage.prototype, "getItem")
       .mockImplementation(() => {
         throw new Error("storage denied");
       });
-    expect(() => render(<App services={services()} />)).not.toThrow();
-    expect(screen.getByRole("heading", { name: "ETH/USD snapshot" })).toBeVisible();
+    expect(() => render(
+      <App
+        runId={TEST_RUN_ID}
+        projectToken={projectToken}
+        services={services()}
+      />,
+    )).not.toThrow();
+    expect(await screen.findByRole("heading", { name: "ETH/USD snapshot" })).toBeVisible();
     getItem.mockRestore();
   });
 });
@@ -106,12 +119,13 @@ describe("Consumer Lab error and focus boundaries", () => {
       .mockResolvedValueOnce({ source: "contract Safe {}" });
     render(
       <App
+        runId={TEST_RUN_ID}
         projectToken={projectToken}
         services={services({ generateConsumer })}
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /verify consumer/i }));
+    await user.click(await screen.findByRole("button", { name: /verify consumer/i }));
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: /run verification/i }));
     await within(dialog).findByText("Consumer needs one fix");
@@ -133,13 +147,14 @@ describe("Consumer Lab error and focus boundaries", () => {
     const user = userEvent.setup();
     render(
       <App
+        runId={TEST_RUN_ID}
         projectToken={projectToken}
         services={services({
           verifyConsumer: vi.fn().mockRejectedValue("upstream rejected"),
         })}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /verify consumer/i }));
+    await user.click(await screen.findByRole("button", { name: /verify consumer/i }));
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: /run verification/i }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
@@ -149,8 +164,8 @@ describe("Consumer Lab error and focus boundaries", () => {
 
   it("wraps forward Tab from the last action to the close control", async () => {
     const user = userEvent.setup();
-    render(<App projectToken={projectToken} services={services()} />);
-    await user.click(screen.getByRole("button", { name: /verify consumer/i }));
+    render(<App runId={TEST_RUN_ID} projectToken={projectToken} services={services()} />);
+    await user.click(await screen.findByRole("button", { name: /verify consumer/i }));
     const dialog = screen.getByRole("dialog");
     const close = within(dialog).getByRole("button", {
       name: /close consumer verification/i,
@@ -163,8 +178,8 @@ describe("Consumer Lab error and focus boundaries", () => {
 
   it("restores focus when the explicit close control is clicked", async () => {
     const user = userEvent.setup();
-    render(<App projectToken={projectToken} services={services()} />);
-    const trigger = screen.getByRole("button", { name: /verify consumer/i });
+    render(<App runId={TEST_RUN_ID} projectToken={projectToken} services={services()} />);
+    const trigger = await screen.findByRole("button", { name: /verify consumer/i });
     await user.click(trigger);
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {

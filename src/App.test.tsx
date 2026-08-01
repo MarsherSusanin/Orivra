@@ -1,12 +1,46 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 import { App } from "./App";
+import {
+  TEST_PROJECT_TOKEN,
+  TEST_RUN_ID,
+  withHydratedRun,
+} from "./test/cockpit-fixture";
+
+function services() {
+  return withHydratedRun({
+    verifyConsumer: vi.fn().mockResolvedValue({
+      summary: "Consumer needs one fix",
+      code: "EXPECTED_HOST_NOT_ENFORCED",
+      checks: [
+        { label: "Cryptographic proof", status: "passed" as const },
+        { label: "Source host invariant", status: "failed" as const },
+      ],
+    }),
+    generateConsumer: vi.fn().mockResolvedValue({
+      source: "requireHost(requestUrl, EXPECTED_HOST);",
+    }),
+    exportBundle: vi.fn(),
+    replayBundle: vi.fn(),
+  });
+}
+
+function renderCockpit() {
+  return render(
+    <App
+      runId={TEST_RUN_ID}
+      projectToken={TEST_PROJECT_TOKEN}
+      services={services()}
+    />,
+  );
+}
 
 describe("Proofline Run Cockpit", () => {
-  it("makes the active attestation state and next action obvious", () => {
-    render(<App />);
+  it("makes the active attestation state and next action obvious", async () => {
+    renderCockpit();
 
-    expect(screen.getByRole("heading", { name: "ETH/USD snapshot" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "ETH/USD snapshot" })).toBeVisible();
     expect(screen.getByText("Proof available")).toBeVisible();
     expect(screen.getByRole("button", { name: /verify consumer/i })).toBeEnabled();
 
@@ -22,9 +56,9 @@ describe("Proofline Run Cockpit", () => {
 
   it("reveals diagnostic evidence on demand", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderCockpit();
 
-    const details = screen.getByRole("button", { name: /view details/i });
+    const details = await screen.findByRole("button", { name: /view details/i });
     expect(details).toHaveAttribute("aria-expanded", "false");
 
     await user.click(details);
@@ -36,9 +70,9 @@ describe("Proofline Run Cockpit", () => {
 
   it("runs consumer verification and turns the failure into a safe next step", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderCockpit();
 
-    await user.click(screen.getByRole("button", { name: /verify consumer/i }));
+    await user.click(await screen.findByRole("button", { name: /verify consumer/i }));
 
     const lab = screen.getByRole("dialog", { name: "Consumer verification" });
     expect(within(lab).getByDisplayValue("0x71C4...9A2E")).toBeVisible();

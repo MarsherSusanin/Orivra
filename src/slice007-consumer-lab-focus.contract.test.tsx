@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { TEST_RUN_ID, withHydratedRun } from "./test/cockpit-fixture";
 
 function services() {
   return {
@@ -26,11 +27,12 @@ async function generateSafeConsumer() {
   const user = userEvent.setup();
   render(
     <App
+      runId={TEST_RUN_ID}
       projectToken={`project_${"a".repeat(64)}`}
-      services={services()}
+      services={withHydratedRun(services())}
     />,
   );
-  const trigger = screen.getByRole("button", { name: /verify consumer/i });
+  const trigger = await screen.findByRole("button", { name: /verify consumer/i });
   await user.click(trigger);
   const dialog = screen.getByRole("dialog", { name: /consumer verification/i });
   await user.click(

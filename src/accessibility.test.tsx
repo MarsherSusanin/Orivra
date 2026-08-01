@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { TEST_RUN_ID, withHydratedRun } from "./test/cockpit-fixture";
 
 const services = {
   verifyConsumer: vi.fn().mockResolvedValue({
@@ -36,9 +37,11 @@ describe("Run Cockpit accessible DOM", () => {
     const { container } = render(
       <App
         projectToken={`project_${"a".repeat(64)}`}
-        services={services}
+        runId={TEST_RUN_ID}
+        services={withHydratedRun(services)}
       />,
     );
+    await screen.findByRole("button", { name: /verify consumer/i });
     expect(await seriousOrCriticalViolations(container)).toEqual([]);
   });
 
@@ -47,10 +50,11 @@ describe("Run Cockpit accessible DOM", () => {
     const { container } = render(
       <App
         projectToken={`project_${"a".repeat(64)}`}
-        services={services}
+        runId={TEST_RUN_ID}
+        services={withHydratedRun(services)}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /verify consumer/i }));
+    await user.click(await screen.findByRole("button", { name: /verify consumer/i }));
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
     expect(await seriousOrCriticalViolations(container)).toEqual([]);
   });

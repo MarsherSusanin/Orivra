@@ -14,7 +14,6 @@ import { Sidebar } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { VerificationDialog } from "./components/VerificationDialog";
 import {
-  initialRunStages,
   timelineFromProjection,
   type EvidenceItem,
 } from "./data/run";
@@ -26,6 +25,11 @@ import {
 } from "./services/run-surface";
 
 const PROJECT_TOKEN_KEY = "proofline:project-token";
+const UNAVAILABLE_STORAGE = {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+};
 
 export type AppProps = {
   runId?: string;
@@ -34,9 +38,25 @@ export type AppProps = {
   analytics?: ProductAnalyticsPort;
 };
 
+function browserLocalStorage() {
+  try {
+    return globalThis.localStorage ?? UNAVAILABLE_STORAGE;
+  } catch {
+    return UNAVAILABLE_STORAGE;
+  }
+}
+
+function browserSessionStorage() {
+  try {
+    return globalThis.sessionStorage ?? UNAVAILABLE_STORAGE;
+  } catch {
+    return UNAVAILABLE_STORAGE;
+  }
+}
+
 function sessionProjectToken(): string {
   try {
-    return globalThis.sessionStorage?.getItem(PROJECT_TOKEN_KEY) ?? "";
+    return browserSessionStorage().getItem(PROJECT_TOKEN_KEY) ?? "";
   } catch {
     return "";
   }
@@ -120,6 +140,7 @@ function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
     return createLiveSurfaceServices({
       baseUrl: import.meta.env.VITE_PROOFLINE_API_BASE_URL ?? "/api",
       projectToken: resolvedToken,
+      storage: browserLocalStorage(),
     });
   }, [resolvedToken, services]);
   const [resumedRun] = useState(() => servicePort.resume?.() ?? null);
@@ -167,7 +188,7 @@ function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
 
   const connectProject = (token: string) => {
     try {
-      globalThis.sessionStorage?.setItem(PROJECT_TOKEN_KEY, token);
+      browserSessionStorage().setItem(PROJECT_TOKEN_KEY, token);
     } catch {
       // The in-memory token still permits the current session in privacy-restricted browsers.
     }
@@ -199,22 +220,12 @@ function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
     }
   };
 
-  const title = hydratedRun?.title ?? "ETH/USD snapshot";
-  const attestationType = hydratedRun?.attestationType ?? "Web2Json";
-  const network = displayNetwork(hydratedRun?.network);
-  const startedAt = hydratedRun
-    ? displayStartedAt(hydratedRun.startedAt)
-    : "May 15, 2025 12:04:11 UTC";
-  const timeline = hydratedRun
-    ? timelineFromProjection(hydratedRun.stages, hydratedRun.stageDetails)
-    : initialRunStages;
-  const consumerFailed = hydratedRun?.stages.consumer === "failed";
   const evidence = useMemo(
     () => hydratedRun ? evidenceFromRun(hydratedRun) : undefined,
     [hydratedRun],
   );
 
-  if (routeRunId && !resolvedToken) {
+  if (activeRunId && !resolvedToken) {
     return (
       <div className="app-shell">
         <Sidebar />
@@ -232,28 +243,53 @@ function RunCockpit({ runId, projectToken, services }: AppProps = {}) {
     );
   }
 
-  if (shouldHydrate && !hydratedRun) {
-    const unavailable = hydrationError.length > 0;
+  if (!activeRunId || !servicePort.hydrateRun || !hydratedRun) {
+    const missingIdentity = !activeRunId;
+    const missingLoader = Boolean(activeRunId && !servicePort.hydrateRun);
+    const unavailable = missingLoader || hydrationError.length > 0;
+    const heading = missingIdentity
+      ? "No persisted run selected"
+      : missingLoader
+        ? "Run unavailable"
+        : unavailable && /404|not found/i.test(hydrationError)
+          ? "Run not found"
+          : unavailable
+            ? "Run unavailable"
+            : "Loading run…";
+    const description = missingIdentity
+      ? "Choose a persisted run from the Runs page."
+      : missingLoader
+        ? "This surface has no persisted run loader."
+        : unavailable
+          ? hydrationError
+          : "Reading the persisted lifecycle and evidence.";
     return (
       <div className="app-shell">
         <Sidebar />
         <div className="shell-main entry-shell-main">
           <Topbar
-            title={unavailable ? "Run unavailable" : "Loading run"}
+            title={heading}
             attestationType="Web2Json"
             mode="new"
           />
           <main className="entry-layout">
             <section className={`entry-state${unavailable ? " is-error" : ""}`} role={unavailable ? "alert" : undefined}>
-              <h1>{unavailable && /404|not found/i.test(hydrationError) ? "Run not found" : unavailable ? "Run unavailable" : "Loading run…"}</h1>
-              <p>{unavailable ? hydrationError : "Reading the persisted lifecycle and evidence."}</p>
-              {unavailable ? <a className="entry-secondary" href="/runs">Back to runs</a> : null}
+              <h1>{heading}</h1>
+              <p>{description}</p>
+              <a className="entry-secondary" href="/runs">Back to runs</a>
             </section>
           </main>
         </div>
       </div>
     );
   }
+
+  const title = hydratedRun.title;
+  const attestationType = hydratedRun.attestationType ?? "Web2Json";
+  const network = displayNetwork(hydratedRun.network);
+  const startedAt = displayStartedAt(hydratedRun.startedAt);
+  const timeline = timelineFromProjection(hydratedRun.stages, hydratedRun.stageDetails);
+  const consumerFailed = hydratedRun.stages.consumer === "failed";
 
   return (
     <div className="app-shell">
@@ -329,16 +365,17 @@ function ProductEntry({
     return createLiveSurfaceServices({
       baseUrl: import.meta.env.VITE_PROOFLINE_API_BASE_URL ?? "/api",
       projectToken: resolvedToken,
+      storage: browserLocalStorage(),
     });
   }, [resolvedToken, services]);
   const analyticsPort = useMemo(() => {
     if (analytics) return analytics;
-    return createLocalProductAnalytics({ storage: globalThis.localStorage });
+    return createLocalProductAnalytics({ storage: browserLocalStorage() });
   }, [analytics]);
 
   const connectProject = (token: string) => {
     try {
-      globalThis.sessionStorage?.setItem(PROJECT_TOKEN_KEY, token);
+      browserSessionStorage().setItem(PROJECT_TOKEN_KEY, token);
     } catch {
       // The current in-memory session remains usable when storage is denied.
     }
@@ -347,7 +384,7 @@ function ProductEntry({
   };
   const recordStart = () => {
     const sessionId = getOrCreateAnalyticsSessionId({
-      storage: globalThis.sessionStorage,
+      storage: browserSessionStorage(),
       crypto: globalThis.crypto,
     });
     if (!sessionId) return;
@@ -393,7 +430,7 @@ function ProductEntry({
 export function App(props: AppProps = {}) {
   const pathname = globalThis.location?.pathname ?? "/";
   const routedRun = deepRouteRunId();
-  if (props.runId || routedRun || (import.meta.env.MODE === "test" && pathname === "/")) {
+  if (props.runId || routedRun) {
     return <RunCockpit {...props} />;
   }
   return <ProductEntry {...props} route={pathname === "/runs/new" ? "new" : "runs"} />;

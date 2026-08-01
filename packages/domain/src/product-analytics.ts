@@ -32,6 +32,7 @@ const CANONICAL_HANDOFF_STEPS: readonly ProductEventNameV1[] = [
 
 type SessionFunnelState = {
   invalid: boolean;
+  halted: boolean;
   lastOccurredAt: number;
   currentStep: number;
   reached: Set<ProductEventNameV1>;
@@ -141,6 +142,7 @@ export function reduceProductFunnel(
   for (const event of events) {
     const state = sessions.get(event.sessionId) ?? {
       invalid: false,
+      halted: false,
       lastOccurredAt: Number.NEGATIVE_INFINITY,
       currentStep: -1,
       reached: new Set<ProductEventNameV1>(),
@@ -152,6 +154,8 @@ export function reduceProductFunnel(
     const occurredAt = Date.parse(event.occurredAt);
     if (occurredAt < state.lastOccurredAt) state.invalid = true;
     state.lastOccurredAt = Math.max(state.lastOccurredAt, occurredAt);
+
+    if (state.halted) continue;
 
     if (event.name === "RUN_RESUMED") {
       state.resumed = true;
@@ -169,7 +173,14 @@ export function reduceProductFunnel(
     const step = CANONICAL_HANDOFF_STEPS.indexOf(event.name);
     if (step === state.currentStep + 1) {
       state.currentStep = step;
-      state.reached.add(event.name);
+      const successfulOutcome =
+        (event.name !== "MANIFEST_VALIDATED" || event.metadata.outcome === "accepted") &&
+        (event.name !== "PREFLIGHT_COMPLETED" || event.metadata.outcome === "accepted") &&
+        (event.name !== "BUNDLE_REPLAYED" || event.metadata.outcome === "byte-identical");
+      if (event.name !== "BUNDLE_REPLAYED" || successfulOutcome) {
+        state.reached.add(event.name);
+      }
+      if (!successfulOutcome) state.halted = true;
     } else if (step !== state.currentStep) {
       state.invalid = true;
     }
@@ -183,7 +194,9 @@ export function reduceProductFunnel(
     version: "1",
     sessions: sessions.size,
     completedSessions: validSessions.filter(
-      (state) => state.currentStep === CANONICAL_HANDOFF_STEPS.length - 1,
+      (state) =>
+        !state.halted &&
+        state.currentStep === CANONICAL_HANDOFF_STEPS.length - 1,
     ).length,
     failedSessions: validSessions.filter((state) => state.consumerFailed).length,
     resumedSessions: validSessions.filter((state) => state.resumed).length,
