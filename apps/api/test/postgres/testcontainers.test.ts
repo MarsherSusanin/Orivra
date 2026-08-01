@@ -22,6 +22,7 @@ async function loadMigrations() {
     "001_initial.sql",
     "002_one_active_submission.sql",
     "003_run_discovery.sql",
+    "004_preflight_report.sql",
   ]);
   return Promise.all(
     names.map(async (name) => ({
@@ -33,7 +34,7 @@ async function loadMigrations() {
 
 describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
   it(
-    "runs 001, 002, and 003 on empty and previous schemas repeatedly",
+    "runs 001 through 004 on empty and previous schemas repeatedly",
     async () => {
       const container = await new GenericContainer("postgres:16-alpine")
         .withEnvironment({
@@ -75,15 +76,17 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           "001_initial.sql",
           "002_one_active_submission.sql",
           "003_run_discovery.sql",
+          "004_preflight_report.sql",
           "001_initial.sql",
           "002_one_active_submission.sql",
           "003_run_discovery.sql",
+          "004_preflight_report.sql",
         ]);
 
         const emptyVersions = await client.query<{ version: number }>(
           "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
         );
-        expect(emptyVersions.rows.map(({ version }) => version)).toEqual([1, 2, 3]);
+        expect(emptyVersions.rows.map(({ version }) => version)).toEqual([1, 2, 3, 4]);
 
         const tables = await client.query<{ table_name: string }>(
           "SELECT table_name FROM information_schema.tables WHERE table_schema = 'proofline_private'",
@@ -146,6 +149,31 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           ),
         ).rejects.toThrow(/append|immutable|delete/i);
 
+        await client.query(
+          `INSERT INTO proofline_private.run_artifacts
+             (id, run_id, kind, canonical_bytes, sha256, metadata)
+           VALUES ($1, $2, 'preflight-report-v1', $3, decode($4, 'hex'), '{}'::jsonb)`,
+          [
+            "33333333-3333-4333-8333-333333333333",
+            runId,
+            Buffer.from('{"version":"1"}', "utf8"),
+            "bb".repeat(32),
+          ],
+        );
+        await expect(
+          client.query(
+            `INSERT INTO proofline_private.run_artifacts
+               (id, run_id, kind, canonical_bytes, sha256, metadata)
+             VALUES ($1, $2, 'preflight-report-v1', $3, decode($4, 'hex'), '{}'::jsonb)`,
+            [
+              "44444444-4444-4444-8444-444444444444",
+              runId,
+              Buffer.from('{"version":"1","verdict":"ready"}', "utf8"),
+              "cc".repeat(32),
+            ],
+          ),
+        ).rejects.toThrow(/duplicate|unique|preflight/i);
+
         await client.query("DROP SCHEMA proofline_private CASCADE");
         await client.query(await readFile(previousSchemaPath, "utf8"));
         executed.length = 0;
@@ -155,15 +183,17 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           "001_initial.sql",
           "002_one_active_submission.sql",
           "003_run_discovery.sql",
+          "004_preflight_report.sql",
           "001_initial.sql",
           "002_one_active_submission.sql",
           "003_run_discovery.sql",
+          "004_preflight_report.sql",
         ]);
 
         const previousVersions = await client.query<{ version: number }>(
           "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
         );
-        expect(previousVersions.rows.map(({ version }) => version)).toEqual([0, 1, 2, 3]);
+        expect(previousVersions.rows.map(({ version }) => version)).toEqual([0, 1, 2, 3, 4]);
         const upgradedTables = await client.query<{ table_name: string }>(
           "SELECT table_name FROM information_schema.tables WHERE table_schema = 'proofline_private'",
         );

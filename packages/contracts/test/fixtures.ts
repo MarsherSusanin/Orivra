@@ -61,6 +61,131 @@ export const validComposerDraft = {
 export const expectedCanonicalUrl =
   "https://api.example.com/prices/eth?currency=USD&source=primary&window=1h";
 
+/**
+ * Slice 016 fixture whose consumer Trust policy covers the exact effective URL.
+ * The historical validManifest remains unchanged for earlier bundle fixtures.
+ */
+export const exactTrustManifest = {
+  ...validManifest,
+  consumer: {
+    ...validManifest.consumer,
+    expectedQuery: {
+      ...validManifest.consumer.expectedQuery,
+      window: "1h",
+    },
+  },
+} as const;
+
+const stableSampleFingerprint =
+  "sha256:6d8108d1c7dccddc7f0a7114f8c7a1f8b01600f6f560314662721f61f077e8d0";
+
+export const validPreflightReport = {
+  version: "1",
+  runId: RUN_ID,
+  verdict: "ready",
+  canonicalUrl: expectedCanonicalUrl,
+  requestIdentitySha256:
+    "sha256:9b11457aa29d65e4940b67b7da16bd370d29bf6a3247a28066f93ac407b8b811",
+  sampleFingerprints: Array.from(
+    { length: 5 },
+    () => stableSampleFingerprint,
+  ),
+  determinism: {
+    passed: true,
+    distinctFingerprints: 1,
+  },
+  responseShape: {
+    truncated: false,
+    nodes: [
+      { path: "", type: "object" },
+      { path: "/price", type: "number" },
+    ],
+  },
+  jqPreview: {
+    truncated: false,
+    nodes: [
+      { path: "", type: "object" },
+      { path: "/value", type: "number" },
+    ],
+  },
+  abiCompatibility: {
+    compatible: true,
+    checkedSamples: 5,
+    encodedBytes: 2,
+    encodedSha256:
+      "sha256:3a103a4e5729ad68c02a678ae39accfbc0ae208096437401b7ceab63cca0622f",
+  },
+  registrySnapshot: {
+    chainId: 114,
+    blockNumber: "12345678",
+    registryAddress: "0x2222222222222222222222222222222222222222",
+    resolvedContracts: {
+      FdcHub: "0x3333333333333333333333333333333333333333",
+      FdcRequestFeeConfigurations:
+        "0x6666666666666666666666666666666666666666",
+      FdcVerification: "0x1111111111111111111111111111111111111111",
+      Relay: "0x4444444444444444444444444444444444444444",
+    },
+  },
+  fee: {
+    quotedWei: "12345000000000000",
+    capWei: exactTrustManifest.submission.feeCapWei,
+    withinCap: true,
+  },
+  blockers: [],
+  diagnostics: [],
+} as const;
+
+export const attentionPreflightReport = {
+  ...structuredClone(validPreflightReport),
+  verdict: "attention",
+  responseShape: {
+    ...structuredClone(validPreflightReport.responseShape),
+    truncated: true,
+  },
+  diagnostics: [
+    {
+      version: "1",
+      code: "PREFLIGHT_RESPONSE_SHAPE_TRUNCATED",
+      severity: "warning",
+      confidence: "high",
+      summary: "The response shape exceeded the bounded public preview.",
+      evidence: { reportFields: ["responseShape"] },
+      remediation: "Review the source schema before submission.",
+    },
+  ],
+} as const;
+
+export const blockedPreflightReport = {
+  ...structuredClone(validPreflightReport),
+  verdict: "blocked",
+  sampleFingerprints: [
+    stableSampleFingerprint,
+    stableSampleFingerprint,
+    stableSampleFingerprint,
+    stableSampleFingerprint,
+    "sha256:c806c492b8c7c2cda5da45323f72e9b1f5f7b3f0a6b4f6c1a2a06a3c0a60aa9e",
+  ],
+  determinism: {
+    passed: false,
+    distinctFingerprints: 2,
+  },
+  blockers: ["PREFLIGHT_SOURCE_NONDETERMINISTIC"],
+  diagnostics: [
+    {
+      version: "1",
+      code: "PREFLIGHT_SOURCE_NONDETERMINISTIC",
+      severity: "error",
+      confidence: "high",
+      summary: "Five transformed samples did not produce one stable result.",
+      evidence: {
+        reportFields: ["sampleFingerprints", "determinism"],
+      },
+      remediation: "Use a source and transform with stable public output.",
+    },
+  ],
+} as const;
+
 export const validDiagnostic = {
   version: "1",
   code: "CONSUMER_HOST_MISMATCH",

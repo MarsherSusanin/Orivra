@@ -9,6 +9,7 @@ import {
 } from "viem";
 import fdcVerificationAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFdcVerification.sol/IFdcVerification.json";
 import {
+  exactTrustManifest,
   expectedCanonicalUrl,
   validManifest,
 } from "../../../packages/contracts/test/fixtures";
@@ -85,6 +86,7 @@ function harness() {
   });
   const publicClient = {
     readContract,
+    getBlockNumber: vi.fn(async () => 12_345_678n),
     getBalance: vi.fn(async () => 1_000_000n),
     getTransactionCount: vi.fn(async () => 7),
     prepareTransactionRequest: vi.fn(async (value) => ({
@@ -207,6 +209,38 @@ describe("live Coston2 pipeline port coverage", () => {
     await expect(fixture.ports.broadcastRawTransaction("0x02f8")).resolves.toBe(
       TRANSACTION_HASH,
     );
+  });
+
+  it("pins every registry resolution and fee quote to one explicit block snapshot", async () => {
+    const fixture = harness();
+
+    const outcome = await fixture.ports.preflight({
+      manifest: exactTrustManifest,
+      runId: "run_snapshot_contract",
+    }) as any;
+
+    expect(fixture.publicClient.getBlockNumber).toHaveBeenCalledOnce();
+    const snapshotReads = fixture.publicClient.readContract.mock.calls
+      .map(([request]) => request)
+      .filter((request) =>
+        request.functionName === "getContractAddressByName" ||
+        request.functionName === "getRequestFee",
+      );
+    expect(snapshotReads).toHaveLength(6);
+    expect(snapshotReads.every((request) => request.blockNumber === 12_345_678n)).toBe(true);
+    expect(outcome.report).toMatchObject({
+      registrySnapshot: {
+        chainId: 114,
+        blockNumber: "12345678",
+        registryAddress: expect.stringMatching(/^0x[0-9a-fA-F]{40}$/),
+        resolvedContracts: {
+          FdcHub: ADDRESSES.FdcHub,
+          FdcRequestFeeConfigurations: ADDRESSES.FdcRequestFeeConfigurations,
+          FdcVerification: ADDRESSES.FdcVerification,
+          Relay: ADDRESSES.Relay,
+        },
+      },
+    });
   });
 
   it("observes wallet, receipt, voting, Relay, and DA success paths", async () => {
