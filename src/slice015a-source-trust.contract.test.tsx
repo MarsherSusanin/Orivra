@@ -187,3 +187,41 @@ describe("Slice 015A inline validation", () => {
     expect(source).toHaveValue("https://api.example.com/public");
   });
 });
+
+describe("Slice 015A Composer flow order", () => {
+  it("moves a safe Source to Transform and preserves unrelated URL state", async () => {
+    const user = userEvent.setup();
+    renderComposer("/runs/new?step=source&status=active&panel=help");
+
+    await user.type(
+      screen.getByLabelText(/source url/i),
+      "https://api.example.com/public",
+    );
+    await user.click(screen.getByRole("button", { name: /continue to transform/i }));
+
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("step")).toBe("transform");
+    expect(params.get("status")).toBe("active");
+    expect(params.get("panel")).toBe("help");
+    expect(
+      within(screen.getByRole("navigation", { name: /composer steps/i }))
+        .getByRole("link", { name: /^transform/i }),
+    ).toHaveAttribute("aria-current", "step");
+  });
+
+  it("moves Trust to Submit and preserves the template URL state", async () => {
+    const user = userEvent.setup();
+    renderComposer("/runs/new?template=eth-usd&step=trust&status=active");
+
+    await user.click(screen.getByRole("button", { name: /continue to submit/i }));
+
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("step")).toBe("submit");
+    expect(params.get("template")).toBe("eth-usd");
+    expect(params.get("status")).toBe("active");
+    expect(
+      within(screen.getByRole("navigation", { name: /composer steps/i }))
+        .getByRole("link", { name: /^submit/i }),
+    ).toHaveAttribute("aria-current", "step");
+  });
+});

@@ -123,7 +123,7 @@ describe("/runs/new Composer step URL contract", () => {
     );
     expect(new URLSearchParams(window.location.search).get("step")).toBe("source");
     expect(new URLSearchParams(window.location.search).get("template")).toBe("eth-usd");
-    expect(replaceState).toHaveBeenCalled();
+    expect(replaceState).toHaveBeenCalledTimes(1);
   });
 
   it("writes a real URL and restores the visible current step on popstate", async () => {
