@@ -502,7 +502,6 @@ export function createLiveCoston2PipelinePorts(input: {
         timeoutMs: 15_000,
         maxResponseBytes: ONE_MIB,
       });
-      let preparedRequestBytes: string | undefined;
       const outcome = await runWeb2JsonPreflight({
         runId,
         manifest,
@@ -515,11 +514,7 @@ export function createLiveCoston2PipelinePorts(input: {
           encodeAbiParameters(canonicalAbiParameters(signature), [value]),
         verifier: {
           prepareRequest: async (canonicalManifest) => {
-            const prepared = await input.verifier.prepareRequest(
-              canonicalManifest,
-            );
-            preparedRequestBytes = prepared.requestBytes;
-            return prepared;
+            return input.verifier.prepareRequest(canonicalManifest);
           },
         },
         feeOracle: {
@@ -534,24 +529,7 @@ export function createLiveCoston2PipelinePorts(input: {
         },
       });
       if (outcome.kind === "blocked") {
-        if (process.env.NODE_ENV !== "test" || !preparedRequestBytes) {
-          return outcome;
-        }
-        return {
-          ...outcome,
-          canonicalUrl: outcome.report.canonicalUrl,
-          requestBytes: preparedRequestBytes,
-          quotedFeeWei: BigInt(outcome.report.fee.quotedWei),
-          network: {
-            chainId: 114 as const,
-            registryAddress: REGISTRY_ADDRESS,
-            resolvedContracts: {
-              FdcHub: addresses.FdcHub,
-              FdcVerification: addresses.FdcVerification,
-              Relay: addresses.Relay,
-            },
-          },
-        };
+        return outcome;
       }
       const requestCalldata = encodeFunctionData({
         abi: fdcHubAbi as Abi,
@@ -560,9 +538,12 @@ export function createLiveCoston2PipelinePorts(input: {
       });
       const network = {
         chainId: 114 as const,
+        blockNumber: blockNumber.toString(),
         registryAddress: REGISTRY_ADDRESS,
         resolvedContracts: {
           FdcHub: addresses.FdcHub,
+          FdcRequestFeeConfigurations:
+            addresses.FdcRequestFeeConfigurations,
           FdcVerification: addresses.FdcVerification,
           Relay: addresses.Relay,
         },

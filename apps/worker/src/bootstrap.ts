@@ -125,7 +125,7 @@ export function createProductionWorker(input: {
     ]),
   );
   return createRunWorker({
-    environment: environment.NODE_ENV ?? "production",
+    environment: "production",
     mode: "live",
     repository,
     maxAttempts: positiveInteger(

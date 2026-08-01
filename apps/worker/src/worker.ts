@@ -343,9 +343,11 @@ interface ProductionPipelineRepository {
 
 type SubmissionNetworkSnapshot = {
   chainId: 114;
+  blockNumber: string;
   registryAddress: string;
   resolvedContracts: {
     FdcHub: string;
+    FdcRequestFeeConfigurations?: string;
     FdcVerification: string;
     Relay: string;
   };
@@ -550,6 +552,242 @@ function sameHex(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
 }
 
+function preflightBoundaryError(
+  code: string,
+  message: string,
+  category: "configuration" | "schema-invalid" = "schema-invalid",
+): NormalizedFdcError {
+  return NormalizedFdcErrorSchema.parse({
+    version: "1",
+    category,
+    code,
+    message,
+    retryable: false,
+    evidence: {},
+  });
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
+
+function canonicalHex(value: unknown): value is string {
+  return typeof value === "string" && /^0x(?:[0-9a-fA-F]{2})+$/.test(value);
+}
+
+function canonicalUnsignedInteger(value: unknown): value is string {
+  return typeof value === "string" && /^(?:0|[1-9][0-9]*)$/.test(value);
+}
+
+function normalizedAddress(value: unknown): string | null {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value)
+    ? value.toLowerCase()
+    : null;
+}
+
+function hasPrivateBlockedEvidence(value: unknown): boolean {
+  const privateKey = /(?:authorization|credential|header|private|requestBytes|requestCalldata|response|secret|stack|token|transaction)/i;
+  const privateValue = /Bearer\s+[^\s;,]+|(?:project|share)_[A-Za-z0-9_-]{32,}|\b0x[a-fA-F0-9]{64}\b/i;
+  if (typeof value === "string") return privateValue.test(value);
+  if (Array.isArray(value)) return value.some(hasPrivateBlockedEvidence);
+  const record = recordValue(value);
+  return record
+    ? Object.entries(record).some(
+        ([key, item]) => privateKey.test(key) || hasPrivateBlockedEvidence(item),
+      )
+    : false;
+}
+
+const BLOCKED_PREFLIGHT_CATEGORY = {
+  PREFLIGHT_SOURCE_NONDETERMINISTIC: "schema-invalid",
+  PREFLIGHT_ABI_INCOMPATIBLE: "schema-invalid",
+  PREFLIGHT_FEE_CAP_EXCEEDED: "configuration",
+  PREFLIGHT_TRUST_HOST_MISMATCH: "configuration",
+  PREFLIGHT_TRUST_PATH_MISMATCH: "configuration",
+  PREFLIGHT_TRUST_QUERY_MISMATCH: "configuration",
+} as const;
+
+/**
+ * Treats every pipeline-port value as untrusted and binds the complete live
+ * outcome before the command handler constructs any durable mutation.
+ */
+function validateProductionPreflightOutcome(input: {
+  value: unknown;
+  context: RunExecutionContext;
+}): ProductionPreflightOutcome {
+  const value = recordValue(input.value);
+  if (!value || (value.kind !== "accepted" && value.kind !== "blocked")) {
+    throw preflightBoundaryError(
+      "PREFLIGHT_OUTCOME_INVALID",
+      "Production preflight requires a strict accepted or blocked outcome",
+      "configuration",
+    );
+  }
+
+  const parsedReport = PreflightReportV1Schema.safeParse(value.report);
+  if (!parsedReport.success) {
+    throw preflightBoundaryError(
+      "PREFLIGHT_OUTCOME_INVALID",
+      "Production preflight report does not match the V1 contract",
+    );
+  }
+  const report = parsedReport.data;
+
+  if (
+    (value.kind === "accepted" && report.verdict === "blocked") ||
+    (value.kind === "blocked" && report.verdict !== "blocked")
+  ) {
+    throw preflightBoundaryError(
+      "PREFLIGHT_OUTCOME_DISCRIMINATOR_MISMATCH",
+      "Preflight outcome discriminator does not match the report verdict",
+    );
+  }
+
+  if (value.kind === "blocked") {
+    if (
+      Object.hasOwn(value, "submissionEvidence") ||
+      Object.keys(value).some(
+        (key) => !["kind", "report", "error"].includes(key),
+      )
+    ) {
+      throw preflightBoundaryError(
+        "PREFLIGHT_BLOCKED_PRIVATE_EVIDENCE",
+        "Blocked preflight outcomes cannot contain private submission evidence",
+      );
+    }
+    const parsedError = NormalizedFdcErrorSchema.safeParse(value.error);
+    if (!parsedError.success || hasPrivateBlockedEvidence(value.error)) {
+      throw preflightBoundaryError(
+        "PREFLIGHT_BLOCKED_PRIVATE_EVIDENCE",
+        "Blocked preflight outcomes must contain only safe public error evidence",
+      );
+    }
+    const error = parsedError.data;
+    const diagnostic = report.diagnostics.find(
+      (item) => item.code === error.code && item.severity === "error",
+    );
+    const category =
+      BLOCKED_PREFLIGHT_CATEGORY[
+        error.code as keyof typeof BLOCKED_PREFLIGHT_CATEGORY
+      ];
+    if (
+      report.runId !== input.context.runId ||
+      report.fee.capWei !== input.context.manifest.submission.feeCapWei ||
+      !report.blockers.includes(error.code as never) ||
+      !diagnostic ||
+      !category ||
+      error.category !== category ||
+      error.retryable ||
+      JSON.stringify(error.evidence) !== JSON.stringify(diagnostic.evidence)
+    ) {
+      throw preflightBoundaryError(
+        "PREFLIGHT_BLOCKED_ERROR_MISMATCH",
+        "Blocked preflight error does not match its report blocker and diagnostic",
+      );
+    }
+    return { kind: "blocked", report, error };
+  }
+
+  if (
+    Object.hasOwn(value, "error") ||
+    Object.keys(value).some(
+      (key) => !["kind", "report", "submissionEvidence"].includes(key),
+    )
+  ) {
+    throw preflightBoundaryError(
+      "PREFLIGHT_SUBMISSION_EVIDENCE_MISMATCH",
+      "Accepted preflight outcome contains contradictory evidence",
+    );
+  }
+  const evidence = recordValue(value.submissionEvidence);
+  const network = recordValue(evidence?.network);
+  const resolvedContracts = recordValue(network?.resolvedContracts);
+  const quotedFeeWei = evidence?.quotedFeeWei;
+  const requestBytes = evidence?.requestBytes;
+  const requestCalldata = evidence?.requestCalldata;
+  const reportSnapshot = report.registrySnapshot;
+  const reportedContracts = reportSnapshot.resolvedContracts;
+  const optionalFeeConfiguration =
+    resolvedContracts?.FdcRequestFeeConfigurations;
+  const evidenceMismatch =
+    report.runId !== input.context.runId ||
+    report.verdict === "blocked" ||
+    report.blockers.length !== 0 ||
+    report.diagnostics.some((diagnostic) => diagnostic.severity === "error") ||
+    report.fee.capWei !== input.context.manifest.submission.feeCapWei ||
+    report.fee.withinCap !== true ||
+    !evidence ||
+    !hasOnlyKeys(evidence, [
+      "version",
+      "canonicalUrl",
+      "requestBytes",
+      "requestCalldata",
+      "quotedFeeWei",
+      "network",
+    ]) ||
+    (evidence.version !== undefined && evidence.version !== "1") ||
+    evidence.canonicalUrl !== report.canonicalUrl ||
+    !canonicalHex(requestBytes) ||
+    `sha256:${canonicalHex(requestBytes) ? sha256HexBytes(requestBytes) : ""}` !==
+      report.requestIdentitySha256 ||
+    !canonicalHex(requestCalldata) ||
+    typeof quotedFeeWei !== "bigint" ||
+    quotedFeeWei < 0n ||
+    quotedFeeWei.toString() !== report.fee.quotedWei ||
+    !network ||
+    !hasOnlyKeys(network, [
+      "chainId",
+      "blockNumber",
+      "registryAddress",
+      "resolvedContracts",
+    ]) ||
+    network.chainId !== 114 ||
+    !canonicalUnsignedInteger(network.blockNumber) ||
+    network.blockNumber !== reportSnapshot.blockNumber ||
+    normalizedAddress(network.registryAddress) !==
+      normalizedAddress(reportSnapshot.registryAddress) ||
+    !resolvedContracts ||
+    !hasOnlyKeys(resolvedContracts, [
+      "FdcHub",
+      "FdcRequestFeeConfigurations",
+      "FdcVerification",
+      "Relay",
+    ]) ||
+    normalizedAddress(resolvedContracts.FdcHub) !==
+      normalizedAddress(reportedContracts.FdcHub) ||
+    normalizedAddress(resolvedContracts.FdcVerification) !==
+      normalizedAddress(reportedContracts.FdcVerification) ||
+    normalizedAddress(resolvedContracts.Relay) !==
+      normalizedAddress(reportedContracts.Relay) ||
+    (optionalFeeConfiguration !== undefined &&
+      normalizedAddress(optionalFeeConfiguration) !==
+        normalizedAddress(reportedContracts.FdcRequestFeeConfigurations));
+  if (evidenceMismatch) {
+    throw preflightBoundaryError(
+      "PREFLIGHT_SUBMISSION_EVIDENCE_MISMATCH",
+      "Private submission evidence does not match the accepted public report",
+    );
+  }
+
+  return {
+    kind: "accepted",
+    report,
+    submissionEvidence: value.submissionEvidence as Extract<
+      ProductionPreflightOutcome,
+      { kind: "accepted" }
+    >["submissionEvidence"],
+  };
+}
+
 function preflightEvidence(context: RunExecutionContext) {
   return artifactValue<{
     canonicalUrl: string;
@@ -558,9 +796,11 @@ function preflightEvidence(context: RunExecutionContext) {
     quotedFeeWei: string;
     network: {
       chainId: 114;
+      blockNumber: string;
       registryAddress: string;
       resolvedContracts: {
         FdcHub: string;
+        FdcRequestFeeConfigurations?: string;
         FdcVerification: string;
         Relay: string;
       };
@@ -791,7 +1031,16 @@ export async function assemblePersistedProofBundle(input: {
     manifest: input.manifest,
     events: input.events,
     requestBytes: preflight.requestBytes,
-    network: preflight.network,
+    network: {
+      chainId: preflight.network.chainId,
+      registryAddress: preflight.network.registryAddress,
+      resolvedContracts: {
+        FdcHub: preflight.network.resolvedContracts.FdcHub,
+        FdcVerification:
+          preflight.network.resolvedContracts.FdcVerification,
+        Relay: preflight.network.resolvedContracts.Relay,
+      },
+    },
     proof: proofEvidence.proof,
     verification: {
       proofVerified,
@@ -871,7 +1120,7 @@ export function createProductionCommandHandlers(input: {
         if (accepted?.type !== "PREFLIGHT_ACCEPTED") {
           throw new Error("Replay evidence has no accepted preflight event");
         }
-        const persistedReplayOutcome = (report?: PreflightReportV1) => ({
+        const persistedReplayOutcome = (report: PreflightReportV1) => ({
           events: [
             event(
               context,
@@ -899,21 +1148,13 @@ export function createProductionCommandHandlers(input: {
               canonicalUrl: accepted.payload.canonicalUrl,
               requestBytes: source.requestBytes,
               quotedFeeWei: accepted.payload.quotedFeeWei,
-              network: source.network,
+              network: report.registrySnapshot,
             }),
-            ...(report
-              ? [preflightReportArtifact(context.runId, report)]
-              : []),
+            preflightReportArtifact(context.runId, report),
           ],
           nextCommands,
         });
         if (!input.ports.loadReplayPreflightReport) {
-          if (
-            process.env.NODE_ENV === "test" &&
-            !Object.hasOwn(input.ports, "loadReplayPreflightReport")
-          ) {
-            return persistedReplayOutcome();
-          }
           throw replayReportError(
             "configuration",
             "REPLAY_PREFLIGHT_REPORT_MISSING",
@@ -945,50 +1186,10 @@ export function createProductionCommandHandlers(input: {
         manifest: context.manifest,
         runId: context.runId,
       });
-      if (
-        !outcomeValue ||
-        typeof outcomeValue !== "object" ||
-        !("kind" in outcomeValue)
-      ) {
-        if (process.env.NODE_ENV !== "test") {
-          throw replayReportError(
-            "configuration",
-            "PREFLIGHT_OUTCOME_INVALID",
-            "Production preflight requires an accepted or blocked outcome",
-          );
-        }
-        const prepared = outcomeValue as {
-          canonicalUrl: string;
-          requestBytes: string;
-          requestCalldata: string;
-          quotedFeeWei: bigint;
-          network: SubmissionNetworkSnapshot;
-        };
-        return {
-          events: [
-            event(
-              context,
-              command,
-              "PREFLIGHT_ACCEPTED",
-              {
-                canonicalUrl: prepared.canonicalUrl,
-                requestBytes: prepared.requestBytes,
-                quotedFeeWei: prepared.quotedFeeWei.toString(),
-              },
-              input.clock.now(),
-            ),
-          ],
-          artifacts: [
-            artifact(context.runId, "preflight-evidence", {
-              version: "1",
-              ...prepared,
-              quotedFeeWei: prepared.quotedFeeWei.toString(),
-            }),
-          ],
-          nextCommands,
-        };
-      }
-      const outcome = outcomeValue as ProductionPreflightOutcome;
+      const outcome = validateProductionPreflightOutcome({
+        value: outcomeValue,
+        context,
+      });
       if (outcome.kind === "blocked") {
         const error = NormalizedFdcErrorSchema.parse(outcome.error);
         return {
