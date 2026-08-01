@@ -14,7 +14,8 @@ const importedManifest = {
     url: "https://rates.example.com/public/eth?source=primary",
     query: { currency: "USD" },
     jq: ".data | {amount: .amount, currency: .currency}",
-    abiSignature: "{string amount,string currency}",
+    abiSignature:
+      '{"components":[{"internalType":"string","name":"amount","type":"string"},{"internalType":"string","name":"currency","type":"string"}],"name":"data","type":"tuple"}',
   },
   consumer: {
     expectedScheme: "https",

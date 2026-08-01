@@ -1,6 +1,8 @@
 export const RUN_ID = "run_01JYXW5ZC6K9JSGG0TQ7V8N3PH";
 export const PROJECT_COMMAND_ID = "cmd_01JYXW62QHR0MCAJ68D5NX7BZV";
 export const OCCURRED_AT = "2025-05-15T12:04:11.000Z";
+export const VALID_ABI_SIGNATURE =
+  '{"components":[{"internalType":"uint256","name":"value","type":"uint256"}],"name":"data","type":"tuple"}';
 
 export const validManifest = {
   version: "1",
@@ -14,7 +16,7 @@ export const validManifest = {
       window: "1h",
     },
     jq: ".price | {value: (. * 1000000 | floor)}",
-    abiSignature: "{uint256 value}",
+    abiSignature: VALID_ABI_SIGNATURE,
   },
   consumer: {
     expectedScheme: "https",

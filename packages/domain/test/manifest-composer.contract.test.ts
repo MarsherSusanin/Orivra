@@ -23,7 +23,7 @@ const manifest: Web2JsonManifestV1 = {
     url: "https://api.example.com/prices/eth?source=primary",
     query: { window: "1h", currency: "USD" },
     jq: ".data | {amount: .amount, currency: .currency}",
-    abiSignature: "{string amount,string currency}",
+    abiSignature: ethUsdAbiSignature,
   },
   consumer: {
     expectedScheme: "https",
