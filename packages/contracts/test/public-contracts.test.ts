@@ -4,9 +4,12 @@ import { describe, expect, it } from "vitest";
 import {
   DiagnosticV1Schema,
   NormalizedFdcErrorSchema,
+  ProductEventV1Schema,
   ProofBundleV1Schema,
   RunEventV1Schema,
+  RunListPageV1Schema,
   RunProjectionV1Schema,
+  RunSummaryV1Schema,
   Web2JsonManifestV1Schema,
 } from "../src/index";
 import {
@@ -165,5 +168,111 @@ describe("remaining wire schemas", () => {
       },
     };
     expect(RunProjectionV1Schema.parse(projection)).toEqual(projection);
+  });
+});
+
+describe("ProductEventV1Schema", () => {
+  const common = {
+    version: "1",
+    sessionId: "session_01JYXW5ZC6K9JSGG0TQ7V8N3PH",
+    occurredAt: "2026-08-02T02:10:00.000Z",
+  };
+
+  const events = [
+    { ...common, name: "COMPOSER_STARTED", metadata: { entryPoint: "runs" } },
+    { ...common, name: "MANIFEST_VALIDATED", metadata: { outcome: "accepted" } },
+    { ...common, name: "PREFLIGHT_COMPLETED", metadata: { outcome: "accepted" } },
+    { ...common, name: "SUBMISSION_REQUESTED", metadata: { mode: "wallet" } },
+    { ...common, name: "PROOF_AVAILABLE", metadata: { source: "live" } },
+    {
+      ...common,
+      name: "CONSUMER_VERIFICATION_FAILED",
+      metadata: { category: "consumer-invariant" },
+    },
+    { ...common, name: "SAFE_CODEGEN_GENERATED", metadata: { target: "solidity" } },
+    { ...common, name: "BUNDLE_REPLAYED", metadata: { outcome: "byte-identical" } },
+    { ...common, name: "RUN_RESUMED", metadata: { priorStatus: "active" } },
+  ];
+
+  it("accepts exactly the nine privacy-safe product events", () => {
+    expect(events.map((event) => ProductEventV1Schema.parse(event).name)).toEqual([
+      "COMPOSER_STARTED",
+      "MANIFEST_VALIDATED",
+      "PREFLIGHT_COMPLETED",
+      "SUBMISSION_REQUESTED",
+      "PROOF_AVAILABLE",
+      "CONSUMER_VERIFICATION_FAILED",
+      "SAFE_CODEGEN_GENERATED",
+      "BUNDLE_REPLAYED",
+      "RUN_RESUMED",
+    ]);
+  });
+
+  it.each([
+    ["unknown event names", { ...events[0], name: "PAGE_VIEWED" }],
+    ["free-form metadata", { ...events[0], metadata: { entryPoint: "runs", label: "hello" } }],
+    ["URLs", { ...events[0], metadata: { entryPoint: "runs", url: "https://secret.test" } }],
+    ["manifest data", { ...events[1], metadata: { outcome: "accepted", manifest: validManifest } }],
+    ["transaction hashes", { ...events[4], metadata: { source: "live", transactionHash: `0x${"a".repeat(64)}` } }],
+    ["invalid timestamps", { ...events[0], occurredAt: "yesterday" }],
+    ["extra envelope fields", { ...events[0], token: `project_${"a".repeat(64)}` }],
+  ])("rejects %s", (_caseName, candidate) => {
+    expect(ProductEventV1Schema.safeParse(candidate).success).toBe(false);
+  });
+});
+
+describe("run discovery schemas", () => {
+  const summary = {
+    version: "1",
+    runId: RUN_ID,
+    network: "coston2",
+    sourceHost: "api.example.com",
+    submissionMode: "wallet",
+    currentStage: "proof",
+    status: "active",
+    createdAt: "2026-08-02T01:00:00.000Z",
+    updatedAt: "2026-08-02T02:00:00.000Z",
+    lastSequence: 5,
+    resumable: true,
+  };
+
+  it("defines a strict product-facing run summary", () => {
+    expect(RunSummaryV1Schema.parse(summary)).toEqual(summary);
+    expect(
+      RunSummaryV1Schema.safeParse({ ...summary, internalProjectId: "project_1" }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["unknown statuses", { ...summary, status: "pending" }],
+    ["unknown stages", { ...summary, currentStage: "broadcast" }],
+    ["URLs instead of source hosts", { ...summary, sourceHost: "https://api.example.com/private?q=1" }],
+    ["invalid timestamps", { ...summary, updatedAt: "02 August 2026" }],
+    ["backwards timestamps", { ...summary, updatedAt: "2026-08-01T23:59:59.000Z" }],
+    ["non-positive sequences", { ...summary, lastSequence: 0 }],
+  ])("rejects %s", (_caseName, candidate) => {
+    expect(RunSummaryV1Schema.safeParse(candidate).success).toBe(false);
+  });
+
+  it("defines an ordered page with one optional opaque cursor", () => {
+    const page = {
+      version: "1",
+      runs: [summary],
+      nextCursor: "eyJ1cGRhdGVkQXQiOiIyMDI2LTA4LTAyIn0",
+    };
+    expect(RunListPageV1Schema.parse(page)).toEqual(page);
+    expect(RunListPageV1Schema.parse({ version: "1", runs: [] })).toEqual({
+      version: "1",
+      runs: [],
+    });
+  });
+
+  it.each([
+    ["empty cursors", { version: "1", runs: [], nextCursor: "" }],
+    ["structured cursors", { version: "1", runs: [], nextCursor: "updated_at=secret" }],
+    ["unknown page fields", { version: "1", runs: [], total: 1 }],
+    ["invalid summaries", { version: "1", runs: [{ ...summary, status: "queued" }] }],
+  ])("rejects %s", (_caseName, candidate) => {
+    expect(RunListPageV1Schema.safeParse(candidate).success).toBe(false);
   });
 });

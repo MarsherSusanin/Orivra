@@ -41,6 +41,11 @@ function createHarness() {
       location: `/v1/runs/${runId}`,
     }),
     getRun: vi.fn().mockResolvedValue({ version: "1", runId, sequence: 1 }),
+    listRuns: vi.fn().mockResolvedValue({
+      version: "1",
+      runs: [],
+      nextCursor: "eyJ1cGRhdGVkQXQiOiIyMDI2LTA4LTAyIn0",
+    }),
     listEvents: vi.fn().mockResolvedValue({ events: [], nextAfter: 0 }),
     createSubmission: vi.fn().mockResolvedValue({ mode: "wallet", transaction: {} }),
     attachTransaction: vi.fn().mockResolvedValue({ accepted: true }),
@@ -96,6 +101,57 @@ describe("Proofline v1 API routing", () => {
     );
   });
 
+  it("lists project runs without requiring idempotency and forwards validated filters", async () => {
+    const cursor = "eyJ1cGRhdGVkQXQiOiIyMDI2LTA4LTAyIn0";
+    const response = await harness.api.fetch(
+      jsonRequest(`/v1/runs?status=active&cursor=${cursor}&limit=7`),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      version: "1",
+      runs: [],
+      nextCursor: cursor,
+    });
+    expect(harness.service.listRuns).toHaveBeenCalledWith({
+      projectId: "project_1",
+      status: "active",
+      cursor,
+      limit: 7,
+    });
+  });
+
+  it("defaults the project run page to 20 items", async () => {
+    const response = await harness.api.fetch(jsonRequest("/v1/runs"));
+
+    expect(response.status).toBe(200);
+    expect(harness.service.listRuns).toHaveBeenCalledWith({
+      projectId: "project_1",
+      status: undefined,
+      cursor: undefined,
+      limit: 20,
+    });
+  });
+
+  it.each([
+    ["unknown status", "status=pending"],
+    ["blank cursor", "cursor=%20"],
+    ["structured cursor", "cursor=updated_at%3Dsecret"],
+    ["zero limit", "limit=0"],
+    ["limit above the cap", "limit=51"],
+    ["fractional limit", "limit=1.5"],
+    ["duplicate filters", "status=active&status=failed"],
+  ])("fails closed for an invalid run-list %s", async (_caseName, query) => {
+    const response = await harness.api.fetch(jsonRequest(`/v1/runs?${query}`));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      version: "1",
+      error: { code: "INVALID_RUN_LIST_QUERY" },
+    });
+    expect(harness.service.listRuns).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["GET", `/v1/runs/${runId}`, "getRun"],
     ["GET", `/v1/runs/${runId}/events?after=4`, "listEvents"],
@@ -126,6 +182,18 @@ describe("Proofline v1 API routing", () => {
 });
 
 describe("API authentication, share, and secret boundaries", () => {
+  it("denies project enumeration to a run-scoped share token", async () => {
+    const { api, service } = createHarness();
+    const response = await api.fetch(jsonRequest("/v1/runs", { token: shareToken }));
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      version: "1",
+      error: { code: "SHARE_READ_ONLY" },
+    });
+    expect(service.listRuns).not.toHaveBeenCalled();
+  });
+
   it("requires a bearer project token for every mutation", async () => {
     const { api } = createHarness();
     for (const [path, body] of [

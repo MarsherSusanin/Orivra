@@ -7,6 +7,19 @@ const HexBytesSchema = z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/);
 const Bytes32Schema = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
 const AddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+const SourceHostSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(253)
+  .regex(
+    /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/,
+  );
+const OpaqueCursorSchema = z
+  .string()
+  .min(16)
+  .max(1024)
+  .regex(/^[A-Za-z0-9_-]+$/);
 
 const StringMapSchema = z.record(z.string().min(1), z.string());
 
@@ -222,6 +235,119 @@ export const RunProjectionV1Schema = z
 
 export type RunProjectionV1 = z.infer<typeof RunProjectionV1Schema>;
 export type RunStageStatusV1 = z.infer<typeof RunStageStatusV1Schema>;
+
+export const ProductEventNameV1Schema = z.enum([
+  "COMPOSER_STARTED",
+  "MANIFEST_VALIDATED",
+  "PREFLIGHT_COMPLETED",
+  "SUBMISSION_REQUESTED",
+  "PROOF_AVAILABLE",
+  "CONSUMER_VERIFICATION_FAILED",
+  "SAFE_CODEGEN_GENERATED",
+  "BUNDLE_REPLAYED",
+  "RUN_RESUMED",
+]);
+
+const ProductEventCommon = {
+  version: VersionV1Schema,
+  sessionId: NonEmptyIdSchema,
+  occurredAt: z.string().datetime({ offset: true }),
+};
+
+function productEvent<
+  TName extends z.infer<typeof ProductEventNameV1Schema>,
+  TMetadata extends z.ZodType,
+>(name: TName, metadata: TMetadata) {
+  return z
+    .object({
+      ...ProductEventCommon,
+      name: z.literal(name),
+      metadata,
+    })
+    .strict();
+}
+
+export const ProductEventV1Schema = z.discriminatedUnion("name", [
+  productEvent(
+    "COMPOSER_STARTED",
+    z.object({ entryPoint: z.enum(["runs", "direct"]) }).strict(),
+  ),
+  productEvent(
+    "MANIFEST_VALIDATED",
+    z.object({ outcome: z.enum(["accepted", "rejected"]) }).strict(),
+  ),
+  productEvent(
+    "PREFLIGHT_COMPLETED",
+    z.object({ outcome: z.enum(["accepted", "rejected"]) }).strict(),
+  ),
+  productEvent(
+    "SUBMISSION_REQUESTED",
+    z.object({ mode: z.enum(["replay", "wallet", "relayer"]) }).strict(),
+  ),
+  productEvent(
+    "PROOF_AVAILABLE",
+    z.object({ source: z.enum(["live", "replay"]) }).strict(),
+  ),
+  productEvent(
+    "CONSUMER_VERIFICATION_FAILED",
+    z
+      .object({
+        category: z.enum([
+          "configuration",
+          "proof-invalid",
+          "consumer-invariant",
+        ]),
+      })
+      .strict(),
+  ),
+  productEvent(
+    "SAFE_CODEGEN_GENERATED",
+    z.object({ target: z.enum(["solidity"]) }).strict(),
+  ),
+  productEvent(
+    "BUNDLE_REPLAYED",
+    z.object({ outcome: z.enum(["byte-identical", "mismatch", "rejected"]) }).strict(),
+  ),
+  productEvent(
+    "RUN_RESUMED",
+    z.object({ priorStatus: z.enum(["active", "completed", "failed"]) }).strict(),
+  ),
+]);
+
+export type ProductEventNameV1 = z.infer<typeof ProductEventNameV1Schema>;
+export type ProductEventV1 = z.infer<typeof ProductEventV1Schema>;
+
+export const RunSummaryV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    runId: NonEmptyIdSchema,
+    network: z.literal("coston2"),
+    sourceHost: SourceHostSchema,
+    submissionMode: z.enum(["replay", "wallet", "relayer"]),
+    currentStage: RunStageNameV1Schema,
+    status: z.enum(["active", "completed", "failed"]),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+    lastSequence: z.number().int().positive(),
+    resumable: z.boolean(),
+  })
+  .strict()
+  .refine((run) => Date.parse(run.updatedAt) >= Date.parse(run.createdAt), {
+    message: "updatedAt must not precede createdAt",
+    path: ["updatedAt"],
+  });
+
+export type RunSummaryV1 = z.infer<typeof RunSummaryV1Schema>;
+
+export const RunListPageV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    runs: z.array(RunSummaryV1Schema),
+    nextCursor: OpaqueCursorSchema.optional(),
+  })
+  .strict();
+
+export type RunListPageV1 = z.infer<typeof RunListPageV1Schema>;
 
 const NetworkSnapshotV1Schema = z
   .object({
