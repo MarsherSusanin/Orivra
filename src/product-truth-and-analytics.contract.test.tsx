@@ -307,6 +307,63 @@ describe("ProductEventV1 journey instrumentation", () => {
     },
   );
 
+  it("does not fabricate live proof provenance when submission mode is missing or invalid", async () => {
+    const emittedCounts: number[] = [];
+
+    for (const submissionMode of [undefined, "unknown-mode"] as const) {
+      const analytics = collector();
+      const before = {
+        ...hydratedRun({
+          sequence: 4,
+          terminal: false,
+          stages: {
+            preflight: "completed",
+            request: "completed",
+            round: "completed",
+            proof: "active",
+            verify: "pending",
+            consumer: "pending",
+          },
+        }),
+        submissionMode,
+      } as HydratedRunView;
+      const after = {
+        ...hydratedRun({ sequence: 5, terminal: true }),
+        submissionMode,
+      } as HydratedRunView;
+      const afterHydration = vi.fn().mockResolvedValue(after);
+      const view = render(
+        <StrictMode>
+          <App
+            runId={runId}
+            projectToken={projectToken}
+            services={surfaceServices({
+              hydrateRun: vi.fn().mockResolvedValue(before),
+            })}
+            analytics={analytics.port}
+          />
+        </StrictMode>,
+      );
+      await screen.findByRole("heading", { name: "Persisted Web2Json run" });
+
+      view.rerender(
+        <StrictMode>
+          <App
+            runId={runId}
+            projectToken={projectToken}
+            services={surfaceServices({ hydrateRun: afterHydration })}
+            analytics={analytics.port}
+          />
+        </StrictMode>,
+      );
+      await waitFor(() => expect(afterHydration).toHaveBeenCalled());
+      emittedCounts.push(eventsNamed(analytics.events, "PROOF_AVAILABLE").length);
+      view.unmount();
+    }
+
+    expect(emittedCounts).toEqual([0, 0]);
+  });
+
   it("records an actual invariant failure and successful safe codegen exactly once", async () => {
     const user = userEvent.setup();
     const analytics = collector();

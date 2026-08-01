@@ -67,6 +67,14 @@ describe("diagnostics evidence trust boundary", () => {
     );
     expect(hydrated.diagnostics).toEqual([]);
   });
+
+  it("keeps an explicitly failed verification without diagnostics unavailable", async () => {
+    const hydrated = await hydrate(
+      { stages: { consumer: "failed" } },
+      [event(1, "CONSUMER_VERIFIED", { passed: false, diagnostics: [] })],
+    );
+    expect(hydrated.diagnostics).toBeUndefined();
+  });
 });
 
 describe("hydrated submission identity", () => {
