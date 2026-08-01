@@ -5,7 +5,6 @@ import {
   Plus,
   WarningCircle,
 } from "@phosphor-icons/react";
-import type { MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import type { RunSummaryV1 } from "../../packages/contracts/src";
 import type { RunSurfaceServices } from "../services/run-surface";
@@ -13,37 +12,11 @@ import type { RunSurfaceServices } from "../services/run-surface";
 const STAGES = ["preflight", "request", "round", "proof", "verify", "consumer"] as const;
 
 type RunFilter = "active" | "completed" | "failed";
-type ComposerStep = "source" | "transform" | "trust" | "submit";
-
-const COMPOSER_STEPS: readonly ComposerStep[] = [
-  "source",
-  "transform",
-  "trust",
-  "submit",
-];
-
 function routeFilter(): RunFilter | undefined {
   const status = new URLSearchParams(globalThis.location?.search ?? "").get("status");
   return status === "active" || status === "completed" || status === "failed"
     ? status
     : undefined;
-}
-
-function composerStepFromLocation(): ComposerStep {
-  const value = new URLSearchParams(globalThis.location?.search ?? "").get("step");
-  return COMPOSER_STEPS.includes(value as ComposerStep)
-    ? value as ComposerStep
-    : "source";
-}
-
-function composerStepHref(step: ComposerStep): string {
-  const url = new URL(globalThis.location.href);
-  url.searchParams.set("step", step);
-  return `${url.pathname}${url.search}${url.hash}`;
-}
-
-function displayComposerStep(step: ComposerStep): string {
-  return step.charAt(0).toUpperCase() + step.slice(1);
 }
 
 function formatUpdatedAt(value: string): string {
@@ -252,65 +225,6 @@ export function RunsIndex({
           ) : null}
         </section>
       ) : null}
-    </main>
-  );
-}
-
-export function NewRunEntry({ onConnect }: { onConnect(): void }) {
-  const [step, setStep] = useState(composerStepFromLocation);
-
-  useEffect(() => {
-    const restoreStep = () => {
-      const restored = composerStepFromLocation();
-      const requested = new URLSearchParams(globalThis.location.search).get("step");
-      if (requested !== restored) {
-        globalThis.history.replaceState({}, "", composerStepHref(restored));
-      }
-      setStep(restored);
-    };
-    restoreStep();
-    globalThis.addEventListener("popstate", restoreStep);
-    return () => globalThis.removeEventListener("popstate", restoreStep);
-  }, []);
-
-  const navigateStep = (event: MouseEvent<HTMLAnchorElement>, next: ComposerStep) => {
-    event.preventDefault();
-    globalThis.history.pushState({}, "", composerStepHref(next));
-    setStep(next);
-  };
-
-  return (
-    <main className="entry-layout new-run-entry">
-      <header className="entry-heading">
-        <div>
-          <span className="section-label">Manifest Composer</span>
-          <h1>New Web2Json run</h1>
-          <p>Define one public HTTPS source, its transform, and the URL invariants your consumer must enforce.</p>
-        </div>
-      </header>
-      <nav className="composer-steps" aria-label="Composer steps">
-        {COMPOSER_STEPS.map((item, index) => (
-          <a
-            className={step === item ? "is-current" : ""}
-            href={composerStepHref(item)}
-            aria-current={step === item ? "step" : undefined}
-            onClick={(event) => navigateStep(event, item)}
-            key={item}
-          >
-            <span aria-hidden="true">{index + 1}</span>
-            {displayComposerStep(item)}
-          </a>
-        ))}
-      </nav>
-      <section className="entry-state">
-        <span className="entry-state-icon" aria-hidden="true"><FileCode size={36} /></span>
-        <h2>Composer is the next product step</h2>
-        <p><strong>{displayComposerStep(step)}</strong> is selected. This navigation shell restores the Composer step without collecting an incomplete or unsafe manifest.</p>
-        <div className="entry-state-actions">
-          <a className="entry-secondary" href="/runs">Back to runs</a>
-          <button className="entry-text-button" type="button" onClick={onConnect}>Connect project</button>
-        </div>
-      </section>
     </main>
   );
 }

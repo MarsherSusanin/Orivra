@@ -7,9 +7,10 @@ import {
 } from "./services/product-analytics";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { EvidenceStrip } from "./components/EvidenceStrip";
+import { ManifestComposer } from "./components/ManifestComposer";
 import { ProjectTokenDialog } from "./components/ProjectTokenDialog";
 import { RunTimeline } from "./components/RunTimeline";
-import { NewRunEntry, RunsIndex } from "./components/RunsIndex";
+import { RunsIndex } from "./components/RunsIndex";
 import { Sidebar } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { VerificationDialog } from "./components/VerificationDialog";
@@ -591,7 +592,7 @@ function ProductEntry({
             })}
           />
         ) : (
-          <NewRunEntry onConnect={() => setConnectOpen(true)} />
+          <ManifestComposer onConnect={() => setConnectOpen(true)} />
         )}
       </div>
       {connectOpen ? (
