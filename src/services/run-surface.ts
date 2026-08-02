@@ -1,9 +1,15 @@
-import { createRunClient } from "./run-client";
+import {
+  createRunClient,
+  reconcileWalletSubmission,
+  submitWithEip1193,
+  type Eip1193Provider,
+} from "./run-client";
 import {
   CreateRunResultV1Schema,
   type CreateRunResultV1,
   type PreflightReportV1,
   type RunListPageV1,
+  type SubmissionResponseV1,
   type Web2JsonManifestV1,
 } from "../../packages/contracts/src";
 import type { ProjectionStages, RunStage } from "../data/run";
@@ -43,6 +49,11 @@ export type ListRunsContext = {
 export type CreateRunContext = {
   projectToken: string;
   manifest: Web2JsonManifestV1;
+  idempotencyKey: string;
+};
+
+export type ConfirmSubmissionContext = RunServiceContext & {
+  mode: SubmissionModeView;
   idempotencyKey: string;
 };
 
@@ -86,6 +97,9 @@ export type HydratedRunView = {
 export interface RunSurfaceServices {
   createRun?(context: CreateRunContext): Promise<CreateRunResultV1>;
   getPreflightReport?(context: RunServiceContext): Promise<PreflightReportV1>;
+  confirmSubmission?(context: ConfirmSubmissionContext): Promise<
+    SubmissionResponseV1 | { transactionHash: string }
+  >;
   verifyConsumer(context: RunServiceContext): Promise<ConsumerVerificationResult>;
   generateConsumer(context: RunServiceContext): Promise<GeneratedConsumer>;
   exportBundle(context: RunServiceContext): Promise<string>;
@@ -93,6 +107,13 @@ export interface RunSurfaceServices {
   hydrateRun?(context: HydrateRunContext): Promise<HydratedRunView>;
   listRuns?(context: ListRunsContext): Promise<RunListPageV1>;
   resume?(): { runId: string; after: number } | null;
+}
+
+export function submissionIdempotencyKey(
+  runId: string,
+  mode: SubmissionModeView,
+): string {
+  return `submission-${mode}-${runId}`;
 }
 
 function commandKey(prefix: string): string {
@@ -416,6 +437,8 @@ export function createLiveSurfaceServices(input: {
   baseUrl: string;
   projectToken: string;
   storage?: Pick<Storage, "getItem" | "setItem">;
+  recoveryStorage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
+  walletProvider?: Eip1193Provider;
 }): RunSurfaceServices {
   const client = createRunClient({
     baseUrl: input.baseUrl,
@@ -423,6 +446,7 @@ export function createLiveSurfaceServices(input: {
     storage: input.storage,
   });
   const eventsByRun = new Map<string, Record<string, unknown>[]>();
+  const recoveryStorage = input.recoveryStorage ?? globalThis.sessionStorage;
 
   function assertContext(context: RunServiceContext): void {
     if (!input.projectToken || context.projectToken !== input.projectToken) {
@@ -462,6 +486,32 @@ export function createLiveSurfaceServices(input: {
     async getPreflightReport(context) {
       assertReadContext(context);
       return client.getPreflightReport(context.runId);
+    },
+
+    async confirmSubmission(context) {
+      assertContext(context);
+      if (context.mode === "wallet") {
+        const provider = input.walletProvider ?? (
+          globalThis as typeof globalThis & { ethereum?: Eip1193Provider }
+        ).ethereum;
+        if (!provider) {
+          throw Object.assign(new Error("An EIP-1193 wallet is required"), {
+            code: "WALLET_PROVIDER_UNAVAILABLE",
+          });
+        }
+        return submitWithEip1193({
+          runId: context.runId,
+          idempotencyKey: context.idempotencyKey,
+          provider,
+          client,
+          recoveryStorage,
+        });
+      }
+      return client.confirmSubmission(
+        context.runId,
+        context.mode,
+        context.idempotencyKey,
+      );
     },
 
     async verifyConsumer(context) {
@@ -516,7 +566,19 @@ export function createLiveSurfaceServices(input: {
         (left, right) => Number(left.sequence) - Number(right.sequence),
       );
       eventsByRun.set(context.runId, events);
-      return hydrateView(context.runId, run, events);
+      const view = hydrateView(context.runId, run, events);
+      if (view.submissionMode === "wallet") {
+        reconcileWalletSubmission({
+          runId: context.runId,
+          idempotencyKey: submissionIdempotencyKey(context.runId, "wallet"),
+          recoveryStorage,
+          events: events.map((event) => ({
+            type: String(event.type ?? ""),
+            payload: eventPayload(event),
+          })),
+        });
+      }
+      return view;
     },
 
     resume: () => client.resume(),

@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "exports": "./src/index.ts",
   "scripts": {
-    "build": "../../node_modules/.bin/esbuild src/entry.ts --bundle --minify --platform=node --format=esm --target=node20 --define:process.env.NODE_ENV='\"production\"' --banner:js='import { createRequire } from \"node:module\"; const require = createRequire(import.meta.url);' --outfile=dist/index.js"
+    "build": "../../node_modules/.bin/esbuild src/entry.ts --bundle --minify --platform=node --format=esm --target=node20 --define:process.env.NODE_ENV='\"production\"' --banner:js='import { createRequire } from \"node:module\"; const require = createRequire(import.meta.url);' --outfile=dist/index.js && node ../../scripts/normalize-action-dist.mjs"
   },
   "engines": {
     "node": ">=20"

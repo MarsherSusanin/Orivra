@@ -100,21 +100,19 @@ export async function runProoflineCli(input: CliDependencies): Promise<number> {
         JSON.parse(await input.files.readText(manifestPath)),
       );
       const created = await input.client.createRun({ manifest, mode });
-      if (mode === "wallet" || mode === "relayer") {
-        const transaction = await input.client.prepareSubmission({
+      const submission = await input.client.prepareSubmission({
+        runId: created.runId,
+        mode,
+      });
+      if (mode === "wallet") {
+        const transactionHash = await input.wallet.signAndBroadcast(
+          submission,
+          privateKey!,
+        );
+        await input.client.attachTransaction({
           runId: created.runId,
-          mode,
+          transactionHash,
         });
-        if (mode === "wallet") {
-          const transactionHash = await input.wallet.signAndBroadcast(
-            transaction,
-            privateKey!,
-          );
-          await input.client.attachTransaction({
-            runId: created.runId,
-            transactionHash,
-          });
-        }
       }
       input.io.stdout(`Run created: ${created.runId}`);
       return 0;

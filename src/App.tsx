@@ -21,6 +21,7 @@ import { ProjectTokenDialog } from "./components/ProjectTokenDialog";
 import { RunTimeline } from "./components/RunTimeline";
 import { RunsIndex } from "./components/RunsIndex";
 import { Sidebar } from "./components/Sidebar";
+import { SubmissionDecision } from "./components/SubmissionDecision";
 import { Topbar } from "./components/Topbar";
 import { VerificationDialog } from "./components/VerificationDialog";
 import type { PreflightReportV1 } from "../packages/contracts/src";
@@ -31,6 +32,7 @@ import {
 import {
   createLiveSurfaceServices,
   createTestSurfaceServices,
+  submissionIdempotencyKey,
   type HydratedRunView,
   type RunSurfaceServices,
 } from "./services/run-surface";
@@ -295,6 +297,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
       baseUrl: import.meta.env.VITE_PROOFLINE_API_BASE_URL ?? "/api",
       projectToken: resolvedToken,
       storage: browserLocalStorage(),
+      recoveryStorage: browserSessionStorage(),
     });
   }, [resolvedToken, services]);
   const [resumedRun] = useState(() => servicePort.resume?.() ?? null);
@@ -313,6 +316,8 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
       : null
   );
   const showsPreflightWorkbench = effectiveRunStep === "preflight";
+  const showsSubmissionDecision = effectiveRunStep === "submission";
+  const needsPreflightReport = showsPreflightWorkbench || showsSubmissionDecision;
 
   useEffect(() => {
     const restoreRouteState = () => {
@@ -336,7 +341,10 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
           after,
         });
         const existingReportAttempt = preflightReportAttempts.current.get(activeRunId);
-        const initialReportPromise = runStepFromLocation() === "preflight" && existingReportAttempt === undefined
+        const initialReportPromise = (
+          runStepFromLocation() === "preflight" ||
+          runStepFromLocation() === "submission"
+        ) && existingReportAttempt === undefined
           ? servicePort.getPreflightReport
             ? (() => {
                 const promise = servicePort.getPreflightReport!({
@@ -463,7 +471,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   }, [activeRunId, emitProductEvent, hydrationRevision, isProjectAccess, resolvedToken, servicePort, shouldHydrate]);
 
   useEffect(() => {
-    if (!showsPreflightWorkbench || !hydratedRun) return;
+    if (!needsPreflightReport || !hydratedRun) return;
     let cancelled = false;
     const runSequence = hydratedRun.sequence;
     const attempt = preflightReportAttempts.current.get(activeRunId);
@@ -517,7 +525,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
     return () => {
       cancelled = true;
     };
-  }, [activeRunId, hydratedRun?.sequence, resolvedToken, servicePort, showsPreflightWorkbench]);
+  }, [activeRunId, hydratedRun?.sequence, needsPreflightReport, resolvedToken, servicePort]);
 
   const connectProject = (token: string) => {
     try {
@@ -547,6 +555,26 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const returnToPreflight = () => {
     writeRunStep("preflight");
     setRunStep("preflight");
+  };
+
+  const confirmSubmission = async ({
+    mode,
+    idempotencyKey,
+  }: {
+    mode: "wallet" | "relayer" | "replay";
+    idempotencyKey: string;
+  }) => {
+    if (!servicePort.confirmSubmission) {
+      throw Object.assign(new Error("Submission adapter is unavailable"), {
+        code: "SUBMISSION_UNAVAILABLE",
+      });
+    }
+    return servicePort.confirmSubmission({
+      runId: activeRunId,
+      projectToken: resolvedToken,
+      mode,
+      idempotencyKey,
+    });
   };
 
   const exportBundle = async () => {
@@ -689,17 +717,45 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
                 readOnly={!isProjectAccess}
                 onContinue={continueToSubmission}
               />
-            ) : effectiveRunStep === "submission" ? (
-              <section className="next-action submission-placeholder" aria-labelledby="next-action-title">
-                <span className="next-action-icon" aria-hidden="true"><FileMagnifyingGlass size={51} /></span>
-                <div className="next-action-content">
-                  <h2 id="next-action-title">Submission is next.</h2>
-                  <p>Preflight evidence is preserved. Transaction execution begins in the next product slice.</p>
-                  <button className="bundle-action submission-back" type="button" onClick={returnToPreflight}>
-                    Review preflight evidence
-                  </button>
-                </div>
-              </section>
+            ) : showsSubmissionDecision ? (
+              preflightReportState.kind === "valid" && hydratedRun.submissionMode ? (
+                <SubmissionDecision
+                  mode={hydratedRun.submissionMode}
+                  report={preflightReportState.report}
+                  canConfirm={
+                    isProjectAccess &&
+                    !hydratedRun.terminal &&
+                    hydratedRun.stages.preflight === "completed" &&
+                    preflightReportState.report.verdict !== "blocked" &&
+                    Boolean(servicePort.confirmSubmission)
+                  }
+                  idempotencyKey={submissionIdempotencyKey(
+                    activeRunId,
+                    hydratedRun.submissionMode,
+                  )}
+                  onConfirm={confirmSubmission}
+                  onRequested={(mode) => emitProductEvent({
+                    name: "SUBMISSION_REQUESTED",
+                    metadata: { mode },
+                  })}
+                  onBack={returnToPreflight}
+                />
+              ) : (
+                <section
+                  className="next-action preflight-workbench preflight-workbench-state is-loading"
+                  aria-label="Submission decision"
+                  aria-live="polite"
+                >
+                  <span className="preflight-state-icon" aria-hidden="true">
+                    <FileMagnifyingGlass size={34} />
+                  </span>
+                  <div className="preflight-state-copy" role="status">
+                    <span className="section-label">Submission decision</span>
+                    <h2>Loading persisted authorization</h2>
+                    <p>Reading the immutable mode and exact preflight evidence for this run.</p>
+                  </div>
+                </section>
+              )
             ) : (
             <section className="next-action" aria-labelledby="next-action-title">
               <span className="next-action-icon" aria-hidden="true"><FileMagnifyingGlass size={51} /></span>
@@ -741,7 +797,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
             </section>
             )}
           </section>
-          {showsPreflightWorkbench || (effectiveRunStep === "submission" && preflightReportState.kind === "valid") ? (
+          {needsPreflightReport ? (
             <PreflightDiagnosticsRail
               state={preflightReportState}
               expanded={diagnosticExpanded}

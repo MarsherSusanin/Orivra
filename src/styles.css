@@ -2011,9 +2011,232 @@ a {
   color: var(--cyan);
 }
 
-.submission-placeholder .submission-back {
+.submission-decision {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(145deg, rgba(45, 200, 243, 0.035), transparent 38%),
+    rgba(8, 17, 24, 0.3);
+}
+
+.submission-decision-heading {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 25px;
+  border-bottom: 1px solid var(--border);
+}
+
+.submission-decision-icon {
+  display: grid;
+  width: 62px;
+  height: 62px;
+  place-items: center;
+  color: var(--cyan);
+  border: 1px solid rgba(45, 200, 243, 0.48);
+  border-radius: 50%;
+  background: rgba(45, 200, 243, 0.045);
+}
+
+.submission-decision-heading .section-label {
+  margin-bottom: 5px;
+  font-size: 11px;
+}
+
+.submission-decision-heading h2 {
+  margin: 0 0 5px;
+  font-size: 27px;
+  letter-spacing: -0.025em;
+}
+
+.submission-decision-heading p {
+  max-width: 640px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.submission-mode-badge,
+.submission-chain {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  color: var(--cyan-soft);
+  border: 1px solid rgba(45, 200, 243, 0.36);
+  border-radius: 999px;
+  background: rgba(45, 200, 243, 0.045);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.submission-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.submission-trust-grid > div {
+  min-width: 0;
+  padding: 16px 25px;
+  border-right: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.submission-trust-grid > div:nth-child(even) {
+  border-right: 0;
+}
+
+.submission-trust-grid dt,
+.submission-evidence-grid dt {
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 680;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.submission-trust-grid dd,
+.submission-evidence-grid dd {
+  min-width: 0;
+  margin: 6px 0 0;
+  color: #e5eaed;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.submission-request-evidence {
+  padding: 23px 25px;
+  border-bottom: 1px solid var(--border);
+}
+
+.submission-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 15px;
+}
+
+.submission-section-heading .section-label {
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+
+.submission-section-heading h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.submission-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--border-soft);
+  border-left: 1px solid var(--border-soft);
+}
+
+.submission-evidence-grid > div {
+  min-width: 0;
+  padding: 11px 13px;
+  border-right: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  background: rgba(7, 16, 22, 0.44);
+}
+
+.submission-evidence-grid > div.is-wide {
+  grid-column: 1 / -1;
+}
+
+.submission-evidence-grid code {
+  color: var(--cyan-soft);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.submission-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 18px 25px 0;
+  padding: 12px 14px;
+  color: var(--amber);
+  border: 1px solid rgba(244, 186, 8, 0.38);
+  background: rgba(244, 186, 8, 0.055);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.submission-error svg {
+  flex: none;
+}
+
+.submission-actions {
+  display: grid;
+  grid-template-columns: auto auto minmax(260px, 1fr);
+  align-items: center;
+  gap: 13px;
+  padding: 20px 25px 25px;
+}
+
+.submission-back,
+.submission-change-mode {
+  display: inline-flex;
   min-height: 40px;
-  margin-top: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(143, 157, 168, 0.03);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 640;
+}
+
+.submission-change-mode {
+  border-color: transparent;
+  background: transparent;
+}
+
+.submission-back:hover,
+.submission-back:focus-visible,
+.submission-change-mode:hover,
+.submission-change-mode:focus-visible {
+  color: #fff;
+  border-color: rgba(45, 200, 243, 0.5);
+  outline: none;
+}
+
+.submission-confirm {
+  min-height: 58px;
+  justify-self: end;
+  font-size: 16px;
+}
+
+.submission-confirm:disabled {
+  cursor: default;
+  opacity: 0.72;
+  transform: none;
+}
+
+.submission-read-only {
+  justify-self: end;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
 }
 
 .diagnostics {
@@ -3075,6 +3298,80 @@ a {
   .preflight-state-icon {
     width: 52px;
     height: 52px;
+  }
+
+  .next-action.submission-decision {
+    display: block;
+    grid-template-columns: none;
+    padding: 0;
+  }
+
+  .submission-decision-heading {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 13px;
+    padding: 20px 17px;
+  }
+
+  .submission-decision-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  .submission-decision-heading h2 {
+    font-size: 23px;
+  }
+
+  .submission-mode-badge {
+    width: max-content;
+    grid-column: 1 / -1;
+  }
+
+  .submission-trust-grid,
+  .submission-evidence-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .submission-trust-grid > div {
+    padding: 14px 17px;
+    border-right: 0;
+  }
+
+  .submission-request-evidence {
+    padding: 20px 17px;
+  }
+
+  .submission-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .submission-evidence-grid > div.is-wide {
+    grid-column: 1;
+  }
+
+  .submission-error {
+    margin: 16px 17px 0;
+  }
+
+  .submission-actions {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 17px;
+  }
+
+  .submission-back,
+  .submission-change-mode,
+  .submission-confirm {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .submission-confirm {
+    grid-row: 1;
+  }
+
+  .submission-read-only {
+    justify-self: start;
+    text-align: left;
   }
 
   .diagnostics .section-label {

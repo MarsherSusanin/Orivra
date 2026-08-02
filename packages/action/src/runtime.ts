@@ -404,16 +404,20 @@ export function createPersistedActionRunClient(input: {
     throw releaseGateTimeout();
   }
 
-  async function submitRelayerWhenReady(runId: string, deadline: LiveDeadline) {
+  async function submitWhenReady(
+    runId: string,
+    mode: "replay" | "relayer",
+    deadline: LiveDeadline,
+  ) {
     for (let attempt = 0; attempt < deadline.maxAttempts; attempt += 1) {
       try {
         const response = await request(
           `/v1/runs/${encodeURIComponent(runId)}/submissions`,
           {
             method: "POST",
-            body: JSON.stringify({ mode: "relayer" }),
+            body: JSON.stringify({ mode }),
           },
-          { mode: "relayer", operation: "submit-relayer" },
+          { mode, operation: `submit-${mode}` },
           deadline,
         );
         await responseText(response, deadline);
@@ -509,10 +513,12 @@ export function createPersistedActionRunClient(input: {
       if (environment.GITHUB_EVENT_NAME === "pull_request") {
         return replayLocalManifest(manifestPath);
       }
-      const created = await createRun(manifestPath, "replay");
+      const deadline = createDeadline(60_000);
+      const created = await createRun(manifestPath, "replay", deadline);
+      await submitWhenReady(created.runId, "replay", deadline);
       const projection = await waitForTerminalRun(
         created.runId,
-        createDeadline(60_000),
+        deadline,
         () =>
           new Error(
             "Persisted Proofline run timed out before terminal evidence",
@@ -523,6 +529,7 @@ export function createPersistedActionRunClient(input: {
         created.runId,
         "replay",
         projection,
+        deadline,
       );
       return {
         ...replayed.replay,
@@ -545,7 +552,7 @@ export function createPersistedActionRunClient(input: {
         "relayer",
         deadline,
       );
-      await submitRelayerWhenReady(created.runId, deadline);
+      await submitWhenReady(created.runId, "relayer", deadline);
       const proofProjection = await waitForProofBoundary(
         created.runId,
         deadline,
