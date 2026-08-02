@@ -65,10 +65,14 @@ pragma solidity ^0.8.25;
 import {ContractRegistry} from "@flarenetwork/flare-periphery-contracts/coston2/ContractRegistry.sol";
 import {IWeb2Json} from "@flarenetwork/flare-periphery-contracts/coston2/IWeb2Json.sol";
 
+/// @notice Diagnostic fixture: proof integrity is checked, but the source URL is not.
 contract CanonicalVulnerableWeb2JsonConsumer {
     error InvalidWeb2JsonProof();
+
     function consume(IWeb2Json.Proof calldata proof) external view returns (bytes memory) {
-        if (!ContractRegistry.getFdcVerification().verifyWeb2Json(proof)) revert InvalidWeb2JsonProof();
+        if (!ContractRegistry.getFdcVerification().verifyWeb2Json(proof)) {
+            revert InvalidWeb2JsonProof();
+        }
         return proof.data.responseBody.abiEncodedData;
     }
 }
@@ -85,6 +89,16 @@ function fullUnifiedDiff(left: string, right: string, contractName: string) {
     ...rightLines.map((line) => `+${line}`),
     "",
   ].join("\n");
+}
+
+function pathPrefixMatches(pathname: string, prefix: string) {
+  return prefix === "/" || pathname === prefix || pathname.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`);
+}
+
+function expectedQueryMatches(url: URL, expected: Record<string, string>) {
+  return Object.entries(expected).every(
+    ([key, value]) => url.searchParams.getAll(key).length === 1 && url.searchParams.get(key) === value,
+  );
 }
 
 function fingerprint(value: unknown): Buffer {
@@ -1054,12 +1068,13 @@ export function createProductionProoflineService(input: {
         const evidence = JSON.parse(Buffer.from(row.consumer_bytes).toString("utf8")) as Record<string, unknown>;
         const diagnostics = DiagnosticV1Schema.array().parse(evidence.diagnostics);
         const passed = evidence.passed === true;
-        if (row.proof_event?.type !== "PROOF_VERIFIED" || row.consumer_event?.type !== "CONSUMER_VERIFIED") {
+        const proofEvent = RunEventV1Schema.parse(row.proof_event);
+        const consumerEvent = RunEventV1Schema.parse(row.consumer_event);
+        if (proofEvent.type !== "PROOF_VERIFIED" || consumerEvent.type !== "CONSUMER_VERIFIED") {
           throw new Error("Consumer Lab requires proof and terminal consumer events");
         }
-        const terminalPayload = row.consumer_event.payload as Record<string, unknown>;
-        const terminalDiagnostics = DiagnosticV1Schema.array().parse(terminalPayload.diagnostics);
-        if (terminalPayload.passed !== passed || JSON.stringify(terminalDiagnostics) !== JSON.stringify(diagnostics)) {
+        const terminalDiagnostics = consumerEvent.payload.diagnostics;
+        if (consumerEvent.payload.passed !== passed || JSON.stringify(terminalDiagnostics) !== JSON.stringify(diagnostics)) {
           throw new Error("Consumer artifact does not match terminal event");
         }
         const identity = evidence.consumer === "canonical-safe"
@@ -1079,13 +1094,27 @@ export function createProductionProoflineService(input: {
             for (const value of item.missingChecks) if (typeof value === "string") missing.add(value);
           }
         }
-        const expectedQuery = new URLSearchParams(manifest.consumer.expectedQuery).toString();
+        const diagnosticInvariant = new Map([
+          ["CONSUMER_SCHEME_MISMATCH", "scheme"],
+          ["CONSUMER_HOST_MISMATCH", "host"],
+          ["EXPECTED_HOST_NOT_ENFORCED", "host"],
+          ["MISSING_CONSUMER_HOST_INVARIANT", "host"],
+          ["CONSUMER_PATH_MISMATCH", "path"],
+          ["CONSUMER_QUERY_MISMATCH", "query"],
+        ]);
+        for (const diagnostic of diagnostics) {
+          const invariant = diagnosticInvariant.get(diagnostic.code);
+          if (invariant) missing.add(invariant);
+        }
+        const expectedQuery = new URLSearchParams(
+          Object.entries(manifest.consumer.expectedQuery).sort(([left], [right]) => left.localeCompare(right)),
+        ).toString();
         const observedQuery = observedUrl.searchParams.toString();
         const facts = [
           ["scheme", manifest.consumer.expectedScheme, observedUrl.protocol.replace(/:$/, ""), observedUrl.protocol.replace(/:$/, "") === manifest.consumer.expectedScheme],
           ["host", manifest.consumer.expectedHost, observedUrl.hostname, observedUrl.hostname === manifest.consumer.expectedHost],
-          ["path", manifest.consumer.expectedPathPrefix, observedUrl.pathname, observedUrl.pathname.startsWith(manifest.consumer.expectedPathPrefix)],
-          ["query", expectedQuery, observedQuery, observedQuery === expectedQuery],
+          ["path", manifest.consumer.expectedPathPrefix, observedUrl.pathname, pathPrefixMatches(observedUrl.pathname, manifest.consumer.expectedPathPrefix)],
+          ["query", expectedQuery, observedQuery, expectedQueryMatches(observedUrl, manifest.consumer.expectedQuery)],
         ] as const;
         const checks = facts.map(([invariant, expected, observed, matches]) => ({
           invariant, expected, observed,
@@ -1101,7 +1130,8 @@ export function createProductionProoflineService(input: {
         if (!contractName) throw new Error("Safe consumer contract name is missing");
         const compilerVersion = row.safe_metadata?.compiler;
         const compileStatus = row.safe_metadata?.compileStatus;
-        if (typeof compilerVersion !== "string" || compileStatus !== "passed") {
+        const compiledSourceSha256 = row.safe_metadata?.compiledSourceSha256;
+        if (typeof compilerVersion !== "string" || compileStatus !== "passed" || compiledSourceSha256 !== `sha256:${actualHash}`) {
           throw new Error("Safe consumer compile evidence is missing");
         }
         const missingChecks = checks.filter((check) => !check.enforced || !check.passed).length;

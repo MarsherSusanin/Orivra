@@ -848,8 +848,16 @@ export const ConsumerLabReportV1Schema = z
     if (report.checks.some((check, index) => check.invariant !== expected[index])) {
       context.addIssue({ code: "custom", path: ["checks"], message: "Invariant rows must be ordered scheme, host, path, query" });
     }
+    const missingChecks = report.checks.filter((check) => !check.enforced || !check.passed).length;
+    if (report.verdict.missingChecks !== missingChecks) {
+      context.addIssue({ code: "custom", path: ["verdict", "missingChecks"], message: "Missing count must match invariant rows" });
+    }
+    if (report.consumerIdentity === "canonical-vulnerable" &&
+      (report.passed || report.checks.some((check) => check.enforced))) {
+      context.addIssue({ code: "custom", path: ["consumerIdentity"], message: "Vulnerable consumer cannot claim enforced checks" });
+    }
     if (report.verdict.state === "safe-to-integrate" &&
-      (report.verdict.missingChecks !== 0 || report.safeConsumer.compileStatus !== "passed" || report.checks.some((check) => !check.enforced || !check.passed))) {
+      (!report.proofValid || !report.passed || report.consumerIdentity !== "canonical-safe" || report.verdict.missingChecks !== 0 || report.safeConsumer.compileStatus !== "passed" || report.checks.some((check) => !check.enforced || !check.passed))) {
       context.addIssue({ code: "custom", path: ["verdict"], message: "Safe verdict requires four enforced checks and a passed compile" });
     }
   });

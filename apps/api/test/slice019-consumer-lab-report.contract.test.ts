@@ -34,8 +34,8 @@ describe("Slice 019 persisted Consumer Lab report", () => {
       manifest: exactTrustManifest, consumer_bytes: evidence, safe_bytes: sourceBytes,
       safe_sha256: createHash("sha256").update(sourceBytes).digest(),
       safe_metadata: { compiler: "solc-0.8.36", compileStatus: "passed", compiledSourceSha256: `sha256:${createHash("sha256").update(sourceBytes).digest("hex")}` },
-      proof_event: { type: "PROOF_VERIFIED" },
-      consumer_event: { type: "CONSUMER_VERIFIED", payload: { passed: false, diagnostics: JSON.parse(evidence.toString()).diagnostics } },
+      proof_event: { version: "1", runId: RUN_ID, sequence: 6, commandId: "verify-proof", occurredAt: "2026-08-03T00:00:00.000Z", type: "PROOF_VERIFIED", payload: { verificationContract: "0x1111111111111111111111111111111111111111" } },
+      consumer_event: { version: "1", runId: RUN_ID, sequence: 7, commandId: "verify-consumer", occurredAt: "2026-08-03T00:00:01.000Z", type: "CONSUMER_VERIFIED", payload: { passed: false, diagnostics: JSON.parse(evidence.toString()).diagnostics } },
     };
     const report = await production(row).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID });
     expect(report).toMatchObject({ statement: "Valid proof ≠ trusted URL", verdict: { state: "needs-fixes", missingChecks: 4 } });

@@ -339,6 +339,23 @@ export function createRunClient(input: {
           { status: 502, code: "CONSUMER_LAB_INVALID" },
         );
       }
+      const digest = await globalThis.crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(parsed.data.safeConsumer.source),
+      );
+      const actual = [...new Uint8Array(digest)]
+        .map((value) => value.toString(16).padStart(2, "0"))
+        .join("");
+      const diffMatchesSource = parsed.data.safeConsumer.source
+        .trimEnd()
+        .split("\n")
+        .every((line) => parsed.data.safeConsumer.diff.includes(`+${line}`));
+      if (`sha256:${actual}` !== parsed.data.safeConsumer.sha256 || !diffMatchesSource) {
+        throw new ProoflineClientError(
+          "Consumer Lab artifact integrity check failed",
+          { status: 502, code: "CONSUMER_LAB_ARTIFACT_INVALID" },
+        );
+      }
       return parsed.data;
     },
 

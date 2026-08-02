@@ -1,4 +1,5 @@
 import solc from "solc";
+import { createHash } from "node:crypto";
 
 const web2JsonStub = `pragma solidity ^0.8.25;
 interface IWeb2Json {
@@ -36,5 +37,10 @@ export function compileGeneratedConsumer(source: string) {
   }));
   const errors = (output.errors ?? []).filter((error: { severity: string }) => error.severity === "error");
   if (errors.length > 0) throw new Error("Generated safe consumer failed Solidity compilation");
-  return { compiler: `solc-${solc.version().split("+")[0]}`, compileStatus: "passed" as const };
+  const compiledSourceSha256 = `sha256:${createHash("sha256").update(source).digest("hex")}`;
+  return {
+    compiler: `solc-${solc.version().split("+")[0]}`,
+    compileStatus: "passed" as const,
+    compiledSourceSha256,
+  };
 }
