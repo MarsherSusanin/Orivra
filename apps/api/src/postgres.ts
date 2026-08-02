@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { appendRunEvents, projectRun } from "@proofline/domain";
 import {
   NormalizedFdcErrorSchema,
+  RecoveryErrorV1Schema,
   RunEventV1Schema,
   RunRecoveryV1Schema,
   Web2JsonManifestV1Schema,
@@ -256,7 +257,37 @@ function recoveryError(
   retryable: boolean,
 ) {
   const error = terminalError(failure);
-  return NormalizedFdcErrorSchema.parse({ ...error, retryable });
+  const source = failure.evidence && typeof failure.evidence === "object"
+    ? failure.evidence as Record<string, unknown>
+    : {};
+  const evidence: Record<string, unknown> = {};
+  if (typeof source.stage === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(source.stage)) {
+    evidence.stage = source.stage;
+  }
+  if (typeof source.attempt === "number" && Number.isInteger(source.attempt) && source.attempt >= 0) {
+    evidence.attempt = source.attempt;
+  }
+  if (typeof source.retryAfterSeconds === "number" && Number.isFinite(source.retryAfterSeconds) && source.retryAfterSeconds >= 0) {
+    evidence.retryAfterSeconds = source.retryAfterSeconds;
+  }
+  if (typeof source.votingRound === "number" && Number.isInteger(source.votingRound) && source.votingRound >= 0) {
+    evidence.votingRound = source.votingRound;
+  }
+  const commandId = typeof failure.commandId === "string"
+    ? failure.commandId
+    : typeof source.commandId === "string"
+      ? source.commandId
+      : undefined;
+  if (commandId) evidence.commandId = commandId;
+  if (typeof source.originalCode === "string" && /^[A-Z][A-Z0-9_]{0,127}$/.test(source.originalCode)) {
+    evidence.originalCode = source.originalCode;
+  }
+  return RecoveryErrorV1Schema.parse({
+    ...error,
+    message: error.message.slice(0, 256),
+    retryable,
+    evidence,
+  });
 }
 
 function terminalRetrySafety(failure: Record<string, unknown>) {
@@ -278,6 +309,30 @@ function eventDedupeKey(event: RunEventV1): string {
     return `${event.commandId}:${event.type}:${event.payload.attempt}`;
   }
   return event.commandId;
+}
+
+function unresolvedRecoveryEvent(
+  events: readonly RunEventV1[],
+  commandId: string,
+) {
+  let unresolved: Extract<
+    RunEventV1,
+    { type: "STAGE_WAITING" | "STAGE_RETRY_SCHEDULED" }
+  > | undefined;
+  for (const event of events) {
+    if (
+      event.type !== "STAGE_WAITING" &&
+      event.type !== "STAGE_RETRY_SCHEDULED" &&
+      event.type !== "RUN_RESUMED"
+    ) {
+      unresolved = undefined;
+      continue;
+    }
+    if (event.commandId !== commandId) continue;
+    if (event.type === "RUN_RESUMED") unresolved = undefined;
+    else unresolved = event;
+  }
+  return unresolved;
 }
 
 async function appendEventInTransaction(
@@ -808,11 +863,9 @@ export function createPostgresCommandRepository(input: {
           const events = prior.rows.map((item) =>
             RunEventV1Schema.parse(item.event_payload),
           );
-          const latestRecovery = [...events].reverse().find(
-            (event) =>
-              event.commandId === String(row.id) &&
-              (event.type === "STAGE_WAITING" ||
-                event.type === "STAGE_RETRY_SCHEDULED"),
+          const latestRecovery = unresolvedRecoveryEvent(
+            events,
+            String(row.id),
           );
           if (
             latestRecovery?.type === "STAGE_WAITING" ||
@@ -1023,6 +1076,7 @@ export function createPostgresCommandRepository(input: {
               RunEventV1Schema.parse(row.event_payload),
             );
             const error = terminalError(failure);
+            const terminalRecoveryError = recoveryError(failure, false);
             const updatedAt = new Date().toISOString();
             const terminalEvent = RunEventV1Schema.parse({
               version: "1",
@@ -1042,7 +1096,7 @@ export function createPostgresCommandRepository(input: {
                   resumeFrom: recoveryCheckpoint(result.rows[0]?.kind),
                   preservedEvidence: preservedEvidence(events),
                   updatedAt,
-                  error,
+                  error: terminalRecoveryError,
                   retrySafety: terminalRetrySafety(failure),
                 },
               },

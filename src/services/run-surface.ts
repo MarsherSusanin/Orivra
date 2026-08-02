@@ -371,6 +371,19 @@ function titleFrom(run: Record<string, unknown>, events: readonly Record<string,
   return host ? `Web2Json · ${host}` : "Web2Json run";
 }
 
+function contiguousEventSequence(events: readonly Record<string, unknown>[]): number {
+  let expected = 1;
+  for (const event of [...events].sort(
+    (left, right) => Number(left.sequence) - Number(right.sequence),
+  )) {
+    const sequence = Number(event.sequence);
+    if (sequence < expected) continue;
+    if (sequence !== expected) break;
+    expected += 1;
+  }
+  return expected - 1;
+}
+
 function hydrateView(
   runId: string,
   run: Record<string, unknown>,
@@ -414,7 +427,7 @@ function hydrateView(
     typeof run.sequence === "number" && Number.isSafeInteger(run.sequence)
       ? run.sequence
       : events.length;
-  const eventSequence = Number(events.at(-1)?.sequence ?? 0);
+  const eventSequence = contiguousEventSequence(events);
   return {
     runId,
     title: titleFrom(run, events),
@@ -569,19 +582,34 @@ export function createLiveSurfaceServices(input: {
 
     async hydrateRun(context) {
       assertContext(context);
+      const run = await client.getRun(context.runId);
+      const projectionSequence = typeof run.sequence === "number" &&
+        Number.isSafeInteger(run.sequence) && run.sequence >= 0
+        ? run.sequence
+        : 0;
       const cached = eventsByRun.get(context.runId) ?? [];
-      const cachedAfter = Number(cached.at(-1)?.sequence ?? 0);
-      const after = cachedAfter >= context.after ? context.after : 0;
-      const [run, incremental] = await Promise.all([
-        client.getRun(context.runId),
-        client.events(context.runId, after),
-      ]);
+      const cachedContiguous = contiguousEventSequence(cached);
+      const cachedLast = Number(cached.at(-1)?.sequence ?? 0);
+      const usableCache = cachedContiguous === cachedLast ? cached : [];
       const merged = new Map<number, Record<string, unknown>>(
-        cached.map((event) => [Number(event.sequence), event]),
+        usableCache.map((event) => [Number(event.sequence), event]),
       );
-      for (const event of eventRecords(incremental.events)) {
-        const sequence = Number(event.sequence);
-        if (Number.isSafeInteger(sequence) && sequence > 0) merged.set(sequence, event);
+      let cursor = usableCache.length > 0 ? cachedContiguous : 0;
+      for (
+        let page = 0;
+        page < 64 && (page === 0 || cursor < projectionSequence);
+        page += 1
+      ) {
+        const incremental = await client.events(context.runId, cursor);
+        const pageEvents = eventRecords(incremental.events);
+        for (const event of pageEvents) {
+          const sequence = Number(event.sequence);
+          if (Number.isSafeInteger(sequence) && sequence > 0) merged.set(sequence, event);
+        }
+        const nextAfter = Number(incremental.nextAfter);
+        if (!Number.isSafeInteger(nextAfter) || nextAfter <= cursor) break;
+        cursor = nextAfter;
+        if (pageEvents.length < 1_000) break;
       }
       const events = [...merged.values()].sort(
         (left, right) => Number(left.sequence) - Number(right.sequence),

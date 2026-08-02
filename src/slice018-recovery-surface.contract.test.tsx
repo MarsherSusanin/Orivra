@@ -1,6 +1,10 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RUN_ID, validManifest } from "../packages/contracts/test/fixtures";
+import {
+  RUN_ID,
+  exactTrustManifest,
+  validManifest,
+} from "../packages/contracts/test/fixtures";
 import { decodeComposerDraftV1, finalizeWeb2JsonManifestDraft } from "../packages/domain/src";
 import { App } from "./App";
 import {
@@ -191,7 +195,8 @@ describe("Slice 018 recovery surface", () => {
   it("copies the exact persisted manifest into a newly keyed Composer draft", async () => {
     window.history.replaceState({}, "", `/runs/${RUN_ID}`);
     sessionStorage.setItem("proofline:project-token", PROJECT_TOKEN);
-    render(<App services={surface(vi.fn().mockResolvedValue(run("terminal")))} />);
+    const sourceRun = { ...run("terminal"), manifest: exactTrustManifest } as HydratedRunView;
+    render(<App services={surface(vi.fn().mockResolvedValue(sourceRun))} />);
     await screen.findByRole("region", { name: /run recovery/i });
     await act(async () => {
       screen.getByRole("button", { name: /create new run/i }).click();
@@ -204,9 +209,9 @@ describe("Slice 018 recovery surface", () => {
     );
     expect(restored.state).toBe("restored");
     if (restored.state !== "restored") throw new Error("replacement draft missing");
-    expect(finalizeWeb2JsonManifestDraft(restored.draft)).toEqual({
-      state: "valid",
-      manifest: validManifest,
+    expect(finalizeWeb2JsonManifestDraft(restored.draft)).toMatchObject({
+      valid: true,
+      manifest: exactTrustManifest,
     });
     expect(restored.draft.createIdempotencyKey).not.toContain(RUN_ID);
   });

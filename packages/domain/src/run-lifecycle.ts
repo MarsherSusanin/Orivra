@@ -210,7 +210,7 @@ export function projectRun(eventValues: readonly RunEventV1[]): RunProjectionV1 
     }
     events.push(event);
     lifecycleEvents.push(event);
-    if (event.type !== "RUN_FAILED") unresolved.clear();
+    unresolved.clear();
   }
 
   const last = events.at(-1)!;
@@ -224,9 +224,11 @@ export function projectRun(eventValues: readonly RunEventV1[]): RunProjectionV1 
     stages.consumer = lastLifecycle.payload.passed ? "completed" : "failed";
   }
 
-  const recovery = [...unresolved.values()].sort(
-    (left, right) => right.order - left.order,
-  )[0]?.recovery ?? (failed ? lastLifecycle.payload.recovery : undefined);
+  const recovery = failed
+    ? lastLifecycle.payload.recovery
+    : [...unresolved.values()].sort(
+        (left, right) => right.order - left.order,
+      )[0]?.recovery;
 
   return RunProjectionV1Schema.parse({
     version: "1",

@@ -380,6 +380,33 @@ describe.runIf(enabled)("Slice 007 real PostgreSQL command integrity", () => {
       `${firstClaim!.command.id}:RUN_RESUMED:2`,
     );
 
+    await pool.query(
+      `UPDATE proofline_private.run_commands
+       SET lease_expires_at = now() - interval '1 second'
+       WHERE id = $1`,
+      [firstClaim!.command.id],
+    );
+    const afterWorkerCrash = createPostgresCommandRepository({ pool });
+    const reclaimedAgain = await afterWorkerCrash.claimNextCommand();
+    expect(reclaimedAgain).toMatchObject({
+      command: {
+        id: firstClaim!.command.id,
+        attempts: 3,
+      },
+    });
+    const journalAfterReclaim = await pool.query<{ type: string }>(
+      `SELECT event_payload->>'type' AS type
+       FROM proofline_private.run_events
+       WHERE run_id = $1
+       ORDER BY sequence`,
+      [created.runId],
+    );
+    expect(journalAfterReclaim.rows.map(({ type }) => type)).toEqual([
+      "RUN_CREATED",
+      "STAGE_RETRY_SCHEDULED",
+      "RUN_RESUMED",
+    ]);
+
     const versions = await pool.query<{ version: number }>(
       "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
     );

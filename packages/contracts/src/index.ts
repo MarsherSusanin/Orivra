@@ -868,6 +868,28 @@ const PreservedEvidenceListV1Schema = z
     message: "Preserved evidence classes must be unique",
   });
 
+export const RecoveryErrorEvidenceV1Schema = z
+  .object({
+    stage: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/).optional(),
+    attempt: z.number().int().nonnegative().optional(),
+    retryAfterSeconds: z.number().finite().nonnegative().optional(),
+    votingRound: z.number().int().nonnegative().optional(),
+    commandId: NonEmptyIdSchema.optional(),
+    originalCode: z.string().regex(/^[A-Z][A-Z0-9_]{0,127}$/).optional(),
+  })
+  .strict();
+
+export const RecoveryErrorV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    category: NormalizedFdcErrorSchema.shape.category,
+    code: NormalizedFdcErrorSchema.shape.code,
+    message: z.string().min(1).max(256),
+    retryable: z.boolean(),
+    evidence: RecoveryErrorEvidenceV1Schema,
+  })
+  .strict();
+
 const RunRecoveryCommonV1 = {
   version: VersionV1Schema,
   stage: RunStageNameV1Schema,
@@ -875,7 +897,7 @@ const RunRecoveryCommonV1 = {
   resumeFrom: RecoveryCheckpointV1Schema,
   preservedEvidence: PreservedEvidenceListV1Schema,
   updatedAt: z.string().datetime({ offset: true }),
-  error: NormalizedFdcErrorSchema,
+  error: RecoveryErrorV1Schema,
 };
 
 const WaitingRecoveryV1Schema = z
@@ -924,6 +946,7 @@ export type RecoveryRetrySafetyV1 = z.infer<
   typeof RecoveryRetrySafetyV1Schema
 >;
 export type RunRecoveryV1 = z.infer<typeof RunRecoveryV1Schema>;
+export type RecoveryErrorV1 = z.infer<typeof RecoveryErrorV1Schema>;
 
 const RunEventCommon = {
   version: VersionV1Schema,

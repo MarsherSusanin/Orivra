@@ -1,10 +1,16 @@
-import type { Web2JsonManifestDraftV1 } from "../../packages/contracts/src";
+import type {
+  Web2JsonManifestDraftV1,
+  Web2JsonManifestV1,
+} from "../../packages/contracts/src";
 import {
   decodeComposerDraftV1,
+  importWeb2JsonManifestDraft,
   serializeComposerDraftV1,
 } from "../../packages/domain/src";
 
 export const COMPOSER_DRAFT_STORAGE_KEY_V1 = "proofline:composer-draft:v1";
+export const REPLACEMENT_DRAFT_STORAGE_KEY_V1 =
+  "proofline:replacement-composer-draft:v1";
 
 const MAX_DRAFT_UTF8_BYTES = 65_536;
 const OPAQUE_TOKEN = /(?:project|share)_[a-f0-9]{64}/i;
@@ -13,6 +19,12 @@ const PRIVATE_KEY = /(?:^|[^a-f0-9])0x[a-f0-9]{64}(?:$|[^a-f0-9])/i;
 const SENSITIVE_QUERY_KEY = /^(?:authorization|api[-_]?key|access[-_]?token|token|password|private[-_]?key)$/i;
 
 type DraftStoragePort = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+type ReplacementDraftEnvelopeV1 = {
+  version: "1";
+  sourceRunId: string;
+  draft: Web2JsonManifestDraftV1;
+};
 
 type DraftLoadResult =
   | { state: "empty" }
@@ -90,6 +102,80 @@ function containsSensitiveData(value: unknown): boolean {
 
 function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
+}
+
+export function stageReplacementComposerDraft(
+  storage: DraftStoragePort,
+  input: {
+    sourceRunId: string;
+    manifest: Web2JsonManifestV1;
+    updatedAt: string;
+    createIdempotencyKey: string;
+  },
+): DraftSaveResult {
+  let draft: Web2JsonManifestDraftV1;
+  try {
+    draft = importWeb2JsonManifestDraft({
+      manifest: input.manifest,
+      updatedAt: input.updatedAt,
+      createIdempotencyKey: input.createIdempotencyKey,
+    });
+  } catch {
+    return { state: "rejected", reason: "invalid" };
+  }
+  if (containsSensitiveData(draft)) {
+    return { state: "rejected", reason: "sensitive-data" };
+  }
+  const envelope: ReplacementDraftEnvelopeV1 = {
+    version: "1",
+    sourceRunId: input.sourceRunId,
+    draft,
+  };
+  const bytes = JSON.stringify(envelope);
+  if (utf8ByteLength(bytes) > MAX_DRAFT_UTF8_BYTES) {
+    return { state: "rejected", reason: "oversized" };
+  }
+  try {
+    storage.setItem(REPLACEMENT_DRAFT_STORAGE_KEY_V1, bytes);
+    return { state: "stored" };
+  } catch {
+    return { state: "unavailable" };
+  }
+}
+
+export function consumeReplacementComposerDraft(
+  storage: DraftStoragePort,
+  sourceRunId: string,
+): DraftLoadResult {
+  let raw: string | null;
+  try {
+    raw = storage.getItem(REPLACEMENT_DRAFT_STORAGE_KEY_V1);
+    storage.removeItem(REPLACEMENT_DRAFT_STORAGE_KEY_V1);
+  } catch {
+    return { state: "unavailable" };
+  }
+  if (raw === null) return { state: "empty" };
+  if (utf8ByteLength(raw) > MAX_DRAFT_UTF8_BYTES) {
+    return { state: "rejected", reason: "oversized" };
+  }
+  try {
+    const decoded = JSON.parse(raw) as Partial<ReplacementDraftEnvelopeV1>;
+    if (
+      decoded.version !== "1" ||
+      decoded.sourceRunId !== sourceRunId ||
+      typeof decoded.draft !== "object" ||
+      decoded.draft === null
+    ) {
+      return { state: "rejected", reason: "invalid" };
+    }
+    const draft = decodeComposerDraftV1(JSON.stringify(decoded.draft));
+    if (draft.state !== "restored" || containsSensitiveData(draft.draft)) {
+      return { state: "rejected", reason: "invalid" };
+    }
+    return draft;
+  } catch {
+    return { state: "rejected", reason: "corrupt" };
+  }
 }
 
 export function createComposerDraftStore(storage: DraftStoragePort) {

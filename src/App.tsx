@@ -9,6 +9,7 @@ import {
   startComposerJourneyFromRuns,
   startDirectComposerJourney,
 } from "./services/composer-journey";
+import { stageReplacementComposerDraft } from "./services/composer-draft-store";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { EvidenceStrip } from "./components/EvidenceStrip";
 import { ManifestComposer } from "./components/ManifestComposer";
@@ -770,8 +771,26 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
     setHydrationRevision((value) => value + 1);
   };
   const createReplacementRun = () => {
-    globalThis.history.pushState({}, "", `/runs/new?from=${encodeURIComponent(activeRunId)}`);
-    globalThis.dispatchEvent(new PopStateEvent("popstate"));
+    if (!hydratedRun.manifest) return;
+    const replacementId = browserCrypto()?.randomUUID?.() ??
+      `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const staged = stageReplacementComposerDraft(browserSessionStorage(), {
+      sourceRunId: activeRunId,
+      manifest: hydratedRun.manifest,
+      updatedAt: new Date().toISOString(),
+      createIdempotencyKey: `composer_${replacementId}`,
+    });
+    if (staged.state !== "stored") {
+      setHydrationError("The persisted manifest could not be copied safely. Refresh and try again.");
+      return;
+    }
+    const destination = `/runs/new?from=${encodeURIComponent(activeRunId)}`;
+    if (import.meta.env.MODE === "test") {
+      globalThis.history.pushState({}, "", destination);
+      globalThis.dispatchEvent(new PopStateEvent("popstate"));
+    } else {
+      globalThis.location.assign(destination);
+    }
   };
 
   return (

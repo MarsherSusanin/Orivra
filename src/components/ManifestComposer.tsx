@@ -17,7 +17,10 @@ import {
   validateComposerSourceUrl,
   type ComposerFinalizationIssue,
 } from "../../packages/domain/src";
-import { createComposerDraftStore } from "../services/composer-draft-store";
+import {
+  consumeReplacementComposerDraft,
+  createComposerDraftStore,
+} from "../services/composer-draft-store";
 import type { RunSurfaceServices } from "../services/run-surface";
 import {
   COMPOSER_STEPS,
@@ -52,6 +55,22 @@ const UNAVAILABLE_DRAFT_STORAGE = {
 function browserDraftStorage() {
   try {
     const storage = globalThis.localStorage;
+    const prototype = globalThis.Storage?.prototype;
+    if (!storage) return UNAVAILABLE_DRAFT_STORAGE;
+    if (!prototype) return storage;
+    return {
+      getItem: (key: string) => prototype.getItem.call(storage, key),
+      setItem: (key: string, value: string) => prototype.setItem.call(storage, key, value),
+      removeItem: (key: string) => prototype.removeItem.call(storage, key),
+    };
+  } catch {
+    return UNAVAILABLE_DRAFT_STORAGE;
+  }
+}
+
+function browserSessionDraftStorage() {
+  try {
+    const storage = globalThis.sessionStorage;
     const prototype = globalThis.Storage?.prototype;
     if (!storage) return UNAVAILABLE_DRAFT_STORAGE;
     if (!prototype) return storage;
@@ -180,7 +199,14 @@ export function ManifestComposer({
     [],
   );
   const [startup] = useState(() => {
-    const loaded = draftStore.load();
+    const sourceRunId = new URLSearchParams(globalThis.location?.search ?? "").get("from");
+    const replacement = sourceRunId
+      ? consumeReplacementComposerDraft(browserSessionDraftStorage(), sourceRunId)
+      : { state: "empty" as const };
+    if (replacement.state === "restored") {
+      draftStore.save(replacement.draft);
+    }
+    const loaded = replacement.state === "restored" ? replacement : draftStore.load();
     const requested = locationStep();
     const requestedStep = requested.state === "valid"
       ? requested.step
