@@ -182,6 +182,48 @@ describe("Slice 018 PostgreSQL recovery journal", () => {
     );
   });
 
+  it("audits an expired first lease before resuming attempt two", async () => {
+    const storedEvents = [makeRunEvents()[0]] as Record<string, unknown>[];
+    let lastSequence = 1;
+    const fixture = repositoryWith(async (text, values) => {
+      if (text === POSTGRES_QUERIES.claimNextCommand) return result([{
+        id: COMMAND, project_id: PROJECT, run_id: RUN_ID, kind: "RUN_PREFLIGHT",
+        attempts: 2, payload: {}, last_error: null,
+      }], 1);
+      if (text === POSTGRES_QUERIES.loadEvents) return result(
+        storedEvents.map((event_payload) => ({ event_payload })),
+        storedEvents.length,
+      );
+      if (text === POSTGRES_QUERIES.lockRun) return result([{
+        last_sequence: lastSequence,
+        projection: { version: "1", runId: RUN_ID, sequence: lastSequence, terminal: false },
+      }], 1);
+      if (text === POSTGRES_QUERIES.insertEvent) {
+        storedEvents.push(JSON.parse(String(values?.[4])) as Record<string, unknown>);
+        return result([], 1);
+      }
+      if (text === POSTGRES_QUERIES.updateProjection) {
+        lastSequence = Number(values?.[2]);
+        return result([], 1);
+      }
+      return result([], 1);
+    });
+
+    await expect(fixture.repository.claimNextCommand()).resolves.toMatchObject({
+      command: { id: COMMAND, attempts: 2 },
+    });
+    expect(insertedEvents(fixture.client)).toEqual([
+      expect.objectContaining({
+        type: "STAGE_RETRY_SCHEDULED",
+        payload: expect.objectContaining({ attempt: 1 }),
+      }),
+      expect.objectContaining({
+        type: "RUN_RESUMED",
+        payload: expect.objectContaining({ attempt: 2 }),
+      }),
+    ]);
+  });
+
   it("audits an expired attempt-two lease before resuming attempt three", async () => {
     const created = makeRunEvents()[0];
     const scheduled = {

@@ -7,6 +7,10 @@ Core Verification NOT PASS. Corrective contracts freeze three regressions:
 2. recovery messages reject credential, private URL, stack and private-key text;
 3. an event feed ahead of its earlier projection snapshot is not reported current.
 
+A subsequent fresh audit added the missing initial-lease case: attempt one can
+expire before any `last_error` exists, and its attempt-two claim must persist the
+same audit pair before returning work.
+
 The focused RED command is:
 
 ```bash

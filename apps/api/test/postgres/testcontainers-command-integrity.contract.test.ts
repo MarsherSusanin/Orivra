@@ -190,6 +190,18 @@ describe.runIf(enabled)("Slice 007 real PostgreSQL command integrity", () => {
         attempts: 2,
       },
     });
+    const recoveryJournal = await pool.query<{ type: string }>(
+      `SELECT event_payload->>'type' AS type
+       FROM proofline_private.run_events
+       WHERE run_id = $1
+       ORDER BY sequence`,
+      [created.runId],
+    );
+    expect(recoveryJournal.rows.map(({ type }) => type)).toEqual([
+      "RUN_CREATED",
+      "STAGE_RETRY_SCHEDULED",
+      "RUN_RESUMED",
+    ]);
 
     const canonicalBytes = new TextEncoder().encode(
       JSON.stringify({ version: "1", requestBytes: "0x574542324a534f4e" }),
@@ -203,7 +215,7 @@ describe.runIf(enabled)("Slice 007 real PostgreSQL command integrity", () => {
           {
             version: "1",
             runId: created.runId,
-            sequence: 2,
+            sequence: 4,
             commandId: reclaimed!.command.id,
             occurredAt: "2025-05-15T12:04:11.000Z",
             type: "PREFLIGHT_ACCEPTED",
@@ -236,10 +248,12 @@ describe.runIf(enabled)("Slice 007 real PostgreSQL command integrity", () => {
       runId: created.runId,
       events: [
         { type: "RUN_CREATED", sequence: 1 },
-        { type: "PREFLIGHT_ACCEPTED", sequence: 2 },
+        { type: "STAGE_RETRY_SCHEDULED", sequence: 2 },
+        { type: "RUN_RESUMED", sequence: 3 },
+        { type: "PREFLIGHT_ACCEPTED", sequence: 4 },
       ],
       projection: {
-        sequence: 2,
+        sequence: 4,
         stages: { preflight: "completed", request: "pending" },
       },
       artifacts: [
