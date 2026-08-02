@@ -103,4 +103,43 @@ describe("Slice 020A deterministic evidence receipt", () => {
     });
     expect(() => createReceipt(foreign)).toThrow(/run|identity|event/i);
   });
+
+  it("rejects live transaction evidence owned by another submission mode", () => {
+    const serialized = canonicalBundle((input) => {
+      const submission = input.events.find((event) => event.type === "REQUEST_SUBMITTED");
+      if (submission?.type !== "REQUEST_SUBMITTED") throw new Error("submission is missing");
+      submission.payload.mode = "relayer";
+    });
+
+    expect(() => Domain.createEvidenceReceipt(serialized)).toThrow(
+      /submission authority/i,
+    );
+  });
+
+  it("deduplicates stable diagnostic codes in the receipt", () => {
+    const serialized = canonicalBundle((input) => {
+      const consumer = input.events.find((event) => event.type === "CONSUMER_VERIFIED");
+      if (consumer?.type !== "CONSUMER_VERIFIED") throw new Error("consumer is missing");
+      const diagnostic = {
+        version: "1" as const,
+        code: "MISSING_CONSUMER_HOST_INVARIANT",
+        severity: "warning" as const,
+        confidence: "high" as const,
+        summary: "Host invariant missing",
+        evidence: { invariant: "host" },
+        remediation: "Enforce the expected host.",
+      };
+      consumer.payload.passed = false;
+      consumer.payload.diagnostics = [diagnostic, diagnostic];
+      input.verification.consumerVerified = false;
+      input.verification.diagnostics = [diagnostic, diagnostic];
+    });
+
+    expect(Domain.createEvidenceReceipt(serialized)).toMatchObject({
+      consumerResult: {
+        passed: false,
+        diagnosticCodes: ["MISSING_CONSUMER_HOST_INVARIANT"],
+      },
+    });
+  });
 });

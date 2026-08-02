@@ -89,4 +89,11 @@ describe("Slice 020A public EvidenceReceiptV1 contract", () => {
     ).toBe(false);
     expect(schema.safeParse({ ...walletReceipt, rawProof: "0x1234" }).success).toBe(false);
   });
+
+  it("rejects consumer verdicts that contradict their diagnostic evidence", () => {
+    expect(evidenceReceiptSchema().safeParse({
+      ...walletReceipt,
+      consumerResult: { passed: true, diagnosticCodes: ["HOST_MISMATCH"] },
+    }).success).toBe(false);
+  });
 });

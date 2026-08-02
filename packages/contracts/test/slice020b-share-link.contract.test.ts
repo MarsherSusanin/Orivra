@@ -42,12 +42,20 @@ describe("Slice 020B public ShareLinkV1 contract", () => {
       { ...shareLink, url: `https://proofline.test/runs/run_other#share=${SHARE_TOKEN}` },
     ],
     [
+      "non-run URL",
+      { ...shareLink, url: `https://proofline.test/shared/${RUN_ID}#share=${SHARE_TOKEN}` },
+    ],
+    [
       "extra fragment data",
       { ...shareLink, url: `${shareLink.url}&utm_source=secret` },
     ],
     [
       "short capability",
       { ...shareLink, url: `https://proofline.test/runs/${RUN_ID}#share=share_deadbeef` },
+    ],
+    [
+      "malformed encoded run",
+      { ...shareLink, url: `https://proofline.test/runs/%E0%A4%A#share=${SHARE_TOKEN}` },
     ],
   ])("rejects %s", (_label, candidate) => {
     expect(shareLinkSchema().safeParse(candidate).success).toBe(false);
