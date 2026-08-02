@@ -303,7 +303,7 @@ function relayerPolicyFromEvidence(value: unknown) {
       !isCanonicalUint256Decimal(projectFeeCapWei.toString()) ||
       !isCanonicalUint256Decimal(globalFeeCapWei.toString()) ||
       !Number.isInteger(quotaRemaining) ||
-      quotaRemaining <= 0 ||
+      quotaRemaining < 0 ||
       !isCanonicalUint256Decimal(balanceFloorWei.toString())
     ) {
       throw new Error("invalid policy values");
