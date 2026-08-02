@@ -85,4 +85,43 @@ describe("Slice 016A web preflight report client", () => {
       `Bearer ${shareToken}`,
     );
   });
+
+  it.each([
+    [409, "PREFLIGHT_REPORT_PENDING"],
+    [409, "PREFLIGHT_REPORT_UNAVAILABLE"],
+    [500, "PREFLIGHT_REPORT_INVALID"],
+  ] as const)(
+    "retains safe typed status and code for %s %s",
+    async (status, code) => {
+      const fetch = vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            version: "1",
+            error: {
+              code,
+              message: `Request rejected ${PROJECT_TOKEN}`,
+            },
+          }),
+          {
+            status,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      );
+      const client = createRunClient({
+        baseUrl: "https://control.proofline.test/v1",
+        projectToken: PROJECT_TOKEN,
+        fetch: fetch as any,
+        storage: { getItem: vi.fn(() => null), setItem: vi.fn() },
+      });
+
+      const caught = await client.getPreflightReport(RUN_ID).catch(
+        (cause: unknown) => cause,
+      );
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).toMatchObject({ status, code });
+      expect((caught as Error).message).not.toContain(PROJECT_TOKEN);
+    },
+  );
 });
