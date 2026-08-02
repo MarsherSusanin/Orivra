@@ -2,6 +2,7 @@ import { createRunClient } from "./run-client";
 import {
   CreateRunResultV1Schema,
   type CreateRunResultV1,
+  type PreflightReportV1,
   type RunListPageV1,
   type Web2JsonManifestV1,
 } from "../../packages/contracts/src";
@@ -84,6 +85,7 @@ export type HydratedRunView = {
 
 export interface RunSurfaceServices {
   createRun?(context: CreateRunContext): Promise<CreateRunResultV1>;
+  getPreflightReport?(context: RunServiceContext): Promise<PreflightReportV1>;
   verifyConsumer(context: RunServiceContext): Promise<ConsumerVerificationResult>;
   generateConsumer(context: RunServiceContext): Promise<GeneratedConsumer>;
   exportBundle(context: RunServiceContext): Promise<string>;
@@ -428,6 +430,12 @@ export function createLiveSurfaceServices(input: {
     }
   }
 
+  function assertReadContext(context: RunServiceContext): void {
+    if (!input.projectToken || context.projectToken !== input.projectToken) {
+      throw new Error("The configured access credential is required to read this run");
+    }
+  }
+
   return {
     async createRun(context) {
       assertContext({ runId: "new-run", projectToken: context.projectToken });
@@ -449,6 +457,11 @@ export function createLiveSurfaceServices(input: {
         cursor: context.cursor,
         limit: context.limit,
       });
+    },
+
+    async getPreflightReport(context) {
+      assertReadContext(context);
+      return client.getPreflightReport(context.runId);
     },
 
     async verifyConsumer(context) {

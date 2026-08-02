@@ -30,6 +30,18 @@ export type Eip1193Provider = {
 
 export type RunClient = ReturnType<typeof createRunClient>;
 
+export class ProoflineClientError extends Error {
+  readonly status: number;
+  readonly code: string;
+
+  constructor(message: string, input: { status: number; code: string }) {
+    super(message);
+    this.name = "ProoflineClientError";
+    this.status = input.status;
+    this.code = input.code;
+  }
+}
+
 function trimBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, "");
   return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
@@ -63,15 +75,27 @@ function redact(message: string, projectToken: string): string {
     .replace(/0x[a-f0-9]{64}/gi, "[REDACTED]");
 }
 
-async function responseError(response: Response, projectToken: string): Promise<Error> {
+function safeErrorCode(value: unknown, status: number): string {
+  return typeof value === "string" && /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(value)
+    ? value
+    : `HTTP_${status}`;
+}
+
+async function responseError(
+  response: Response,
+  projectToken: string,
+): Promise<ProoflineClientError> {
   let detail = response.statusText || "Request failed";
+  let code: unknown;
   try {
     const body: unknown = await response.json();
     if (body && typeof body === "object") {
       const record = body as Record<string, unknown>;
+      code = record.code;
       if (typeof record.error === "string") detail = record.error;
       if (record.error && typeof record.error === "object") {
         const nested = record.error as Record<string, unknown>;
+        code = nested.code ?? code;
         if (typeof nested.message === "string") detail = nested.message;
       }
       if (typeof record.message === "string") detail = record.message;
@@ -79,7 +103,10 @@ async function responseError(response: Response, projectToken: string): Promise<
   } catch {
     // Do not obscure the HTTP status when an upstream returns a non-JSON body.
   }
-  return new Error(redact(`Proofline API ${response.status}: ${detail}`, projectToken));
+  return new ProoflineClientError(
+    redact(`Proofline API ${response.status}: ${detail}`, projectToken),
+    { status: response.status, code: safeErrorCode(code, response.status) },
+  );
 }
 
 export function createRunClient(input: {
@@ -117,7 +144,10 @@ export function createRunClient(input: {
       });
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      throw new Error(redact(`Proofline API transport error: ${message}`, input.projectToken));
+      throw new ProoflineClientError(
+        redact(`Proofline API transport error: ${message}`, input.projectToken),
+        { status: 503, code: "TRANSPORT_UNAVAILABLE" },
+      );
     }
     if (!response.ok) throw await responseError(response, input.projectToken);
     if (options.raw) return (await response.text()) as T;
@@ -164,7 +194,10 @@ export function createRunClient(input: {
       );
       const parsed = PreflightReportV1Schema.safeParse(result);
       if (!parsed.success) {
-        throw new Error("Proofline returned an invalid preflight report contract");
+        throw new ProoflineClientError(
+          "Proofline returned an invalid preflight report contract",
+          { status: 502, code: "PREFLIGHT_REPORT_INVALID" },
+        );
       }
       return parsed.data;
     },
