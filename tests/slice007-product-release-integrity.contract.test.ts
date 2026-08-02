@@ -432,6 +432,7 @@ function liveGraphHarness() {
 describe("Slice 007 scheduled live command graph", () => {
   it("drains relayer mode to truthful safe-consumer release evidence", async () => {
     const fixture = liveGraphHarness();
+    const explicitSubmissionKey = `${RUN_ID}:explicit-relayer-submission`;
     const queue: Array<{ id: string; kind: string; payload: Record<string, unknown> }> = [
       { id: "run-preflight", kind: "RUN_PREFLIGHT", payload: {} },
     ];
@@ -451,6 +452,19 @@ describe("Slice 007 scheduled live command graph", () => {
       );
       fixture.state.artifacts.push(...(outcome.artifacts ?? []));
       queue.push(...(outcome.nextCommands ?? []));
+      if (command.kind === "RUN_PREFLIGHT") {
+        expect(outcome.nextCommands ?? []).toEqual([]);
+        expect(
+          fixture.state.artifacts.some(
+            (artifact) => artifact.kind === "preflight-evidence",
+          ),
+        ).toBe(true);
+        queue.push({
+          id: "explicit-submit-relayer",
+          kind: "SUBMIT_RELAYER",
+          payload: { idempotencyKey: explicitSubmissionKey },
+        });
+      }
       if (command.kind === "VERIFY_PROOF") {
         queue.push({
           id: "verify-safe-consumer",
@@ -476,6 +490,9 @@ describe("Slice 007 scheduled live command graph", () => {
     expect(fixture.state.artifacts.some((value) => value.kind === "proof-bundle")).toBe(
       true,
     );
+    expect(fixture.state.relayer).toMatchObject({
+      idempotencyKey: explicitSubmissionKey,
+    });
     expect(fixture.broadcastCount).toBe(1);
     expect(fixture.broadcastCountAfterRecordedHash).toBe(0);
   });
