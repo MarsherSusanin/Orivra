@@ -27,6 +27,7 @@ export function generateSafeWeb2JsonConsumer(
   }
 
   const queryChecks = Object.entries(manifest.consumer.expectedQuery)
+    .sort(([left], [right]) => (left < right ? -1 : 1))
     .map(([key, value]) => {
       const [encodedKey, encodedValue] = urlSearchParamPair(key, value);
       return `        ProoflineUrlInvariant.requireQueryValue(requestUrl, ${solidityString(encodedKey)}, ${solidityString(encodedValue)});`;
