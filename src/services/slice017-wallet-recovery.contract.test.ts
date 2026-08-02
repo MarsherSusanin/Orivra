@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
+import * as RunClientModule from "./run-client";
 import {
   createRunClient,
   submitWithEip1193,
@@ -19,6 +20,15 @@ const TRANSACTION = {
 };
 
 type RecoveryStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+type ReconcileWalletSubmission = (input: {
+  runId: string;
+  idempotencyKey: string;
+  events: ReadonlyArray<{
+    type: string;
+    payload: Record<string, unknown>;
+  }>;
+  recoveryStorage: RecoveryStorage;
+}) => { cleared: boolean; transactionHash?: string };
 type RecoverableSubmit = (input: {
   runId: string;
   idempotencyKey: string;
@@ -57,7 +67,7 @@ function walletProvider(hash: string | Error = TX_HASH): Eip1193Provider {
 }
 
 describe("Slice 017 wallet broadcast recovery coordinator", () => {
-  it("stores a valid broadcast hash before attachment and reload attaches it without rebroadcast", async () => {
+  it("keeps a valid broadcast hash after HTTP attachment until persisted journal reconciliation", async () => {
     const storage = recoveryStorage();
     const firstProvider = walletProvider();
     const firstClient = {
@@ -100,7 +110,114 @@ describe("Slice 017 wallet broadcast recovery coordinator", () => {
       { transactionHash: TX_HASH },
       "wallet-confirm",
     );
+    expect([...storage.values.values()]).toContain(TX_HASH);
+    expect(storage.port.removeItem).not.toHaveBeenCalled();
+
+    // Public RED contract: HTTP 202 is only command acceptance. The marker may
+    // be cleared solely after a persisted REQUEST_SUBMITTED event proves that
+    // the exact hash reached the append-only run journal.
+    const reconcileWalletSubmission = (
+      RunClientModule as unknown as {
+        reconcileWalletSubmission?: ReconcileWalletSubmission;
+      }
+    ).reconcileWalletSubmission;
+    expect(reconcileWalletSubmission).toBeTypeOf("function");
+    expect(reconcileWalletSubmission!({
+      runId: RUN_ID,
+      idempotencyKey: "wallet-confirm",
+      recoveryStorage: storage.port,
+      events: [
+        {
+          type: "REQUEST_SUBMITTED",
+          payload: {
+            mode: "wallet",
+            transactionHash: `0x${"8".repeat(64)}`,
+          },
+        },
+      ],
+    })).toEqual({ cleared: false, transactionHash: TX_HASH });
+    expect([...storage.values.values()]).toContain(TX_HASH);
+    expect(reconcileWalletSubmission!({
+      runId: RUN_ID,
+      idempotencyKey: "wallet-confirm",
+      recoveryStorage: storage.port,
+      events: [
+        {
+          type: "REQUEST_SUBMITTED",
+          payload: { mode: "wallet", transactionHash: TX_HASH },
+        },
+      ],
+    })).toEqual({ cleared: true, transactionHash: TX_HASH });
     expect([...storage.values.values()]).not.toContain(TX_HASH);
+  });
+
+  it("proves recovery storage is writable before eth_sendTransaction", async () => {
+    const provider: Eip1193Provider = {
+      request: vi.fn(async ({ method }) => {
+        if (method === "wallet_switchEthereumChain") return null;
+        if (method === "eth_requestAccounts") return [ACCOUNT];
+        if (method === "eth_sendTransaction") return TX_HASH;
+        throw new Error(`Unexpected wallet method ${method}`);
+      }),
+    };
+    const recoveryStorage: RecoveryStorage = {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(() => {
+        throw new DOMException("storage denied", "SecurityError");
+      }),
+      removeItem: vi.fn(),
+    };
+    const client = {
+      prepareSubmission: vi.fn().mockResolvedValue(TRANSACTION),
+      attachTransaction: vi.fn(),
+    };
+
+    await expect((submitWithEip1193 as RecoverableSubmit)({
+      runId: RUN_ID,
+      idempotencyKey: "wallet-storage-denied",
+      provider,
+      client,
+      recoveryStorage,
+    })).rejects.toThrow(/storage|recovery|persist/i);
+
+    expect(recoveryStorage.setItem).toHaveBeenCalled();
+    expect(provider.request).not.toHaveBeenCalledWith(
+      expect.objectContaining({ method: "eth_sendTransaction" }),
+    );
+    expect(client.attachTransaction).not.toHaveBeenCalled();
+  });
+
+  it("single-flights concurrent confirmation for one run and idempotency key", async () => {
+    const storage = recoveryStorage();
+    const provider: Eip1193Provider = {
+      request: vi.fn(async ({ method }) => {
+        if (method === "wallet_switchEthereumChain") return null;
+        if (method === "eth_requestAccounts") return [ACCOUNT];
+        if (method === "eth_sendTransaction") return TX_HASH;
+        throw new Error(`Unexpected wallet method ${method}`);
+      }),
+    };
+    const client = {
+      prepareSubmission: vi.fn().mockResolvedValue(TRANSACTION),
+      attachTransaction: vi.fn().mockResolvedValue({ accepted: true }),
+    };
+    const submit = submitWithEip1193 as RecoverableSubmit;
+    const input = {
+      runId: RUN_ID,
+      idempotencyKey: "wallet-concurrent",
+      provider,
+      client,
+      recoveryStorage: storage.port,
+    };
+
+    await expect(Promise.all([submit(input), submit(input)])).resolves.toEqual([
+      { transactionHash: TX_HASH },
+      { transactionHash: TX_HASH },
+    ]);
+    expect(client.prepareSubmission).toHaveBeenCalledOnce();
+    expect(provider.request).toHaveBeenCalledTimes(3);
+    expect(client.attachTransaction).toHaveBeenCalledOnce();
+    expect([...storage.values.values()]).toContain(TX_HASH);
   });
 
   it("leaves user rejection retryable and records no recovery value", async () => {

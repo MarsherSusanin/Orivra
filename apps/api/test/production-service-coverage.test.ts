@@ -390,7 +390,7 @@ describe("production service submission and command intent coverage", () => {
     ).rejects.toMatchObject({ status: 409 });
   });
 
-  it("supports nested registry wallet evidence and rejects missing evidence", async () => {
+  it("supports exact nested wallet evidence and rejects missing evidence", async () => {
     const nested = service({
       query: vi.fn(async () =>
         result([
@@ -401,7 +401,23 @@ describe("production service submission and command intent coverage", () => {
             projection: { stages: { preflight: "completed" } },
             canonical_bytes: Buffer.from(
               JSON.stringify({
-                network: { resolvedContracts: { FdcHub: FDC_HUB } },
+                version: "1",
+                canonicalUrl: "https://api.example.com/prices/eth",
+                requestBytes: "0x1234abcd",
+                network: {
+                  chainId: 114,
+                  blockNumber: "12345678",
+                  registryAddress:
+                    "0x2222222222222222222222222222222222222222",
+                  resolvedContracts: {
+                    FdcHub: FDC_HUB,
+                    FdcRequestFeeConfigurations:
+                      "0x6666666666666666666666666666666666666666",
+                    FdcVerification:
+                      "0x1111111111111111111111111111111111111111",
+                    Relay: "0x4444444444444444444444444444444444444444",
+                  },
+                },
                 requestCalldata: "0xfeedcafe",
                 quotedFeeWei: "12345",
               }),

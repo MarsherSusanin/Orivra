@@ -37,11 +37,16 @@ function result(rows: Record<string, unknown>[] = [], rowCount = rows.length) {
 
 function repository(
   query: (text: string, values?: readonly unknown[]) => Promise<ReturnType<typeof result>>,
+  relayerPolicy?: {
+    globalFeeCapWei: bigint;
+    balanceFloorWei: bigint;
+    dailyProjectQuota: number;
+  },
 ) {
   const client = { query: vi.fn(query), release: vi.fn() };
   const pool = { connect: vi.fn().mockResolvedValue(client) };
   return {
-    repository: createPostgresCommandRepository({ pool }),
+    repository: createPostgresCommandRepository({ pool, relayerPolicy }),
     client,
     pool,
   };
@@ -156,6 +161,43 @@ describe("PostgreSQL signed transaction persistence", () => {
     expect(fixture.client.query.mock.calls.map(([text]) => text.trim()).at(-1)).toBe(
       "COMMIT",
     );
+    expect(fixture.client.release).toHaveBeenCalledOnce();
+  });
+
+  it("normalizes a quota race after the project advisory lock", async () => {
+    const relayerPolicy = {
+      globalFeeCapWei: 20_000n,
+      balanceFloorWei: 1_000n,
+      dailyProjectQuota: 1,
+    };
+    const fixture = repository(async (text) => {
+      if (/SELECT count\(\*\)::integer AS used/i.test(text)) {
+        return result([{ used: 1 }], 1);
+      }
+      if (/SELECT run_id, chain_id, nonce/i.test(text)) return result([], 0);
+      return result([], 1);
+    }, relayerPolicy);
+
+    await expect(
+      fixture.repository.persistRelayerTransaction(signed({
+        policy: {
+          projectFeeCapWei: 20_000n,
+          globalFeeCapWei: relayerPolicy.globalFeeCapWei,
+          quotaRemaining: 1,
+          balanceFloorWei: relayerPolicy.balanceFloorWei,
+        },
+      }) as any),
+    ).rejects.toMatchObject({
+      version: "1",
+      category: "configuration",
+      code: "RELAYER_QUOTA_EXHAUSTED",
+      retryable: false,
+    });
+    expect(fixture.client.query).toHaveBeenCalledWith(
+      "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+      [PROJECT_ID],
+    );
+    expect(fixture.client.query).toHaveBeenCalledWith("ROLLBACK");
     expect(fixture.client.release).toHaveBeenCalledOnce();
   });
 

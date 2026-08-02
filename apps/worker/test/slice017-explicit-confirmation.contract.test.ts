@@ -97,6 +97,13 @@ function harness(input: {
   mode: SubmissionMode;
   artifacts?: Record<string, unknown>[];
   observedHash?: string;
+  observed?: Partial<{
+    transactionHash: string;
+    chainId: number;
+    target: string;
+    calldata: string;
+    valueWei: bigint;
+  }>;
 }) {
   const runEvents = events(input.mode);
   const repository = {
@@ -124,6 +131,7 @@ function harness(input: {
       target: FDC_HUB,
       calldata: "0xfeedcafe",
       valueWei: 12_345n,
+      ...input.observed,
     })),
     getTransactionReceipt: vi.fn(),
     getVotingConfiguration: vi.fn(),
@@ -191,6 +199,50 @@ describe("Slice 017 final command authorization", () => {
     expect(fixture.ports.getTransactionReceipt).not.toHaveBeenCalled();
     expect(fixture.ports.getVotingConfiguration).not.toHaveBeenCalled();
   });
+
+  it.each(["", "0x1234", `0x${"g".repeat(64)}`])(
+    "rejects malformed attached hash %j before wallet RPC observation",
+    async (transactionHash) => {
+      const fixture = harness({ mode: "wallet" });
+      await expect(
+        fixture.handlers.ATTACH_WALLET_TRANSACTION(
+          command("ATTACH_WALLET_TRANSACTION", { transactionHash }),
+        ),
+      ).rejects.toMatchObject({
+        category: "configuration",
+        code: "WALLET_TRANSACTION_HASH_INVALID",
+        retryable: false,
+      });
+      expect(fixture.ports.observeWalletTransaction).not.toHaveBeenCalled();
+      expect(fixture.ports.getTransactionReceipt).not.toHaveBeenCalled();
+      expect(fixture.ports.getVotingConfiguration).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["chain", { chainId: 1 }],
+    ["target", { target: "0x5555555555555555555555555555555555555555" }],
+    ["calldata", { calldata: "0xdeadbeef" }],
+    ["value", { valueWei: 12_346n }],
+  ] as const)(
+    "normalizes wallet %s mismatch as one terminal intent error",
+    async (_label, observed) => {
+      const fixture = harness({ mode: "wallet", observed: { ...observed } });
+      await expect(
+        fixture.handlers.ATTACH_WALLET_TRANSACTION(
+          command("ATTACH_WALLET_TRANSACTION", { transactionHash: TX_HASH }),
+        ),
+      ).rejects.toMatchObject({
+        version: "1",
+        category: "configuration",
+        code: "WALLET_TRANSACTION_INTENT_MISMATCH",
+        retryable: false,
+      });
+      expect(fixture.ports.observeWalletTransaction).toHaveBeenCalledOnce();
+      expect(fixture.ports.getTransactionReceipt).not.toHaveBeenCalled();
+      expect(fixture.ports.getVotingConfiguration).not.toHaveBeenCalled();
+    },
+  );
 
   it("applies explicitly confirmed replay evidence without wallet, RPC, relayer or source-host effects", async () => {
     const source = makeBundleInput();

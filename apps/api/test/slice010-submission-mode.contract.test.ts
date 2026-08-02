@@ -1,7 +1,10 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
-import { validManifest } from "../../../packages/contracts/test/fixtures";
+import {
+  validManifest,
+  validPreflightReport,
+} from "../../../packages/contracts/test/fixtures";
 import { createProductionProoflineService } from "../src/production-service";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111110";
@@ -36,10 +39,19 @@ function harness(mode: SubmissionMode) {
             kind: "preflight-evidence",
             canonical_bytes: Buffer.from(
               JSON.stringify({
-                chainId: 114,
-                fdcHub: FDC_HUB,
+                version: "1",
+                canonicalUrl: validPreflightReport.canonicalUrl,
+                requestBytes: "0x1234abcd",
                 requestCalldata: "0xfeedcafe",
                 quotedFeeWei: "12345",
+                network: {
+                  ...validPreflightReport.registrySnapshot,
+                  chainId: 114,
+                  resolvedContracts: {
+                    ...validPreflightReport.registrySnapshot.resolvedContracts,
+                    FdcHub: FDC_HUB,
+                  },
+                },
               }),
             ),
           },

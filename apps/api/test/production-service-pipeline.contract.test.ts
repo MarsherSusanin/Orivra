@@ -1,7 +1,10 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
-import { validManifest } from "../../../packages/contracts/test/fixtures";
+import {
+  validManifest,
+  validPreflightReport,
+} from "../../../packages/contracts/test/fixtures";
 import { createProductionProoflineService } from "../src/production-service";
 
 const projectA = "11111111-1111-4111-8111-111111111111";
@@ -12,11 +15,18 @@ const fdcHub = "0x3333333333333333333333333333333333333333";
 
 const preflightEvidence = {
   version: "1",
-  chainId: 114,
-  fdcHub,
+  canonicalUrl: validPreflightReport.canonicalUrl,
   requestBytes: "0x574542324a534f4e",
   requestCalldata: "0xfeedcafe",
   quotedFeeWei: "12345",
+  network: {
+    ...validPreflightReport.registrySnapshot,
+    chainId: 114,
+    resolvedContracts: {
+      ...validPreflightReport.registrySnapshot.resolvedContracts,
+      FdcHub: fdcHub,
+    },
+  },
 };
 
 type Row = Record<string, any>;
@@ -204,7 +214,10 @@ describe("Slice 003 production ownership and idempotency intent", () => {
         idempotencyKey: "submission-intent-1",
         mode: "relayer",
       }),
-    ).rejects.toMatchObject({ status: 409 });
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "SUBMISSION_INTENT_CONFLICT",
+    });
     expect(harness.commands.size).toBe(1);
   });
 });

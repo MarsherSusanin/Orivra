@@ -1,7 +1,10 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
-import { validManifest } from "../../../packages/contracts/test/fixtures";
+import {
+  validManifest,
+  validPreflightReport,
+} from "../../../packages/contracts/test/fixtures";
 import { createProoflineApi } from "../src/app";
 import { createProductionProoflineService } from "../src/production-service";
 
@@ -145,10 +148,19 @@ function serviceHarness(input: {
         projection,
         kind: "preflight-evidence",
         canonical_bytes: Buffer.from(JSON.stringify({
-          chainId: 114,
-          fdcHub: FDC_HUB,
+          version: "1",
+          canonicalUrl: validPreflightReport.canonicalUrl,
+          requestBytes: "0x1234abcd",
           requestCalldata: "0xfeedcafe",
           quotedFeeWei: "12345",
+          network: {
+            ...validPreflightReport.registrySnapshot,
+            chainId: 114,
+            resolvedContracts: {
+              ...validPreflightReport.registrySnapshot.resolvedContracts,
+              FdcHub: FDC_HUB,
+            },
+          },
         })),
       }]);
     }
@@ -336,6 +348,46 @@ describe("Slice 017 persisted confirmation authority", () => {
       mode: "replay",
       idempotencyKey: "one-intent",
     })).rejects.toMatchObject({ status: 409 });
+    expect(fixture.commands).toHaveLength(1);
+  });
+
+  it("uses one stable conflict when a second key competes for run authority", async () => {
+    const fixture = serviceHarness({ mode: "relayer" });
+    await fixture.service.createSubmission({
+      runId: RUN_ID,
+      projectId: PROJECT_ID,
+      mode: "relayer",
+      idempotencyKey: "first-authority",
+    });
+    await expect(fixture.service.createSubmission({
+      runId: RUN_ID,
+      projectId: PROJECT_ID,
+      mode: "relayer",
+      idempotencyKey: "competing-authority",
+    })).rejects.toMatchObject({
+      status: 409,
+      code: "SUBMISSION_INTENT_CONFLICT",
+    });
+    expect(fixture.commands).toHaveLength(1);
+  });
+
+  it("uses one stable conflict when wallet attachment changes under the same key", async () => {
+    const fixture = serviceHarness({ mode: "wallet" });
+    await fixture.service.attachTransaction({
+      runId: RUN_ID,
+      projectId: PROJECT_ID,
+      idempotencyKey: "wallet-intent",
+      transactionHash: TX_HASH,
+    });
+    await expect(fixture.service.attachTransaction({
+      runId: RUN_ID,
+      projectId: PROJECT_ID,
+      idempotencyKey: "wallet-intent",
+      transactionHash: `0x${"8".repeat(64)}`,
+    })).rejects.toMatchObject({
+      status: 409,
+      code: "SUBMISSION_INTENT_CONFLICT",
+    });
     expect(fixture.commands).toHaveLength(1);
   });
 });
