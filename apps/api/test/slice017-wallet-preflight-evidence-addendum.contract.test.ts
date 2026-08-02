@@ -39,10 +39,16 @@ function serviceWithEvidence(evidence: unknown) {
         id: RUN_ID,
         project_id: PROJECT_ID,
         manifest: validManifest,
-        projection: { terminal: false, stages: { preflight: "completed" } },
+        projection: {
+          terminal: false,
+          stages: { preflight: "completed", request: "pending" },
+        },
         kind: "preflight-evidence",
         canonical_bytes: Buffer.from(JSON.stringify(evidence)),
       }]);
+    }
+    if (/FROM proofline_private\.run_commands/i.test(text)) {
+      return result([], 0);
     }
     return result([], 0);
   });

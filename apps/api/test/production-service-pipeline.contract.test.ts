@@ -41,13 +41,19 @@ function createPool(mode: "wallet" | "relayer" = "wallet") {
       id: runA,
       project_id: projectA,
       manifest: persistedManifest,
-      projection: { stages: { preflight: "completed" } },
+      projection: {
+        terminal: false,
+        stages: { preflight: "completed", request: "pending" },
+      },
     }],
     [runB, {
       id: runB,
       project_id: projectA,
       manifest: persistedManifest,
-      projection: { stages: { preflight: "completed" } },
+      projection: {
+        terminal: false,
+        stages: { preflight: "completed", request: "pending" },
+      },
     }],
   ]);
   const commands = new Map<string, Row>();
@@ -84,6 +90,9 @@ function createPool(mode: "wallet" | "relayer" = "wallet") {
       return owned
         ? { rowCount: 1, rows: [{ ...runs.get(requestedRun!) }] }
         : { rowCount: 0, rows: [] };
+    }
+    if (/kind IN \(/i.test(text)) {
+      return { rowCount: 0, rows: [] };
     }
     if (/SELECT[\s\S]+FROM proofline_private\.run_commands/i.test(text)) {
       const idempotencyKey = values.find(

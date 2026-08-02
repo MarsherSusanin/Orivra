@@ -370,15 +370,23 @@ describe("production service submission and command intent coverage", () => {
       ...override,
     };
     const production = service({
-      query: vi.fn(async () =>
-        result([{
-          id: RUN_ID,
-          project_id: PROJECT_ID,
-          manifest: validManifest,
-          projection: { stages: { preflight: "completed" } },
-          canonical_bytes: Buffer.from(JSON.stringify(evidence)),
-        }]),
-      ),
+      query: vi.fn(async (text: string) => {
+        if (/FROM proofline_private\.run_commands/i.test(text)) {
+          return result([], 0);
+        }
+        return result([
+          {
+            id: RUN_ID,
+            project_id: PROJECT_ID,
+            manifest: validManifest,
+            projection: {
+              terminal: false,
+              stages: { preflight: "completed", request: "pending" },
+            },
+            canonical_bytes: Buffer.from(JSON.stringify(evidence)),
+          },
+        ]);
+      }),
     });
     await expect(
       production.createSubmission({
@@ -392,13 +400,19 @@ describe("production service submission and command intent coverage", () => {
 
   it("supports exact nested wallet evidence and rejects missing evidence", async () => {
     const nested = service({
-      query: vi.fn(async () =>
-        result([
+      query: vi.fn(async (text: string) => {
+        if (/FROM proofline_private\.run_commands/i.test(text)) {
+          return result([], 0);
+        }
+        return result([
           {
             id: RUN_ID,
             project_id: PROJECT_ID,
             manifest: validManifest,
-            projection: { stages: { preflight: "completed" } },
+            projection: {
+              terminal: false,
+              stages: { preflight: "completed", request: "pending" },
+            },
             canonical_bytes: Buffer.from(
               JSON.stringify({
                 version: "1",
@@ -423,8 +437,8 @@ describe("production service submission and command intent coverage", () => {
               }),
             ),
           },
-        ]),
-      ),
+        ]);
+      }),
     });
     await expect(
       nested.createSubmission({
