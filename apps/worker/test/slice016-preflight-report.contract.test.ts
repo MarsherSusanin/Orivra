@@ -771,6 +771,69 @@ describe("Slice 016A replay report sidecar", () => {
     };
   }
 
+  async function captureCorruptReplayRejection(serialized: string) {
+    const source = replaySource();
+    const fixture = handlerHarness({
+      runId: TARGET_RUN_ID,
+      manifest: source.manifest,
+      preflight: async () => {
+        throw new Error("live-preflight-secret-must-not-leak");
+      },
+      loadReplayBundle: async () => serialized,
+      loadReplayPreflightReport: async () => {
+        throw new Error("report-sidecar-secret-must-not-leak");
+      },
+    });
+
+    const rejection = await fixture.handlers
+      .RUN_PREFLIGHT(command(TARGET_RUN_ID))
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(rejection).toMatchObject({
+      category: "schema-invalid",
+      code: "REPLAY_EVIDENCE_INVALID",
+      retryable: false,
+    });
+    expect(rejection).toMatchObject({
+      message: "Recorded replay evidence is invalid",
+    });
+    expect(JSON.stringify(rejection)).not.toMatch(
+      /bundle-secret-must-not-leak|live-preflight-secret-must-not-leak|report-sidecar-secret-must-not-leak|SyntaxError/i,
+    );
+    expect(fixture.ports.loadReplayBundle).toHaveBeenCalledOnce();
+    expect(fixture.ports.loadReplayPreflightReport).not.toHaveBeenCalled();
+    expect(fixture.ports.preflight).not.toHaveBeenCalled();
+    expect(fixture.ports.signRelayerTransaction).not.toHaveBeenCalled();
+    expect(fixture.repository.persistRelayerTransaction).not.toHaveBeenCalled();
+    expect(fixture.repository.markRelayerBroadcast).not.toHaveBeenCalled();
+    return fixture;
+  }
+
+  it("fails closed with a stable safe error for invalid replay bundle JSON", async () => {
+    await captureCorruptReplayRejection(
+      "not-json::bundle-secret-must-not-leak::SyntaxError",
+    );
+  });
+
+  it("fails closed with the same safe error for checksum or canonical corruption", async () => {
+    const source = replaySource();
+    const canonical = canonicalSerializeProofBundle(source);
+    const checksumCorrupted = canonical.replace(
+      source.checksum,
+      `sha256:${"0".repeat(64)}`,
+    );
+    const canonicalCorrupted = `${canonical}\n`;
+
+    await Promise.all(
+      [checksumCorrupted, canonicalCorrupted].map((serialized) =>
+        captureCorruptReplayRejection(serialized),
+      ),
+    );
+  });
+
   it("requires and binds a recorded public report without live preflight I/O", async () => {
     const source = replaySource();
     const sourceReport = boundReport(source);
