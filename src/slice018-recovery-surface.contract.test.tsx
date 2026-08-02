@@ -192,6 +192,18 @@ describe("Slice 018 recovery surface", () => {
     expect(screen.getByRole("button", { name: /refresh status/i })).toBeVisible();
   });
 
+  it("states the truthful direction when the event feed is ahead of projection", async () => {
+    window.history.replaceState({}, "", `/runs/${RUN_ID}`);
+    sessionStorage.setItem("proofline:project-token", PROJECT_TOKEN);
+    const feedAhead = {
+      ...run("waiting"),
+      sync: { state: "partial", projectionSequence: 3, eventSequence: 4 },
+    } as unknown as HydratedRunView;
+    render(<App services={surface(vi.fn().mockResolvedValue(feedAhead))} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/event feed is ahead/i);
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/projection is ahead/i);
+  });
+
   it("copies the exact persisted manifest into a newly keyed Composer draft", async () => {
     window.history.replaceState({}, "", `/runs/${RUN_ID}`);
     sessionStorage.setItem("proofline:project-token", PROJECT_TOKEN);

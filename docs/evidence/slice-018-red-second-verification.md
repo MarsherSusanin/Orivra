@@ -11,6 +11,10 @@ A subsequent fresh audit added the missing initial-lease case: attempt one can
 expire before any `last_error` exists, and its attempt-two claim must persist the
 same audit pair before returning work.
 
+Product Integration Verification then froze the final copy invariant: when the
+event feed is ahead of the earlier projection snapshot, the recovery alert must
+name that direction truthfully rather than claim the projection is ahead.
+
 The focused RED command is:
 
 ```bash
