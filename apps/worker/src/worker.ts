@@ -92,6 +92,17 @@ const SAFE_FAILURE_CATEGORIES = new Set([
   "consumer-invariant",
 ]);
 
+function recoveryState(
+  category: unknown,
+  retryable: boolean,
+): "waiting" | "retryable" | "terminal" {
+  return category === "not-finalized"
+    ? "waiting"
+    : retryable
+      ? "retryable"
+      : "terminal";
+}
+
 function safeFailureEvidence(value: unknown): Record<string, unknown> {
   const source =
     value && typeof value === "object"
@@ -129,13 +140,15 @@ function safeFailure(cause: unknown, commandId: string): Record<string, unknown>
       SAFE_FAILURE_CATEGORIES.has(source.category)
         ? source.category
         : "transport";
+    const retryable = source.retryable === true;
     return {
       category,
       ...(typeof source.code === "string" &&
       /^[A-Z][A-Z0-9_]{0,127}$/.test(source.code)
         ? { code: source.code }
         : {}),
-      retryable: source.retryable === true,
+      retryable,
+      recoveryState: recoveryState(category, retryable),
       message: "Worker command failed",
       evidence: safeFailureEvidence(source.evidence),
       commandId,
@@ -144,6 +157,7 @@ function safeFailure(cause: unknown, commandId: string): Record<string, unknown>
   const normalized = normalizeFdcError(cause, { commandId });
   return {
     ...normalized,
+    recoveryState: recoveryState(normalized.category, normalized.retryable),
     message: "Worker command failed",
     evidence: { commandId },
   };
@@ -186,6 +200,7 @@ export function createRunWorker(input: {
           category: "configuration",
           code: "WORKER_HANDLER_MISSING",
           retryable: false,
+          recoveryState: "terminal",
           terminal: true,
           message: "No handler registered for command",
           evidence: { commandId: claimed.command.id },
@@ -242,6 +257,7 @@ export function createRunWorker(input: {
               ...normalized,
               code: "COMMAND_RETRY_EXHAUSTED",
               retryable: false,
+              recoveryState: "terminal",
               terminal: true,
               evidence: {
                 ...(normalized.evidence &&
@@ -254,7 +270,7 @@ export function createRunWorker(input: {
               },
             }
           : normalized.retryable === false
-            ? { ...normalized, terminal: true }
+            ? { ...normalized, recoveryState: "terminal", terminal: true }
             : normalized;
         await input.repository.retryCommand(
           claimed.command.id,
@@ -1920,6 +1936,7 @@ export function createProductionCommandHandlers(input: {
       if (!verified.verified) {
         throw Object.assign(new Error("FdcVerification rejected the proof"), {
           category: "proof-invalid",
+          code: "FDC_PROOF_INVALID",
           retryable: false,
         });
       }

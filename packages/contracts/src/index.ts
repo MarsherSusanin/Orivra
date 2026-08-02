@@ -832,6 +832,99 @@ export const RunStageNameV1Schema = z.enum([
 
 export type RunStageNameV1 = z.infer<typeof RunStageNameV1Schema>;
 
+export const RecoveryCheckpointV1Schema = z.enum([
+  "preflight",
+  "submission",
+  "transaction-receipt",
+  "voting-round",
+  "relay-finalization",
+  "da-proof",
+  "proof-verification",
+  "consumer-verification",
+]);
+
+export const PreservedEvidenceV1Schema = z.enum([
+  "preflight",
+  "transaction",
+  "receipt",
+  "round",
+  "relay",
+  "proof",
+  "verification",
+  "consumer",
+]);
+
+export const RecoveryRetrySafetyV1Schema = z.enum([
+  "same-command",
+  "observe-only",
+  "new-run-required",
+  "operator-review",
+]);
+
+const PreservedEvidenceListV1Schema = z
+  .array(PreservedEvidenceV1Schema)
+  .max(8)
+  .refine((items) => new Set(items).size === items.length, {
+    message: "Preserved evidence classes must be unique",
+  });
+
+const RunRecoveryCommonV1 = {
+  version: VersionV1Schema,
+  stage: RunStageNameV1Schema,
+  attempt: z.number().int().positive(),
+  resumeFrom: RecoveryCheckpointV1Schema,
+  preservedEvidence: PreservedEvidenceListV1Schema,
+  updatedAt: z.string().datetime({ offset: true }),
+  error: NormalizedFdcErrorSchema,
+};
+
+const WaitingRecoveryV1Schema = z
+  .object({
+    ...RunRecoveryCommonV1,
+    state: z.literal("waiting"),
+    retryAfter: z.string().datetime({ offset: true }).optional(),
+    retrySafety: RecoveryRetrySafetyV1Schema,
+  })
+  .strict();
+
+const RetryableRecoveryV1Schema = z
+  .object({
+    ...RunRecoveryCommonV1,
+    state: z.literal("retryable"),
+    retryAfter: z.string().datetime({ offset: true }),
+    retrySafety: z.literal("same-command"),
+  })
+  .strict()
+  .refine((recovery) => recovery.error.retryable, {
+    path: ["error", "retryable"],
+    message: "Retryable recovery requires a retryable normalized error",
+  });
+
+const TerminalRecoveryV1Schema = z
+  .object({
+    ...RunRecoveryCommonV1,
+    state: z.literal("terminal"),
+    retrySafety: z.enum(["new-run-required", "operator-review"]),
+  })
+  .strict()
+  .refine((recovery) => !recovery.error.retryable, {
+    path: ["error", "retryable"],
+    message: "Terminal recovery requires a non-retryable normalized error",
+  });
+
+export const RunRecoveryV1Schema = z.discriminatedUnion("state", [
+  WaitingRecoveryV1Schema,
+  RetryableRecoveryV1Schema,
+  TerminalRecoveryV1Schema,
+]);
+
+export type RecoveryCheckpointV1 = z.infer<typeof RecoveryCheckpointV1Schema>;
+export type PreservedEvidenceV1 = z.infer<typeof PreservedEvidenceV1Schema>;
+export type RecoveryRetrySafetyV1 = z.infer<
+  typeof RecoveryRetrySafetyV1Schema
+>;
+export type RunRecoveryV1 = z.infer<typeof RunRecoveryV1Schema>;
+
 const RunEventCommon = {
   version: VersionV1Schema,
   runId: NonEmptyIdSchema,
@@ -898,6 +991,22 @@ export const RunEventV1Schema = z.discriminatedUnion("type", [
       })
       .strict(),
   ),
+  runEvent("STAGE_WAITING", WaitingRecoveryV1Schema),
+  runEvent(
+    "STAGE_RETRY_SCHEDULED",
+    RetryableRecoveryV1Schema,
+  ),
+  runEvent(
+    "RUN_RESUMED",
+    z
+      .object({
+        stage: RunStageNameV1Schema,
+        attempt: z.number().int().positive(),
+        resumeFrom: RecoveryCheckpointV1Schema,
+        preservedEvidence: PreservedEvidenceListV1Schema,
+      })
+      .strict(),
+  ),
   runEvent(
     "RUN_FAILED",
     z
@@ -937,6 +1046,7 @@ export const RunProjectionV1Schema = z
         consumer: RunStageStatusV1Schema,
       })
       .strict(),
+    recovery: RunRecoveryV1Schema.optional(),
   })
   .strict();
 
