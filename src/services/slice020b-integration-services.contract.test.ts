@@ -101,4 +101,23 @@ describe("Slice 020B browser integration service contracts", () => {
       /share|contract|identity/i,
     );
   });
+
+  it("binds returned share links to the browser client's expected web origin", async () => {
+    const fetch = vi.fn().mockResolvedValue(response({
+      ...link,
+      url: `https://foreign-proofline.test/runs/${RUN_ID}#share=${SHARE_TOKEN}`,
+    }, 201));
+    const client = createRunClient({
+      baseUrl: "https://api.proofline.test",
+      projectToken: PROJECT_TOKEN,
+      fetch,
+      storage: { getItem: () => null, setItem: () => undefined },
+      ...({ expectedWebOrigin: "https://proofline.test" } as object),
+    });
+
+    await expect(
+      requiredMethod(client, "createShare")(RUN_ID, `share-${RUN_ID}`),
+    ).rejects.toMatchObject({ code: "SHARE_LINK_INVALID" });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
 });

@@ -64,11 +64,21 @@ const safeSource = generateSafeWeb2JsonConsumer(validManifest, {
 const safeReport = {
   ...consumerLabReport,
   runId: RUN_ID,
+  consumerIdentity: "canonical-safe" as const,
+  passed: true,
+  checks: consumerLabReport.checks.map((check) => ({
+    ...check,
+    observed: check.expected,
+    enforced: true,
+    passed: true,
+  })) as typeof consumerLabReport.checks,
+  diagnostics: [],
   safeConsumer: {
     ...consumerLabReport.safeConsumer,
     source: safeSource,
     sha256: receipt.safeConsumerChecksum,
   },
+  verdict: { state: "safe-to-integrate" as const, missingChecks: 0 },
 };
 
 const terminalRun = {
@@ -121,6 +131,35 @@ afterEach(() => {
 });
 
 describe("Slice 020B Integration Package surface", () => {
+  it("keeps share-reader cockpit export and replay mutations unavailable", async () => {
+    window.history.replaceState({}, "", `/runs/${RUN_ID}`);
+    const ports = services();
+    const user = userEvent.setup();
+    render(<App projectToken={SHARE_TOKEN} services={ports} />);
+
+    const handoff = await screen.findByRole("button", {
+      name: /open integration package/i,
+    });
+    expect(
+      screen.queryByRole("button", { name: /export bundle/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /bundle verified/i }),
+    ).not.toBeInTheDocument();
+    expect(ports.exportBundle).not.toHaveBeenCalled();
+    expect(ports.replayBundle).not.toHaveBeenCalled();
+
+    await user.click(handoff);
+    const dialog = await screen.findByRole("dialog", {
+      name: /integration package/i,
+    });
+    expect(
+      await within(dialog).findByRole("link", { name: /download bundle/i }),
+    ).toBeVisible();
+    expect(ports.exportBundle).toHaveBeenCalledOnce();
+    expect(ports.replayBundle).not.toHaveBeenCalled();
+  });
+
   it("replaces the completed journey with one dominant evidence handoff action", async () => {
     window.history.replaceState({}, "", `/runs/${RUN_ID}`);
     const user = userEvent.setup();
@@ -213,6 +252,43 @@ describe("Slice 020B Integration Package surface", () => {
     window.history.replaceState({}, "", `/runs/${RUN_ID}?panel=integration`);
     fireEvent(window, new PopStateEvent("popstate"));
     expect(await screen.findByRole("dialog", { name: /integration package/i })).toBeVisible();
+  });
+
+  it.each([
+    {
+      name: "the Consumer Lab pass verdict",
+      report: { ...safeReport, passed: false },
+    },
+    {
+      name: "the canonical diagnostic code set",
+      report: {
+        ...safeReport,
+        diagnostics: [{
+          ...consumerLabReport.diagnostics[0],
+          code: "MISSING_CONSUMER_PATH_INVARIANT",
+        }],
+      },
+    },
+  ])("fails closed when $name disagrees with the receipt", async ({ report }) => {
+    window.history.replaceState({}, "", `/runs/${RUN_ID}?panel=integration`);
+    render(
+      <App
+        projectToken={PROJECT_TOKEN}
+        services={services({
+          getConsumerLabReport: vi.fn().mockResolvedValue(report),
+        })}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /integration package/i,
+    });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      /integration package unavailable|does not agree/i,
+    );
+    expect(
+      within(dialog).queryByRole("link", { name: /download bundle/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("has no serious or critical accessibility violations in the completed handoff", async () => {
