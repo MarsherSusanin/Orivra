@@ -22,5 +22,6 @@ ADR фиксирует архитектурное решение, которое
 | [0017](0017-persisted-preflight-workbench.md) | Persisted preflight Workbench, URL state и transition analytics |
 | [0018](0018-explicit-submission-confirmation.md) | Explicit confirmation как единственная граница wallet/relayer/replay submission |
 | [0019](0019-journal-derived-run-recovery.md) | Restart-safe recovery выводится из append-only journal и persisted command queue |
+| [0020](0020-persisted-consumer-lab-report.md) | Consumer Lab выводится из persisted consumer evidence и exact safe artifact bytes |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.
