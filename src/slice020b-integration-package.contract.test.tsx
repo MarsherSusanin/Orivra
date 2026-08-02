@@ -1,3 +1,4 @@
+import axe from "axe-core";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -212,5 +213,23 @@ describe("Slice 020B Integration Package surface", () => {
     window.history.replaceState({}, "", `/runs/${RUN_ID}?panel=integration`);
     fireEvent(window, new PopStateEvent("popstate"));
     expect(await screen.findByRole("dialog", { name: /integration package/i })).toBeVisible();
+  });
+
+  it("has no serious or critical accessibility violations in the completed handoff", async () => {
+    window.history.replaceState({}, "", `/runs/${RUN_ID}?panel=integration`);
+    const { container } = render(
+      <App projectToken={PROJECT_TOKEN} services={services()} />,
+    );
+    const dialog = await screen.findByRole("dialog", { name: /integration package/i });
+    await within(dialog).findByRole("link", { name: /download receipt/i });
+
+    const result = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(
+      result.violations.filter(
+        ({ impact }) => impact === "serious" || impact === "critical",
+      ),
+    ).toEqual([]);
   });
 });
