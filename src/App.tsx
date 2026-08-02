@@ -36,6 +36,7 @@ import {
   createTestSurfaceServices,
   submissionIdempotencyKey,
   type HydratedRunView,
+  type ConsumerVerificationResult,
   type RunSurfaceServices,
 } from "./services/run-surface";
 
@@ -76,6 +77,25 @@ function browserCrypto() {
   } catch {
     return undefined;
   }
+}
+
+function persistedConsumerFailure(
+  run: HydratedRunView,
+): ConsumerVerificationResult | undefined {
+  if (run.stages.consumer !== "failed") return undefined;
+  const diagnostics = run.diagnostics ?? [];
+  return {
+    summary: diagnostics.length === 1
+      ? "Consumer needs 1 fix"
+      : `Consumer needs ${diagnostics.length} fixes`,
+    code: diagnostics[0]?.code ?? "CONSUMER_INVARIANT_FAILED",
+    checks: diagnostics.length > 0
+      ? diagnostics.map((diagnostic) => ({
+          label: diagnostic.summary,
+          status: "failed" as const,
+        }))
+      : [{ label: "Persisted consumer invariant", status: "failed" as const }],
+  };
 }
 
 function useProductEventEmitter(analytics: ProductAnalyticsPort | undefined) {
@@ -1026,6 +1046,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
           onProductEvent={emitProductEvent}
           onOpenIntegration={openIntegration}
           resumePersisted={consumerFailed}
+          persistedFailure={persistedConsumerFailure(hydratedRun)}
         />
       ) : null}
       {integrationOpen ? (

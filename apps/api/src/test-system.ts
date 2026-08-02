@@ -29,6 +29,7 @@ interface StoredRun {
   };
   artifactSource?: string;
   consumerIdentity?: "canonical-vulnerable" | "canonical-safe";
+  consumerRequestUrl?: string;
 }
 
 interface QueuedCommand {
@@ -216,6 +217,7 @@ export function createHermeticProoflineSystem(input: {
         ? "https://mirror.example.net/prices/eth?currency=USD&source=primary"
         : canonicalizeManifestUrl(stored.manifest);
     stored.consumerIdentity = command.consumer ?? "canonical-vulnerable";
+    stored.consumerRequestUrl = requestUrl;
     stored.diagnostics = diagnoseConsumerRequest(stored.manifest, requestUrl);
     if (
       stored.consumerIdentity === "canonical-vulnerable" &&
@@ -580,7 +582,10 @@ export function createHermeticProoflineSystem(input: {
       const source = stored.artifactSource;
       const contractName = /contract\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(source)?.[1];
       if (!contractName) throw new Error("Safe consumer contract name is missing");
-      const observedUrl = new URL(canonicalizeManifestUrl(stored.manifest));
+      if (!stored.consumerRequestUrl) {
+        throw new Error("Observed consumer request URL is missing");
+      }
+      const observedUrl = new URL(stored.consumerRequestUrl);
       const expectedQuery = new URLSearchParams(
         Object.entries(stored.manifest.consumer.expectedQuery)
           .sort(([left], [right]) => left.localeCompare(right)),

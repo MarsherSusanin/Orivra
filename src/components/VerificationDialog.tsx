@@ -26,6 +26,7 @@ export function VerificationDialog({
   onProductEvent,
   onOpenIntegration,
   resumePersisted = false,
+  persistedFailure,
 }: {
   context: RunServiceContext;
   services: RunSurfaceServices;
@@ -34,6 +35,7 @@ export function VerificationDialog({
   onProductEvent?: (event: ProductEventInputV1) => void;
   onOpenIntegration?: () => void;
   resumePersisted?: boolean;
+  persistedFailure?: ConsumerVerificationResult;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -95,12 +97,14 @@ export function VerificationDialog({
       setArtifactVerified(true);
       setStatus("complete");
     }).catch(() => {
-      // A missing artifact is the normal first-open state; the primary journey remains available.
+      if (cancelled || !persistedFailure) return;
+      setResult(persistedFailure);
+      setStatus("complete");
     });
     return () => {
       cancelled = true;
     };
-  }, [context, resumePersisted, services]);
+  }, [context, persistedFailure, resumePersisted, services]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Tab") return;
