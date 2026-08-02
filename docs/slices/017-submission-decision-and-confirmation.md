@@ -29,6 +29,11 @@ network-free replay command.
   target/calldata/value, caps, quota and balance floor remain mandatory.
 - Replay confirmation persists one pure command and touches no wallet, RPC,
   relayer or source-host port.
+- `APPLY_REPLAY_EVIDENCE` repeats the persisted replay-mode authorization at the
+  final handler boundary.
+- Wallet attachment is rejected before completed preflight and the worker proves
+  the observed transaction hash equals the attached command hash before emitting
+  `REQUEST_SUBMITTED`.
 - Double click, reload and exact retries cannot create a second command or
   broadcast. Wallet rejection leaves the same run safely retryable.
 - `SUBMISSION_REQUESTED` is emitted once from explicit confirmation with the
@@ -45,6 +50,11 @@ network-free replay command.
   Testcontainers coverage.
 - Persisted mode mismatch, not-ready preflight, terminal state, duplicate intent,
   quota/cap rejection and malformed wallet transaction use stable safe errors.
+- Relayer quota, global cap and balance-floor failures are non-retryable and use
+  stable `RELAYER_QUOTA_EXHAUSTED`, `GLOBAL_FEE_CAP_EXCEEDED` and
+  `BALANCE_FLOOR_VIOLATION` codes.
+- Hermetic API/E2E composition also requires explicit replay confirmation; it may
+  not preserve an automatic test-only path that production no longer has.
 
 ## TDD cadence
 

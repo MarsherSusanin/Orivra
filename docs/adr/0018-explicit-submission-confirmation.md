@@ -33,6 +33,13 @@ only. PostgreSQL extends the one-active-submission invariant to replay commands;
 idempotent retries return the same accepted intent and conflicting mode, key or
 payload fails closed.
 
+Every final worker handler repeats the persisted-mode authorization. Replay
+evidence cannot be applied to a wallet or relayer manifest even if an internal
+caller injects the command. Wallet attachment requires completed preflight and
+the transaction returned by the observation adapter must have the exact hash
+that the project attached, in addition to matching chain, target, calldata and
+value.
+
 The Web derives decision evidence from the persisted `PreflightReportV1` and
 hydrated manifest mode. It does not let the user switch mode on an existing run.
 Changing mode starts a new Composer run. The confirmation shows Coston2 chain
@@ -47,6 +54,10 @@ The API never receives a private key.
 
 CLI and Action use the same persisted submission endpoint. Local PR replay stays
 unchanged and network-free; persisted replay confirmation becomes explicit.
+
+Relayer quota, global fee-cap and balance-floor rejections are stable,
+non-retryable configuration failures. They cannot degrade into generic transport
+retry and `COMMAND_RETRY_EXHAUSTED` evidence.
 
 ## Consequences
 
