@@ -1073,6 +1073,9 @@ export function createProductionProoflineService(input: {
         if (proofEvent.type !== "PROOF_VERIFIED" || consumerEvent.type !== "CONSUMER_VERIFIED") {
           throw new Error("Consumer Lab requires proof and terminal consumer events");
         }
+        if (proofEvent.runId !== runId || consumerEvent.runId !== runId || proofEvent.sequence >= consumerEvent.sequence) {
+          throw new Error("Consumer Lab lifecycle evidence does not belong to this ordered run");
+        }
         const terminalDiagnostics = consumerEvent.payload.diagnostics;
         if (consumerEvent.payload.passed !== passed || JSON.stringify(terminalDiagnostics) !== JSON.stringify(diagnostics)) {
           throw new Error("Consumer artifact does not match terminal event");
@@ -1094,17 +1097,22 @@ export function createProductionProoflineService(input: {
             for (const value of item.missingChecks) if (typeof value === "string") missing.add(value);
           }
         }
-        const diagnosticInvariant = new Map([
-          ["CONSUMER_SCHEME_MISMATCH", "scheme"],
-          ["CONSUMER_HOST_MISMATCH", "host"],
+        const notEnforcedInvariant = new Map([
           ["EXPECTED_HOST_NOT_ENFORCED", "host"],
           ["MISSING_CONSUMER_HOST_INVARIANT", "host"],
+        ]);
+        const mismatchInvariant = new Map([
+          ["CONSUMER_SCHEME_MISMATCH", "scheme"],
+          ["CONSUMER_HOST_MISMATCH", "host"],
           ["CONSUMER_PATH_MISMATCH", "path"],
           ["CONSUMER_QUERY_MISMATCH", "query"],
         ]);
+        const mismatched = new Set<string>();
         for (const diagnostic of diagnostics) {
-          const invariant = diagnosticInvariant.get(diagnostic.code);
-          if (invariant) missing.add(invariant);
+          const notEnforced = notEnforcedInvariant.get(diagnostic.code);
+          if (notEnforced) missing.add(notEnforced);
+          const mismatch = mismatchInvariant.get(diagnostic.code);
+          if (mismatch) mismatched.add(mismatch);
         }
         const expectedQuery = new URLSearchParams(
           Object.entries(manifest.consumer.expectedQuery).sort(([left], [right]) => left.localeCompare(right)),
@@ -1119,7 +1127,7 @@ export function createProductionProoflineService(input: {
         const checks = facts.map(([invariant, expected, observed, matches]) => ({
           invariant, expected, observed,
           enforced: identity === "canonical-safe" && !missing.has(invariant),
-          passed: identity === "canonical-safe" && !missing.has(invariant) && matches,
+          passed: identity === "canonical-safe" && !missing.has(invariant) && !mismatched.has(invariant) && matches,
         })) as [{ invariant: "scheme"; expected: string; observed: string; enforced: boolean; passed: boolean }, { invariant: "host"; expected: string; observed: string; enforced: boolean; passed: boolean }, { invariant: "path"; expected: string; observed: string; enforced: boolean; passed: boolean }, { invariant: "query"; expected: string; observed: string; enforced: boolean; passed: boolean }];
         const sourceBytes = Buffer.from(row.safe_bytes);
         const storedHash = Buffer.from(row.safe_sha256).toString("hex");

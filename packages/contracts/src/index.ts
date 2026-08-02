@@ -856,9 +856,18 @@ export const ConsumerLabReportV1Schema = z
       (report.passed || report.checks.some((check) => check.enforced))) {
       context.addIssue({ code: "custom", path: ["consumerIdentity"], message: "Vulnerable consumer cannot claim enforced checks" });
     }
-    if (report.verdict.state === "safe-to-integrate" &&
-      (!report.proofValid || !report.passed || report.consumerIdentity !== "canonical-safe" || report.verdict.missingChecks !== 0 || report.safeConsumer.compileStatus !== "passed" || report.checks.some((check) => !check.enforced || !check.passed))) {
-      context.addIssue({ code: "custom", path: ["verdict"], message: "Safe verdict requires four enforced checks and a passed compile" });
+    if (report.checks.some((check) => check.passed && !check.enforced)) {
+      context.addIssue({ code: "custom", path: ["checks"], message: "A passing invariant must be enforced" });
+    }
+    const allChecksPassed = report.checks.every((check) => check.enforced && check.passed);
+    if (report.consumerIdentity === "canonical-safe" && report.passed !== allChecksPassed) {
+      context.addIssue({ code: "custom", path: ["passed"], message: "Safe consumer result must match its invariant rows" });
+    }
+    const safeToIntegrate = report.proofValid && report.passed &&
+      report.consumerIdentity === "canonical-safe" && report.verdict.missingChecks === 0 &&
+      report.safeConsumer.compileStatus === "passed" && allChecksPassed;
+    if ((report.verdict.state === "safe-to-integrate") !== safeToIntegrate) {
+      context.addIssue({ code: "custom", path: ["verdict"], message: "Verdict must be derived from proof, consumer, invariant, and compiler evidence" });
     }
   });
 
