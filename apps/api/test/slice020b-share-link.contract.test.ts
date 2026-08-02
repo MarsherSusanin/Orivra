@@ -89,7 +89,7 @@ describe("Slice 020B share-link HTTP boundary", () => {
     const production = createProductionProoflineService({
       pool: terminalPool() as any,
       tokenDigestKey: "slice020b-share-digest-key",
-      publicWebOrigin: "https://proofline.test///",
+      publicWebOrigin: "https://proofline.test/",
     });
     const first = await production.createShare({
       projectId: PROJECT_ID,

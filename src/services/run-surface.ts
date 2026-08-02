@@ -484,12 +484,14 @@ export function createLiveSurfaceServices(input: {
   recoveryStorage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
   walletProvider?: Eip1193Provider;
   fetch?: typeof globalThis.fetch;
+  expectedWebOrigin?: string;
 }): RunSurfaceServices {
   const client = createRunClient({
     baseUrl: input.baseUrl,
     projectToken: input.projectToken,
     storage: input.storage,
     fetch: input.fetch,
+    expectedWebOrigin: input.expectedWebOrigin,
   });
   const eventsByRun = new Map<string, Record<string, unknown>[]>();
   const recoveryStorage = input.recoveryStorage ?? globalThis.sessionStorage;

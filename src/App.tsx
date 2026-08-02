@@ -970,7 +970,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
                     )}
                     <div className="action-footer">
                       <span>{consumerTerminal ? "Next step: Add the persisted artifacts to your repository." : "Next step: Verify consumer invariants and enforcement."}</span>
-                      {bundleState === "verified" && bundleSource ? (
+                      {isProjectAccess && bundleState === "verified" && bundleSource ? (
                         <a
                           className="bundle-download"
                           href={`data:application/json;charset=utf-8,${encodeURIComponent(bundleSource)}`}
@@ -978,12 +978,12 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
                         >
                           <CheckCircle size={16} weight="fill" aria-hidden="true" />Bundle verified
                         </a>
-                      ) : (
+                      ) : isProjectAccess ? (
                         <button className="bundle-action" type="button" disabled={bundleState === "running"} onClick={exportBundle}>
                           <DownloadSimple size={16} aria-hidden="true" />
                           {bundleState === "running" ? "Verifying bundle…" : "Export bundle"}
                         </button>
-                      )}
+                      ) : null}
                     </div>
                     {bundleState === "error" ? <p className="bundle-error" role="alert">{bundleError}</p> : null}
                   </>

@@ -221,12 +221,25 @@ async function responseError(
 export function createRunClient(input: {
   baseUrl: string;
   projectToken: string;
+  expectedWebOrigin?: string;
   fetch?: FetchPort;
   storage?: StoragePort;
 }) {
   const baseUrl = trimBaseUrl(input.baseUrl);
   const fetchPort = input.fetch ?? globalThis.fetch.bind(globalThis);
   const storage = input.storage ?? globalThis.localStorage;
+  const expectedWebOrigin = input.expectedWebOrigin ?? globalThis.location?.origin;
+  let normalizedExpectedWebOrigin: string | undefined;
+  if (expectedWebOrigin !== undefined) {
+    try {
+      normalizedExpectedWebOrigin = new URL(expectedWebOrigin).origin;
+    } catch {
+      throw new ProoflineClientError("The expected Proofline web origin is invalid", {
+        status: 500,
+        code: "SHARE_LINK_INVALID",
+      });
+    }
+  }
 
   async function request<T>(
     path: string,
@@ -382,7 +395,20 @@ export function createRunClient(input: {
         idempotencyKey,
       });
       const parsed = ShareLinkV1Schema.safeParse(result);
-      if (!parsed.success || parsed.data.runId !== runId) {
+      let returnedOrigin: string | undefined;
+      if (parsed.success) {
+        try {
+          returnedOrigin = new URL(parsed.data.url).origin;
+        } catch {
+          returnedOrigin = undefined;
+        }
+      }
+      if (
+        !parsed.success ||
+        parsed.data.runId !== runId ||
+        (normalizedExpectedWebOrigin !== undefined &&
+          returnedOrigin !== normalizedExpectedWebOrigin)
+      ) {
         throw new ProoflineClientError(
           "Proofline returned an invalid share-link contract",
           { status: 502, code: "SHARE_LINK_INVALID" },

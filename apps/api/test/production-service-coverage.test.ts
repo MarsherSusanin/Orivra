@@ -27,7 +27,7 @@ function service(pool: any) {
   return createProductionProoflineService({
     pool,
     tokenDigestKey: "coverage-digest-key",
-    publicWebOrigin: "https://proofline.test///",
+    publicWebOrigin: "https://proofline.test/",
   });
 }
 

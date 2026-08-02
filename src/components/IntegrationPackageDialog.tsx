@@ -40,6 +40,10 @@ function dataHref(mediaType: string, bytes: string): string {
   return `data:${mediaType};charset=utf-8,${encodeURIComponent(bytes)}`;
 }
 
+function canonicalDiagnosticCodes(codes: readonly string[]): string[] {
+  return [...new Set(codes)].sort();
+}
+
 function workflowYaml(runId: string): string {
   return [
     "name: Proofline replay",
@@ -99,6 +103,9 @@ export function IntegrationPackageDialog({
         if (
           canonicalSerializeEvidenceReceipt(localReceipt) !== receiptBytes ||
           report.runId !== context.runId ||
+          report.passed !== receipt.consumerResult.passed ||
+          JSON.stringify(canonicalDiagnosticCodes(report.diagnostics.map(({ code }) => code))) !==
+            JSON.stringify(canonicalDiagnosticCodes(receipt.consumerResult.diagnosticCodes)) ||
           report.safeConsumer.sha256 !== receipt.safeConsumerChecksum ||
           report.safeConsumer.compileStatus !== "passed"
         ) {

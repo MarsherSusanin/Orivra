@@ -6,6 +6,7 @@ import {
   RunEventV1Schema,
   RunListPageV1Schema,
   RunProjectionV1Schema,
+  ShareLinkV1Schema,
   SubmissionResponseV1Schema,
   Web2JsonManifestV1Schema,
   isCanonicalUint256Decimal,
@@ -188,11 +189,34 @@ function isUniqueViolation(value: unknown): value is {
   );
 }
 
+function normalizePublicWebOrigin(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Public web origin must be a valid HTTPS origin");
+  }
+  if (
+    url.protocol !== "https:" ||
+    (url.port !== "" && url.port !== "443") ||
+    url.username !== "" ||
+    url.password !== "" ||
+    (url.pathname !== "" && url.pathname !== "/") ||
+    url.search !== "" ||
+    url.hash !== ""
+  ) {
+    throw new Error("Public web origin must be an HTTPS default-port root origin");
+  }
+  return url.origin;
+}
+
 export function createProductionProoflineService(input: {
   pool: Pool;
   tokenDigestKey: string;
   publicWebOrigin: string;
 }) {
+  const publicWebOrigin = normalizePublicWebOrigin(input.publicWebOrigin);
+
   function assertMutableProjection(projection: unknown): void {
     if (
       projection &&
@@ -1272,11 +1296,13 @@ export function createProductionProoflineService(input: {
           context.expiresAt ?? null,
         ],
       );
-      return {
-        version: "1" as const,
+      const shareUrl = new URL(`/runs/${runId}`, `${publicWebOrigin}/`);
+      shareUrl.hash = `share=${raw}`;
+      return ShareLinkV1Schema.parse({
+        version: "1",
         runId,
-        url: `${input.publicWebOrigin.replace(/\/+$/, "")}/runs/${runId}#share=${raw}`,
-      };
+        url: shareUrl.href,
+      });
     },
   };
 }
