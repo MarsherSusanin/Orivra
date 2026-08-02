@@ -113,6 +113,7 @@ npm run test:core:coverage
 npm run test:coverage:backend
 npm run test:coverage:web
 npm run test:solidity
+npm run test:e2e
 npm run build
 npm run test:sites
 ```
@@ -125,13 +126,29 @@ PROOFLINE_TESTCONTAINERS=1 npm run test:postgres -- --maxWorkers=1
 
 Если Docker Desktop socket не обнаруживается автоматически, задайте корректный `DOCKER_HOST` для своей машины. Без `PROOFLINE_TESTCONTAINERS=1` integration cases намеренно пропускаются и не являются PostgreSQL PASS.
 
-Browser acceptance:
+`npm run test:e2e` — это герметичный Node-сценарий, который проходит persisted API и worker через replay evidence. Он не запускает браузер, не проверяет отрисовку Web и не доказывает browser acceptance.
+
+### Product Integration Verification: Browser acceptance
+
+Это отдельный обязательный gate Product Integration Verifier. Перед проверкой зафиксируйте candidate identity и больше не изменяйте production tree:
 
 ```bash
-npm run test:e2e
+git rev-parse HEAD
+git rev-parse HEAD^{tree}
+npm run build
+npm run preview
 ```
 
-Проверяются desktop `1488×1058`, mobile `390×844`, keyboard/focus/Escape, axe, console/network, reload persistence и export/reparse.
+Откройте локальный built/preview Web в доступном browser harness и сохраните evidence для того же commit/tree:
+
+1. Пройдите обязательный journey в desktop viewport `1488×1058` и mobile viewport `390×844`.
+2. Проверьте keyboard navigation, видимый focus и закрытие вторичных поверхностей по `Escape`.
+3. Запустите axe; результат обязан содержать `0` serious и `0` critical violations.
+4. Проверьте application console и network: без ошибок приложения, неожиданных failed requests и browser fetch произвольного source URL.
+5. Проверьте reload, back и forward, восстановление URL state, persisted draft/run/evidence и export с повторным parse.
+6. Запишите commit hash, tree hash, оба viewport, browser/harness, результаты axe, console/network и итоговый PASS либо findings.
+
+В репозитории пока нет команды, которая автоматизирует этот browser gate или выдаёт за него PASS. `npm run test:e2e` PASS не заменяет browser PASS; Product Integration Verification нельзя отметить PASS только на основании `test:e2e`.
 
 ## 8. Sites package
 

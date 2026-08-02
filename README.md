@@ -34,11 +34,13 @@ npm run dev
 | `npm run test:coverage:web` | Coverage React-поверхности |
 | `npm run test:postgres` | PostgreSQL contracts; Testcontainers включается отдельно |
 | `npm run test:solidity` | Компиляция и проверки canonical consumers |
-| `npm run test:e2e` | Browser acceptance |
+| `npm run test:e2e` | Герметичный Node replay через API и worker; не запускает browser |
 | `npm run build` | Web/Sites release package |
 | `npm run test:sites` | Sites routing и artifact contract |
 
 Полная матрица проверок, конфигурация API/worker и live gate описаны в [операционном runbook](docs/runbook.md).
+
+Browser acceptance — отдельный обязательный **Product Integration Verification** gate на локальном built/preview Web. Он фиксируется для конкретных commit/tree и не имеет отдельной автоматизированной repo-команды; PASS `npm run test:e2e` не заменяет browser PASS.
 
 ## Поток продукта
 
@@ -86,4 +88,3 @@ Web2JsonManifestV1
 - [docs/development/roles.md](docs/development/roles.md) — RED → GREEN → verification protocol.
 - [docs/adr/README.md](docs/adr/README.md) — индекс архитектурных решений.
 - [docs/examples/README.md](docs/examples/README.md) — canonical reference paths.
-
