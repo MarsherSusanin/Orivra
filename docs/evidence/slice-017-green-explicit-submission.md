@@ -22,6 +22,8 @@
   `76fabfd593a1588bcfcd5035cac30ff3acd0627c`.
 - Corrective verifier-finding hardening: commit
   `49151b16e06aebf0214fe97f6ab98ff896aa919d`.
+- Composed relayer quota correction: commit
+  `2ae1af475aea65f103e267d3a0fba71a45ffa1f5`.
 
 Production authors did not edit frozen acceptance tests. Legacy expectations
 were reconciled in separate test-only commits.
@@ -55,6 +57,18 @@ Corrective focused GREEN results:
 - CLI coverage: 93.10% statements and 94.35% branches;
 - run-client coverage: 96.19% statements and 85.15% branches;
 - CLI build, syntax check, typecheck and diff check: PASS.
+
+The second frozen candidate `74f096620aa42b20ea2d8a48409f80e647bea673`
+also did not receive Core PASS. Independent verification found that the live
+relayer policy parser rejected valid `quotaRemaining: 0` evidence before the
+stable quota validator could emit `RELAYER_QUOTA_EXHAUSTED`. The composed-path
+RED is recorded in `slice-017-red-relayer-zero-quota-corrective.md`.
+
+The production correction changes only the zero-boundary interpretation in the
+live adapter. Focused composition passes `23/23`, nearest relayer/worker/
+PostgreSQL controls pass `55/55`, and worker coverage remains above the gate at
+90.41% lines and 86.75% branches. Zero quota now terminalizes before signing or
+broadcast; malformed, noninteger and negative evidence remains fail-closed.
 
 These are implementation-wave results, not independent verification PASS.
 The complete runbook matrix, candidate identity and two verifier reports are
