@@ -76,15 +76,23 @@ describe("CLI bounded preflight error handling", () => {
 });
 
 describe("CLI command and secret boundaries", () => {
-  it("defaults run creation to replay without requesting a submission", async () => {
+  it("defaults persisted run creation to replay and explicitly confirms its immutable mode", async () => {
+    const prepareSubmission = vi.fn().mockResolvedValue({
+      version: "1",
+      runId: "run_replay",
+      mode: "replay",
+      effectOwner: "none",
+      commandId: "command_replay",
+    });
+    const wallet = { signAndBroadcast: vi.fn() };
     const client = {
       createRun: vi.fn().mockResolvedValue({ runId: "run_replay" }),
-      prepareSubmission: vi.fn(),
+      prepareSubmission,
     };
     const code = await runProoflineCli({
       argv: ["run", "create", "--manifest", "manifest.json"],
       client,
-      wallet: { signAndBroadcast: vi.fn() },
+      wallet,
       env: {},
       io: { stdout: vi.fn(), stderr: vi.fn() },
       files: {
@@ -98,7 +106,12 @@ describe("CLI command and secret boundaries", () => {
       manifest: validManifest,
       mode: "replay",
     });
-    expect(client.prepareSubmission).not.toHaveBeenCalled();
+    expect(prepareSubmission).toHaveBeenCalledOnce();
+    expect(prepareSubmission).toHaveBeenCalledWith({
+      runId: "run_replay",
+      mode: "replay",
+    });
+    expect(wallet.signAndBroadcast).not.toHaveBeenCalled();
   });
 
   it("rejects bundle export without an output path before API access", async () => {

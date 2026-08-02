@@ -30,6 +30,7 @@ describe("Action persisted release path", () => {
   it("creates and replays a Web2Json manifest through the persisted API client", async () => {
     const createClient = await loadPersistedClientFactory();
     const requests: Request[] = [];
+    let submissionAttempts = 0;
     const checksum = `sha256:${"a".repeat(64)}`;
     const bundle = `{"version":"1","runId":"run_pr","checksum":"${checksum}"}`;
     const client = createClient({
@@ -43,6 +44,25 @@ describe("Action persisted release path", () => {
         const path = new URL(request.url).pathname;
         if (request.method === "POST" && path === "/v1/runs") {
           return Response.json({ runId: "run_pr" }, { status: 202 });
+        }
+        if (
+          request.method === "POST" &&
+          path === "/v1/runs/run_pr/submissions"
+        ) {
+          submissionAttempts += 1;
+          if (submissionAttempts === 1) {
+            return Response.json(
+              { error: { code: "PREFLIGHT_NOT_READY" } },
+              { status: 404 },
+            );
+          }
+          return Response.json({
+            version: "1",
+            runId: "run_pr",
+            mode: "replay",
+            effectOwner: "none",
+            commandId: "command_replay",
+          }, { status: 202 });
         }
         if (request.method === "GET" && path === "/v1/runs/run_pr") {
           return Response.json({
@@ -78,6 +98,8 @@ describe("Action persisted release path", () => {
     });
     expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual([
       "POST /v1/runs",
+      "POST /v1/runs/run_pr/submissions",
+      "POST /v1/runs/run_pr/submissions",
       "GET /v1/runs/run_pr",
       "GET /v1/runs/run_pr/bundle",
       "POST /v1/replays",
@@ -88,6 +110,30 @@ describe("Action persisted release path", () => {
         submission: { mode: "replay" },
       },
     });
+    const submissions = requests.filter(
+      (request) =>
+        request.method === "POST" &&
+        new URL(request.url).pathname === "/v1/runs/run_pr/submissions",
+    );
+    expect(submissions).toHaveLength(2);
+    await expect(Promise.all(submissions.map((request) => request.clone().json())))
+      .resolves.toEqual([{ mode: "replay" }, { mode: "replay" }]);
+    expect(submissions[0]?.headers.get("idempotency-key")).toMatch(
+      /^action-[a-f0-9]{64}$/,
+    );
+    expect(submissions[1]?.headers.get("idempotency-key")).toBe(
+      submissions[0]?.headers.get("idempotency-key"),
+    );
+    expect(
+      requests.some((request) =>
+        /\/transactions$/.test(new URL(request.url).pathname),
+      ),
+    ).toBe(false);
+    expect(
+      requests.every(
+        (request) => new URL(request.url).origin === "https://proofline.invalid",
+      ),
+    ).toBe(true);
   });
 
   it("runs merge/live through the persisted run and submission API", async () => {
