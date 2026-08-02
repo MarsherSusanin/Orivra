@@ -51,6 +51,32 @@ describe("Slice 019 persisted Consumer Lab report", () => {
       .rejects.toMatchObject({ status: 500, code: "CONSUMER_LAB_INVALID" });
     await expect(production({ ...row, proof_event: null }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID }))
       .rejects.toMatchObject({ status: 500, code: "CONSUMER_LAB_INVALID" });
+    await expect(production({ ...row, proof_event: { ...row.proof_event, runId: "01900000-0000-4000-8000-000000000099" } }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID }))
+      .rejects.toMatchObject({ status: 500, code: "CONSUMER_LAB_INVALID" });
+    await expect(production({ ...row, consumer_event: { ...row.consumer_event, sequence: row.proof_event.sequence } }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID }))
+      .rejects.toMatchObject({ status: 500, code: "CONSUMER_LAB_INVALID" });
+
+    const mismatchDiagnostics = [{
+      version: "1", code: "CONSUMER_HOST_MISMATCH", severity: "error",
+      confidence: "high", summary: "Host mismatch",
+      evidence: { requestUrl: "https://attacker.example/api/price?symbol=ETHUSD" },
+      remediation: "Use the expected host.",
+    }];
+    const mismatchEvidence = Buffer.from(JSON.stringify({
+      version: "1", consumer: "canonical-safe", passed: false,
+      requestUrl: "https://attacker.example/api/price?symbol=ETHUSD",
+      diagnostics: mismatchDiagnostics,
+    }));
+    const mismatchReport = await production({
+      ...row,
+      consumer_bytes: mismatchEvidence,
+      consumer_event: {
+        ...row.consumer_event,
+        payload: { passed: false, diagnostics: mismatchDiagnostics },
+      },
+    }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID });
+    expect(mismatchReport.checks.find((check: { invariant: string }) => check.invariant === "host"))
+      .toMatchObject({ enforced: true, passed: false });
   });
 
   it("returns pending without both persisted artifacts", async () => {
