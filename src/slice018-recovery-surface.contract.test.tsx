@@ -159,10 +159,15 @@ describe("Slice 018 recovery surface", () => {
       .mockResolvedValueOnce(run("waiting"))
       .mockRejectedValueOnce(new Error(`Failed to fetch Bearer ${PROJECT_TOKEN}`));
     render(<App services={surface(hydrateRun)} />);
-    expect(await screen.findByText(/0xcccc/i)).toBeVisible();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/0xcccc/i)).toBeVisible();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_500);
+      await Promise.resolve();
     });
     expect(screen.getByRole("alert")).toHaveTextContent(/offline|connection/i);
     expect(screen.getByText(/0xcccc/i)).toBeVisible();

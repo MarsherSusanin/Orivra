@@ -23,6 +23,7 @@ const migrationPath = fileURLToPath(
 const PROJECT_A = "11111111-1111-4111-8111-111111111117";
 const PROJECT_B = "22222222-2222-4222-8222-222222222227";
 const PROJECT_C = "33333333-3333-4333-8333-333333333337";
+const PROJECT_D = "44444444-4444-4444-8444-444444444447";
 
 describe.runIf(enabled)("Slice 007 real PostgreSQL command integrity", () => {
   let container: StartedTestContainer;
@@ -250,5 +251,138 @@ describe.runIf(enabled)("Slice 007 real PostgreSQL command integrity", () => {
         },
       ],
     });
+  });
+
+  it("persists retry recovery and appends RUN_RESUMED after repository recreation", async () => {
+    await pool.query(
+      `UPDATE proofline_private.run_commands
+       SET status = 'cancelled'
+       WHERE status IN ('queued', 'leased')`,
+    );
+    await pool.query(
+      "INSERT INTO proofline_private.projects (id, name) VALUES ($1, $2)",
+      [PROJECT_D, "Slice 018 durable recovery"],
+    );
+    const service = createProductionProoflineService({
+      pool,
+      tokenDigestKey: "slice-018-testcontainers-key",
+      publicWebOrigin: "https://proofline.test",
+    });
+    const created = await service.createRun({
+      projectId: PROJECT_D,
+      idempotencyKey: "slice018-recovery-create",
+      manifest: validManifest,
+    });
+
+    const beforeRestart = createPostgresCommandRepository({ pool });
+    const firstClaim = await beforeRestart.claimNextCommand();
+    expect(firstClaim).toMatchObject({
+      command: {
+        runId: created.runId,
+        kind: "RUN_PREFLIGHT",
+        attempts: 1,
+      },
+    });
+    await beforeRestart.retryCommand(
+      firstClaim!.command.id,
+      firstClaim!.claimToken,
+      {
+        category: "transport",
+        code: "VERIFIER_TRANSPORT_FAILED",
+        message: "Worker command failed",
+        retryable: true,
+        recoveryState: "retryable",
+        evidence: { stage: "preflight" },
+        commandId: firstClaim!.command.id,
+      },
+    );
+
+    const scheduled = await pool.query<{
+      sequence: string;
+      dedupe_key: string;
+      event_payload: {
+        commandId: string;
+        type: string;
+        payload: { attempt: number; state: string };
+      };
+    }>(
+      `SELECT sequence, dedupe_key, event_payload
+       FROM proofline_private.run_events
+       WHERE run_id = $1
+       ORDER BY sequence`,
+      [created.runId],
+    );
+    expect(scheduled.rows).toHaveLength(2);
+    expect(scheduled.rows[1]).toMatchObject({
+      sequence: "2",
+      dedupe_key: `${firstClaim!.command.id}:STAGE_RETRY_SCHEDULED:1`,
+      event_payload: {
+        commandId: firstClaim!.command.id,
+        type: "STAGE_RETRY_SCHEDULED",
+        payload: { attempt: 1, state: "retryable" },
+      },
+    });
+
+    await pool.query(
+      `UPDATE proofline_private.run_commands
+       SET available_at = now() - interval '1 second'
+       WHERE id = $1`,
+      [firstClaim!.command.id],
+    );
+    const afterRestart = createPostgresCommandRepository({ pool });
+    const resumed = await afterRestart.claimNextCommand();
+    expect(resumed).toMatchObject({
+      command: {
+        id: firstClaim!.command.id,
+        runId: created.runId,
+        kind: "RUN_PREFLIGHT",
+        attempts: 2,
+      },
+    });
+
+    const journal = await pool.query<{
+      sequence: string;
+      dedupe_key: string;
+      event_payload: {
+        commandId: string;
+        type: string;
+        payload: { attempt: number };
+      };
+    }>(
+      `SELECT sequence, dedupe_key, event_payload
+       FROM proofline_private.run_events
+       WHERE run_id = $1
+       ORDER BY sequence`,
+      [created.runId],
+    );
+    expect(journal.rows.map(({ event_payload }) => ({
+      commandId: event_payload.commandId,
+      type: event_payload.type,
+      attempt: event_payload.payload.attempt,
+    }))).toEqual([
+      {
+        commandId: "slice018-recovery-create",
+        type: "RUN_CREATED",
+        attempt: undefined,
+      },
+      {
+        commandId: firstClaim!.command.id,
+        type: "STAGE_RETRY_SCHEDULED",
+        attempt: 1,
+      },
+      {
+        commandId: firstClaim!.command.id,
+        type: "RUN_RESUMED",
+        attempt: 2,
+      },
+    ]);
+    expect(journal.rows[2].dedupe_key).toBe(
+      `${firstClaim!.command.id}:RUN_RESUMED:2`,
+    );
+
+    const versions = await pool.query<{ version: number }>(
+      "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
+    );
+    expect(versions.rows.map(({ version }) => version)).toEqual([1]);
   });
 });
