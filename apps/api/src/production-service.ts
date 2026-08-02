@@ -7,6 +7,7 @@ import {
   RunProjectionV1Schema,
   SubmissionResponseV1Schema,
   Web2JsonManifestV1Schema,
+  isCanonicalUint256Decimal,
   type RunStageNameV1,
   type RunEventV1,
 } from "@proofline/contracts";
@@ -18,7 +19,44 @@ import {
   replayProofBundle,
 } from "@proofline/domain";
 import type { Pool } from "pg";
+import { z } from "zod";
 import { digestOpaqueToken } from "./postgres";
+
+const PersistedAddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
+const PersistedUint256Schema = z.string().refine(isCanonicalUint256Decimal);
+const PersistedPreflightEvidenceV1Schema = z
+  .object({
+    version: z.literal("1"),
+    canonicalUrl: z.string().url().refine((value) => {
+      const url = new URL(value);
+      return (
+        url.protocol === "https:" &&
+        (url.port === "" || url.port === "443") &&
+        url.username === "" &&
+        url.password === "" &&
+        url.hash === ""
+      );
+    }),
+    requestBytes: z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/),
+    requestCalldata: z.string().regex(/^0x(?:[0-9a-fA-F]{2})+$/),
+    quotedFeeWei: PersistedUint256Schema,
+    network: z
+      .object({
+        chainId: z.literal(114),
+        blockNumber: PersistedUint256Schema,
+        registryAddress: PersistedAddressSchema,
+        resolvedContracts: z
+          .object({
+            FdcHub: PersistedAddressSchema,
+            FdcRequestFeeConfigurations: PersistedAddressSchema,
+            FdcVerification: PersistedAddressSchema,
+            Relay: PersistedAddressSchema,
+          })
+          .strict(),
+      })
+      .strict(),
+  })
+  .strict();
 
 function fingerprint(value: unknown): Buffer {
   return createHash("sha256")
@@ -151,6 +189,13 @@ export function createProductionProoflineService(input: {
     }
   }
 
+  function submissionIntentConflict(message: string): Error {
+    return Object.assign(new Error(message), {
+      status: 409,
+      code: "SUBMISSION_INTENT_CONFLICT",
+    });
+  }
+
   async function loadOwnedRun(context: Record<string, unknown>) {
     const runId = requireRunId(context.runId);
     const result = await input.pool.query(
@@ -240,9 +285,7 @@ export function createProductionProoflineService(input: {
     );
     if (existing) {
       if (!sameIntent(existing, runId, kind, payload)) {
-        throw Object.assign(new Error("Idempotency key command intent conflict"), {
-          status: 409,
-        });
+        throw submissionIntentConflict("Idempotency key command intent conflict");
       }
       return {
         accepted: true,
@@ -256,9 +299,8 @@ export function createProductionProoflineService(input: {
     if (expectedMode) {
       const priorSubmission = await findSubmissionCommandByRun(runId);
       if (priorSubmission) {
-        throw Object.assign(
-          new Error("Run already has one active submission authority"),
-          { status: 409, code: "SUBMISSION_AUTHORITY_EXISTS" },
+        throw submissionIntentConflict(
+          "Run already has one active submission authority",
         );
       }
     }
@@ -285,9 +327,8 @@ export function createProductionProoflineService(input: {
       if (expectedMode && isUniqueViolation(cause)) {
         const racedSubmission = await findSubmissionCommandByRun(runId);
         if (racedSubmission) {
-          throw Object.assign(
-            new Error("Run already has one active submission authority"),
-            { status: 409, code: "SUBMISSION_AUTHORITY_EXISTS" },
+          throw submissionIntentConflict(
+            "Run already has one active submission authority",
           );
         }
       }
@@ -299,9 +340,7 @@ export function createProductionProoflineService(input: {
         context.idempotencyKey,
       );
       if (!raced || !sameIntent(raced, runId, kind, payload)) {
-        throw Object.assign(new Error("Idempotency key command intent conflict"), {
-          status: 409,
-        });
+        throw submissionIntentConflict("Idempotency key command intent conflict");
       }
     }
     const accepted = inserted.rows[0] ?? (await findCommandIntent(
@@ -816,33 +855,24 @@ export function createProductionProoflineService(input: {
             code: "PREFLIGHT_NOT_READY",
           });
         }
-        const evidence = JSON.parse(
-          Buffer.from(row.canonical_bytes).toString("utf8"),
-        ) as Record<string, unknown>;
-        const chainId = Number(evidence.chainId ?? 114);
-        const fdcHub = String(
-          evidence.fdcHub ??
-            (evidence.network as any)?.resolvedContracts?.FdcHub ??
-            "",
-        );
-        const requestCalldata = String(evidence.requestCalldata ?? "");
-        let quotedFeeWei = -1n;
+        let persistedEvidence: unknown;
         try {
-          quotedFeeWei = BigInt(String(evidence.quotedFeeWei ?? "-1"));
+          persistedEvidence = JSON.parse(
+            Buffer.from(row.canonical_bytes).toString("utf8"),
+          );
         } catch {
-          // The stable invalid-evidence response below owns malformed numerics.
+          persistedEvidence = null;
         }
-        if (
-          chainId !== 114 ||
-          !/^0x[0-9a-fA-F]{40}$/.test(fdcHub) ||
-          !/^0x(?:[0-9a-fA-F]{2})+$/.test(requestCalldata) ||
-          quotedFeeWei < 0n
-        ) {
+        const parsedEvidence =
+          PersistedPreflightEvidenceV1Schema.safeParse(persistedEvidence);
+        if (!parsedEvidence.success) {
           throw Object.assign(new Error("Persisted preflight evidence is invalid"), {
             status: 409,
             code: "PREFLIGHT_EVIDENCE_INVALID",
           });
         }
+        const evidence = parsedEvidence.data;
+        const quotedFeeWei = BigInt(evidence.quotedFeeWei);
         return SubmissionResponseV1Schema.parse({
           version: "1",
           runId,
@@ -850,8 +880,8 @@ export function createProductionProoflineService(input: {
           effectOwner: "wallet",
           transaction: {
             chainId: "0x72",
-            to: fdcHub,
-            data: requestCalldata,
+            to: evidence.network.resolvedContracts.FdcHub,
+            data: evidence.requestCalldata,
             value: `0x${quotedFeeWei.toString(16)}`,
           },
         });
@@ -868,10 +898,7 @@ export function createProductionProoflineService(input: {
       );
       if (existing) {
         if (!sameIntent(existing, runId, kind, payload)) {
-          throw Object.assign(
-            new Error("Idempotency key command intent conflict"),
-            { status: 409, code: "SUBMISSION_INTENT_CONFLICT" },
-          );
+          throw submissionIntentConflict("Idempotency key command intent conflict");
         }
         return SubmissionResponseV1Schema.parse({
           version: "1",

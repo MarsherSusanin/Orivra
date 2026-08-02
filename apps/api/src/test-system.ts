@@ -44,6 +44,15 @@ interface MemoryDatabase {
   runs: Map<string, StoredRun>;
   createKeys: Map<string, string>;
   commandKeys: Set<string>;
+  submissionAuthorities: Map<
+    string,
+    {
+      mode: "wallet" | "relayer" | "replay";
+      idempotencyKey: string;
+      commandId: string;
+      transactionHash?: string;
+    }
+  >;
   queue: QueuedCommand[];
   shares: Map<string, string>;
 }
@@ -59,6 +68,7 @@ function database(id?: string): MemoryDatabase {
       runs: new Map(),
       createKeys: new Map(),
       commandKeys: new Set(),
+      submissionAuthorities: new Map(),
       queue: [],
       shares: new Map(),
     };
@@ -356,6 +366,27 @@ export function createHermeticProoflineSystem(input: {
           code: "SUBMISSION_MODE_MISMATCH",
         });
       }
+      const existingAuthority = db.submissionAuthorities.get(context.runId);
+      if (
+        existingAuthority &&
+        context.mode !== "wallet" &&
+        existingAuthority.mode === context.mode &&
+        existingAuthority.idempotencyKey === context.idempotencyKey
+      ) {
+        return {
+          version: "1" as const,
+          runId: context.runId,
+          mode: context.mode,
+          effectOwner: context.mode === "relayer" ? "worker" as const : "none" as const,
+          commandId: existingAuthority.commandId,
+        };
+      }
+      if (projectRun(stored.events).terminal) {
+        throw Object.assign(new Error("Terminal runs are immutable"), {
+          status: 409,
+          code: "RUN_TERMINAL",
+        });
+      }
       if (!stored.events.some((event) => event.type === "PREFLIGHT_ACCEPTED")) {
         throw Object.assign(new Error("Preflight evidence is not ready"), {
           status: 409,
@@ -376,7 +407,18 @@ export function createHermeticProoflineSystem(input: {
           },
         };
       }
+      if (existingAuthority) {
+        throw Object.assign(new Error("Run already has one submission authority"), {
+          status: 409,
+          code: "SUBMISSION_INTENT_CONFLICT",
+        });
+      }
       const id = commandId(`command_${context.mode}`, context.idempotencyKey);
+      db.submissionAuthorities.set(context.runId, {
+        mode: context.mode,
+        idempotencyKey: context.idempotencyKey,
+        commandId: id,
+      });
       if (context.mode === "replay") {
         enqueue(
           { id, runId: context.runId, kind: "APPLY_REPLAY_EVIDENCE" },
@@ -409,34 +451,63 @@ export function createHermeticProoflineSystem(input: {
       transactionHash: string;
     }) {
       const stored = run(context.runId);
-      const dedupe = `${context.runId}:tx:${context.idempotencyKey}`;
-      if (!db.commandKeys.has(dedupe)) {
-        db.commandKeys.add(dedupe);
-        if (!stored.events.some((event) => event.type === "PREFLIGHT_ACCEPTED")) {
-          throw Object.assign(new Error("Preflight evidence is not ready"), {
-            status: 409,
-            code: "PREFLIGHT_NOT_READY",
-          });
-        }
-        if (!stored.events.some((event) => event.type === "REQUEST_SUBMITTED")) {
-          append(stored, {
-            commandId: commandId("cmd_tx", context.idempotencyKey),
-            type: "REQUEST_SUBMITTED",
-            payload: {
-              mode: "wallet",
-              transactionHash: context.transactionHash as `0x${string}`,
-            },
-          });
-        }
-        enqueue(
-          {
-            id: "command_wallet_lifecycle",
-            runId: context.runId,
-            kind: "ADVANCE_WALLET",
-          },
-          `${context.runId}:wallet-lifecycle`,
-        );
+      if (stored.manifest.submission.mode !== "wallet") {
+        throw Object.assign(new Error("Submission mode does not match manifest"), {
+          status: 409,
+          code: "SUBMISSION_MODE_MISMATCH",
+        });
       }
+      const dedupe = `${context.runId}:tx:${context.idempotencyKey}`;
+      const existingAuthority = db.submissionAuthorities.get(context.runId);
+      if (
+        existingAuthority?.mode === "wallet" &&
+        existingAuthority.idempotencyKey === context.idempotencyKey &&
+        existingAuthority.transactionHash === context.transactionHash
+      ) {
+        return { accepted: true };
+      }
+      if (projectRun(stored.events).terminal) {
+        throw Object.assign(new Error("Terminal runs are immutable"), {
+          status: 409,
+          code: "RUN_TERMINAL",
+        });
+      }
+      if (!stored.events.some((event) => event.type === "PREFLIGHT_ACCEPTED")) {
+        throw Object.assign(new Error("Preflight evidence is not ready"), {
+          status: 409,
+          code: "PREFLIGHT_NOT_READY",
+        });
+      }
+      if (existingAuthority) {
+        throw Object.assign(new Error("Run already has one submission authority"), {
+          status: 409,
+          code: "SUBMISSION_INTENT_CONFLICT",
+        });
+      }
+      const attachmentCommandId = commandId("cmd_tx", context.idempotencyKey);
+      db.submissionAuthorities.set(context.runId, {
+        mode: "wallet",
+        idempotencyKey: context.idempotencyKey,
+        commandId: attachmentCommandId,
+        transactionHash: context.transactionHash,
+      });
+      db.commandKeys.add(dedupe);
+      append(stored, {
+        commandId: attachmentCommandId,
+        type: "REQUEST_SUBMITTED",
+        payload: {
+          mode: "wallet",
+          transactionHash: context.transactionHash as `0x${string}`,
+        },
+      });
+      enqueue(
+        {
+          id: "command_wallet_lifecycle",
+          runId: context.runId,
+          kind: "ADVANCE_WALLET",
+        },
+        `${context.runId}:wallet-lifecycle`,
+      );
       return { accepted: true };
     },
 

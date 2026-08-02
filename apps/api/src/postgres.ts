@@ -13,6 +13,17 @@ export function digestOpaqueToken(rawToken: string, digestKey: string): Uint8Arr
   );
 }
 
+function relayerQuotaExhausted() {
+  return NormalizedFdcErrorSchema.parse({
+    version: "1",
+    category: "configuration",
+    code: "RELAYER_QUOTA_EXHAUSTED",
+    message: "Relayer quota is exhausted",
+    retryable: false,
+    evidence: {},
+  });
+}
+
 export const POSTGRES_QUERIES = {
   claimNextCommand: `
     WITH candidate AS (
@@ -389,11 +400,16 @@ export function createPostgresCommandRepository(input: {
         value.policy &&
         (value.policy.projectFeeCapWei < value.valueWei ||
           value.policy.globalFeeCapWei < value.valueWei ||
-          !Number.isInteger(value.policy.quotaRemaining) ||
-          value.policy.quotaRemaining <= 0 ||
           value.policy.balanceFloorWei < 0n)
       ) {
         throw new Error("Persisted relayer policy rejects this transaction");
+      }
+      if (
+        value.policy &&
+        (!Number.isInteger(value.policy.quotaRemaining) ||
+          value.policy.quotaRemaining <= 0)
+      ) {
+        throw relayerQuotaExhausted();
       }
       const matches = (row: Record<string, unknown> | undefined) =>
         Boolean(
@@ -454,7 +470,7 @@ export function createPostgresCommandRepository(input: {
           );
           const usedToday = Number(usage.rows[0]?.used ?? 0);
           if (usedToday >= input.relayerPolicy.dailyProjectQuota) {
-            throw new Error("Relayer quota is exhausted");
+            throw relayerQuotaExhausted();
           }
         }
         const inserted = await client.query(

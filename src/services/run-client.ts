@@ -15,6 +15,21 @@ import {
 const LAST_RUN_KEY = "proofline:last-run";
 const COSTON2_CHAIN_ID = "0x72";
 const TRANSACTION_HASH = /^0x[0-9a-fA-F]{64}$/;
+const WALLET_BROADCAST_PENDING = "wallet-broadcast-pending";
+const walletSubmissionFlights = new Map<
+  string,
+  Promise<{ transactionHash: string }>
+>();
+const walletRecoveryMemory = new Map<string, string>();
+const walletRecoveryMemoryStorage: RecoveryStoragePort = {
+  getItem: (key) => walletRecoveryMemory.get(key) ?? null,
+  setItem: (key, value) => {
+    walletRecoveryMemory.set(key, value);
+  },
+  removeItem: (key) => {
+    walletRecoveryMemory.delete(key);
+  },
+};
 
 type StoragePort = Pick<Storage, "getItem" | "setItem">;
 type RecoveryStoragePort = Pick<
@@ -51,6 +66,74 @@ function trimBaseUrl(baseUrl: string): string {
 function sequenceKey(runId: string): string {
   return `proofline:${runId}:after`;
 }
+
+function walletRecoveryKey(runId: string, idempotencyKey: string): string {
+  return `proofline:${encodeURIComponent(runId)}:wallet:${encodeURIComponent(idempotencyKey)}`;
+}
+
+function availableRecoveryStorage(
+  provided: RecoveryStoragePort | undefined,
+): RecoveryStoragePort {
+  if (provided) return provided;
+  try {
+    if (typeof globalThis.sessionStorage !== "undefined") {
+      return globalThis.sessionStorage;
+    }
+  } catch {
+    // The stable recovery error below owns denied browser storage access.
+  }
+  return walletRecoveryMemoryStorage;
+}
+
+function proveRecoveryStorageWritable(
+  storage: RecoveryStoragePort,
+  recoveryKey: string,
+): void {
+  try {
+    storage.setItem(recoveryKey, WALLET_BROADCAST_PENDING);
+    if (storage.getItem(recoveryKey) !== WALLET_BROADCAST_PENDING) {
+      throw new Error("Wallet recovery storage did not persist its probe");
+    }
+  } catch {
+    throw new Error("Wallet recovery storage is not writable");
+  }
+}
+
+function clearPendingWalletMarker(
+  storage: RecoveryStoragePort,
+  recoveryKey: string,
+): void {
+  if (storage.getItem(recoveryKey) === WALLET_BROADCAST_PENDING) {
+    storage.removeItem(recoveryKey);
+  }
+}
+
+export const reconcileWalletSubmission = Object.freeze(
+  (input: {
+    runId: string;
+    idempotencyKey: string;
+    events: ReadonlyArray<{
+      type: string;
+      payload: Record<string, unknown>;
+    }>;
+    recoveryStorage: RecoveryStoragePort;
+  }): { cleared: boolean; transactionHash?: string } => {
+    const key = walletRecoveryKey(input.runId, input.idempotencyKey);
+    const transactionHash = input.recoveryStorage.getItem(key);
+    if (!transactionHash || !TRANSACTION_HASH.test(transactionHash)) {
+      return { cleared: false };
+    }
+    const persisted = input.events.some(
+      (event) =>
+        event.type === "REQUEST_SUBMITTED" &&
+        event.payload.mode === "wallet" &&
+        event.payload.transactionHash === transactionHash,
+    );
+    if (!persisted) return { cleared: false, transactionHash };
+    input.recoveryStorage.removeItem(key);
+    return { cleared: true, transactionHash };
+  },
+);
 
 function safeStorageSet(storage: StoragePort, key: string, value: string): void {
   try {
@@ -321,71 +404,99 @@ export function createRunClient(input: {
   };
 }
 
-export async function submitWithEip1193(input: {
+export function submitWithEip1193(input: {
   runId: string;
   idempotencyKey: string;
   provider: Eip1193Provider;
   client: Pick<RunClient, "prepareSubmission" | "attachTransaction">;
   recoveryStorage?: RecoveryStoragePort;
-}) {
-  const recoveryStorage =
-    input.recoveryStorage ??
-    (typeof globalThis.sessionStorage === "undefined"
-      ? null
-      : globalThis.sessionStorage);
-  const recoveryKey = `proofline:${encodeURIComponent(input.runId)}:wallet:${encodeURIComponent(input.idempotencyKey)}`;
-  const recoveredHash = recoveryStorage?.getItem(recoveryKey) ?? null;
-  if (recoveredHash !== null) {
-    if (!TRANSACTION_HASH.test(recoveredHash)) {
-      recoveryStorage?.removeItem(recoveryKey);
-    } else {
-      await input.client.attachTransaction(
-        input.runId,
-        { transactionHash: recoveredHash },
-        input.idempotencyKey,
-      );
-      recoveryStorage?.removeItem(recoveryKey);
-      return { transactionHash: recoveredHash };
+}): Promise<{ transactionHash: string }> {
+  const flightKey = `${input.runId}\u0000${input.idempotencyKey}`;
+  const existingFlight = walletSubmissionFlights.get(flightKey);
+  if (existingFlight) return existingFlight;
+
+  const operation = (async () => {
+    const recoveryStorage = availableRecoveryStorage(input.recoveryStorage);
+    const recoveryKey = walletRecoveryKey(input.runId, input.idempotencyKey);
+    const recoveredHash = recoveryStorage.getItem(recoveryKey);
+    if (recoveredHash !== null) {
+      if (recoveredHash === WALLET_BROADCAST_PENDING) {
+        throw new Error(
+          "Wallet broadcast recovery is ambiguous; refusing to rebroadcast",
+        );
+      }
+      if (!TRANSACTION_HASH.test(recoveredHash)) {
+        recoveryStorage.removeItem(recoveryKey);
+      } else {
+        await input.client.attachTransaction(
+          input.runId,
+          { transactionHash: recoveredHash },
+          input.idempotencyKey,
+        );
+        return { transactionHash: recoveredHash };
+      }
     }
-  }
 
-  const transaction = await input.client.prepareSubmission(
-    input.runId,
-    input.idempotencyKey,
-  );
-  if (transaction.chainId.toLowerCase() !== COSTON2_CHAIN_ID) {
-    throw new Error("Wallet submission was prepared for a network other than Coston2");
-  }
+    const transaction = await input.client.prepareSubmission(
+      input.runId,
+      input.idempotencyKey,
+    );
+    if (transaction.chainId.toLowerCase() !== COSTON2_CHAIN_ID) {
+      throw new Error("Wallet submission was prepared for a network other than Coston2");
+    }
 
-  await input.provider.request({
-    method: "wallet_switchEthereumChain",
-    params: [{ chainId: COSTON2_CHAIN_ID }],
-  });
-  const accounts = await input.provider.request({ method: "eth_requestAccounts" });
-  if (!Array.isArray(accounts) || typeof accounts[0] !== "string") {
-    throw new Error("The wallet did not return an account");
-  }
+    proveRecoveryStorageWritable(recoveryStorage, recoveryKey);
+    let accounts: unknown;
+    try {
+      await input.provider.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: COSTON2_CHAIN_ID }],
+      });
+      accounts = await input.provider.request({ method: "eth_requestAccounts" });
+      if (!Array.isArray(accounts) || typeof accounts[0] !== "string") {
+        throw new Error("The wallet did not return an account");
+      }
+    } catch (cause) {
+      clearPendingWalletMarker(recoveryStorage, recoveryKey);
+      throw cause;
+    }
 
-  const transactionHash = await input.provider.request({
-    method: "eth_sendTransaction",
-    params: [
-      {
-        ...transaction,
-        chainId: COSTON2_CHAIN_ID,
-        from: accounts[0],
-      },
-    ],
-  });
-  if (typeof transactionHash !== "string" || !TRANSACTION_HASH.test(transactionHash)) {
-    throw new Error("The wallet did not return a valid transaction hash");
-  }
+    let transactionHash: unknown;
+    try {
+      transactionHash = await input.provider.request({
+        method: "eth_sendTransaction",
+        params: [
+          {
+            ...transaction,
+            chainId: COSTON2_CHAIN_ID,
+            from: (accounts as string[])[0],
+          },
+        ],
+      });
+    } catch (cause) {
+      if (cause instanceof Error && /user rejected/i.test(cause.message)) {
+        clearPendingWalletMarker(recoveryStorage, recoveryKey);
+      }
+      throw cause;
+    }
+    if (typeof transactionHash !== "string" || !TRANSACTION_HASH.test(transactionHash)) {
+      clearPendingWalletMarker(recoveryStorage, recoveryKey);
+      throw new Error("The wallet did not return a valid transaction hash");
+    }
 
-  recoveryStorage?.setItem(recoveryKey, transactionHash);
-  await input.client.attachTransaction(
-    input.runId,
-    { transactionHash },
-    input.idempotencyKey,
-  );
-  recoveryStorage?.removeItem(recoveryKey);
-  return { transactionHash };
+    recoveryStorage.setItem(recoveryKey, transactionHash);
+    await input.client.attachTransaction(
+      input.runId,
+      { transactionHash },
+      input.idempotencyKey,
+    );
+    return { transactionHash };
+  })();
+  walletSubmissionFlights.set(flightKey, operation);
+  void operation.finally(() => {
+    if (walletSubmissionFlights.get(flightKey) === operation) {
+      walletSubmissionFlights.delete(flightKey);
+    }
+  }).catch(() => undefined);
+  return operation;
 }

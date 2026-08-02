@@ -1266,6 +1266,20 @@ export function createProductionCommandHandlers(input: {
     }
   }
 
+  function submissionConfigurationError(
+    code: string,
+    message: string,
+  ): NormalizedFdcError {
+    return NormalizedFdcErrorSchema.parse({
+      version: "1",
+      category: "configuration",
+      code,
+      message,
+      retryable: false,
+      evidence: {},
+    });
+  }
+
   const handlers: Record<
     string,
     (command: ProductionCommand) => Promise<CommandOutcome>
@@ -1683,6 +1697,15 @@ export function createProductionCommandHandlers(input: {
     async ATTACH_WALLET_TRANSACTION(command) {
       const context = await load(command);
       assertSubmissionMode(context, "wallet");
+      if (
+        typeof command.payload.transactionHash !== "string" ||
+        !/^0x[0-9a-fA-F]{64}$/.test(command.payload.transactionHash)
+      ) {
+        throw submissionConfigurationError(
+          "WALLET_TRANSACTION_HASH_INVALID",
+          "Attached wallet transaction hash is invalid",
+        );
+      }
       const preflight = preflightEvidence(context);
       const observed = await input.ports.observeWalletTransaction({
         transactionHash: command.payload.transactionHash,
@@ -1694,13 +1717,9 @@ export function createProductionCommandHandlers(input: {
         observed.transactionHash.toLowerCase() !==
           command.payload.transactionHash.toLowerCase()
       ) {
-        throw Object.assign(
-          new Error("Observed wallet transaction hash differs from the attached hash"),
-          {
-            category: "configuration",
-            code: "WALLET_TRANSACTION_HASH_MISMATCH",
-            retryable: false,
-          },
+        throw submissionConfigurationError(
+          "WALLET_TRANSACTION_HASH_MISMATCH",
+          "Observed wallet transaction hash differs from the attached hash",
         );
       }
       if (
@@ -1709,7 +1728,10 @@ export function createProductionCommandHandlers(input: {
         !sameHex(observed.calldata, preflight.requestCalldata) ||
         observed.valueWei !== BigInt(preflight.quotedFeeWei)
       ) {
-        throw new Error("Wallet transaction does not match persisted preflight intent");
+        throw submissionConfigurationError(
+          "WALLET_TRANSACTION_INTENT_MISMATCH",
+          "Wallet transaction does not match persisted preflight intent",
+        );
       }
       return {
         events: hasEvent(context, "REQUEST_SUBMITTED")
