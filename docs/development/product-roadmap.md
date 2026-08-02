@@ -13,7 +13,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 016 | Persisted preflight evidence and decision Workbench | Complete; independently verified |
 | 017A | Manifest-owned submission decision and confirmation evidence | Complete; independently verified |
 | 017B | Wallet, relayer and replay confirmation through one persisted path | Complete; independently verified |
-| 018 | Restart-safe waiting, retry and terminal recovery semantics | In progress — Slice Contract and ADR accepted |
+| 018 | Restart-safe waiting, retry and terminal recovery semantics | Implemented; candidate freeze gates pending |
 | 019 | Consumer evidence matrix and deterministic safe artifact | Pending |
 | 020 | Evidence receipt, integration package and read-only handoff | Pending |
 | 021B | Deterministic local product funnel report | Pending |
