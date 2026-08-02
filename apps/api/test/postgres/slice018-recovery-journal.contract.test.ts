@@ -200,19 +200,29 @@ describe("Slice 018 PostgreSQL recovery journal", () => {
       occurredAt: "2026-08-03T02:00:16.000Z", type: "RUN_RESUMED",
       payload: { stage: "preflight", attempt: 2, resumeFrom: "preflight", preservedEvidence: [] },
     };
-    const fixture = repositoryWith(async (text) => {
+    const storedEvents = [created, scheduled, resumed] as Record<string, unknown>[];
+    let lastSequence = 3;
+    const fixture = repositoryWith(async (text, values) => {
       if (text === POSTGRES_QUERIES.claimNextCommand) return result([{
         id: COMMAND, project_id: PROJECT, run_id: RUN_ID, kind: "RUN_PREFLIGHT",
         attempts: 3, payload: {}, last_error: scheduled.payload.error,
       }], 1);
       if (text === POSTGRES_QUERIES.loadEvents) return result(
-        [created, scheduled, resumed].map((event_payload) => ({ event_payload })),
-        3,
+        storedEvents.map((event_payload) => ({ event_payload })),
+        storedEvents.length,
       );
       if (text === POSTGRES_QUERIES.lockRun) return result([{
-        last_sequence: 3,
-        projection: { version: "1", runId: RUN_ID, sequence: 3, terminal: false },
+        last_sequence: lastSequence,
+        projection: { version: "1", runId: RUN_ID, sequence: lastSequence, terminal: false },
       }], 1);
+      if (text === POSTGRES_QUERIES.insertEvent) {
+        storedEvents.push(JSON.parse(String(values?.[4])) as Record<string, unknown>);
+        return result([], 1);
+      }
+      if (text === POSTGRES_QUERIES.updateProjection) {
+        lastSequence = Number(values?.[2]);
+        return result([], 1);
+      }
       return result([], 1);
     });
 

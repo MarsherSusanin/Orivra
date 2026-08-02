@@ -284,7 +284,7 @@ function recoveryError(
   }
   return RecoveryErrorV1Schema.parse({
     ...error,
-    message: error.message.slice(0, 256),
+    message: "Worker command failed",
     retryable,
     evidence,
   });
@@ -333,6 +333,28 @@ function unresolvedRecoveryEvent(
     else unresolved = event;
   }
   return unresolved;
+}
+
+function latestRecoveryEvent(
+  events: readonly RunEventV1[],
+  commandId: string,
+) {
+  let latest: Extract<
+    RunEventV1,
+    { type: "STAGE_WAITING" | "STAGE_RETRY_SCHEDULED" | "RUN_RESUMED" }
+  > | undefined;
+  for (const event of events) {
+    if (
+      event.type !== "STAGE_WAITING" &&
+      event.type !== "STAGE_RETRY_SCHEDULED" &&
+      event.type !== "RUN_RESUMED"
+    ) {
+      latest = undefined;
+      continue;
+    }
+    if (event.commandId === commandId) latest = event;
+  }
+  return latest;
 }
 
 async function appendEventInTransaction(
@@ -867,24 +889,68 @@ export function createPostgresCommandRepository(input: {
             events,
             String(row.id),
           );
+          const latest = latestRecovery ?? latestRecoveryEvent(
+            events,
+            String(row.id),
+          );
+          let resumeSequence = events.length + 1;
           if (
-            latestRecovery?.type === "STAGE_WAITING" ||
-            latestRecovery?.type === "STAGE_RETRY_SCHEDULED"
+            !latestRecovery &&
+            latest?.type === "RUN_RESUMED" &&
+            latest.payload.attempt === attempts - 1
+          ) {
+            const occurredAt = new Date().toISOString();
+            await appendEventInTransaction(
+              client,
+              RunEventV1Schema.parse({
+                version: "1",
+                runId: String(row.run_id),
+                sequence: resumeSequence,
+                commandId: String(row.id),
+                occurredAt,
+                type: "STAGE_RETRY_SCHEDULED",
+                payload: {
+                  version: "1",
+                  state: "retryable",
+                  stage: latest.payload.stage,
+                  attempt: attempts - 1,
+                  retryAfter: occurredAt,
+                  resumeFrom: latest.payload.resumeFrom,
+                  preservedEvidence: latest.payload.preservedEvidence,
+                  updatedAt: occurredAt,
+                  error: {
+                    version: "1",
+                    category: "timeout",
+                    code: "COMMAND_LEASE_EXPIRED",
+                    message: "Command lease expired before completion",
+                    retryable: true,
+                    evidence: { attempt: attempts - 1, commandId: String(row.id) },
+                  },
+                  retrySafety: "same-command",
+                },
+              }),
+            );
+            resumeSequence += 1;
+          }
+          if (
+            latest?.type === "STAGE_WAITING" ||
+            latest?.type === "STAGE_RETRY_SCHEDULED" ||
+            latest?.type === "RUN_RESUMED"
           ) {
             await appendEventInTransaction(
               client,
               RunEventV1Schema.parse({
                 version: "1",
                 runId: String(row.run_id),
-                sequence: events.length + 1,
+                sequence: resumeSequence,
                 commandId: String(row.id),
                 occurredAt: new Date().toISOString(),
                 type: "RUN_RESUMED",
                 payload: {
-                  stage: latestRecovery.payload.stage,
+                  stage: latest.payload.stage,
                   attempt: attempts,
-                  resumeFrom: latestRecovery.payload.resumeFrom,
-                  preservedEvidence: latestRecovery.payload.preservedEvidence,
+                  resumeFrom: latest.payload.resumeFrom,
+                  preservedEvidence: latest.payload.preservedEvidence,
                 },
               }),
             );

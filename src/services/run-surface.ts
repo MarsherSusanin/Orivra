@@ -440,7 +440,7 @@ function hydrateView(
     ...(parsedManifest.success ? { manifest: parsedManifest.data } : {}),
     ...(recovery.success ? { recovery: recovery.data } : {}),
     sync: {
-      state: eventSequence < projectionSequence ? "partial" : "current",
+      state: eventSequence === projectionSequence ? "current" : "partial",
       projectionSequence,
       eventSequence,
     },

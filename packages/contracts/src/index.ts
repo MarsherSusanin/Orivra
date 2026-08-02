@@ -879,12 +879,17 @@ export const RecoveryErrorEvidenceV1Schema = z
   })
   .strict();
 
+export const RecoveryErrorMessageV1Schema = z.enum([
+  "Worker command failed",
+  "Command lease expired before completion",
+]);
+
 export const RecoveryErrorV1Schema = z
   .object({
     version: VersionV1Schema,
     category: NormalizedFdcErrorSchema.shape.category,
     code: NormalizedFdcErrorSchema.shape.code,
-    message: z.string().min(1).max(256),
+    message: RecoveryErrorMessageV1Schema,
     retryable: z.boolean(),
     evidence: RecoveryErrorEvidenceV1Schema,
   })
