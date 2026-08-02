@@ -197,6 +197,7 @@ describe("worker command failure boundaries", () => {
       {
         category: "transport",
         retryable: true,
+        recoveryState: "retryable",
         message: "Worker command failed",
         evidence: {},
         commandId: "command_1",
@@ -245,6 +246,7 @@ describe("worker command failure boundaries", () => {
       category: "transport",
       code: "VERIFIER_TRANSPORT_FAILED",
       retryable: true,
+      recoveryState: "retryable",
       message: "Worker command failed",
       evidence: {
         stage: "preflight",
@@ -301,6 +303,7 @@ describe("worker command failure boundaries", () => {
       category: "transport",
       code: "FDC_TRANSPORT",
       retryable: true,
+      recoveryState: "retryable",
       message: "Worker command failed",
       evidence: { commandId: "command_1" },
     };
