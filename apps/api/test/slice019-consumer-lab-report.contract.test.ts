@@ -32,14 +32,22 @@ describe("Slice 019 persisted Consumer Lab report", () => {
     const row = {
       manifest: exactTrustManifest, consumer_bytes: evidence, safe_bytes: sourceBytes,
       safe_sha256: createHash("sha256").update(sourceBytes).digest(),
-      safe_metadata: { compiler: "solc-0.8.36" },
+      safe_metadata: { compiler: "solc-0.8.36", compileStatus: "passed" },
+      proof_event: { type: "PROOF_VERIFIED" },
+      consumer_event: { type: "CONSUMER_VERIFIED", payload: { passed: false, diagnostics: JSON.parse(evidence.toString()).diagnostics } },
     };
     const report = await production(row).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID });
     expect(report).toMatchObject({ statement: "Valid proof ≠ trusted URL", verdict: { state: "needs-fixes", missingChecks: 4 } });
     expect(report.safeConsumer.source).toBe(source);
+    expect(report.safeConsumer.diff).toContain("-contract CanonicalVulnerableWeb2JsonConsumer");
+    expect(report.safeConsumer.diff).toContain("+contract ProoflineSafeWeb2JsonConsumer");
     expect(report.checks.map((check: { invariant: string }) => check.invariant)).toEqual(["scheme", "host", "path", "query"]);
 
     await expect(production({ ...row, safe_sha256: Buffer.alloc(32) }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID }))
+      .rejects.toMatchObject({ status: 500, code: "CONSUMER_LAB_INVALID" });
+    await expect(production({ ...row, safe_metadata: { compiler: "solc-0.8.36" } }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID }))
+      .rejects.toMatchObject({ status: 500, code: "CONSUMER_LAB_INVALID" });
+    await expect(production({ ...row, proof_event: null }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID }))
       .rejects.toMatchObject({ status: 500, code: "CONSUMER_LAB_INVALID" });
   });
 
