@@ -319,6 +319,39 @@ describe("Slice 017 wallet broadcast recovery coordinator", () => {
     expect(client.prepareSubmission).toHaveBeenCalledOnce();
     expect(client.attachTransaction).not.toHaveBeenCalled();
   });
+
+  it("keeps the pending marker when eth_sendTransaction resolves with a malformed hash and refuses rebroadcast", async () => {
+    const storage = recoveryStorage();
+    const malformedProvider = walletProvider("0x1234");
+    const client = {
+      prepareSubmission: vi.fn().mockResolvedValue(TRANSACTION),
+      attachTransaction: vi.fn(),
+    };
+    const submit = submitWithEip1193 as RecoverableSubmit;
+    const common = {
+      runId: RUN_ID,
+      idempotencyKey: "wallet-malformed-hash",
+      client,
+      recoveryStorage: storage.port,
+    };
+
+    await expect(
+      submit({ ...common, provider: malformedProvider }),
+    ).rejects.toThrow(/valid transaction hash/i);
+    expect([...storage.values.values()]).toContain(
+      "wallet-broadcast-pending",
+    );
+    expect(storage.port.removeItem).not.toHaveBeenCalled();
+    expect(client.attachTransaction).not.toHaveBeenCalled();
+
+    const retryProvider = walletProvider();
+    await expect(
+      submit({ ...common, provider: retryProvider }),
+    ).rejects.toThrow(/ambiguous|refusing to rebroadcast/i);
+    expect(retryProvider.request).not.toHaveBeenCalled();
+    expect(client.prepareSubmission).toHaveBeenCalledOnce();
+    expect(client.attachTransaction).not.toHaveBeenCalled();
+  });
 });
 
 describe("Slice 017 browser submission response validation", () => {

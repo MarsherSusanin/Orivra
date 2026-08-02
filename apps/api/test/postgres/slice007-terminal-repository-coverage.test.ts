@@ -67,6 +67,7 @@ describe("Slice 007 terminal journal persistence coverage", () => {
     ["SUBMIT_RELAYER", "request"],
     ["BROADCAST_RELAYER_TRANSACTION", "request"],
     ["ATTACH_WALLET_TRANSACTION", "request"],
+    ["APPLY_REPLAY_EVIDENCE", "request"],
     ["POLL_TRANSACTION_RECEIPT", "round"],
     ["POLL_RELAY_FINALIZATION", "round"],
     ["FETCH_DA_PROOF", "proof"],
@@ -145,6 +146,83 @@ describe("Slice 007 terminal journal persistence coverage", () => {
     expect(
       fixture.client.query.mock.calls.map(([text]) => String(text).trim()).at(-1),
     ).toBe("COMMIT");
+  });
+
+  it("preserves completed preflight and fails request when replay application terminalizes", async () => {
+    const acceptedEvents = makeRunEvents().slice(0, 2);
+    const fixture = repositoryWith(async (text) => {
+      if (text === POSTGRES_QUERIES.retryCommand) {
+        return result([{
+          run_id: RUN_ID,
+          kind: "APPLY_REPLAY_EVIDENCE",
+        }], 1);
+      }
+      if (text === POSTGRES_QUERIES.lockRun) {
+        return result([{
+          last_sequence: 2,
+          projection: {
+            version: "1",
+            runId: RUN_ID,
+            sequence: 2,
+            terminal: false,
+            stages: {
+              preflight: "completed",
+              request: "pending",
+              round: "pending",
+              proof: "pending",
+              verify: "pending",
+              consumer: "pending",
+            },
+          },
+        }], 1);
+      }
+      if (text === POSTGRES_QUERIES.loadEvents) {
+        return result(
+          acceptedEvents.map((event) => ({ event_payload: event })),
+          acceptedEvents.length,
+        );
+      }
+      return result([], 1);
+    });
+
+    await fixture.repository.retryCommand(
+      "command_apply_replay",
+      CLAIM,
+      {
+        terminal: true,
+        retryable: false,
+        category: "schema-invalid",
+        code: "REPLAY_EVIDENCE_INVALID",
+        message: "Persisted replay evidence is invalid",
+        evidence: {},
+      },
+    );
+
+    const insert = fixture.client.query.mock.calls.find(
+      ([text]) => String(text) === POSTGRES_QUERIES.insertEvent,
+    );
+    expect(JSON.parse(String(insert?.[1]?.[4]))).toMatchObject({
+      type: "RUN_FAILED",
+      payload: {
+        stage: "request",
+        error: {
+          category: "schema-invalid",
+          code: "REPLAY_EVIDENCE_INVALID",
+          retryable: false,
+        },
+      },
+    });
+    const projectionUpdate = fixture.client.query.mock.calls.find(
+      ([text]) => String(text) === POSTGRES_QUERIES.updateProjection,
+    );
+    expect(JSON.parse(String(projectionUpdate?.[1]?.[1]))).toMatchObject({
+      terminal: true,
+      stages: {
+        preflight: "completed",
+        request: "failed",
+      },
+      terminalFailure: { stage: "request" },
+    });
   });
 
   it("does not append another failure event when projection is already terminal", async () => {

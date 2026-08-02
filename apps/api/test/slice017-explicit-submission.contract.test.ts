@@ -125,6 +125,7 @@ function result(rows: Record<string, unknown>[] = [], rowCount = rows.length) {
 function serviceHarness(input: {
   mode: SubmissionMode;
   preflight?: "completed" | "active";
+  request?: "pending" | "completed";
   terminal?: boolean;
 }) {
   const commands: Record<string, unknown>[] = [];
@@ -132,7 +133,7 @@ function serviceHarness(input: {
     terminal: input.terminal ?? false,
     stages: {
       preflight: input.preflight ?? "completed",
-      request: "pending",
+      request: input.request ?? "pending",
       round: "pending",
       proof: "pending",
       verify: "pending",
@@ -200,14 +201,16 @@ function serviceHarness(input: {
     }
     return result([], 0);
   });
+  const createService = () => createProductionProoflineService({
+    pool: { query } as any,
+    tokenDigestKey: "slice-017-contract-key",
+    publicWebOrigin: "https://proofline.test",
+  });
   return {
     commands,
     query,
-    service: createProductionProoflineService({
-      pool: { query } as any,
-      tokenDigestKey: "slice-017-contract-key",
-      publicWebOrigin: "https://proofline.test",
-    }),
+    service: createService(),
+    restartService: createService,
   };
 }
 
@@ -263,6 +266,65 @@ describe("Slice 017 persisted confirmation authority", () => {
         data: "0xfeedcafe",
         value: "0x3039",
       },
+    });
+    expect(fixture.commands).toHaveLength(0);
+  });
+
+  it("reconciles an exact wallet attachment retry without creating a duplicate authority", async () => {
+    const fixture = serviceHarness({ mode: "wallet" });
+    const attachment = {
+      runId: RUN_ID,
+      projectId: PROJECT_ID,
+      idempotencyKey: "wallet-authority",
+      transactionHash: TX_HASH,
+    };
+
+    const first = await fixture.service.attachTransaction(attachment);
+    const retry = await fixture.service.attachTransaction(attachment);
+    expect(retry).toEqual(first);
+    expect(fixture.commands).toHaveLength(1);
+    expect(fixture.commands[0]).toMatchObject({
+      kind: "ATTACH_WALLET_TRANSACTION",
+      payload: { transactionHash: TX_HASH },
+    });
+  });
+
+  it("refuses a new unsigned wallet transaction after persisted attachment authority survives restart", async () => {
+    const fixture = serviceHarness({ mode: "wallet" });
+    await fixture.service.attachTransaction({
+      runId: RUN_ID,
+      projectId: PROJECT_ID,
+      idempotencyKey: "wallet-authority",
+      transactionHash: TX_HASH,
+    });
+    expect(fixture.commands).toHaveLength(1);
+
+    await expect(fixture.restartService().createSubmission({
+      runId: RUN_ID,
+      projectId: PROJECT_ID,
+      mode: "wallet",
+      idempotencyKey: "wallet-rebroadcast-after-restart",
+    })).rejects.toMatchObject({
+      status: 409,
+      code: "SUBMISSION_INTENT_CONFLICT",
+    });
+    expect(fixture.commands).toHaveLength(1);
+  });
+
+  it("refuses a new unsigned wallet transaction when the persisted projection proves request submission", async () => {
+    const fixture = serviceHarness({
+      mode: "wallet",
+      request: "completed",
+    });
+
+    await expect(fixture.service.createSubmission({
+      runId: RUN_ID,
+      projectId: PROJECT_ID,
+      mode: "wallet",
+      idempotencyKey: "wallet-rebroadcast-after-event",
+    })).rejects.toMatchObject({
+      status: 409,
+      code: "SUBMISSION_INTENT_CONFLICT",
     });
     expect(fixture.commands).toHaveLength(0);
   });

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProductEventV1, PreflightReportV1 } from "../packages/contracts/src";
@@ -21,6 +21,8 @@ const FDC_HUB = validPreflightReport.registrySnapshot.resolvedContracts.FdcHub;
 function run(mode: SubmissionModeView, input: {
   terminal?: boolean;
   preflight?: HydratedRunView["stages"]["preflight"];
+  request?: HydratedRunView["stages"]["request"];
+  evidence?: HydratedRunView["evidence"];
 } = {}): HydratedRunView {
   return {
     runId: RUN_ID,
@@ -33,14 +35,14 @@ function run(mode: SubmissionModeView, input: {
     submissionMode: mode,
     stages: {
       preflight: input.preflight ?? "completed",
-      request: "pending",
+      request: input.request ?? "pending",
       round: "pending",
       proof: "pending",
       verify: "pending",
       consumer: "pending",
     },
     diagnostics: [],
-    evidence: {},
+    evidence: input.evidence ?? {},
   };
 }
 
@@ -60,6 +62,8 @@ function services(input: {
   report?: PreflightReportV1;
   terminal?: boolean;
   preflight?: HydratedRunView["stages"]["preflight"];
+  request?: HydratedRunView["stages"]["request"];
+  evidence?: HydratedRunView["evidence"];
   confirmSubmission?: ReturnType<typeof vi.fn>;
 } = {}): SubmissionSurface {
   const mode = input.mode ?? "replay";
@@ -134,6 +138,7 @@ afterEach(() => {
   sessionStorage.clear();
   localStorage.clear();
   vi.restoreAllMocks();
+  Reflect.deleteProperty(window, "ethereum");
 });
 
 describe("Slice 017 immutable submission decision evidence", () => {
@@ -185,6 +190,44 @@ describe("Slice 017 confirmation policy and analytics", () => {
     expect(surface.confirmSubmission).not.toHaveBeenCalled();
     expect(events.events.filter((event) => event.name === "SUBMISSION_REQUESTED"))
       .toHaveLength(0);
+  });
+
+  it("hydrates a persisted wallet submission as submitted and never offers rebroadcast on reload", async () => {
+    const transactionHash = `0x${"9".repeat(64)}`;
+    const walletRequest = vi.fn();
+    Object.defineProperty(window, "ethereum", {
+      configurable: true,
+      value: { request: walletRequest },
+    });
+    const surface = services({
+      mode: "wallet",
+      request: "completed",
+      evidence: { transactionHash },
+    });
+
+    await renderDecision({ surface });
+    expect(
+      screen.getByRole("img", { name: /request: submitted/i }),
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole("region", { name: /run evidence/i })).getByText(
+        "0x999999…99999999",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /confirm/i }),
+    ).not.toBeInTheDocument();
+    expect(surface.confirmSubmission).not.toHaveBeenCalled();
+    expect(walletRequest).not.toHaveBeenCalled();
+
+    cleanup();
+    await renderDecision({ surface });
+    expect(
+      screen.queryByRole("button", { name: /confirm/i }),
+    ).not.toBeInTheDocument();
+    expect(surface.hydrateRun).toHaveBeenCalledTimes(2);
+    expect(surface.confirmSubmission).not.toHaveBeenCalled();
+    expect(walletRequest).not.toHaveBeenCalled();
   });
 
   it.each([
