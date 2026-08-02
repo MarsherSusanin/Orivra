@@ -23,5 +23,7 @@ ADR фиксирует архитектурное решение, которое
 | [0018](0018-explicit-submission-confirmation.md) | Explicit confirmation как единственная граница wallet/relayer/replay submission |
 | [0019](0019-journal-derived-run-recovery.md) | Restart-safe recovery выводится из append-only journal и persisted command queue |
 | [0020](0020-persisted-consumer-lab-report.md) | Consumer Lab выводится из persisted consumer evidence и exact safe artifact bytes |
+| [0021](0021-evidence-receipt-and-secure-handoff.md) | Evidence receipt выводится из canonical bundle; share handoff использует только URL fragment |
+| [0022](0022-local-product-qa-report.md) | Локальная аналитика экспортирует aggregate-only deterministic QA/CI report |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

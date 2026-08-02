@@ -14,7 +14,9 @@ Proofline can measure whether the product journey succeeds without adding an ext
 
 ### Reporting 021B
 
-- Deterministic funnel reducer and exportable QA/CI report.
+- Strict aggregate-only `ProductQaReportV1` with deterministic canonical bytes.
+- Retry- and repeated-journey-aware funnel reducer with explicit invalid-session accounting.
+- Non-throwing local export for QA/CI; no raw events, session identifiers or timestamps.
 - Corrupt local state fails closed and analytics failure never blocks the product flow.
 
 ## Frozen privacy contract
@@ -30,8 +32,8 @@ Proofline can measure whether the product journey succeeds without adding an ext
 - Component tests prove one event per action across rerenders and Strict Mode.
 - Queue tests cover bounds, corruption, storage denial, and stable export bytes.
 - Funnel tests cover partial, resumed, failed, duplicated, and complete sessions.
+- Property tests cover retries, repeated/interleaved journeys and byte determinism.
 
 ## Risk class
 
 Privacy-sensitive local telemetry. No production network or persistence migration.
-
