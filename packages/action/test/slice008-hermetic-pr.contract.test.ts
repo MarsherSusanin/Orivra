@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Web2JsonManifestV1Schema } from "@proofline/contracts";
 import {
   makeBundleInput,
   validManifest,
@@ -123,6 +124,66 @@ describe("Slice 008 local pull-request replay", () => {
       client.replayManifest("proofline.manifest.json"),
     ).rejects.toThrow(/manifest|match/i);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("accepts a local replay manifest whose query maps have different insertion order", async () => {
+    const bundle = localBundle();
+    const serialized = canonicalSerializeProofBundle(bundle);
+    const reorderedManifest = {
+      ...bundle.manifest,
+      request: {
+        ...bundle.manifest.request,
+        query: {
+          window: bundle.manifest.request.query.window,
+          currency: bundle.manifest.request.query.currency,
+        },
+      },
+      consumer: {
+        ...bundle.manifest.consumer,
+        expectedQuery: {
+          source: bundle.manifest.consumer.expectedQuery.source,
+          currency: bundle.manifest.consumer.expectedQuery.currency,
+        },
+      },
+    };
+    expect(Web2JsonManifestV1Schema.parse(reorderedManifest)).toEqual(
+      Web2JsonManifestV1Schema.parse(bundle.manifest),
+    );
+    expect(JSON.stringify(reorderedManifest)).not.toBe(
+      JSON.stringify(bundle.manifest),
+    );
+    const fetch = vi.fn(async () => {
+      throw new Error("local replay must not perform network or broadcast I/O");
+    });
+    const sleep = vi.fn();
+    const files = {
+      readText: vi.fn(async (path: string) =>
+        path.endsWith(".manifest.json")
+          ? JSON.stringify(reorderedManifest)
+          : serialized,
+      ),
+    };
+    const client = createPersistedActionRunClient({
+      environment: {
+        GITHUB_EVENT_NAME: "pull_request",
+        PROOFLINE_REPLAY_BUNDLE_PATH: "fixtures/proofline.bundle.json",
+      },
+      fetch,
+      clock: { now: () => 1_000, sleep },
+      files,
+    });
+
+    await expect(
+      client.replayManifest("proofline.manifest.json"),
+    ).resolves.toMatchObject({
+      runId: bundle.runId,
+      checksum: bundle.checksum,
+      byteIdentical: true,
+      localReplay: true,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
+    expect(files.readText).toHaveBeenCalledTimes(2);
   });
 });
 
