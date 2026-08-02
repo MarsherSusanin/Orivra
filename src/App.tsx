@@ -726,6 +726,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
                     isProjectAccess &&
                     !hydratedRun.terminal &&
                     hydratedRun.stages.preflight === "completed" &&
+                    hydratedRun.stages.request === "pending" &&
                     preflightReportState.report.verdict !== "blocked" &&
                     Boolean(servicePort.confirmSubmission)
                   }
