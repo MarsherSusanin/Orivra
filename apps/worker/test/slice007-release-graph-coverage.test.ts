@@ -185,7 +185,7 @@ describe("Slice 007 replay command graph coverage", () => {
         { kind: "preflight-evidence" },
         { kind: "preflight-report-v1" },
       ],
-      nextCommands: [{ kind: "APPLY_REPLAY_EVIDENCE" }],
+      nextCommands: [],
     });
     fixture.state.events = appendRunEvents(
       fixture.state.events,
@@ -280,7 +280,7 @@ describe("Slice 007 replay command graph coverage", () => {
     );
     expect(resumedPreflight).not.toHaveProperty("events");
     expect(resumedPreflight).toMatchObject({
-      nextCommands: [{ kind: "APPLY_REPLAY_EVIDENCE" }],
+      nextCommands: [],
     });
     const resumedApply = await fixture.handlers.APPLY_REPLAY_EVIDENCE(
       command("APPLY_REPLAY_EVIDENCE"),

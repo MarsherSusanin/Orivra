@@ -47,7 +47,18 @@ function createHarness() {
       nextCursor: "eyJ1cGRhdGVkQXQiOiIyMDI2LTA4LTAyIn0",
     }),
     listEvents: vi.fn().mockResolvedValue({ events: [], nextAfter: 0 }),
-    createSubmission: vi.fn().mockResolvedValue({ mode: "wallet", transaction: {} }),
+    createSubmission: vi.fn().mockResolvedValue({
+      version: "1",
+      runId,
+      mode: "wallet",
+      effectOwner: "wallet",
+      transaction: {
+        chainId: "0x72",
+        to: "0x3333333333333333333333333333333333333333",
+        data: "0xfeedcafe",
+        value: "0x3039",
+      },
+    }),
     attachTransaction: vi.fn().mockResolvedValue({ accepted: true }),
     verifyConsumer: vi.fn().mockResolvedValue({ accepted: true }),
     generateConsumer: vi.fn().mockResolvedValue({ artifactId: "artifact_safe" }),
@@ -166,7 +177,12 @@ describe("Proofline v1 API routing", () => {
     const response = await harness.api.fetch(
       jsonRequest(path, {
         method,
-        body: method === "POST" ? {} : undefined,
+        body:
+          method !== "POST"
+            ? undefined
+            : serviceMethod === "createSubmission"
+              ? { mode: "wallet" }
+              : {},
         idempotencyKey: method === "POST" ? "command-idem" : undefined,
       }),
     );

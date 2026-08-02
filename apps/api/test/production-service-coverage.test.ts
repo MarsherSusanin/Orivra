@@ -242,14 +242,20 @@ describe("production service submission and command intent coverage", () => {
           project_id: PROJECT_ID,
           manifest:
             selectedRunId === WALLET_RUN_ID ? validManifest : relayerManifest,
+          projection: { stages: { preflight: "completed" } },
         }]);
       }
       if (/SELECT project_id, run_id, idempotency_key, kind, payload/i.test(text)) {
-        const row = commands.get(String(values[1]));
+        const row = /idempotency_key\s*=\s*\$2/i.test(text)
+          ? commands.get(String(values[1]))
+          : [...commands.values()].find(
+              (command) => command.run_id === values[0],
+            );
         return row ? result([row]) : result([], 0);
       }
       if (/INSERT INTO proofline_private\.run_commands/i.test(text)) {
         const row = {
+          id: values[0],
           project_id: values[1],
           run_id: values[2],
           idempotency_key: values[3],
@@ -264,20 +270,22 @@ describe("production service submission and command intent coverage", () => {
     const production = service({ query });
     const base = { runId: RUN_ID, projectId: PROJECT_ID };
 
-    await expect(
-      production.createSubmission({
-        ...base,
-        mode: "relayer",
-        idempotencyKey: "submit-1",
-      }),
-    ).resolves.toEqual({ accepted: true, runId: RUN_ID });
-    await expect(
-      production.createSubmission({
-        ...base,
-        mode: "relayer",
-        idempotencyKey: "submit-1",
-      }),
-    ).resolves.toEqual({ accepted: true, runId: RUN_ID });
+    const relayerContext = {
+      ...base,
+      mode: "relayer" as const,
+      idempotencyKey: "submit-1",
+    };
+    const acceptedRelayer = await production.createSubmission(relayerContext);
+    expect(acceptedRelayer).toMatchObject({
+      version: "1",
+      runId: RUN_ID,
+      mode: "relayer",
+      effectOwner: "worker",
+      commandId: expect.any(String),
+    });
+    await expect(production.createSubmission(relayerContext)).resolves.toEqual(
+      acceptedRelayer,
+    );
     await production.attachTransaction({
       ...base,
       runId: WALLET_RUN_ID,
@@ -364,7 +372,10 @@ describe("production service submission and command intent coverage", () => {
     const production = service({
       query: vi.fn(async () =>
         result([{
+          id: RUN_ID,
+          project_id: PROJECT_ID,
           manifest: validManifest,
+          projection: { stages: { preflight: "completed" } },
           canonical_bytes: Buffer.from(JSON.stringify(evidence)),
         }]),
       ),
@@ -374,6 +385,7 @@ describe("production service submission and command intent coverage", () => {
         runId: RUN_ID,
         projectId: PROJECT_ID,
         mode: "wallet",
+        idempotencyKey: `invalid-wallet-${_label}`,
       }),
     ).rejects.toMatchObject({ status: 409 });
   });
@@ -383,7 +395,10 @@ describe("production service submission and command intent coverage", () => {
       query: vi.fn(async () =>
         result([
           {
+            id: RUN_ID,
+            project_id: PROJECT_ID,
             manifest: validManifest,
+            projection: { stages: { preflight: "completed" } },
             canonical_bytes: Buffer.from(
               JSON.stringify({
                 network: { resolvedContracts: { FdcHub: FDC_HUB } },
@@ -396,11 +411,27 @@ describe("production service submission and command intent coverage", () => {
       ),
     });
     await expect(
-      nested.createSubmission({ runId: RUN_ID, projectId: PROJECT_ID, mode: "wallet" }),
-    ).resolves.toMatchObject({ transaction: { chainId: "0x72", to: FDC_HUB } });
+      nested.createSubmission({
+        runId: RUN_ID,
+        projectId: PROJECT_ID,
+        mode: "wallet",
+        idempotencyKey: "nested-wallet",
+      }),
+    ).resolves.toMatchObject({
+      version: "1",
+      runId: RUN_ID,
+      mode: "wallet",
+      effectOwner: "wallet",
+      transaction: { chainId: "0x72", to: FDC_HUB },
+    });
     const missing = service({ query: vi.fn(async () => result([], 0)) });
     await expect(
-      missing.createSubmission({ runId: RUN_ID, projectId: PROJECT_ID, mode: "wallet" }),
+      missing.createSubmission({
+        runId: RUN_ID,
+        projectId: PROJECT_ID,
+        mode: "wallet",
+        idempotencyKey: "missing-wallet",
+      }),
     ).rejects.toMatchObject({ status: 404 });
   });
 });

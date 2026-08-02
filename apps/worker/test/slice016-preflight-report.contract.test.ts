@@ -288,7 +288,7 @@ describe("Slice 016A worker preflight artifact boundary", () => {
     }
   });
 
-  it("atomically returns compact acceptance, one public report, private evidence and the authorized child", async () => {
+  it("atomically returns compact acceptance, one public report and private evidence without a submission child", async () => {
     const relayerManifest = {
       ...exactTrustManifest,
       submission: { ...exactTrustManifest.submission, mode: "relayer" as const },
@@ -345,14 +345,7 @@ describe("Slice 016A worker preflight artifact boundary", () => {
         },
       },
     });
-    expect(outcome.nextCommands).toEqual([
-      expect.objectContaining({
-        projectId: PROJECT_ID,
-        runId: RUN_ID,
-        kind: "SUBMIT_RELAYER",
-        idempotencyKey: `${RUN_ID}:submit_relayer`,
-      }),
-    ]);
+    expect(outcome.nextCommands).toEqual([]);
   });
 
   it("persists a blocked public report with terminal journal evidence and no private or submission artifact", async () => {

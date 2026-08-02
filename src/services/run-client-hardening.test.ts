@@ -150,10 +150,18 @@ describe("run client storage and response hardening", () => {
     expect(String(failure)).not.toContain(privateHex);
   });
 
-  it("supports both direct and nested wallet transaction responses", async () => {
+  it("accepts only the strict versioned wallet transaction response", async () => {
     const fetch = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse(transaction, 202))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          version: "1",
+          runId: "run_1",
+          mode: "wallet",
+          effectOwner: "wallet",
+          transaction,
+        }, 202),
+      )
       .mockResolvedValueOnce(
         jsonResponse({ mode: "wallet", transaction }, 202),
       );
@@ -162,9 +170,10 @@ describe("run client storage and response hardening", () => {
     await expect(client.prepareSubmission("run_1", "submit-1")).resolves.toEqual(
       transaction,
     );
-    await expect(client.prepareSubmission("run_1", "submit-2")).resolves.toEqual(
-      transaction,
-    );
+    await expect(client.prepareSubmission("run_1", "submit-2")).rejects.toMatchObject({
+      status: 502,
+      code: "SUBMISSION_RESPONSE_INVALID",
+    });
     expect(new Headers(fetch.mock.calls[1][1]?.headers).get("idempotency-key")).toBe(
       "submit-2",
     );

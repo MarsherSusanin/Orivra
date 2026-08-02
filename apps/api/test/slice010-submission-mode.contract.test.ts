@@ -71,6 +71,7 @@ function harness(mode: SubmissionMode) {
       }
       if (/INSERT INTO proofline_private\.run_commands/i.test(text)) {
         const row = {
+          id: values[0],
           project_id: values[1],
           run_id: values[2],
           idempotency_key: values[3],
@@ -182,8 +183,19 @@ describe("Slice 010 API submission authority", () => {
                 mode,
               });
 
-      await expect(first()).resolves.toEqual({ accepted: true, runId: RUN_ID });
-      await expect(first()).resolves.toEqual({ accepted: true, runId: RUN_ID });
+      const accepted = await first();
+      if (mode === "wallet") {
+        expect(accepted).toEqual({ accepted: true, runId: RUN_ID });
+      } else {
+        expect(accepted).toMatchObject({
+          version: "1",
+          runId: RUN_ID,
+          mode: "relayer",
+          effectOwner: "worker",
+          commandId: expect.any(String),
+        });
+      }
+      await expect(first()).resolves.toEqual(accepted);
       expect(fixture.commands).toHaveLength(1);
     },
   );

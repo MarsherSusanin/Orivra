@@ -27,8 +27,18 @@ function createPool(mode: "wallet" | "relayer" = "wallet") {
     submission: { ...validManifest.submission, mode },
   };
   const runs = new Map<string, Row>([
-    [runA, { id: runA, project_id: projectA, manifest: persistedManifest }],
-    [runB, { id: runB, project_id: projectA, manifest: persistedManifest }],
+    [runA, {
+      id: runA,
+      project_id: projectA,
+      manifest: persistedManifest,
+      projection: { stages: { preflight: "completed" } },
+    }],
+    [runB, {
+      id: runB,
+      project_id: projectA,
+      manifest: persistedManifest,
+      projection: { stages: { preflight: "completed" } },
+    }],
   ]);
   const commands = new Map<string, Row>();
   const shares: Row[] = [];
@@ -77,6 +87,7 @@ function createPool(mode: "wallet" | "relayer" = "wallet") {
       const key = `${String(projectId)}:${String(idempotencyKey)}`;
       if (commands.has(key)) return { rowCount: 0, rows: [] };
       const row = {
+        id: values[0],
         project_id: projectId,
         run_id: runId,
         idempotency_key: idempotencyKey,
@@ -124,7 +135,10 @@ describe("Slice 003 production wallet preparation", () => {
     });
 
     expect(result).toEqual({
+      version: "1",
+      runId: runA,
       mode: "wallet",
+      effectOwner: "wallet",
       transaction: {
         chainId: "0x72",
         to: fdcHub,
@@ -175,7 +189,13 @@ describe("Slice 003 production ownership and idempotency intent", () => {
         idempotencyKey: "submission-intent-1",
         mode: "relayer",
       }),
-    ).resolves.toMatchObject({ accepted: true, runId: runA });
+    ).resolves.toMatchObject({
+      version: "1",
+      runId: runA,
+      mode: "relayer",
+      effectOwner: "worker",
+      commandId: expect.any(String),
+    });
 
     await expect(
       productionService.createSubmission({

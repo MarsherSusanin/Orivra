@@ -258,10 +258,10 @@ describe("Slice 003 production command composition", () => {
     const fixture = createFixture();
 
     const preflight = await fixture.execute("RUN_PREFLIGHT");
-    expect(preflight.nextCommands).toEqual([
-      expect.objectContaining({ kind: "SUBMIT_RELAYER" }),
-    ]);
+    expect(preflight.nextCommands).toEqual([]);
 
+    // Explicit API confirmation is the only boundary that may enqueue this
+    // command; the handler is invoked directly here to continue the pipeline.
     const prepared = await fixture.execute("SUBMIT_RELAYER", {
       idempotencyKey: "submission-1",
     });
