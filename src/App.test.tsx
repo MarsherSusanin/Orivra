@@ -75,7 +75,8 @@ describe("Proofline Run Cockpit", () => {
     await user.click(await screen.findByRole("button", { name: /verify consumer/i }));
 
     const lab = screen.getByRole("dialog", { name: "Consumer verification" });
-    expect(within(lab).getByDisplayValue("0x71C4...9A2E")).toBeVisible();
+    expect(within(lab).getByText("Canonical vulnerable consumer")).toBeVisible();
+    expect(lab).not.toHaveTextContent("0x71C4...9A2E");
 
     await user.click(within(lab).getByRole("button", { name: /run verification/i }));
 

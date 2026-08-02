@@ -1505,6 +1505,9 @@ export function createProductionCommandHandlers(input: {
           }),
           artifact(context.runId, "consumer-evidence", {
             version: "1",
+            consumer: source.verification.consumerVerified
+              ? "canonical-safe"
+              : "canonical-vulnerable",
             passed: source.verification.consumerVerified,
             diagnostics: source.verification.diagnostics,
             replaySourceChecksum: source.checksum,
@@ -2020,6 +2023,7 @@ export function createProductionCommandHandlers(input: {
         artifacts: [
           artifact(context.runId, "consumer-evidence", {
             version: "1",
+            consumer,
             passed: result.passed,
             diagnostics: diagnostics.data,
           }),

@@ -799,6 +799,63 @@ export const DiagnosticV1Schema = z
 
 export type DiagnosticV1 = z.infer<typeof DiagnosticV1Schema>;
 
+const ConsumerInvariantEvidenceV1Schema = z
+  .object({
+    invariant: z.enum(["scheme", "host", "path", "query"]),
+    expected: z.string(),
+    observed: z.string(),
+    enforced: z.boolean(),
+    passed: z.boolean(),
+  })
+  .strict();
+
+export const ConsumerLabReportV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    runId: NonEmptyIdSchema,
+    statement: z.literal("Valid proof ≠ trusted URL"),
+    proofValid: z.boolean(),
+    consumerIdentity: z.enum(["canonical-vulnerable", "canonical-safe"]),
+    passed: z.boolean(),
+    checks: z.tuple([
+      ConsumerInvariantEvidenceV1Schema,
+      ConsumerInvariantEvidenceV1Schema,
+      ConsumerInvariantEvidenceV1Schema,
+      ConsumerInvariantEvidenceV1Schema,
+    ]),
+    diagnostics: z.array(DiagnosticV1Schema),
+    safeConsumer: z
+      .object({
+        identity: z.literal("canonical-safe"),
+        contractName: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+        compilerVersion: z.string().regex(/^solc-\d+\.\d+\.\d+$/),
+        compileStatus: z.enum(["passed", "failed", "not-run"]),
+        sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+        source: z.string().min(1),
+        diff: z.string().startsWith("--- canonical-vulnerable\n+++ "),
+      })
+      .strict(),
+    verdict: z
+      .object({
+        state: z.enum(["safe-to-integrate", "needs-fixes"]),
+        missingChecks: z.number().int().min(0).max(4),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((report, context) => {
+    const expected = ["scheme", "host", "path", "query"];
+    if (report.checks.some((check, index) => check.invariant !== expected[index])) {
+      context.addIssue({ code: "custom", path: ["checks"], message: "Invariant rows must be ordered scheme, host, path, query" });
+    }
+    if (report.verdict.state === "safe-to-integrate" &&
+      (report.verdict.missingChecks !== 0 || report.safeConsumer.compileStatus !== "passed" || report.checks.some((check) => !check.enforced || !check.passed))) {
+      context.addIssue({ code: "custom", path: ["verdict"], message: "Safe verdict requires four enforced checks and a passed compile" });
+    }
+  });
+
+export type ConsumerLabReportV1 = z.infer<typeof ConsumerLabReportV1Schema>;
+
 export const NormalizedFdcErrorSchema = z
   .object({
     version: VersionV1Schema,

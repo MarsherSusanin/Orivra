@@ -62,6 +62,7 @@ function createHarness() {
     attachTransaction: vi.fn().mockResolvedValue({ accepted: true }),
     verifyConsumer: vi.fn().mockResolvedValue({ accepted: true }),
     generateConsumer: vi.fn().mockResolvedValue({ artifactId: "artifact_safe" }),
+    getConsumerLabReport: vi.fn().mockResolvedValue({ version: "1", runId }),
     getBundle: vi.fn().mockResolvedValue({ version: "1", runId, checksum: `sha256:${"a".repeat(64)}` }),
     replay: vi.fn().mockResolvedValue({ runId: "run_replay", byteIdentical: true }),
     createShare: vi.fn().mockResolvedValue({
@@ -85,6 +86,14 @@ function createHarness() {
 }
 
 describe("Proofline v1 API routing", () => {
+  it("serves Consumer Lab evidence to project and run-scoped share readers", async () => {
+    const { api, service } = createHarness();
+    for (const token of [projectToken, shareToken]) {
+      const response = await api.fetch(jsonRequest(`/v1/runs/${runId}/consumer-lab`, { token }));
+      expect(response.status).toBe(200);
+    }
+    expect(service.getConsumerLabReport).toHaveBeenCalledTimes(2);
+  });
   let harness: ReturnType<typeof createHarness>;
 
   beforeEach(() => {

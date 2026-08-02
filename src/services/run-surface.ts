@@ -9,6 +9,7 @@ import {
   RunRecoveryV1Schema,
   Web2JsonManifestV1Schema,
   type CreateRunResultV1,
+  type ConsumerLabReportV1,
   type PreflightReportV1,
   type RunRecoveryV1,
   type RunListPageV1,
@@ -107,6 +108,7 @@ export type HydratedRunView = {
 export interface RunSurfaceServices {
   createRun?(context: CreateRunContext): Promise<CreateRunResultV1>;
   getPreflightReport?(context: RunServiceContext): Promise<PreflightReportV1>;
+  getConsumerLabReport?(context: RunServiceContext): Promise<ConsumerLabReportV1>;
   confirmSubmission?(context: ConfirmSubmissionContext): Promise<
     SubmissionResponseV1 | { transactionHash: string }
   >;
@@ -520,6 +522,11 @@ export function createLiveSurfaceServices(input: {
     async getPreflightReport(context) {
       assertReadContext(context);
       return client.getPreflightReport(context.runId);
+    },
+
+    async getConsumerLabReport(context) {
+      assertReadContext(context);
+      return client.getConsumerLabReport(context.runId);
     },
 
     async confirmSubmission(context) {

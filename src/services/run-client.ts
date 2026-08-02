@@ -1,4 +1,5 @@
 import type {
+  ConsumerLabReportV1,
   CreateRunResultV1,
   PreflightReportV1,
   RunListPageV1,
@@ -7,6 +8,7 @@ import type {
   WalletTransactionV1,
 } from "../../packages/contracts/src";
 import {
+  ConsumerLabReportV1Schema,
   CreateRunResultV1Schema,
   PreflightReportV1Schema,
   SubmissionResponseV1Schema,
@@ -323,6 +325,18 @@ export function createRunClient(input: {
         throw new ProoflineClientError(
           "Proofline returned an invalid preflight report contract",
           { status: 502, code: "PREFLIGHT_REPORT_INVALID" },
+        );
+      }
+      return parsed.data;
+    },
+
+    async getConsumerLabReport(runId: string): Promise<ConsumerLabReportV1> {
+      const result = await request<unknown>(`/runs/${encodeURIComponent(runId)}/consumer-lab`);
+      const parsed = ConsumerLabReportV1Schema.safeParse(result);
+      if (!parsed.success || parsed.data.runId !== runId) {
+        throw new ProoflineClientError(
+          "Proofline returned an invalid Consumer Lab report contract",
+          { status: 502, code: "CONSUMER_LAB_INVALID" },
         );
       }
       return parsed.data;

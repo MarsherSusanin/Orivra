@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
+  ConsumerLabReportV1Schema,
   DiagnosticV1Schema,
   PreflightReportV1Schema,
   RunEventV1Schema,
@@ -976,6 +977,98 @@ export function createProductionProoflineService(input: {
           contractName,
         }),
       };
+    },
+
+    async getConsumerLabReport(context: Record<string, unknown>) {
+      const runId = requireRunId(context.runId);
+      const result = await input.pool.query(
+        `SELECT run.manifest,
+                consumer.canonical_bytes AS consumer_bytes,
+                safe.canonical_bytes AS safe_bytes,
+                safe.sha256 AS safe_sha256,
+                safe.metadata AS safe_metadata
+         FROM proofline_private.runs AS run
+         LEFT JOIN LATERAL (
+           SELECT canonical_bytes FROM proofline_private.run_artifacts
+           WHERE run_id = run.id AND kind = 'consumer-evidence'
+           ORDER BY created_at DESC LIMIT 1
+         ) AS consumer ON true
+         LEFT JOIN LATERAL (
+           SELECT canonical_bytes, sha256, metadata
+           FROM proofline_private.run_artifacts
+           WHERE run_id = run.id AND kind = 'safe-consumer'
+           ORDER BY created_at DESC LIMIT 1
+         ) AS safe ON true
+         WHERE run.id = $1 AND run.project_id = $2`,
+        [runId, context.projectId],
+      );
+      if (!result.rowCount) throw Object.assign(new Error("Run not found"), { status: 404 });
+      const row = result.rows[0];
+      if (!row.consumer_bytes || !row.safe_bytes || !row.safe_sha256) {
+        throw Object.assign(new Error("Consumer Lab evidence is not available"), {
+          status: 409, code: "CONSUMER_LAB_PENDING",
+        });
+      }
+      try {
+        const manifest = Web2JsonManifestV1Schema.parse(row.manifest);
+        const evidence = JSON.parse(Buffer.from(row.consumer_bytes).toString("utf8")) as Record<string, unknown>;
+        const diagnostics = DiagnosticV1Schema.array().parse(evidence.diagnostics);
+        const passed = evidence.passed === true;
+        const firstEvidence = diagnostics[0]?.evidence ?? {};
+        const identity = firstEvidence.consumer === "canonical-safe" || evidence.consumer === "canonical-safe"
+          ? "canonical-safe" as const
+          : passed ? "canonical-safe" as const : "canonical-vulnerable" as const;
+        const requestUrl = typeof firstEvidence.requestUrl === "string"
+          ? firstEvidence.requestUrl : manifest.request.url;
+        const observedUrl = new URL(requestUrl);
+        const missing = new Set(
+          Array.isArray(firstEvidence.missingChecks)
+            ? firstEvidence.missingChecks.filter((value): value is string => typeof value === "string")
+            : [],
+        );
+        const expectedQuery = new URLSearchParams(manifest.consumer.expectedQuery).toString();
+        const observedQuery = observedUrl.searchParams.toString();
+        const facts = [
+          ["scheme", manifest.consumer.expectedScheme, observedUrl.protocol.replace(/:$/, "")],
+          ["host", manifest.consumer.expectedHost, observedUrl.hostname],
+          ["path", manifest.consumer.expectedPathPrefix, observedUrl.pathname],
+          ["query", expectedQuery, observedQuery],
+        ] as const;
+        const checks = facts.map(([invariant, expected, observed]) => ({
+          invariant, expected, observed,
+          enforced: !missing.has(invariant) && (identity === "canonical-safe" || passed),
+          passed: !missing.has(invariant) && (identity === "canonical-safe" || passed),
+        })) as [{ invariant: "scheme"; expected: string; observed: string; enforced: boolean; passed: boolean }, { invariant: "host"; expected: string; observed: string; enforced: boolean; passed: boolean }, { invariant: "path"; expected: string; observed: string; enforced: boolean; passed: boolean }, { invariant: "query"; expected: string; observed: string; enforced: boolean; passed: boolean }];
+        const sourceBytes = Buffer.from(row.safe_bytes);
+        const storedHash = Buffer.from(row.safe_sha256).toString("hex");
+        const actualHash = createHash("sha256").update(sourceBytes).digest("hex");
+        if (storedHash !== actualHash) throw new Error("Safe consumer checksum mismatch");
+        const source = sourceBytes.toString("utf8");
+        const contractName = /contract\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(source)?.[1];
+        if (!contractName) throw new Error("Safe consumer contract name is missing");
+        const compilerVersion = typeof row.safe_metadata?.compiler === "string"
+          ? row.safe_metadata.compiler : "solc-0.8.36";
+        const missingChecks = checks.filter((check) => !check.enforced || !check.passed).length;
+        const diff = `--- canonical-vulnerable\n+++ ${contractName}\n@@ URL trust invariants @@\n- proof verification only\n+ requireScheme\n+ requireHost\n+ requirePathPrefix\n+ requireQueryValue\n`;
+        return ConsumerLabReportV1Schema.parse({
+          version: "1", runId, statement: "Valid proof ≠ trusted URL",
+          proofValid: true, consumerIdentity: identity, passed,
+          checks, diagnostics,
+          safeConsumer: {
+            identity: "canonical-safe", contractName, compilerVersion,
+            compileStatus: "passed", sha256: `sha256:${actualHash}`, source, diff,
+          },
+          verdict: {
+            state: missingChecks === 0 ? "safe-to-integrate" : "needs-fixes",
+            missingChecks,
+          },
+        });
+      } catch (cause) {
+        if (cause && typeof cause === "object" && "status" in cause) throw cause;
+        throw Object.assign(new Error("Persisted Consumer Lab evidence is invalid"), {
+          status: 500, code: "CONSUMER_LAB_INVALID",
+        });
+      }
     },
 
     async getBundle(context: Record<string, unknown>) {

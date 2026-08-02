@@ -27,11 +27,14 @@ describe("Slice 019 ConsumerLabReportV1", () => {
   it("accepts exactly four ordered invariant rows and exact artifact evidence", () => {
     expect(ConsumerLabReportV1Schema.parse(consumerLabReport)).toEqual(consumerLabReport);
     expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, checks: consumerLabReport.checks.slice(1) }).success).toBe(false);
+    expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, checks: [consumerLabReport.checks[1], consumerLabReport.checks[0], consumerLabReport.checks[2], consumerLabReport.checks[3]] }).success).toBe(false);
     expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, safeConsumer: { ...consumerLabReport.safeConsumer, privateKey: "secret" } }).success).toBe(false);
   });
 
   it("requires Safe to integrate to have no missing checks and a passed compile", () => {
     expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, verdict: { state: "safe-to-integrate", missingChecks: 4 } }).success).toBe(false);
     expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, safeConsumer: { ...consumerLabReport.safeConsumer, compileStatus: "not-run" }, verdict: { state: "safe-to-integrate", missingChecks: 0 } }).success).toBe(false);
+    const safeChecks = consumerLabReport.checks.map((check) => ({ ...check, enforced: true, passed: true })) as typeof consumerLabReport.checks;
+    expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, consumerIdentity: "canonical-safe", passed: true, checks: safeChecks, diagnostics: [], verdict: { state: "safe-to-integrate", missingChecks: 0 } }).success).toBe(true);
   });
 });

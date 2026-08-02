@@ -1,5 +1,6 @@
 import { Check, Code, ShieldCheck, SpinnerGap, Warning, X } from "@phosphor-icons/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ConsumerLabReportV1 } from "../../packages/contracts/src";
 import type {
   ConsumerVerificationResult,
   GeneratedConsumer,
@@ -38,6 +39,7 @@ export function VerificationDialog({
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<GeneratedConsumer | null>(null);
+  const [report, setReport] = useState<ConsumerLabReportV1 | null>(null);
 
   useLayoutEffect(() => {
     closeRef.current?.focus();
@@ -112,6 +114,9 @@ export function VerificationDialog({
     try {
       const consumer = await services.generateConsumer(context);
       setGenerated(consumer);
+      if (services.getConsumerLabReport) {
+        setReport(await services.getConsumerLabReport(context));
+      }
       onProductEvent?.({
         name: "SAFE_CODEGEN_GENERATED",
         metadata: { target: "solidity" },
@@ -138,10 +143,9 @@ export function VerificationDialog({
           <button ref={closeRef} className="close-button" type="button" onClick={onClose} aria-label="Close consumer verification"><X size={22} aria-hidden="true" /></button>
         </header>
         <div className="dialog-body">
-          <label className="field-label" htmlFor="consumer-address">Consumer contract</label>
-          <div className="address-field">
+          <div className="address-field" aria-label="Consumer identity">
             <ShieldCheck size={20} aria-hidden="true" />
-            <input id="consumer-address" value="0x71C4...9A2E" readOnly tabIndex={-1} />
+            <strong>Canonical vulnerable consumer</strong>
             <span>Coston2</span>
           </div>
           {status === "idle" ? (
@@ -184,6 +188,33 @@ export function VerificationDialog({
                 <button ref={resultActionRef} className="dialog-primary" type="button" disabled={generating} onClick={generateConsumer}>
                   {generating ? "Generating safe consumer…" : "Generate safe consumer"}<Code size={21} weight="bold" aria-hidden="true" />
                 </button>
+              ) : report ? (
+                <div className="consumer-lab-report">
+                  <div className="consumer-lab-statement">
+                    <strong>{report.statement}</strong>
+                    <span>{report.verdict.state === "safe-to-integrate" ? "Safe to integrate" : `Still missing ${report.verdict.missingChecks} checks`}</span>
+                  </div>
+                  <ul className="consumer-matrix" aria-label="Consumer URL invariant comparison">
+                    {report.checks.map((check) => (
+                      <li key={check.invariant}>
+                        <strong>{check.invariant}</strong>
+                        <span>Expected <code>{check.expected || "—"}</code></span>
+                        <span>Observed <code>{check.observed || "—"}</code></span>
+                        <span>{check.enforced ? "Enforced" : "Not enforced"}</span>
+                        <span>{check.passed ? "Passed" : "Missing"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="generated-code">
+                    <span><Check size={17} weight="bold" aria-hidden="true" />{report.safeConsumer.contractName} · {report.safeConsumer.compileStatus} · {report.safeConsumer.sha256}</span>
+                    <pre><code>{report.safeConsumer.diff}</code></pre>
+                    <div className="consumer-artifact-actions">
+                      <button type="button" onClick={() => void navigator.clipboard?.writeText(report.safeConsumer.source)}>Copy Solidity</button>
+                      <a download={`${report.safeConsumer.contractName}.sol`} href={`data:text/plain;charset=utf-8,${encodeURIComponent(report.safeConsumer.source)}`}>Download .sol</a>
+                      <button type="button" onClick={generateConsumer}>Verify generated consumer</button>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <div className="generated-code"><span><Check size={17} weight="bold" aria-hidden="true" />Safe consumer generated</span><code>{generated.source}</code></div>
               )}
