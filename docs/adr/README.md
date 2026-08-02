@@ -21,5 +21,6 @@ ADR фиксирует архитектурное решение, которое
 | [0016](0016-public-preflight-report-boundary.md) | Redacted persisted preflight report как public evidence boundary |
 | [0017](0017-persisted-preflight-workbench.md) | Persisted preflight Workbench, URL state и transition analytics |
 | [0018](0018-explicit-submission-confirmation.md) | Explicit confirmation как единственная граница wallet/relayer/replay submission |
+| [0019](0019-journal-derived-run-recovery.md) | Restart-safe recovery выводится из append-only journal и persisted command queue |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.
