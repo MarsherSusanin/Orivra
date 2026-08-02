@@ -5,7 +5,8 @@
 - RED 020A: `9b93e8e`.
 - GREEN 020A: `b106247`.
 - RED 020B: `4f06d62`.
-- GREEN/corrective series: `cf83ad5`, `82d287b`, `a69c444`, `4201d6e`.
+- GREEN/corrective series: `cf83ad5`, `82d287b`, `a69c444`, `4201d6e`,
+  `3dc1e05`, `3fa7279`.
 - Candidate commit and tree are recorded after this evidence document is
   committed. Both independent verifiers must inspect that exact tree.
 
@@ -23,20 +24,25 @@
   Solidity evidence locally before enabling exact-byte downloads.
 - Project access receives one idempotent share action. Share access remains
   read-only and has no verify, codegen, replay or share-creation controls.
+- The configured public Web origin is accepted only as an HTTPS default-port
+  root origin. Generated share links are schema-checked by the API and bound to
+  the expected Web origin again by the browser client.
+- Integration Package requires exact agreement between Consumer Lab and the
+  receipt for both the consumer verdict and canonical diagnostic-code set.
 - Repository-local CLI and GitHub Action instructions match the current package
   layout; no unpublished package name is suggested.
 
 ## Hermetic and coverage evidence
 
 - `npm run typecheck`: PASS.
-- `npm test`: 167 files PASS, 4 infrastructure-conditioned files skipped;
-  1474 tests PASS, 14 skipped.
+- `npm test`: 168 files PASS, 4 infrastructure-conditioned files skipped;
+  1488 tests PASS, 14 skipped.
 - `npm run test:core:coverage`: 356 tests PASS; statements, branches,
   functions and lines all 100%.
-- `npm run test:coverage:backend`: 760 PASS, 14 skipped; 92.09% statements,
-  87.70% branches, 93.00% lines.
-- `npm run test:coverage:web`: 305 PASS; 87.61% statements, 83.57% branches,
-  89.47% lines.
+- `npm run test:coverage:backend`: 770 PASS, 14 skipped; 92.08% statements,
+  87.76% branches, 92.99% lines.
+- `npm run test:coverage:web`: 309 PASS; 87.84% statements, 83.95% branches,
+  89.66% lines.
 - `npm run test:solidity`: 214 PASS.
 - `npm run test:e2e`: 7 PASS, including persisted Consumer Lab handoff and
   exact generated-diff evidence.
@@ -79,6 +85,16 @@ was used.
 The browser pass found and caused correction of a missing hermetic
 `/consumer-lab` read model and incomplete unified-diff evidence before freeze.
 Those corrected paths are now covered by the hermetic E2E suite.
+
+## Independent-verifier corrective wave
+
+The first frozen candidate was not accepted: independent verification found
+that a share reader could still invoke the replay-based bundle control, the
+public origin boundary was too permissive, and contradictory Consumer Lab and
+receipt verdicts were not rejected. Those findings were converted into frozen
+RED contracts in `3dc1e05` and closed in `3fa7279`. The complete matrix above
+was rerun after the production correction; the earlier verifier signatures are
+invalid and are not counted toward release.
 
 ## Scope note
 
