@@ -2,7 +2,24 @@ import { z } from "zod";
 
 const VersionV1Schema = z.literal("1");
 const NonEmptyIdSchema = z.string().trim().min(1);
-const CanonicalUnsignedIntegerSchema = z.string().regex(/^(?:0|[1-9]\d*)$/);
+export const UINT256_MAX_DECIMAL =
+  "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+
+export function isCanonicalUint256Decimal(value: string): boolean {
+  return (
+    /^(?:0|[1-9]\d*)$/.test(value) &&
+    (value.length < UINT256_MAX_DECIMAL.length ||
+      (value.length === UINT256_MAX_DECIMAL.length &&
+        value <= UINT256_MAX_DECIMAL))
+  );
+}
+
+export const CanonicalUint256DecimalSchema = z
+  .string()
+  .refine(
+    isCanonicalUint256Decimal,
+    "Expected a canonical uint256 decimal string",
+  );
 const HexBytesSchema = z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/);
 const Bytes32Schema = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
 const AddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
@@ -114,6 +131,8 @@ const PUBLIC_URL_CREDENTIAL_QUERY_NAMES = new Set([
   "xgoogsecuritytoken",
   "googleaccessid",
   "signature",
+  "sig",
+  "awsaccesskeyid",
   "securitytoken",
 ]);
 
@@ -171,7 +190,32 @@ const Web2JsonRequestV1Schema = z
         "Expected a bounded JSON ABI-parameter descriptor",
       ),
   })
-  .strict();
+  .strict()
+  .superRefine((request, context) => {
+    if (isSafePublicHttpsUrl(request.url)) {
+      const url = new URL(request.url);
+      for (const [name, value] of url.searchParams) {
+        if (!isSafePublicUrlQueryEntry(name, value)) {
+          context.addIssue({
+            code: "custom",
+            path: ["url"],
+            message:
+              "Public Web2Json URLs cannot contain credential query entries",
+          });
+        }
+      }
+    }
+    for (const [name, value] of Object.entries(request.query)) {
+      if (!isSafePublicUrlQueryEntry(name, value)) {
+        context.addIssue({
+          code: "custom",
+          path: ["query", name],
+          message:
+            "Public Web2Json queries cannot contain credential entries",
+        });
+      }
+    }
+  });
 
 const Web2JsonConsumerV1Schema = z
   .object({
@@ -185,7 +229,7 @@ const Web2JsonConsumerV1Schema = z
 const SubmissionV1Schema = z
   .object({
     mode: z.enum(["replay", "wallet", "relayer"]),
-    feeCapWei: CanonicalUnsignedIntegerSchema,
+    feeCapWei: CanonicalUint256DecimalSchema,
   })
   .strict();
 
@@ -404,7 +448,7 @@ const PreflightAbiCompatibilityV1Schema = z
 const PreflightRegistrySnapshotV1Schema = z
   .object({
     chainId: z.literal(114),
-    blockNumber: CanonicalUnsignedIntegerSchema,
+    blockNumber: CanonicalUint256DecimalSchema,
     registryAddress: AddressSchema,
     resolvedContracts: z
       .object({
@@ -419,8 +463,8 @@ const PreflightRegistrySnapshotV1Schema = z
 
 const PreflightFeeV1Schema = z
   .object({
-    quotedWei: CanonicalUnsignedIntegerSchema,
-    capWei: CanonicalUnsignedIntegerSchema,
+    quotedWei: CanonicalUint256DecimalSchema,
+    capWei: CanonicalUint256DecimalSchema,
     withinCap: z.boolean(),
   })
   .strict()
@@ -636,8 +680,8 @@ const DraftFeeCapV1Schema = z
   .string()
   .max(78)
   .refine(
-    (value) => value.length === 0 || /^(?:0|[1-9]\d*)$/.test(value),
-    "Draft fee caps must be empty or canonical unsigned integers",
+    (value) => value.length === 0 || isCanonicalUint256Decimal(value),
+    "Draft fee caps must be empty or canonical uint256 decimal strings",
   );
 
 const DraftQueryRowsV1Schema = z.array(Web2JsonDraftQueryRowV1Schema).max(50);
@@ -769,7 +813,7 @@ export const RunEventV1Schema = z.discriminatedUnion("type", [
       .object({
         canonicalUrl: z.string().url(),
         requestBytes: HexBytesSchema,
-        quotedFeeWei: CanonicalUnsignedIntegerSchema,
+        quotedFeeWei: CanonicalUint256DecimalSchema,
       })
       .strict(),
   ),
@@ -975,10 +1019,12 @@ export type RunListPageV1 = z.infer<typeof RunListPageV1Schema>;
 const NetworkSnapshotV1Schema = z
   .object({
     chainId: z.literal(114),
+    blockNumber: CanonicalUint256DecimalSchema,
     registryAddress: AddressSchema,
     resolvedContracts: z
       .object({
         FdcHub: AddressSchema,
+        FdcRequestFeeConfigurations: AddressSchema,
         FdcVerification: AddressSchema,
         Relay: AddressSchema,
       })
