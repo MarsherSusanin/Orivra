@@ -15,6 +15,7 @@ import {
   validPreflightReport,
 } from "../../../../packages/contracts/test/fixtures";
 import {
+  canonicalizeManifestUrl,
   canonicalSerializeProofBundle,
   createProofBundle,
 } from "@proofline/domain";
@@ -34,13 +35,28 @@ function terminalReplayBundle(persistedManifest?: Record<string, any>) {
   const input = makeBundleInput();
   const manifest = persistedManifest ?? {
     ...input.manifest,
+    consumer: {
+      ...input.manifest.consumer,
+      expectedQuery: {
+        ...input.manifest.consumer.expectedQuery,
+        window: "1h",
+      },
+    },
     submission: { ...input.manifest.submission, mode: "replay" as const },
   };
-  const events = input.events.map((event) =>
-    event.type === "RUN_CREATED"
-      ? { ...event, payload: { manifest } }
-      : event,
-  );
+  const canonicalUrl = canonicalizeManifestUrl(manifest as any);
+  const events = input.events.map((event) => {
+    if (event.type === "RUN_CREATED") {
+      return { ...event, payload: { manifest } };
+    }
+    if (event.type === "PREFLIGHT_ACCEPTED") {
+      return {
+        ...event,
+        payload: { ...event.payload, canonicalUrl },
+      };
+    }
+    return event;
+  });
   return createProofBundle({ ...input, manifest, events });
 }
 
@@ -61,10 +77,13 @@ function boundPreflightReport(source: ReturnType<typeof terminalReplayBundle>) {
     registrySnapshot: {
       ...structuredClone(validPreflightReport.registrySnapshot),
       chainId: source.network.chainId,
+      blockNumber: source.network.blockNumber,
       registryAddress: source.network.registryAddress,
       resolvedContracts: {
         ...structuredClone(validPreflightReport.registrySnapshot.resolvedContracts),
         FdcHub: source.network.resolvedContracts.FdcHub,
+        FdcRequestFeeConfigurations:
+          source.network.resolvedContracts.FdcRequestFeeConfigurations,
         FdcVerification: source.network.resolvedContracts.FdcVerification,
         Relay: source.network.resolvedContracts.Relay,
       },
@@ -125,7 +144,7 @@ describe.runIf(enabled)(
         },
         consumer: {
           ...fixtureManifest.consumer,
-          expectedQuery: { currency: "USD" },
+          expectedQuery: { currency: "USD", source: "primary" },
         },
       });
       await pool.query(
