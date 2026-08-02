@@ -25,4 +25,31 @@ describe("Slice 019 Consumer Lab surface", () => {
     expect(decodeURIComponent(download.getAttribute("href") ?? "")).toContain(consumerLabReport.safeConsumer.source);
     await waitFor(() => expect(services.getConsumerLabReport).toHaveBeenCalledOnce());
   });
+
+  it("uses a singular verdict when exactly one invariant fails", async () => {
+    const user = userEvent.setup();
+    const checks = consumerLabReport.checks.map((check) => ({
+      ...check,
+      enforced: true,
+      passed: check.invariant !== "host",
+    })) as unknown as typeof consumerLabReport.checks;
+    const report = {
+      ...consumerLabReport,
+      consumerIdentity: "canonical-safe" as const,
+      checks,
+      diagnostics: [],
+      verdict: { state: "needs-fixes" as const, missingChecks: 1 },
+    };
+    const services = {
+      verifyConsumer: vi.fn().mockResolvedValue({ summary: "Consumer needs 1 fix", code: "CONSUMER_HOST_MISMATCH", checks: [] }),
+      generateConsumer: vi.fn().mockResolvedValue({ source: report.safeConsumer.source }),
+      getConsumerLabReport: vi.fn().mockResolvedValue(report),
+      exportBundle: vi.fn(), replayBundle: vi.fn(),
+    };
+    render(<VerificationDialog context={{ runId: report.runId, projectToken: `project_${"a".repeat(64)}` }} services={services} onClose={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /run verification/i }));
+    await user.click(await screen.findByRole("button", { name: /generate safe consumer/i }));
+    expect(await screen.findByText("Still missing 1 check")).toBeVisible();
+    expect(screen.queryByText("Still missing 1 checks")).not.toBeInTheDocument();
+  });
 });
