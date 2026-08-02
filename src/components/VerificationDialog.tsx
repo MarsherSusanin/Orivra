@@ -213,7 +213,9 @@ export function VerificationDialog({
                 <div className="consumer-lab-report">
                   <div className="consumer-lab-statement">
                     <strong>{report.statement}</strong>
-                    <span>{report.verdict.state === "safe-to-integrate" ? "Safe to integrate" : `Still missing ${report.verdict.missingChecks} checks`}</span>
+                    <span>{report.verdict.state === "safe-to-integrate"
+                      ? "Safe to integrate"
+                      : `Still missing ${report.verdict.missingChecks} ${report.verdict.missingChecks === 1 ? "check" : "checks"}`}</span>
                   </div>
                   <ul className="consumer-matrix" aria-label="Consumer URL invariant comparison">
                     {report.checks.map((check) => (
