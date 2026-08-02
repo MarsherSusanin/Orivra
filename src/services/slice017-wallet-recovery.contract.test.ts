@@ -234,8 +234,13 @@ describe("Slice 017 wallet broadcast recovery coordinator", () => {
       client,
       recoveryStorage: storage.port,
     })).rejects.toThrow(/user rejected/i);
+    expect(storage.port.setItem).toHaveBeenCalledOnce();
+    const [recoveryKey, marker] = storage.port.setItem.mock.calls[0]!;
+    expect(marker).toBe("wallet-broadcast-pending");
+    expect(storage.port.removeItem).toHaveBeenCalledWith(recoveryKey);
     expect(storage.values.size).toBe(0);
-    expect(storage.port.setItem).not.toHaveBeenCalled();
+    expect([...storage.values.values()]).not.toContain(marker);
+    expect([...storage.values.values()]).not.toContain(TX_HASH);
     expect(client.attachTransaction).not.toHaveBeenCalled();
   });
 });
