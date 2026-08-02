@@ -182,7 +182,7 @@ describe("Slice 018 PostgreSQL recovery journal", () => {
     );
   });
 
-  it("reclaims attempt three after a crash without replaying an already resolved resume", async () => {
+  it("audits an expired attempt-two lease before resuming attempt three", async () => {
     const created = makeRunEvents()[0];
     const scheduled = {
       version: "1", runId: RUN_ID, sequence: 2, commandId: COMMAND,
@@ -219,7 +219,21 @@ describe("Slice 018 PostgreSQL recovery journal", () => {
     await expect(fixture.repository.claimNextCommand()).resolves.toMatchObject({
       command: { id: COMMAND, attempts: 3 },
     });
-    expect(insertedEvents(fixture.client)).toEqual([]);
+    expect(insertedEvents(fixture.client)).toEqual([
+      expect.objectContaining({
+        commandId: COMMAND,
+        type: "STAGE_RETRY_SCHEDULED",
+        payload: expect.objectContaining({
+          attempt: 2,
+          error: expect.objectContaining({ code: "COMMAND_LEASE_EXPIRED" }),
+        }),
+      }),
+      expect.objectContaining({
+        commandId: COMMAND,
+        type: "RUN_RESUMED",
+        payload: expect.objectContaining({ attempt: 3, resumeFrom: "preflight" }),
+      }),
+    ]);
     expect(fixture.client.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
   });
 });

@@ -43,6 +43,12 @@ dedupe identity for recovery annotations is derived from command, event type and
 attempt; the public `commandId` remains the real effect command. Exact repeats
 are idempotent and conflicting annotations fail closed.
 
+An expired leased attempt is itself persisted recovery evidence. Reclaim first
+appends a generic, secret-free `STAGE_RETRY_SCHEDULED` annotation for the lost
+attempt and then `RUN_RESUMED` for the newly claimed attempt in the same
+transaction, before external I/O. Recovery messages are selected from a closed
+public vocabulary; adapter-provided message text is never copied into recovery.
+
 Waiting is reserved for an already-observed asynchronous effect: a recorded
 transaction receipt wait, Relay finalization or DA availability. It has no
 manual retry. Retryable means a transport or timeout failure before a new

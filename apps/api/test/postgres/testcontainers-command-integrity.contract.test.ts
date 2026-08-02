@@ -405,6 +405,8 @@ describe.runIf(enabled)("Slice 007 real PostgreSQL command integrity", () => {
       "RUN_CREATED",
       "STAGE_RETRY_SCHEDULED",
       "RUN_RESUMED",
+      "STAGE_RETRY_SCHEDULED",
+      "RUN_RESUMED",
     ]);
 
     const versions = await pool.query<{ version: number }>(

@@ -251,5 +251,17 @@ describe("Slice 018 recovery surface", () => {
     });
     await expect(gapServices.hydrateRun!({ runId: RUN_ID, projectToken: PROJECT_TOKEN, after: 0 }))
       .resolves.toMatchObject({ sync: { state: "partial", eventSequence: 1 } });
+
+    const raceFetch = vi.fn()
+      .mockResolvedValueOnce(response({ sequence: 3, terminal: false, stages: run("waiting").stages }))
+      .mockResolvedValueOnce(response({ events: [event(1), event(2), event(3), event(4)], nextAfter: 4 }));
+    vi.stubGlobal("fetch", raceFetch);
+    const raceServices = createLiveSurfaceServices({
+      baseUrl: "https://api.proofline.test", projectToken: PROJECT_TOKEN,
+      storage: { getItem: () => null, setItem: () => undefined },
+      recoveryStorage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+    });
+    await expect(raceServices.hydrateRun!({ runId: RUN_ID, projectToken: PROJECT_TOKEN, after: 0 }))
+      .resolves.toMatchObject({ sync: { state: "partial", projectionSequence: 3, eventSequence: 4 } });
   });
 });

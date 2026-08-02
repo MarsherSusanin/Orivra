@@ -66,6 +66,19 @@ describe("Slice 018 public recovery contract", () => {
         },
       }).success,
     ).toBe(false);
+    for (const message of [
+      `Bearer project_${"a".repeat(64)}`,
+      "https://127.0.0.1/private?token=secret",
+      "Error: upstream failed\n    at verifier (/private/app.ts:42:1)",
+      `private key 0x${"b".repeat(64)}`,
+    ]) {
+      expect(
+        schema.safeParse({
+          ...retryableRecovery,
+          error: { ...retryableRecovery.error, message },
+        }).success,
+      ).toBe(false);
+    }
   });
 
   it("requires terminal recovery to omit retryAfter and name a safe continuation", () => {
