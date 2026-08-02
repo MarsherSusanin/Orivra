@@ -219,10 +219,30 @@ describe.runIf(enabled)(
         JSON.parse(Buffer.from(persistedReportArtifact!.canonicalBytes).toString("utf8")),
       ).toEqual({ ...sourceReport, runId: created.runId });
 
+      const replaySubmissionKey = "slice007-explicit-replay-apply";
+      const authorized = await service.createSubmission({
+        projectId: PROJECT_ID,
+        runId: created.runId,
+        mode: "replay",
+        idempotencyKey: replaySubmissionKey,
+      });
+      expect(authorized).toMatchObject({
+        version: "1",
+        runId: created.runId,
+        mode: "replay",
+        effectOwner: "none",
+        commandId: expect.any(String),
+      });
+
       const repositoryAfterRestart = createPostgresCommandRepository({ pool });
       const applyClaim = await repositoryAfterRestart.claimNextCommand();
       expect(applyClaim).toMatchObject({
-        command: { kind: "APPLY_REPLAY_EVIDENCE", runId: created.runId },
+        command: {
+          id: authorized.commandId,
+          kind: "APPLY_REPLAY_EVIDENCE",
+          runId: created.runId,
+          payload: { idempotencyKey: replaySubmissionKey },
+        },
       });
       const handlersAfterRestart = createProductionCommandHandlers({
         repository: repositoryAfterRestart,

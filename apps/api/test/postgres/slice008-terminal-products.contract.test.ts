@@ -138,7 +138,11 @@ describe.runIf(enabled)(
           idempotencyKey: "slice008-existing-consumer",
           consumer: "canonical-vulnerable",
         }),
-      ).resolves.toEqual({ accepted: true, runId: RUN_ID });
+      ).resolves.toMatchObject({
+        accepted: true,
+        runId: RUN_ID,
+        commandId: "83838383-8383-4838-8838-838383838383",
+      });
       await expect(
         service.verifyConsumer({
           projectId: PROJECT_ID,

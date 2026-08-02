@@ -239,7 +239,7 @@ describe.runIf(enabled)("Slice 007 real PostgreSQL command integrity", () => {
       ],
       projection: {
         sequence: 2,
-        stages: { preflight: "completed", request: "active" },
+        stages: { preflight: "completed", request: "pending" },
       },
       artifacts: [
         {

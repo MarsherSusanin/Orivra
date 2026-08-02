@@ -23,6 +23,7 @@ async function loadMigrations() {
     "002_one_active_submission.sql",
     "003_run_discovery.sql",
     "004_preflight_report.sql",
+    "005_explicit_submission_authority.sql",
   ]);
   return Promise.all(
     names.map(async (name) => ({
@@ -34,7 +35,7 @@ async function loadMigrations() {
 
 describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
   it(
-    "runs 001 through 004 on empty and previous schemas repeatedly",
+    "runs 001 through 005 on empty and previous schemas repeatedly",
     async () => {
       const container = await new GenericContainer("postgres:16-alpine")
         .withEnvironment({
@@ -77,16 +78,20 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           "002_one_active_submission.sql",
           "003_run_discovery.sql",
           "004_preflight_report.sql",
+          "005_explicit_submission_authority.sql",
           "001_initial.sql",
           "002_one_active_submission.sql",
           "003_run_discovery.sql",
           "004_preflight_report.sql",
+          "005_explicit_submission_authority.sql",
         ]);
 
         const emptyVersions = await client.query<{ version: number }>(
           "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
         );
-        expect(emptyVersions.rows.map(({ version }) => version)).toEqual([1, 2, 3, 4]);
+        expect(emptyVersions.rows.map(({ version }) => version)).toEqual([
+          1, 2, 3, 4, 5,
+        ]);
 
         const tables = await client.query<{ table_name: string }>(
           "SELECT table_name FROM information_schema.tables WHERE table_schema = 'proofline_private'",
@@ -184,16 +189,20 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           "002_one_active_submission.sql",
           "003_run_discovery.sql",
           "004_preflight_report.sql",
+          "005_explicit_submission_authority.sql",
           "001_initial.sql",
           "002_one_active_submission.sql",
           "003_run_discovery.sql",
           "004_preflight_report.sql",
+          "005_explicit_submission_authority.sql",
         ]);
 
         const previousVersions = await client.query<{ version: number }>(
           "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
         );
-        expect(previousVersions.rows.map(({ version }) => version)).toEqual([0, 1, 2, 3, 4]);
+        expect(previousVersions.rows.map(({ version }) => version)).toEqual([
+          0, 1, 2, 3, 4, 5,
+        ]);
         const upgradedTables = await client.query<{ table_name: string }>(
           "SELECT table_name FROM information_schema.tables WHERE table_schema = 'proofline_private'",
         );
