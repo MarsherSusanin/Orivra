@@ -33,6 +33,10 @@ describe("Slice 004 CLI production adapter", () => {
       }
       if (request.url.endsWith("/submissions")) {
         return Response.json({
+          version: "1",
+          runId: "run_cli",
+          mode: "wallet",
+          effectOwner: "wallet",
           transaction: {
             chainId: "0x72",
             to: "0x3333333333333333333333333333333333333333",

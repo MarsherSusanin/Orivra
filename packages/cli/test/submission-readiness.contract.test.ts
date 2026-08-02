@@ -10,7 +10,13 @@ import {
 function cliHarness() {
   const client = {
     createRun: vi.fn().mockResolvedValue({ runId: "run_cli" }),
-    prepareSubmission: vi.fn().mockResolvedValue({ accepted: true }),
+    prepareSubmission: vi.fn().mockResolvedValue({
+      version: "1",
+      runId: "run_cli",
+      mode: "relayer",
+      effectOwner: "worker",
+      commandId: "command_cli",
+    }),
     attachTransaction: vi.fn(),
     watchRun: vi.fn(),
     verifyRun: vi.fn(),
@@ -60,9 +66,10 @@ describe("CLI submission readiness", () => {
     ).toBeLessThan(harness.client.prepareSubmission.mock.invocationCallOrder[0]!);
   });
 
-  it("retries a transient wallet preflight 404 and returns the durable transaction", async () => {
+  it("retries the persisted 409 readiness code with one command identity and returns the durable transaction", async () => {
     let now = 0;
     let submissionAttempts = 0;
+    const requests: Request[] = [];
     const sleep = vi.fn(async (milliseconds: number) => {
       now += milliseconds;
     });
@@ -77,17 +84,24 @@ describe("CLI submission readiness", () => {
         PROOFLINE_API_URL: "https://proofline.invalid",
         PROOFLINE_PROJECT_TOKEN: `project_${"a".repeat(64)}`,
       },
-      fetch: vi.fn(async (input: string | URL | Request) => {
-        const request = new Request(input);
+      fetch: vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const request = new Request(input, init);
+        requests.push(request);
         if (request.url.endsWith("/submissions")) {
           submissionAttempts += 1;
           if (submissionAttempts < 3) {
             return Response.json(
               { error: { code: "PREFLIGHT_NOT_READY" } },
-              { status: 404 },
+              { status: 409 },
             );
           }
-          return Response.json({ transaction });
+          return Response.json({
+            version: "1",
+            runId: "run_cli",
+            mode: "wallet",
+            effectOwner: "wallet",
+            transaction,
+          });
         }
         throw new Error(`Unexpected request ${request.url}`);
       }),
@@ -105,6 +119,18 @@ describe("CLI submission readiness", () => {
     ).resolves.toEqual(transaction);
     expect(submissionAttempts).toBe(3);
     expect(sleep).toHaveBeenCalledTimes(2);
+    expect(
+      new Set(
+        requests.map((request) => request.headers.get("idempotency-key")),
+      ),
+    ).toEqual(new Set(["cli-0-1"]));
+    await expect(
+      Promise.all(requests.map((request) => request.clone().json())),
+    ).resolves.toEqual([
+      { mode: "wallet" },
+      { mode: "wallet" },
+      { mode: "wallet" },
+    ]);
   });
 
   it("bounds a wallet preflight wait that never becomes durable", async () => {
@@ -120,7 +146,7 @@ describe("CLI submission readiness", () => {
       fetch: vi.fn(async () =>
         Response.json(
           { error: { code: "PREFLIGHT_NOT_READY" } },
-          { status: 404 },
+          { status: 409 },
         ),
       ),
       walletFactory: vi.fn(),
@@ -139,5 +165,39 @@ describe("CLI submission readiness", () => {
     expect(sleep.mock.calls.flat().reduce((sum, value) => sum + value, 0)).toBeLessThanOrEqual(
       60_000,
     );
+  });
+
+  it("fails closed for the superseded 404 readiness status without retrying", async () => {
+    const sleep = vi.fn();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(
+        { error: { code: "PREFLIGHT_NOT_READY" } },
+        { status: 404 },
+      ))
+      .mockResolvedValueOnce(Response.json(
+        { error: { code: "UNEXPECTED_RETRY" } },
+        { status: 503 },
+      ));
+    const dependencies = createProductionCliDependencies({
+      environment: {
+        PROOFLINE_API_URL: "https://proofline.invalid",
+        PROOFLINE_PROJECT_TOKEN: `project_${"a".repeat(64)}`,
+      },
+      fetch,
+      walletFactory: vi.fn(),
+      clock: { now: () => 0, sleep },
+      files: { readText: vi.fn(), writeText: vi.fn() },
+      io: { stdout: vi.fn(), stderr: vi.fn() },
+    });
+
+    await expect(
+      dependencies.client.prepareSubmission({
+        runId: "run_cli",
+        mode: "wallet",
+      }),
+    ).rejects.toThrow(/rejected POST .*\(404\)/i);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
   });
 });

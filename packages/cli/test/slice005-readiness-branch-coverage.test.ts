@@ -60,8 +60,14 @@ describe("CLI bounded preflight error handling", () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
-  it("returns a relayer acceptance body when no wallet transaction is present", async () => {
-    const accepted = { accepted: true, runId: "run_cli" };
+  it("returns a strict relayer submission envelope when no wallet transaction is present", async () => {
+    const accepted = {
+      version: "1",
+      runId: "run_cli",
+      mode: "relayer",
+      effectOwner: "worker",
+      commandId: "command_cli",
+    };
     const dependencies = productionDependencies(
       vi.fn(async () => Response.json(accepted, { status: 202 })),
     );

@@ -243,6 +243,82 @@ describe("Slice 017 wallet broadcast recovery coordinator", () => {
     expect([...storage.values.values()]).not.toContain(TX_HASH);
     expect(client.attachTransaction).not.toHaveBeenCalled();
   });
+
+  it("recognizes EIP-1193 code 4001 as user rejection and lets the same run retry", async () => {
+    const storage = recoveryStorage();
+    const rejection = Object.assign(new Error("Request denied by provider"), {
+      code: 4001,
+    });
+    const rejectedProvider = walletProvider(rejection);
+    const client = {
+      prepareSubmission: vi.fn().mockResolvedValue(TRANSACTION),
+      attachTransaction: vi.fn().mockResolvedValue({ accepted: true }),
+    };
+    const submit = submitWithEip1193 as RecoverableSubmit;
+    const common = {
+      runId: RUN_ID,
+      idempotencyKey: "wallet-code-4001",
+      client,
+      recoveryStorage: storage.port,
+    };
+
+    await expect(
+      submit({ ...common, provider: rejectedProvider }),
+    ).rejects.toMatchObject({ code: 4001 });
+    const [recoveryKey, marker] = storage.port.setItem.mock.calls[0]!;
+    expect(marker).toBe("wallet-broadcast-pending");
+    expect(storage.port.removeItem).toHaveBeenCalledWith(recoveryKey);
+    expect(storage.values.size).toBe(0);
+    expect(client.attachTransaction).not.toHaveBeenCalled();
+
+    const retryProvider = walletProvider();
+    await expect(
+      submit({ ...common, provider: retryProvider }),
+    ).resolves.toEqual({ transactionHash: TX_HASH });
+    expect(client.prepareSubmission).toHaveBeenCalledTimes(2);
+    expect(retryProvider.request).toHaveBeenCalledTimes(3);
+    expect(client.attachTransaction).toHaveBeenCalledExactlyOnceWith(
+      RUN_ID,
+      { transactionHash: TX_HASH },
+      "wallet-code-4001",
+    );
+  });
+
+  it("keeps the pending marker for non-4001 ambiguous provider failures and refuses rebroadcast", async () => {
+    const storage = recoveryStorage();
+    const ambiguousFailure = Object.assign(new Error("Provider unavailable"), {
+      code: -32603,
+    });
+    const firstProvider = walletProvider(ambiguousFailure);
+    const client = {
+      prepareSubmission: vi.fn().mockResolvedValue(TRANSACTION),
+      attachTransaction: vi.fn(),
+    };
+    const submit = submitWithEip1193 as RecoverableSubmit;
+    const common = {
+      runId: RUN_ID,
+      idempotencyKey: "wallet-ambiguous",
+      client,
+      recoveryStorage: storage.port,
+    };
+
+    await expect(
+      submit({ ...common, provider: firstProvider }),
+    ).rejects.toMatchObject({ code: -32603 });
+    expect([...storage.values.values()]).toContain(
+      "wallet-broadcast-pending",
+    );
+    expect(storage.port.removeItem).not.toHaveBeenCalled();
+    expect(client.attachTransaction).not.toHaveBeenCalled();
+
+    const retryProvider = walletProvider();
+    await expect(
+      submit({ ...common, provider: retryProvider }),
+    ).rejects.toThrow(/ambiguous|refusing to rebroadcast/i);
+    expect(retryProvider.request).not.toHaveBeenCalled();
+    expect(client.prepareSubmission).toHaveBeenCalledOnce();
+    expect(client.attachTransaction).not.toHaveBeenCalled();
+  });
 });
 
 describe("Slice 017 browser submission response validation", () => {

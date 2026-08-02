@@ -203,7 +203,7 @@ describe("Slice 007 Action readiness mapping coverage", () => {
       bundle: terminalBundle(),
       submission: [
         {
-          status: 404,
+          status: 409,
           body: { error: { code: "PREFLIGHT_NOT_READY" } },
         },
         { status: 202, body: { accepted: true } },
@@ -231,7 +231,7 @@ describe("Slice 007 Action readiness mapping coverage", () => {
       bundle: terminalBundle(),
       submission: [
         {
-          status: 404,
+          status: 409,
           body: { code: "PREFLIGHT_NOT_READY" },
         },
       ],
