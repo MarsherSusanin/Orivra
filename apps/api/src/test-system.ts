@@ -381,7 +381,8 @@ export function createHermeticProoflineSystem(input: {
           commandId: existingAuthority.commandId,
         };
       }
-      if (projectRun(stored.events).terminal) {
+      const projection = projectRun(stored.events);
+      if (projection.terminal) {
         throw Object.assign(new Error("Terminal runs are immutable"), {
           status: 409,
           code: "RUN_TERMINAL",
@@ -394,6 +395,12 @@ export function createHermeticProoflineSystem(input: {
         });
       }
       if (context.mode === "wallet") {
+        if (projection.stages.request !== "pending" || existingAuthority) {
+          throw Object.assign(
+            new Error("Run already has one submission authority"),
+            { status: 409, code: "SUBMISSION_INTENT_CONFLICT" },
+          );
+        }
         return {
           version: "1" as const,
           runId: context.runId,

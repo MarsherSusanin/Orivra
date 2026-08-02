@@ -849,6 +849,17 @@ export function createProductionProoflineService(input: {
         assertSubmissionMode(persistedManifest, "wallet");
         assertMutableProjection(row.projection);
         assertCompletedPreflight(row.projection);
+        const requestStage =
+          row.projection && typeof row.projection === "object"
+            ? (row.projection as { stages?: { request?: unknown } }).stages
+                ?.request
+            : undefined;
+        const priorSubmission = await findSubmissionCommandByRun(runId);
+        if (requestStage !== "pending" || priorSubmission) {
+          throw submissionIntentConflict(
+            "Run already has one active submission authority",
+          );
+        }
         if (!row.canonical_bytes) {
           throw Object.assign(new Error("Preflight evidence is not ready"), {
             status: 409,

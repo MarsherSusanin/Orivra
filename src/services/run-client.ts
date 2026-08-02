@@ -20,16 +20,7 @@ const walletSubmissionFlights = new Map<
   string,
   Promise<{ transactionHash: string }>
 >();
-const walletRecoveryMemory = new Map<string, string>();
-const walletRecoveryMemoryStorage: RecoveryStoragePort = {
-  getItem: (key) => walletRecoveryMemory.get(key) ?? null,
-  setItem: (key, value) => {
-    walletRecoveryMemory.set(key, value);
-  },
-  removeItem: (key) => {
-    walletRecoveryMemory.delete(key);
-  },
-};
+const walletRecoveryMemory = new WeakMap<object, Map<string, string>>();
 
 type StoragePort = Pick<Storage, "getItem" | "setItem">;
 type RecoveryStoragePort = Pick<
@@ -73,6 +64,7 @@ function walletRecoveryKey(runId: string, idempotencyKey: string): string {
 
 function availableRecoveryStorage(
   provided: RecoveryStoragePort | undefined,
+  owner: object,
 ): RecoveryStoragePort {
   if (provided) return provided;
   try {
@@ -82,7 +74,20 @@ function availableRecoveryStorage(
   } catch {
     // The stable recovery error below owns denied browser storage access.
   }
-  return walletRecoveryMemoryStorage;
+  let memory = walletRecoveryMemory.get(owner);
+  if (!memory) {
+    memory = new Map<string, string>();
+    walletRecoveryMemory.set(owner, memory);
+  }
+  return {
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => {
+      memory.set(key, value);
+    },
+    removeItem: (key) => {
+      memory.delete(key);
+    },
+  };
 }
 
 function proveRecoveryStorageWritable(
@@ -430,7 +435,10 @@ export function submitWithEip1193(input: {
   if (existingFlight) return existingFlight;
 
   const operation = (async () => {
-    const recoveryStorage = availableRecoveryStorage(input.recoveryStorage);
+    const recoveryStorage = availableRecoveryStorage(
+      input.recoveryStorage,
+      input.client,
+    );
     const recoveryKey = walletRecoveryKey(input.runId, input.idempotencyKey);
     const recoveredHash = recoveryStorage.getItem(recoveryKey);
     if (recoveredHash !== null) {
@@ -494,7 +502,6 @@ export function submitWithEip1193(input: {
       throw cause;
     }
     if (typeof transactionHash !== "string" || !TRANSACTION_HASH.test(transactionHash)) {
-      clearPendingWalletMarker(recoveryStorage, recoveryKey);
       throw new Error("The wallet did not return a valid transaction hash");
     }
 

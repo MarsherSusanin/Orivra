@@ -169,7 +169,8 @@ function failureStage(commandKind: unknown) {
   if (
     kind === "SUBMIT_RELAYER" ||
     kind === "BROADCAST_RELAYER_TRANSACTION" ||
-    kind === "ATTACH_WALLET_TRANSACTION"
+    kind === "ATTACH_WALLET_TRANSACTION" ||
+    kind === "APPLY_REPLAY_EVIDENCE"
   ) {
     return "request" as const;
   }
