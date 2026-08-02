@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# This checked-in GitHub Action artifact must remain byte-identical to esbuild.
+# Bundled dependency template literals contain significant trailing spaces.
+packages/action/dist/index.js whitespace=-trailing-space
