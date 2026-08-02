@@ -52,6 +52,20 @@ describe("Slice 018 public recovery contract", () => {
         privateUrl: "https://user:secret@example.test/source?token=private",
       }).success,
     ).toBe(false);
+    expect(
+      schema.safeParse({
+        ...retryableRecovery,
+        error: {
+          ...retryableRecovery.error,
+          evidence: {
+            nested: {
+              stack: "private stack",
+              privateUrl: "https://example.test/?token=secret",
+            },
+          },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("requires terminal recovery to omit retryAfter and name a safe continuation", () => {

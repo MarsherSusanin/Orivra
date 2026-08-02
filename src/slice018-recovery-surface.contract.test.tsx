@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RUN_ID, validManifest } from "../packages/contracts/test/fixtures";
+import { decodeComposerDraftV1, finalizeWeb2JsonManifestDraft } from "../packages/domain/src";
 import { App } from "./App";
 import {
   createLiveSurfaceServices,
@@ -185,5 +186,65 @@ describe("Slice 018 recovery surface", () => {
     render(<App services={surface(vi.fn().mockResolvedValue(partial))} />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/partial|incomplete/i);
     expect(screen.getByRole("button", { name: /refresh status/i })).toBeVisible();
+  });
+
+  it("copies the exact persisted manifest into a newly keyed Composer draft", async () => {
+    window.history.replaceState({}, "", `/runs/${RUN_ID}`);
+    sessionStorage.setItem("proofline:project-token", PROJECT_TOKEN);
+    render(<App services={surface(vi.fn().mockResolvedValue(run("terminal")))} />);
+    await screen.findByRole("region", { name: /run recovery/i });
+    await act(async () => {
+      screen.getByRole("button", { name: /create new run/i }).click();
+    });
+    cleanup();
+    render(<App services={surface(vi.fn())} />);
+
+    const restored = decodeComposerDraftV1(
+      localStorage.getItem("proofline:composer-draft:v1"),
+    );
+    expect(restored.state).toBe("restored");
+    if (restored.state !== "restored") throw new Error("replacement draft missing");
+    expect(finalizeWeb2JsonManifestDraft(restored.draft)).toEqual({
+      state: "valid",
+      manifest: validManifest,
+    });
+    expect(restored.draft.createIdempotencyKey).not.toContain(RUN_ID);
+  });
+
+  it("marks a missing-middle journal partial and follows nextAfter across pages", async () => {
+    const event = (sequence: number) => ({
+      version: "1", runId: RUN_ID, sequence, commandId: `command_${sequence}`,
+      occurredAt: "2026-08-03T01:59:00.000Z",
+      type: sequence === 1 ? "RUN_CREATED" : "RUN_RESUMED",
+      payload: sequence === 1 ? { manifest: validManifest } : {},
+    });
+    const pagedFetch = vi.fn()
+      .mockResolvedValueOnce(response({ sequence: 1002, terminal: false, stages: run("waiting").stages }))
+      .mockResolvedValueOnce(response({ events: Array.from({ length: 1000 }, (_, index) => event(index + 1)), nextAfter: 1000 }))
+      .mockResolvedValueOnce(response({ events: [event(1001), event(1002)], nextAfter: 1002 }));
+    vi.stubGlobal("fetch", pagedFetch);
+    const services = createLiveSurfaceServices({
+      baseUrl: "https://api.proofline.test", projectToken: PROJECT_TOKEN,
+      storage: { getItem: () => null, setItem: () => undefined },
+      recoveryStorage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+    });
+    const complete = await services.hydrateRun!({ runId: RUN_ID, projectToken: PROJECT_TOKEN, after: 0 });
+    expect(complete.sync).toMatchObject({ state: "current", eventSequence: 1002 });
+    expect(pagedFetch.mock.calls.map(([url]) => String(url))).toEqual(expect.arrayContaining([
+      expect.stringContaining("events?after=0"),
+      expect.stringContaining("events?after=1000"),
+    ]));
+
+    const gapFetch = vi.fn()
+      .mockResolvedValueOnce(response({ sequence: 4, terminal: false, stages: run("waiting").stages }))
+      .mockResolvedValueOnce(response({ events: [event(1), event(4)], nextAfter: 4 }));
+    vi.stubGlobal("fetch", gapFetch);
+    const gapServices = createLiveSurfaceServices({
+      baseUrl: "https://api.proofline.test", projectToken: PROJECT_TOKEN,
+      storage: { getItem: () => null, setItem: () => undefined },
+      recoveryStorage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+    });
+    await expect(gapServices.hydrateRun!({ runId: RUN_ID, projectToken: PROJECT_TOKEN, after: 0 }))
+      .resolves.toMatchObject({ sync: { state: "partial", eventSequence: 1 } });
   });
 });

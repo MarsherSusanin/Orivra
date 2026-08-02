@@ -166,4 +166,37 @@ describe("Slice 018 recovery projection", () => {
     expect(projection).not.toHaveProperty("terminalFailure");
     expect(projection).not.toHaveProperty("recovery");
   });
+
+  it("lets terminal RUN_FAILED recovery override an older retryable annotation", () => {
+    const scheduled = annotation(2, "STAGE_RETRY_SCHEDULED", recovery);
+    const { retryAfter: _retryAfter, ...terminalBase } = recovery;
+    const terminalRecovery = {
+      ...terminalBase,
+      state: "terminal",
+      retrySafety: "new-run-required",
+      error: {
+        ...recovery.error,
+        category: "proof-invalid",
+        code: "FDC_PROOF_INVALID",
+        retryable: false,
+      },
+    } as const;
+    const failed = {
+      version: "1" as const,
+      runId: created.runId,
+      sequence: 3,
+      commandId: "command_preflight",
+      occurredAt: "2026-08-03T02:00:03.000Z",
+      type: "RUN_FAILED" as const,
+      payload: {
+        stage: "preflight" as const,
+        error: terminalRecovery.error,
+        recovery: terminalRecovery,
+      },
+    };
+    expect(projectRun([created, scheduled, failed] as any)).toMatchObject({
+      terminal: true,
+      recovery: { state: "terminal", retrySafety: "new-run-required" },
+    });
+  });
 });

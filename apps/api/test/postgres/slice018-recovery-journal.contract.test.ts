@@ -181,4 +181,45 @@ describe("Slice 018 PostgreSQL recovery journal", () => {
       statements.indexOf("COMMIT"),
     );
   });
+
+  it("reclaims attempt three after a crash without replaying an already resolved resume", async () => {
+    const created = makeRunEvents()[0];
+    const scheduled = {
+      version: "1", runId: RUN_ID, sequence: 2, commandId: COMMAND,
+      occurredAt: "2026-08-03T02:00:00.000Z", type: "STAGE_RETRY_SCHEDULED",
+      payload: {
+        version: "1", state: "retryable", stage: "preflight", attempt: 1,
+        retryAfter: RETRY_AT, resumeFrom: "preflight", preservedEvidence: [],
+        updatedAt: "2026-08-03T02:00:00.000Z",
+        error: { version: "1", category: "transport", code: "VERIFIER_TRANSPORT_FAILED", message: "Worker command failed", retryable: true, evidence: {} },
+        retrySafety: "same-command",
+      },
+    };
+    const resumed = {
+      version: "1", runId: RUN_ID, sequence: 3, commandId: COMMAND,
+      occurredAt: "2026-08-03T02:00:16.000Z", type: "RUN_RESUMED",
+      payload: { stage: "preflight", attempt: 2, resumeFrom: "preflight", preservedEvidence: [] },
+    };
+    const fixture = repositoryWith(async (text) => {
+      if (text === POSTGRES_QUERIES.claimNextCommand) return result([{
+        id: COMMAND, project_id: PROJECT, run_id: RUN_ID, kind: "RUN_PREFLIGHT",
+        attempts: 3, payload: {}, last_error: scheduled.payload.error,
+      }], 1);
+      if (text === POSTGRES_QUERIES.loadEvents) return result(
+        [created, scheduled, resumed].map((event_payload) => ({ event_payload })),
+        3,
+      );
+      if (text === POSTGRES_QUERIES.lockRun) return result([{
+        last_sequence: 3,
+        projection: { version: "1", runId: RUN_ID, sequence: 3, terminal: false },
+      }], 1);
+      return result([], 1);
+    });
+
+    await expect(fixture.repository.claimNextCommand()).resolves.toMatchObject({
+      command: { id: COMMAND, attempts: 3 },
+    });
+    expect(insertedEvents(fixture.client)).toEqual([]);
+    expect(fixture.client.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
+  });
 });
