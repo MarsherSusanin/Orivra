@@ -39,9 +39,12 @@ const preflightArtifact = {
     quotedFeeWei: "12345",
     network: {
       chainId: 114,
+      blockNumber: "12345678",
       registryAddress: "0x2222222222222222222222222222222222222222",
       resolvedContracts: {
         FdcHub: fdcHub,
+        FdcRequestFeeConfigurations:
+          "0x6666666666666666666666666666666666666666",
         FdcVerification: fdcVerification,
         Relay: relay,
       },

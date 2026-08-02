@@ -136,6 +136,96 @@ describe("Slice 015B local Transform surface", () => {
 });
 
 describe("Slice 015B strict local draft recovery", () => {
+  it("lets restored URL history win without losing fields or duplicating effects", async () => {
+    const restored = {
+      ...structuredClone(validComposerDraft),
+      step: "submit",
+    } as const;
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(restored));
+    window.history.replaceState({}, "", "/runs/new?step=submit&status=active");
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new Error("Composer history must not perform network I/O"),
+    );
+    const analytics = collector();
+    const servicePort = services();
+
+    const first = render(
+      <App
+        projectToken={projectToken}
+        services={servicePort}
+        analytics={analytics}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: /create the persisted preflight run/i }))
+      .toBeVisible();
+    expect(screen.getByLabelText(/fee cap/i)).toHaveValue(
+      restored.fields.feeCapWei,
+    );
+
+    first.unmount();
+    render(
+      <App
+        projectToken={projectToken}
+        services={servicePort}
+        analytics={analytics}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: /create the persisted preflight run/i }))
+      .toBeVisible();
+    expect(new URLSearchParams(window.location.search).get("step")).toBe(
+      "submit",
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("link", { name: /back to trust/i }));
+    expect(screen.getByRole("heading", { name: /pin the url invariants/i }))
+      .toBeVisible();
+    expect(screen.getByLabelText(/expected host/i)).toHaveValue(
+      restored.fields.expectedHost,
+    );
+    expect(new URLSearchParams(window.location.search).get("step")).toBe(
+      "trust",
+    );
+    const analyticsAfterAction = analytics.events.map((event) => event.name);
+    expect(analyticsAfterAction).toEqual(["COMPOSER_STARTED"]);
+
+    const beforeBackReplaceCalls = replaceState.mock.calls.length;
+    window.history.back();
+    await waitFor(() => {
+      expect(new URLSearchParams(window.location.search).get("step")).toBe(
+        "submit",
+      );
+      expect(screen.getByRole("heading", { name: /create the persisted preflight run/i }))
+        .toBeVisible();
+    });
+    expect(replaceState).toHaveBeenCalledTimes(beforeBackReplaceCalls);
+    expect(screen.getByLabelText(/fee cap/i)).toHaveValue(
+      restored.fields.feeCapWei,
+    );
+
+    const beforeForwardReplaceCalls = replaceState.mock.calls.length;
+    window.history.forward();
+    await waitFor(() => {
+      expect(new URLSearchParams(window.location.search).get("step")).toBe(
+        "trust",
+      );
+      expect(screen.getByRole("heading", { name: /pin the url invariants/i }))
+        .toBeVisible();
+    });
+    expect(replaceState).toHaveBeenCalledTimes(beforeForwardReplaceCalls);
+    expect(screen.getByLabelText(/expected host/i)).toHaveValue(
+      restored.fields.expectedHost,
+    );
+    expect(analytics.events.map((event) => event.name)).toEqual(
+      analyticsAfterAction,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+    for (const port of Object.values(servicePort)) {
+      if (typeof port === "function") expect(port).not.toHaveBeenCalled();
+    }
+  });
+
   it("persists Source and Transform edits and restores the same step after reload", async () => {
     const user = userEvent.setup();
     const first = renderComposer("/runs/new?step=source");

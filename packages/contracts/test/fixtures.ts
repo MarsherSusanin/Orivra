@@ -62,6 +62,8 @@ export const expectedCanonicalUrl =
   "https://api.example.com/prices/eth?currency=USD&source=primary&window=1h";
 
 export const signedUrlCredentialQueryNames = [
+  "sig",
+  "AWSAccessKeyId",
   "X-Goog-Signature",
   "X-Goog-Credential",
   "X-Goog-Security-Token",
@@ -73,6 +75,9 @@ export const signedUrlCredentialQueryNames = [
   "Credential",
   "SecurityToken",
 ] as const;
+
+export const UINT256_MAX = ((1n << 256n) - 1n).toString();
+export const UINT256_OVERFLOW = (1n << 256n).toString();
 
 /**
  * Slice 016 fixture whose consumer Trust policy covers the exact effective URL.
@@ -295,9 +300,12 @@ export function makeBundleInput() {
     requestBytes: "0x574542324a534f4e",
     network: {
       chainId: 114,
+      blockNumber: validPreflightReport.registrySnapshot.blockNumber,
       registryAddress: "0x2222222222222222222222222222222222222222",
       resolvedContracts: {
         FdcHub: "0x3333333333333333333333333333333333333333",
+        FdcRequestFeeConfigurations:
+          "0x6666666666666666666666666666666666666666",
         FdcVerification: "0x1111111111111111111111111111111111111111",
         Relay: "0x4444444444444444444444444444444444444444",
       },

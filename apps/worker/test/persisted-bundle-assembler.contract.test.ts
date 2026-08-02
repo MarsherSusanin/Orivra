@@ -73,6 +73,19 @@ describe("Slice 003 persisted proof-bundle assembly", () => {
     const serialized = new TextDecoder().decode(result.canonicalBytes);
     const replayed = replayProofBundle(serialized);
     expect(replayed).toEqual(expect.objectContaining(expected));
+    expect(replayed.network).toEqual({
+      chainId: 114,
+      blockNumber: expected.network.blockNumber,
+      registryAddress: expected.network.registryAddress,
+      resolvedContracts: {
+        FdcHub: expected.network.resolvedContracts.FdcHub,
+        FdcRequestFeeConfigurations:
+          expected.network.resolvedContracts.FdcRequestFeeConfigurations,
+        FdcVerification:
+          expected.network.resolvedContracts.FdcVerification,
+        Relay: expected.network.resolvedContracts.Relay,
+      },
+    });
     expect(canonicalSerializeProofBundle(replayed)).toBe(serialized);
     expect(serialized).not.toMatch(
       /must-not-enter-bundle|authorization|rawSignedTransaction|privateKey/i,

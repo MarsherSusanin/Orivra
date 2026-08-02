@@ -39,9 +39,12 @@ function preflightArtifact() {
         quotedFeeWei: QUOTED_FEE.toString(),
         network: {
           chainId: 114,
+          blockNumber: "12345678",
           registryAddress: REGISTRY,
           resolvedContracts: {
             FdcHub: FDC_HUB,
+            FdcRequestFeeConfigurations:
+              "0x6666666666666666666666666666666666666666",
             FdcVerification: FDC_VERIFICATION,
             Relay: RELAY,
           },

@@ -109,10 +109,13 @@ function replayHarness(serialized: string, manifest = replayBundle().manifest) {
     registrySnapshot: {
       ...structuredClone(validPreflightReport.registrySnapshot),
       chainId: source.network.chainId,
+      blockNumber: source.network.blockNumber,
       registryAddress: source.network.registryAddress,
       resolvedContracts: {
         ...structuredClone(validPreflightReport.registrySnapshot.resolvedContracts),
         FdcHub: source.network.resolvedContracts.FdcHub,
+        FdcRequestFeeConfigurations:
+          source.network.resolvedContracts.FdcRequestFeeConfigurations,
         FdcVerification: source.network.resolvedContracts.FdcVerification,
         Relay: source.network.resolvedContracts.Relay,
       },
@@ -377,9 +380,12 @@ function preflightArtifact() {
     quotedFeeWei: "12345",
     network: {
       chainId: 114,
+      blockNumber: "12345678",
       registryAddress: "0x2222222222222222222222222222222222222222",
       resolvedContracts: {
         FdcHub: FDC_HUB,
+        FdcRequestFeeConfigurations:
+          "0x6666666666666666666666666666666666666666",
         FdcVerification: FDC_VERIFICATION,
         Relay: "0x4444444444444444444444444444444444444444",
       },

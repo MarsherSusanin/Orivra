@@ -11,6 +11,8 @@ import {
   blockedPreflightReport,
   exactTrustManifest,
   makeBundleInput,
+  UINT256_MAX,
+  UINT256_OVERFLOW,
   validPreflightReport,
 } from "../../../packages/contracts/test/fixtures";
 import {
@@ -229,6 +231,62 @@ function blockedOutcome(report: any = blockedPreflightReport) {
 }
 
 describe("Slice 016A worker preflight artifact boundary", () => {
+  it("accepts uint256 max but rejects overflow at the preflight port boundary", async () => {
+    const maxManifest = {
+      ...exactTrustManifest,
+      submission: {
+        ...exactTrustManifest.submission,
+        feeCapWei: UINT256_MAX,
+      },
+    };
+    const maxOutcome = acceptedOutcome();
+    maxOutcome.report.fee = {
+      quotedWei: UINT256_MAX,
+      capWei: UINT256_MAX,
+      withinCap: true,
+    };
+    maxOutcome.submissionEvidence.quotedFeeWei = BigInt(UINT256_MAX);
+    const maxFixture = handlerHarness({
+      manifest: maxManifest,
+      preflight: async () => maxOutcome,
+    });
+    await expect(maxFixture.handlers.RUN_PREFLIGHT(command())).resolves
+      .toMatchObject({
+        events: [
+          expect.objectContaining({
+            type: "PREFLIGHT_ACCEPTED",
+            payload: expect.objectContaining({ quotedFeeWei: UINT256_MAX }),
+          }),
+        ],
+      });
+
+    for (const mutate of [
+      (outcome: any) => {
+        outcome.report.fee = {
+          quotedWei: UINT256_OVERFLOW,
+          capWei: UINT256_OVERFLOW,
+          withinCap: true,
+        };
+        outcome.submissionEvidence.quotedFeeWei = BigInt(UINT256_OVERFLOW);
+      },
+      (outcome: any) => {
+        outcome.report.registrySnapshot.blockNumber = UINT256_OVERFLOW;
+        outcome.submissionEvidence.network.blockNumber = UINT256_OVERFLOW;
+      },
+    ]) {
+      const overflow = acceptedOutcome();
+      mutate(overflow);
+      const fixture = handlerHarness({
+        manifest: maxManifest,
+        preflight: async () => overflow,
+      });
+      await expectBoundaryRejection(fixture, {
+        category: "schema-invalid",
+        retryable: false,
+      });
+    }
+  });
+
   it("atomically returns compact acceptance, one public report, private evidence and the authorized child", async () => {
     const relayerManifest = {
       ...exactTrustManifest,
@@ -694,10 +752,13 @@ describe("Slice 016A replay report sidecar", () => {
       registrySnapshot: {
         ...structuredClone(validPreflightReport.registrySnapshot),
         chainId: source.network.chainId,
+        blockNumber: source.network.blockNumber,
         registryAddress: source.network.registryAddress,
         resolvedContracts: {
           ...structuredClone(validPreflightReport.registrySnapshot.resolvedContracts),
           FdcHub: source.network.resolvedContracts.FdcHub,
+          FdcRequestFeeConfigurations:
+            source.network.resolvedContracts.FdcRequestFeeConfigurations,
           FdcVerification: source.network.resolvedContracts.FdcVerification,
           Relay: source.network.resolvedContracts.Relay,
         },
@@ -765,6 +826,16 @@ describe("Slice 016A replay report sidecar", () => {
       }),
     ],
     [
+      "registry block",
+      (report: any) => ({
+        ...report,
+        registrySnapshot: {
+          ...report.registrySnapshot,
+          blockNumber: (BigInt(report.registrySnapshot.blockNumber) + 1n).toString(),
+        },
+      }),
+    ],
+    [
       "resolved FdcHub",
       (report: any) => ({
         ...report,
@@ -773,6 +844,20 @@ describe("Slice 016A replay report sidecar", () => {
           resolvedContracts: {
             ...report.registrySnapshot.resolvedContracts,
             FdcHub: "0x9999999999999999999999999999999999999999",
+          },
+        },
+      }),
+    ],
+    [
+      "resolved FdcRequestFeeConfigurations",
+      (report: any) => ({
+        ...report,
+        registrySnapshot: {
+          ...report.registrySnapshot,
+          resolvedContracts: {
+            ...report.registrySnapshot.resolvedContracts,
+            FdcRequestFeeConfigurations:
+              "0x9999999999999999999999999999999999999999",
           },
         },
       }),
@@ -795,6 +880,83 @@ describe("Slice 016A replay report sidecar", () => {
       retryable: false,
     });
   });
+
+  it("rejects a sidecar and event URL that agree with each other but not the persisted manifest", async () => {
+    const input = makeBundleInput();
+    const manifest = {
+      ...exactTrustManifest,
+      submission: { ...exactTrustManifest.submission, mode: "replay" as const },
+    };
+    const forgedCanonicalUrl =
+      "https://api.example.com/prices/eth?currency=USD&source=primary&window=4h";
+    const events = input.events.map((item) => {
+      if (item.type === "RUN_CREATED") {
+        return { ...item, payload: { manifest } };
+      }
+      if (item.type === "PREFLIGHT_ACCEPTED") {
+        return {
+          ...item,
+          payload: { ...item.payload, canonicalUrl: forgedCanonicalUrl },
+        };
+      }
+      return item;
+    });
+    const source = createProofBundle({ ...input, manifest, events });
+    const report = {
+      ...boundReport(source),
+      canonicalUrl: forgedCanonicalUrl,
+    };
+    const fixture = handlerHarness({
+      runId: TARGET_RUN_ID,
+      manifest,
+      loadReplayBundle: async () => canonicalSerializeProofBundle(source),
+      loadReplayPreflightReport: async () => JSON.stringify(report),
+    });
+
+    await expectBoundaryRejection(fixture, {
+      category: "schema-invalid",
+      code: "REPLAY_PREFLIGHT_REPORT_MISMATCH",
+      retryable: false,
+    });
+  });
+
+  it.each([
+    ["host", { expectedHost: "mirror.example.net" }],
+    ["path", { expectedPathPrefix: "/trusted/" }],
+    ["query", { expectedQuery: { currency: "USD", source: "backup" } }],
+  ])(
+    "rejects a ready replay sidecar when persisted Trust derives a %s blocker",
+    async (_label, consumerOverride) => {
+      const input = makeBundleInput();
+      const manifest = {
+        ...exactTrustManifest,
+        submission: { ...exactTrustManifest.submission, mode: "replay" as const },
+        consumer: {
+          ...exactTrustManifest.consumer,
+          ...consumerOverride,
+        },
+      };
+      const events = input.events.map((item) =>
+        item.type === "RUN_CREATED"
+          ? { ...item, payload: { manifest } }
+          : item,
+      );
+      const source = createProofBundle({ ...input, manifest, events });
+      const fixture = handlerHarness({
+        runId: TARGET_RUN_ID,
+        manifest,
+        loadReplayBundle: async () => canonicalSerializeProofBundle(source),
+        loadReplayPreflightReport: async () =>
+          JSON.stringify(boundReport(source)),
+      });
+
+      await expectBoundaryRejection(fixture, {
+        category: "schema-invalid",
+        code: "REPLAY_PREFLIGHT_REPORT_MISMATCH",
+        retryable: false,
+      });
+    },
+  );
 
   it.each(["test", "development", "production"])(
     "fails closed without a replay report sidecar when NODE_ENV=%s",

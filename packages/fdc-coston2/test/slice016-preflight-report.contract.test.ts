@@ -3,6 +3,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   RUN_ID,
+  UINT256_MAX,
+  UINT256_OVERFLOW,
   blockedPreflightReport,
   exactTrustManifest,
   validPreflightReport,
@@ -42,6 +44,120 @@ function input(adapterPorts: ReturnType<typeof ports>, manifest: unknown = exact
 }
 
 describe("Slice 016A FDC preflight public evidence outcomes", () => {
+  it.each([
+    ["Azure sig", "sig"],
+    ["AWS access-key id", "AWSAccessKeyId"],
+  ])(
+    "rejects a %s credential query before any source, verifier, or chain I/O",
+    async (_label, credentialName) => {
+      for (const request of [
+        {
+          ...exactTrustManifest.request,
+          query: {
+            ...exactTrustManifest.request.query,
+            [credentialName]: "public-looking",
+          },
+        },
+        {
+          ...exactTrustManifest.request,
+          url: `https://api.example.com/prices/eth?${credentialName}=public-looking`,
+        },
+      ]) {
+        const adapterPorts = ports();
+        await expect(
+          runWeb2JsonPreflight(
+            input(adapterPorts, { ...exactTrustManifest, request }),
+          ),
+        ).rejects.toThrow(/credential|public|query/i);
+        expect(adapterPorts.safeFetcher.getJson).not.toHaveBeenCalled();
+        expect(adapterPorts.verifier.prepareRequest).not.toHaveBeenCalled();
+        expect(adapterPorts.feeOracle.quote).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("accepts signatureVersion as ordinary public query metadata", async () => {
+    const adapterPorts = ports();
+    const manifest = {
+      ...exactTrustManifest,
+      request: {
+        ...exactTrustManifest.request,
+        query: {
+          ...exactTrustManifest.request.query,
+          signatureVersion: "4",
+        },
+      },
+      consumer: {
+        ...exactTrustManifest.consumer,
+        expectedQuery: {
+          ...exactTrustManifest.consumer.expectedQuery,
+          signatureVersion: "4",
+        },
+      },
+    };
+
+    await expect(runWeb2JsonPreflight(input(adapterPorts, manifest))).resolves
+      .toMatchObject({ kind: "accepted" });
+    expect(adapterPorts.safeFetcher.getJson).toHaveBeenCalledTimes(5);
+  });
+
+  it("accepts uint256 max at manifest/report boundaries and rejects 2^256", async () => {
+    const maxPorts = ports();
+    maxPorts.feeOracle.quote.mockResolvedValueOnce(BigInt(UINT256_MAX));
+    const maxManifest = {
+      ...exactTrustManifest,
+      submission: {
+        ...exactTrustManifest.submission,
+        feeCapWei: UINT256_MAX,
+      },
+    };
+    await expect(runWeb2JsonPreflight(input(maxPorts, maxManifest))).resolves
+      .toMatchObject({
+        kind: "accepted",
+        report: {
+          registrySnapshot: { blockNumber: "12345678" },
+          fee: {
+            quotedWei: UINT256_MAX,
+            capWei: UINT256_MAX,
+            withinCap: true,
+          },
+        },
+      });
+
+    const manifestOverflowPorts = ports();
+    await expect(
+      runWeb2JsonPreflight(
+        input(manifestOverflowPorts, {
+          ...maxManifest,
+          submission: {
+            ...maxManifest.submission,
+            feeCapWei: UINT256_OVERFLOW,
+          },
+        }),
+      ),
+    ).rejects.toThrow(/uint256|fee|invalid|schema/i);
+    expect(manifestOverflowPorts.safeFetcher.getJson).not.toHaveBeenCalled();
+
+    const quoteOverflowPorts = ports();
+    quoteOverflowPorts.feeOracle.quote.mockResolvedValueOnce(
+      BigInt(UINT256_OVERFLOW),
+    );
+    await expect(
+      runWeb2JsonPreflight(input(quoteOverflowPorts, maxManifest)),
+    ).rejects.toThrow(/uint256|fee|invalid|schema/i);
+
+    const blockOverflowPorts = ports();
+    await expect(
+      runWeb2JsonPreflight({
+        ...input(blockOverflowPorts, maxManifest),
+        networkSnapshot: {
+          ...NETWORK_SNAPSHOT,
+          blockNumber: UINT256_OVERFLOW,
+        },
+      }),
+    ).rejects.toThrow(/uint256|block|invalid|schema/i);
+  });
+
   it("returns an accepted public report after exactly five canonical transformed fingerprints", async () => {
     const adapterPorts = ports();
     const outcome = await runWeb2JsonPreflight(input(adapterPorts));
