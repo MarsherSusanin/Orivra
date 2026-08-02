@@ -246,13 +246,15 @@ describe("Slice 015B strict local draft recovery", () => {
     });
     const beforeReload = localStorage.getItem(DRAFT_KEY);
     first.unmount();
-    renderComposer("/runs/new?step=source");
+    renderComposer("/runs/new");
 
     expect(screen.getByLabelText(/jq transform/i)).toHaveValue(".data");
     expect(screen.getByLabelText(/abi signature/i)).toHaveValue(
       VALID_ABI_SIGNATURE,
     );
     expect(screen.getByText(/draft restored/i)).toBeVisible();
+    expect(screen.getByRole("heading", { name: /describe the deterministic result/i }))
+      .toBeVisible();
     expect(new URLSearchParams(window.location.search).get("step")).toBe("transform");
     expect(localStorage.getItem(DRAFT_KEY)).toBe(beforeReload);
   });

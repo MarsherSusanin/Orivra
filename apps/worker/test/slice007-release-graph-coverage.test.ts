@@ -43,6 +43,13 @@ function replayBundle(input?: {
   const source = makeBundleInput();
   const manifest = {
     ...source.manifest,
+    consumer: {
+      ...source.manifest.consumer,
+      expectedQuery: {
+        ...source.manifest.consumer.expectedQuery,
+        window: "1h",
+      },
+    },
     submission: { ...source.manifest.submission, mode: "replay" as const },
   };
   const consumerPassed = input?.consumerPassed ?? true;
