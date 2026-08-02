@@ -24,6 +24,9 @@
   `49151b16e06aebf0214fe97f6ab98ff896aa919d`.
 - Composed relayer quota correction: commit
   `2ae1af475aea65f103e267d3a0fba71a45ffa1f5`.
+- Wallet authority and replay failure-stage correction: core commit
+  `49cad56f9a2332c2208f0edcedec24007e14d120`, Web commit
+  `ca708bcc97fab97cb2afc33fb41c5e3e8aa158d7`.
 
 Production authors did not edit frozen acceptance tests. Legacy expectations
 were reconciled in separate test-only commits.
@@ -69,6 +72,20 @@ live adapter. Focused composition passes `23/23`, nearest relayer/worker/
 PostgreSQL controls pass `55/55`, and worker coverage remains above the gate at
 90.41% lines and 86.75% branches. Zero quota now terminalizes before signing or
 broadcast; malformed, noninteger and negative evidence remains fail-closed.
+
+The third frozen candidate `04d7040879e7c4187f4c150a2dddaf813ed5f69c`
+did not receive either PASS. Core and black-box Product Verification reproduced
+a second wallet broadcast after persisted `REQUEST_SUBMITTED`; Core also found
+ambiguous malformed provider hashes being cleared and replay failures being
+assigned to preflight. The RED evidence is recorded in
+`slice-017-red-wallet-rebroadcast-and-replay-stage.md`.
+
+The correction adds a server-side persisted authority/request guard, preserves
+an ambiguity marker for malformed provider success, maps replay failures to the
+request stage and hides confirmation once the persisted request is no longer
+pending. Focused core passes `57/57`, real affected PostgreSQL passes `1/1`,
+wallet coverage is 96.51% lines / 86.92% branches, and the full Web coverage
+gate passes `279/279` at 92.00% lines / 85.10% branches.
 
 These are implementation-wave results, not independent verification PASS.
 The complete runbook matrix, candidate identity and two verifier reports are
