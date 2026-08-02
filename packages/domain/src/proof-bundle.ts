@@ -17,6 +17,23 @@ function checksumContent(content: unknown): string {
   return `sha256:${sha256Hex(canonicalJson(content))}`;
 }
 
+function replayPreflightReportMismatch(): Error & {
+  category: "schema-invalid";
+  code: "REPLAY_PREFLIGHT_REPORT_MISMATCH";
+  retryable: false;
+} {
+  return Object.assign(
+    new Error(
+      "Recorded replay preflight evidence does not match the proof bundle or consumer Trust contract",
+    ),
+    {
+      category: "schema-invalid" as const,
+      code: "REPLAY_PREFLIGHT_REPORT_MISMATCH" as const,
+      retryable: false as const,
+    },
+  );
+}
+
 export function createProofBundle(input: ProofBundleContentV1): ProofBundleV1 {
   const parsed = ProofBundleContentV1Schema.parse(input);
   const proofHash = proofResponseHash(parsed.proof.response);
@@ -99,31 +116,25 @@ function assertSemanticIntegrity(bundle: ProofBundleV1): void {
     preflight.payload.requestBytes.toLowerCase() !==
       bundle.requestBytes.toLowerCase()
   ) {
-    throw new Error("Proof bundle request bytes do not match preflight evidence");
+    throw replayPreflightReportMismatch();
   }
 
   if (preflight.payload.canonicalUrl !== canonicalizeManifestUrl(bundle.manifest)) {
-    throw new Error(
-      "Proof bundle accepted preflight URL does not match the manifest request",
-    );
+    throw replayPreflightReportMismatch();
   }
 
   if (
     diagnoseConsumerRequest(bundle.manifest, preflight.payload.canonicalUrl)
       .length > 0
   ) {
-    throw new Error(
-      "Proof bundle accepted preflight URL contradicts consumer Trust invariants",
-    );
+    throw replayPreflightReportMismatch();
   }
 
   if (
     BigInt(preflight.payload.quotedFeeWei) >
     BigInt(bundle.manifest.submission.feeCapWei)
   ) {
-    throw new Error(
-      "Proof bundle accepted preflight fee quote exceeds the manifest fee cap",
-    );
+    throw replayPreflightReportMismatch();
   }
 
   const round = bundle.events.find((event) => event.type === "ROUND_FINALIZED");
