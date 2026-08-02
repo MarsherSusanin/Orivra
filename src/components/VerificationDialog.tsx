@@ -40,6 +40,7 @@ export function VerificationDialog({
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<GeneratedConsumer | null>(null);
   const [report, setReport] = useState<ConsumerLabReportV1 | null>(null);
+  const [artifactVerified, setArtifactVerified] = useState(false);
 
   useLayoutEffect(() => {
     closeRef.current?.focus();
@@ -128,6 +129,26 @@ export function VerificationDialog({
     }
   };
 
+  const verifyGeneratedConsumer = async () => {
+    if (!report) return;
+    setError("");
+    try {
+      const digest = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(report.safeConsumer.source),
+      );
+      const actual = [...new Uint8Array(digest)]
+        .map((value) => value.toString(16).padStart(2, "0"))
+        .join("");
+      if (`sha256:${actual}` !== report.safeConsumer.sha256 || report.safeConsumer.compileStatus !== "passed") {
+        throw new Error("Generated consumer integrity or compile evidence is invalid");
+      }
+      setArtifactVerified(true);
+    } catch (cause) {
+      setError(safeError(cause));
+    }
+  };
+
   return (
     <div className="dialog-backdrop" role="presentation">
       <section
@@ -211,7 +232,7 @@ export function VerificationDialog({
                     <div className="consumer-artifact-actions">
                       <button type="button" onClick={() => void navigator.clipboard?.writeText(report.safeConsumer.source)}>Copy Solidity</button>
                       <a download={`${report.safeConsumer.contractName}.sol`} href={`data:text/plain;charset=utf-8,${encodeURIComponent(report.safeConsumer.source)}`}>Download .sol</a>
-                      <button type="button" onClick={generateConsumer}>Verify generated consumer</button>
+                      <button type="button" onClick={() => void verifyGeneratedConsumer()}>{artifactVerified ? "Generated consumer verified" : "Verify generated consumer"}</button>
                     </div>
                   </div>
                 </div>

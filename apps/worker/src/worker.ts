@@ -21,6 +21,7 @@ import {
   projectRun,
   replayProofBundle,
 } from "@proofline/domain";
+import { compileGeneratedConsumer } from "./solidity-compiler";
 import {
   calculateVotingRoundId,
   deriveWeb2JsonPreflightTrustBlockers,
@@ -494,6 +495,7 @@ export interface ProductionPipelinePorts {
   verifyConsumer(input: Record<string, unknown>): Promise<{
     passed: boolean;
     diagnostics: DiagnosticV1[];
+    requestUrl?: string;
   }>;
 }
 
@@ -1487,6 +1489,7 @@ export function createProductionCommandHandlers(input: {
         contractName: "ProoflineSafeWeb2JsonConsumer",
       });
       const safeBytes = encoder.encode(safeSource);
+      const compilation = compileGeneratedConsumer(safeSource);
       return {
         events,
         artifacts: [
@@ -1508,6 +1511,7 @@ export function createProductionCommandHandlers(input: {
             consumer: source.verification.consumerVerified
               ? "canonical-safe"
               : "canonical-vulnerable",
+            requestUrl: context.manifest.request.url,
             passed: source.verification.consumerVerified,
             diagnostics: source.verification.diagnostics,
             replaySourceChecksum: source.checksum,
@@ -1518,7 +1522,7 @@ export function createProductionCommandHandlers(input: {
             kind: "safe-consumer",
             canonicalBytes: safeBytes,
             sha256: sha256Bytes(safeBytes),
-            metadata: { compiler: "solc-0.8.36", replay: true },
+            metadata: { ...compilation, replay: true },
           },
         ],
         nextCommands: [child(context, "BUILD_PROOF_BUNDLE")],
@@ -2010,6 +2014,7 @@ export function createProductionCommandHandlers(input: {
         contractName: "ProoflineSafeWeb2JsonConsumer",
       });
       const safeBytes = encoder.encode(safeSource);
+      const compilation = compileGeneratedConsumer(safeSource);
       return {
         events: [
           event(
@@ -2024,6 +2029,7 @@ export function createProductionCommandHandlers(input: {
           artifact(context.runId, "consumer-evidence", {
             version: "1",
             consumer,
+            requestUrl: result.requestUrl,
             passed: result.passed,
             diagnostics: diagnostics.data,
           }),
@@ -2033,7 +2039,7 @@ export function createProductionCommandHandlers(input: {
             kind: "safe-consumer",
             canonicalBytes: safeBytes,
             sha256: sha256Bytes(safeBytes),
-            metadata: { compiler: "solc-0.8.36" },
+            metadata: compilation,
           },
         ],
         nextCommands: [child(context, "BUILD_PROOF_BUNDLE")],

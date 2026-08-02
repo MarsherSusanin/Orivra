@@ -59,6 +59,34 @@ const PersistedPreflightEvidenceV1Schema = z
   })
   .strict();
 
+const canonicalVulnerableConsumer = `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.25;
+
+import {ContractRegistry} from "@flarenetwork/flare-periphery-contracts/coston2/ContractRegistry.sol";
+import {IWeb2Json} from "@flarenetwork/flare-periphery-contracts/coston2/IWeb2Json.sol";
+
+contract CanonicalVulnerableWeb2JsonConsumer {
+    error InvalidWeb2JsonProof();
+    function consume(IWeb2Json.Proof calldata proof) external view returns (bytes memory) {
+        if (!ContractRegistry.getFdcVerification().verifyWeb2Json(proof)) revert InvalidWeb2JsonProof();
+        return proof.data.responseBody.abiEncodedData;
+    }
+}
+`;
+
+function fullUnifiedDiff(left: string, right: string, contractName: string) {
+  const leftLines = left.trimEnd().split("\n");
+  const rightLines = right.trimEnd().split("\n");
+  return [
+    "--- canonical-vulnerable",
+    `+++ ${contractName}`,
+    `@@ -1,${leftLines.length} +1,${rightLines.length} @@`,
+    ...leftLines.map((line) => `-${line}`),
+    ...rightLines.map((line) => `+${line}`),
+    "",
+  ].join("\n");
+}
+
 function fingerprint(value: unknown): Buffer {
   return createHash("sha256")
     .update(JSON.stringify(value))
@@ -986,7 +1014,9 @@ export function createProductionProoflineService(input: {
                 consumer.canonical_bytes AS consumer_bytes,
                 safe.canonical_bytes AS safe_bytes,
                 safe.sha256 AS safe_sha256,
-                safe.metadata AS safe_metadata
+                safe.metadata AS safe_metadata,
+                proof.event_payload AS proof_event,
+                terminal.event_payload AS consumer_event
          FROM proofline_private.runs AS run
          LEFT JOIN LATERAL (
            SELECT canonical_bytes FROM proofline_private.run_artifacts
@@ -999,6 +1029,16 @@ export function createProductionProoflineService(input: {
            WHERE run_id = run.id AND kind = 'safe-consumer'
            ORDER BY created_at DESC LIMIT 1
          ) AS safe ON true
+         LEFT JOIN LATERAL (
+           SELECT event_payload FROM proofline_private.run_events
+           WHERE run_id = run.id AND event_type = 'PROOF_VERIFIED'
+           ORDER BY sequence DESC LIMIT 1
+         ) AS proof ON true
+         LEFT JOIN LATERAL (
+           SELECT event_payload FROM proofline_private.run_events
+           WHERE run_id = run.id AND event_type = 'CONSUMER_VERIFIED'
+           ORDER BY sequence DESC LIMIT 1
+         ) AS terminal ON true
          WHERE run.id = $1 AND run.project_id = $2`,
         [runId, context.projectId],
       );
@@ -1014,30 +1054,43 @@ export function createProductionProoflineService(input: {
         const evidence = JSON.parse(Buffer.from(row.consumer_bytes).toString("utf8")) as Record<string, unknown>;
         const diagnostics = DiagnosticV1Schema.array().parse(evidence.diagnostics);
         const passed = evidence.passed === true;
-        const firstEvidence = diagnostics[0]?.evidence ?? {};
-        const identity = firstEvidence.consumer === "canonical-safe" || evidence.consumer === "canonical-safe"
+        if (row.proof_event?.type !== "PROOF_VERIFIED" || row.consumer_event?.type !== "CONSUMER_VERIFIED") {
+          throw new Error("Consumer Lab requires proof and terminal consumer events");
+        }
+        const terminalPayload = row.consumer_event.payload as Record<string, unknown>;
+        const terminalDiagnostics = DiagnosticV1Schema.array().parse(terminalPayload.diagnostics);
+        if (terminalPayload.passed !== passed || JSON.stringify(terminalDiagnostics) !== JSON.stringify(diagnostics)) {
+          throw new Error("Consumer artifact does not match terminal event");
+        }
+        const identity = evidence.consumer === "canonical-safe"
           ? "canonical-safe" as const
-          : passed ? "canonical-safe" as const : "canonical-vulnerable" as const;
-        const requestUrl = typeof firstEvidence.requestUrl === "string"
-          ? firstEvidence.requestUrl : manifest.request.url;
+          : evidence.consumer === "canonical-vulnerable"
+            ? "canonical-vulnerable" as const
+            : (() => { throw new Error("Consumer identity is missing"); })();
+        const diagnosticEvidence = diagnostics.map((item) => item.evidence);
+        const requestUrl = typeof evidence.requestUrl === "string"
+          ? evidence.requestUrl
+          : diagnosticEvidence.find((item) => typeof item.requestUrl === "string")?.requestUrl;
+        if (typeof requestUrl !== "string") throw new Error("Observed consumer URL is missing");
         const observedUrl = new URL(requestUrl);
-        const missing = new Set(
-          Array.isArray(firstEvidence.missingChecks)
-            ? firstEvidence.missingChecks.filter((value): value is string => typeof value === "string")
-            : [],
-        );
+        const missing = new Set<string>();
+        for (const item of diagnosticEvidence) {
+          if (Array.isArray(item.missingChecks)) {
+            for (const value of item.missingChecks) if (typeof value === "string") missing.add(value);
+          }
+        }
         const expectedQuery = new URLSearchParams(manifest.consumer.expectedQuery).toString();
         const observedQuery = observedUrl.searchParams.toString();
         const facts = [
-          ["scheme", manifest.consumer.expectedScheme, observedUrl.protocol.replace(/:$/, "")],
-          ["host", manifest.consumer.expectedHost, observedUrl.hostname],
-          ["path", manifest.consumer.expectedPathPrefix, observedUrl.pathname],
-          ["query", expectedQuery, observedQuery],
+          ["scheme", manifest.consumer.expectedScheme, observedUrl.protocol.replace(/:$/, ""), observedUrl.protocol.replace(/:$/, "") === manifest.consumer.expectedScheme],
+          ["host", manifest.consumer.expectedHost, observedUrl.hostname, observedUrl.hostname === manifest.consumer.expectedHost],
+          ["path", manifest.consumer.expectedPathPrefix, observedUrl.pathname, observedUrl.pathname.startsWith(manifest.consumer.expectedPathPrefix)],
+          ["query", expectedQuery, observedQuery, observedQuery === expectedQuery],
         ] as const;
-        const checks = facts.map(([invariant, expected, observed]) => ({
+        const checks = facts.map(([invariant, expected, observed, matches]) => ({
           invariant, expected, observed,
-          enforced: !missing.has(invariant) && (identity === "canonical-safe" || passed),
-          passed: !missing.has(invariant) && (identity === "canonical-safe" || passed),
+          enforced: identity === "canonical-safe" && !missing.has(invariant),
+          passed: identity === "canonical-safe" && !missing.has(invariant) && matches,
         })) as [{ invariant: "scheme"; expected: string; observed: string; enforced: boolean; passed: boolean }, { invariant: "host"; expected: string; observed: string; enforced: boolean; passed: boolean }, { invariant: "path"; expected: string; observed: string; enforced: boolean; passed: boolean }, { invariant: "query"; expected: string; observed: string; enforced: boolean; passed: boolean }];
         const sourceBytes = Buffer.from(row.safe_bytes);
         const storedHash = Buffer.from(row.safe_sha256).toString("hex");
@@ -1046,20 +1099,24 @@ export function createProductionProoflineService(input: {
         const source = sourceBytes.toString("utf8");
         const contractName = /contract\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(source)?.[1];
         if (!contractName) throw new Error("Safe consumer contract name is missing");
-        const compilerVersion = typeof row.safe_metadata?.compiler === "string"
-          ? row.safe_metadata.compiler : "solc-0.8.36";
+        const compilerVersion = row.safe_metadata?.compiler;
+        const compileStatus = row.safe_metadata?.compileStatus;
+        if (typeof compilerVersion !== "string" || compileStatus !== "passed") {
+          throw new Error("Safe consumer compile evidence is missing");
+        }
         const missingChecks = checks.filter((check) => !check.enforced || !check.passed).length;
-        const diff = `--- canonical-vulnerable\n+++ ${contractName}\n@@ URL trust invariants @@\n- proof verification only\n+ requireScheme\n+ requireHost\n+ requirePathPrefix\n+ requireQueryValue\n`;
+        const diff = fullUnifiedDiff(canonicalVulnerableConsumer, source, contractName);
         return ConsumerLabReportV1Schema.parse({
           version: "1", runId, statement: "Valid proof ≠ trusted URL",
           proofValid: true, consumerIdentity: identity, passed,
           checks, diagnostics,
           safeConsumer: {
             identity: "canonical-safe", contractName, compilerVersion,
-            compileStatus: "passed", sha256: `sha256:${actualHash}`, source, diff,
+            compileStatus, sha256: `sha256:${actualHash}`, source, diff,
           },
           verdict: {
-            state: missingChecks === 0 ? "safe-to-integrate" : "needs-fixes",
+            state: passed && identity === "canonical-safe" && missingChecks === 0
+              ? "safe-to-integrate" : "needs-fixes",
             missingChecks,
           },
         });

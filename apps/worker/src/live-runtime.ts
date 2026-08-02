@@ -815,10 +815,11 @@ export function createLiveCoston2PipelinePorts(input: {
         (decoded.data as { requestBody: { url: string } }).requestBody.url,
       );
       const diagnostics = diagnoseConsumerRequest(manifest, requestUrl);
-      if (diagnostics.length > 0) return { passed: false, diagnostics };
+      if (diagnostics.length > 0) return { passed: false, diagnostics, requestUrl };
       if (value.consumer === "canonical-vulnerable") {
         return {
           passed: false,
+          requestUrl,
           diagnostics: [
             {
               version: "1" as const,
@@ -842,7 +843,7 @@ export function createLiveCoston2PipelinePorts(input: {
         required(environment, "PROOFLINE_SAFE_CONSUMER_ADDRESS"),
       );
       await read(safeConsumer, consumerAbi(), "consume", [decoded]);
-      return { passed: true, diagnostics: [] };
+      return { passed: true, diagnostics: [], requestUrl };
     },
   };
 }

@@ -654,7 +654,11 @@ describe("live Coston2 pipeline port coverage", () => {
         manifest: validManifest,
         consumer: "safe",
       }),
-    ).resolves.toEqual({ passed: true, diagnostics: [] });
+    ).resolves.toEqual({
+      passed: true,
+      diagnostics: [],
+      requestUrl: "https://api.example.com/prices/eth?currency=USD&source=primary&window=1h",
+    });
     expect(
       fixture.publicClient.readContract.mock.calls.some(
         ([request]) => request.functionName === "consume",
