@@ -42,6 +42,52 @@ function annotation(
 }
 
 describe("Slice 018 recovery projection", () => {
+  it("rejects recovery before RUN_CREATED and resume without an unresolved annotation", () => {
+    expect(() => projectRun([
+      { ...annotation(1, "STAGE_RETRY_SCHEDULED", recovery), sequence: 1 },
+    ])).toThrow(/RUN_CREATED before recovery/i);
+    expect(() => projectRun([
+      created,
+      annotation(2, "RUN_RESUMED", {
+        stage: "preflight",
+        attempt: 2,
+        resumeFrom: "preflight",
+        preservedEvidence: [],
+      }),
+    ])).toThrow(/requires unresolved recovery/i);
+  });
+
+  it("rejects a resume whose stage or checkpoint differs from the scheduled command", () => {
+    const scheduled = annotation(2, "STAGE_RETRY_SCHEDULED", recovery);
+    expect(() => projectRun([
+      created,
+      scheduled,
+      annotation(3, "RUN_RESUMED", {
+        stage: "request",
+        attempt: 2,
+        resumeFrom: "submission",
+        preservedEvidence: [],
+      }),
+    ])).toThrow(/advance monotonically/i);
+  });
+
+  it("selects the latest unresolved recovery across independent commands", () => {
+    const first = annotation(2, "STAGE_RETRY_SCHEDULED", recovery);
+    const second = {
+      ...annotation(3, "STAGE_WAITING", {
+        ...recovery,
+        state: "waiting",
+        retrySafety: "same-command",
+        updatedAt: "2026-08-03T02:00:03.000Z",
+      }),
+      commandId: "command_registry",
+    };
+    expect(projectRun([created, first, second] as any).recovery).toMatchObject({
+      state: "waiting",
+      updatedAt: "2026-08-03T02:00:03.000Z",
+    });
+  });
+
   it("interleaves retry evidence without advancing the six-stage lifecycle", () => {
     const scheduled = annotation(2, "STAGE_RETRY_SCHEDULED", recovery);
     const projection = projectRun([created, scheduled]);
