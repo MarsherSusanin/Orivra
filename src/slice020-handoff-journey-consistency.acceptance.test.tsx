@@ -18,6 +18,8 @@ import type {
 } from "../packages/contracts/src";
 
 const PROJECT_TOKEN = `project_${"a".repeat(64)}`;
+const FAILING_REQUEST_URL =
+  "https://mirror.example.net/prices/eth?currency=USD&source=primary";
 const replayManifest = {
   ...validManifest,
   submission: { ...validManifest.submission, mode: "replay" as const },
@@ -159,6 +161,26 @@ describe("Slice 020 canonical hermetic handoff journey", () => {
     expect.soft(
       observedReport!.diagnostics.map(({ code }) => code).sort(),
     ).toEqual([...observedReceipt!.consumerResult.diagnosticCodes].sort());
+    const hostDiagnostic = observedReport!.diagnostics.find(
+      ({ code }) => code === "CONSUMER_HOST_MISMATCH",
+    );
+    expect.soft(hostDiagnostic?.evidence).toMatchObject({
+      actual: "mirror.example.net",
+      requestUrl: FAILING_REQUEST_URL,
+    });
+    const observedChecks = Object.fromEntries(
+      observedReport!.checks.map(({ invariant, observed }) => [invariant, observed]),
+    );
+    expect.soft(observedChecks).toEqual({
+      scheme: "https",
+      host: "mirror.example.net",
+      path: "/prices/eth",
+      query: "currency=USD&source=primary",
+    });
+    expect.soft(hostDiagnostic?.evidence.actual).toBe(observedChecks.host);
+    expect.soft(
+      new URL(String(hostDiagnostic?.evidence.requestUrl)).hostname,
+    ).toBe(observedChecks.host);
 
     const expectedDownloads = [
       ["receipt", `${runId}.receipt.json`, canonicalSerializeEvidenceReceipt(observedReceipt!)],
@@ -284,6 +306,123 @@ describe("Slice 020 canonical hermetic handoff journey", () => {
         name: /open integration package/i,
       }));
     }
+
+    const integration = await screen.findByRole("dialog", {
+      name: /integration package/i,
+    });
+    expect(await within(integration).findByRole("link", {
+      name: /download receipt/i,
+    })).toBeVisible();
+    const safeDownload = within(integration).getByRole("link", {
+      name: /download solidity/i,
+    });
+    expect(decodedDownload(safeDownload)).toBe(persistedReport.safeConsumer.source);
+    expect(integration).toHaveTextContent(
+      `node packages/cli/dist/index.js replay ${runId}.proofline.json`,
+    );
+    expect(consumerVerificationPosts).toBe(1);
+  }, 15_000);
+
+  it("resumes terminal vulnerable evidence before codegen without rerunning verification", async () => {
+    const system = createHermeticProoflineSystem({
+      projectToken: PROJECT_TOKEN,
+      fixture: "web2json-host-invariant",
+      now: "2025-05-15T12:04:11.000Z",
+    });
+    const create = await system.api.fetch(projectRequest(
+      "/v1/runs",
+      "POST",
+      { manifest: replayManifest },
+      "slice020-before-codegen-create",
+    ));
+    const { runId } = await create.json() as { runId: string };
+    await system.worker.drain();
+    await system.api.fetch(projectRequest(
+      `/v1/runs/${runId}/submissions`,
+      "POST",
+      { mode: "replay" },
+      "slice020-before-codegen-submit",
+    ));
+    await system.worker.drain();
+
+    let consumerVerificationPosts = 0;
+    const hermeticFetch: typeof globalThis.fetch = async (input, init) => {
+      const request = new Request(input, init);
+      const consumerVerification =
+        request.method === "POST" &&
+        /\/v1\/runs\/[^/]+\/consumer-verifications$/.test(new URL(request.url).pathname);
+      if (consumerVerification) consumerVerificationPosts += 1;
+      const response = await system.api.fetch(request);
+      if (response.ok && consumerVerification) await system.worker.drain();
+      return response;
+    };
+    const createServices = () => createLiveSurfaceServices({
+      baseUrl: "https://api.proofline.test",
+      projectToken: PROJECT_TOKEN,
+      expectedWebOrigin: "https://proofline.test",
+      fetch: hermeticFetch,
+      storage: localStorage,
+      recoveryStorage: sessionStorage,
+    });
+
+    window.history.replaceState({}, "", `/runs/${runId}`);
+    const user = userEvent.setup();
+    const firstSession = render(
+      <App projectToken={PROJECT_TOKEN} services={createServices()} />,
+    );
+    await user.click(await screen.findByRole("button", { name: /^verify consumer$/i }));
+    const consumerDialog = await screen.findByRole("dialog", {
+      name: /consumer verification/i,
+    });
+    await user.click(within(consumerDialog).getByRole("button", {
+      name: /run verification/i,
+    }));
+    expect(await within(consumerDialog).findByText("CONSUMER_HOST_MISMATCH"))
+      .toBeVisible();
+    await user.click(within(consumerDialog).getByRole("button", {
+      name: /close consumer verification/i,
+    }));
+    firstSession.unmount();
+    expect(consumerVerificationPosts).toBe(1);
+
+    window.history.replaceState({}, "", `/runs/${runId}`);
+    render(<App projectToken={PROJECT_TOKEN} services={createServices()} />);
+    const resumeAction = await screen.findByRole("button", {
+      name: /^(?:resume consumer lab|open consumer lab)$/i,
+    });
+    expect(screen.getAllByRole("button", {
+      name: /^(?:resume consumer lab|open consumer lab)$/i,
+    })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /retry verification/i }))
+      .not.toBeInTheDocument();
+    expect(consumerVerificationPosts).toBe(1);
+
+    await user.click(resumeAction);
+    const resumedLab = await screen.findByRole("dialog", {
+      name: /consumer (?:verification|lab)/i,
+    });
+    expect(within(resumedLab).queryByRole("button", {
+      name: /run verification|retry verification/i,
+    })).not.toBeInTheDocument();
+    expect(await within(resumedLab).findByText("CONSUMER_HOST_MISMATCH"))
+      .toBeVisible();
+    expect(consumerVerificationPosts).toBe(1);
+
+    await user.click(within(resumedLab).getByRole("button", {
+      name: /generate safe consumer/i,
+    }));
+    expect(await within(resumedLab).findByText("Valid proof ≠ trusted URL"))
+      .toBeVisible();
+    const persistedReport = await createServices().getConsumerLabReport!({
+      runId,
+      projectToken: PROJECT_TOKEN,
+    });
+    await user.click(within(resumedLab).getByRole("button", {
+      name: /^verify generated consumer$/i,
+    }));
+    await user.click(await within(resumedLab).findByRole("button", {
+      name: /open integration package/i,
+    }));
 
     const integration = await screen.findByRole("dialog", {
       name: /integration package/i,

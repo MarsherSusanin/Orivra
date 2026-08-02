@@ -75,3 +75,65 @@ npx vitest run src/slice020b-integration-package.contract.test.tsx --reporter=do
 
 Result: `8/8` PASS. This isolates the defect to the real hermetic journey rather
 than the component's consistency checks or static artifact rendering.
+
+## Corrective RED extension after rejected candidate
+
+Corrective extension base:
+
+- Commit: `d4d92fdf54859af63c0bbb6e569283128410e49c`
+- Tree: `c8f92f930bd765287408893ec6e255cef5642041`
+- Role: Contract & Test Designer
+- Scope: focused acceptance and evidence only; no production or checked-in
+  GitHub Action artifact changes.
+
+The extension freezes two remaining core contracts:
+
+1. Consumer Lab derives every observed scheme, host, path and query value from
+   the exact request URL that produced the persisted terminal diagnostic:
+   `https://mirror.example.net/prices/eth?currency=USD&source=primary`.
+   `CONSUMER_HOST_MISMATCH.evidence.actual`, its `evidence.requestUrl`, and the
+   report matrix must agree. The canonical manifest URL is not valid observed
+   evidence for this fixture.
+2. When the page is closed or unmounted after the terminal vulnerable-consumer
+   failure but before codegen, a fresh `/runs/:id` load exposes exactly one
+   `Resume Consumer Lab` or `Open Consumer Lab` action. Opening it must restore
+   `CONSUMER_HOST_MISMATCH` and offer safe-consumer generation without a `Run
+   verification` or `Retry verification` action and without a second
+   consumer-verification POST. The user can then generate the persisted safe
+   consumer, verify it, and reach Integration Package.
+
+Corrective RED evidence:
+
+```text
+npm run typecheck
+```
+
+Result: PASS.
+
+```text
+npx vitest run src/slice020-handoff-journey-consistency.acceptance.test.tsx --reporter=verbose
+```
+
+Result: expected RED, `2` failed and `1` passed:
+
+- the diagnostic correctly persists `actual=mirror.example.net` and the exact
+  failing `requestUrl`, but the report matrix incorrectly observes
+  `host=api.example.com`;
+- the report matrix also adds manifest-only `window=1h` to the observed query
+  instead of preserving `currency=USD&source=primary` from the failing URL;
+- therefore diagnostic `actual`/`requestUrl` and matrix `observed` disagree;
+- after reload before codegen, the cockpit has one safe `Resume Consumer Lab`
+  action, but the resumed dialog incorrectly offers `Run verification` instead
+  of restoring the persisted terminal evidence and codegen path.
+
+The already-frozen post-codegen reload journey remains green in the same run.
+
+The standalone Action artifact guard was recorded separately without editing
+its test, production source, or checked-in artifact:
+
+```text
+npx vitest run tests/action-artifact-sync.contract.test.ts --reporter=verbose
+```
+
+Result: expected RED, `1/1` failed because `packages/action/dist/index.js` is
+not byte-identical to a clean deterministic build of `packages/action/src/entry.ts`.
