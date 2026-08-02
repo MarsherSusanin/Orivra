@@ -119,7 +119,7 @@ describe("production run route and hydration", () => {
 
     expect(await screen.findByLabelText(/consumer: failed/i)).toBeVisible();
     expect(screen.getByText(/expected host is not enforced/i)).toBeVisible();
-    expect(screen.getByRole("button", { name: /retry verification/i })).toBeVisible();
+    expect(screen.getByRole("button", { name: /resume consumer lab/i })).toBeVisible();
   });
 });
 
