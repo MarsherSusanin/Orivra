@@ -606,7 +606,11 @@ export function createHermeticProoflineSystem(input: {
       run(context.runId);
       const token = `share_${randomBytes(32).toString("hex")}`;
       db.shares.set(token, context.runId);
-      return { token, url: `https://proofline.test/shared/${token}` };
+      return {
+        version: "1" as const,
+        runId: context.runId,
+        url: `https://proofline.test/runs/${context.runId}#share=${token}`,
+      };
     },
   };
 

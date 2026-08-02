@@ -1397,3 +1397,38 @@ export const EvidenceReceiptV1Schema = z
   });
 
 export type EvidenceReceiptV1 = z.infer<typeof EvidenceReceiptV1Schema>;
+
+export const ShareLinkV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    runId: NonEmptyIdSchema,
+    url: z.string().url(),
+  })
+  .strict()
+  .superRefine((link, context) => {
+    const url = new URL(link.url);
+    const token = /^#share=(share_[a-f0-9]{64})$/.exec(url.hash)?.[1];
+    const pathRunId = /^\/runs\/([^/]+)\/?$/.exec(url.pathname)?.[1];
+    let decodedRunId: string | undefined;
+    try {
+      decodedRunId = pathRunId === undefined ? undefined : decodeURIComponent(pathRunId);
+    } catch {
+      decodedRunId = undefined;
+    }
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.search !== "" ||
+      token === undefined ||
+      decodedRunId !== link.runId
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["url"],
+        message: "Share URL must be an HTTPS run-bound fragment capability",
+      });
+    }
+  });
+
+export type ShareLinkV1 = z.infer<typeof ShareLinkV1Schema>;

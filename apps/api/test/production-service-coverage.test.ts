@@ -203,10 +203,11 @@ describe("production service read, artifact, replay, and share coverage", () => 
       projectId: PROJECT_ID,
       expiresAt: "2025-05-16T12:04:11.000Z",
     });
-    expect(share.token).toMatch(/^share_[a-f0-9]{64}$/);
-    expect(share.url).toBe(
-      `https://proofline.test/runs/${RUN_ID}?share=${share.token}`,
+    expect(share).toMatchObject({ version: "1", runId: RUN_ID });
+    expect(share.url).toMatch(
+      new RegExp(`^https://proofline\\.test/runs/${RUN_ID}#share=share_[a-f0-9]{64}$`),
     );
+    expect(share).not.toHaveProperty("token");
   });
 
   it("fails closed for missing IDs, foreign runs, and unavailable artifacts", async () => {

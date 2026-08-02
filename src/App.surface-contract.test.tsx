@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 import { App } from "./App";
 import { withHydratedRun } from "./test/cockpit-fixture";
 
@@ -34,6 +34,11 @@ function renderWithServices(overrides: Record<string, unknown> = {}) {
   );
   return services;
 }
+
+afterEach(() => {
+  window.history.replaceState({}, "", "/");
+  sessionStorage.clear();
+});
 
 describe("Run Cockpit live surface contract", () => {
   it("calls evidence-backed verification and safe codegen instead of the simulator", async () => {

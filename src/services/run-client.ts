@@ -1,17 +1,21 @@
 import type {
   ConsumerLabReportV1,
   CreateRunResultV1,
+  EvidenceReceiptV1,
   PreflightReportV1,
   RunListPageV1,
   SubmissionResponseV1,
+  ShareLinkV1,
   Web2JsonManifestV1,
   WalletTransactionV1,
 } from "../../packages/contracts/src";
 import {
   ConsumerLabReportV1Schema,
   CreateRunResultV1Schema,
+  EvidenceReceiptV1Schema,
   PreflightReportV1Schema,
   SubmissionResponseV1Schema,
+  ShareLinkV1Schema,
 } from "../../packages/contracts/src";
 
 const LAST_RUN_KEY = "proofline:last-run";
@@ -354,6 +358,34 @@ export function createRunClient(input: {
         throw new ProoflineClientError(
           "Consumer Lab artifact integrity check failed",
           { status: 502, code: "CONSUMER_LAB_ARTIFACT_INVALID" },
+        );
+      }
+      return parsed.data;
+    },
+
+    async getEvidenceReceipt(runId: string): Promise<EvidenceReceiptV1> {
+      const result = await request<unknown>(`/runs/${encodeURIComponent(runId)}/receipt`);
+      const parsed = EvidenceReceiptV1Schema.safeParse(result);
+      if (!parsed.success || parsed.data.runId !== runId) {
+        throw new ProoflineClientError(
+          "Proofline returned an invalid evidence receipt contract",
+          { status: 502, code: "EVIDENCE_RECEIPT_INVALID" },
+        );
+      }
+      return parsed.data;
+    },
+
+    async createShare(runId: string, idempotencyKey: string): Promise<ShareLinkV1> {
+      const result = await request<unknown>(`/runs/${encodeURIComponent(runId)}/share`, {
+        method: "POST",
+        body: {},
+        idempotencyKey,
+      });
+      const parsed = ShareLinkV1Schema.safeParse(result);
+      if (!parsed.success || parsed.data.runId !== runId) {
+        throw new ProoflineClientError(
+          "Proofline returned an invalid share-link contract",
+          { status: 502, code: "SHARE_LINK_INVALID" },
         );
       }
       return parsed.data;

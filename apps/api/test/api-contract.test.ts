@@ -66,8 +66,9 @@ function createHarness() {
     getBundle: vi.fn().mockResolvedValue({ version: "1", runId, checksum: `sha256:${"a".repeat(64)}` }),
     replay: vi.fn().mockResolvedValue({ runId: "run_replay", byteIdentical: true }),
     createShare: vi.fn().mockResolvedValue({
-      token: shareToken,
-      url: `https://proofline.test/shared/${shareToken}`,
+      version: "1",
+      runId,
+      url: `https://proofline.test/runs/${runId}#share=${shareToken}`,
     }),
   };
   const authenticate = vi.fn(async (rawToken: string) => {

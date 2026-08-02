@@ -24,12 +24,14 @@ export function VerificationDialog({
   onClose,
   onVerified,
   onProductEvent,
+  onOpenIntegration,
 }: {
   context: RunServiceContext;
   services: RunSurfaceServices;
   onClose: () => void;
   onVerified?: () => void;
   onProductEvent?: (event: ProductEventInputV1) => void;
+  onOpenIntegration?: () => void;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -236,6 +238,9 @@ export function VerificationDialog({
                       <a download={`${report.safeConsumer.contractName}.sol`} href={`data:text/plain;charset=utf-8,${encodeURIComponent(report.safeConsumer.source)}`}>Download .sol</a>
                       <button type="button" onClick={() => void verifyGeneratedConsumer()}>{artifactVerified ? "Generated consumer verified" : "Verify generated consumer"}</button>
                     </div>
+                    {artifactVerified && onOpenIntegration ? (
+                      <button className="dialog-primary" type="button" onClick={onOpenIntegration}>Open integration package<Code size={20} aria-hidden="true" /></button>
+                    ) : null}
                   </div>
                 </div>
               ) : (

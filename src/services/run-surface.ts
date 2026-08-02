@@ -10,9 +10,11 @@ import {
   Web2JsonManifestV1Schema,
   type CreateRunResultV1,
   type ConsumerLabReportV1,
+  type EvidenceReceiptV1,
   type PreflightReportV1,
   type RunRecoveryV1,
   type RunListPageV1,
+  type ShareLinkV1,
   type SubmissionResponseV1,
   type Web2JsonManifestV1,
 } from "../../packages/contracts/src";
@@ -58,6 +60,10 @@ export type CreateRunContext = {
 
 export type ConfirmSubmissionContext = RunServiceContext & {
   mode: SubmissionModeView;
+  idempotencyKey: string;
+};
+
+export type CreateShareContext = RunServiceContext & {
   idempotencyKey: string;
 };
 
@@ -109,6 +115,8 @@ export interface RunSurfaceServices {
   createRun?(context: CreateRunContext): Promise<CreateRunResultV1>;
   getPreflightReport?(context: RunServiceContext): Promise<PreflightReportV1>;
   getConsumerLabReport?(context: RunServiceContext): Promise<ConsumerLabReportV1>;
+  getEvidenceReceipt?(context: RunServiceContext): Promise<EvidenceReceiptV1>;
+  createShare?(context: CreateShareContext): Promise<ShareLinkV1>;
   confirmSubmission?(context: ConfirmSubmissionContext): Promise<
     SubmissionResponseV1 | { transactionHash: string }
   >;
@@ -475,11 +483,13 @@ export function createLiveSurfaceServices(input: {
   storage?: Pick<Storage, "getItem" | "setItem">;
   recoveryStorage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
   walletProvider?: Eip1193Provider;
+  fetch?: typeof globalThis.fetch;
 }): RunSurfaceServices {
   const client = createRunClient({
     baseUrl: input.baseUrl,
     projectToken: input.projectToken,
     storage: input.storage,
+    fetch: input.fetch,
   });
   const eventsByRun = new Map<string, Record<string, unknown>[]>();
   const recoveryStorage = input.recoveryStorage ?? globalThis.sessionStorage;
@@ -527,6 +537,19 @@ export function createLiveSurfaceServices(input: {
     async getConsumerLabReport(context) {
       assertReadContext(context);
       return client.getConsumerLabReport(context.runId);
+    },
+
+    async getEvidenceReceipt(context) {
+      assertReadContext(context);
+      return client.getEvidenceReceipt(context.runId);
+    },
+
+    async createShare(context) {
+      assertContext(context);
+      if (!context.projectToken.startsWith("project_")) {
+        throw new Error("A project credential is required; shared runs are read-only");
+      }
+      return client.createShare(context.runId, context.idempotencyKey);
     },
 
     async confirmSubmission(context) {

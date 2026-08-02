@@ -13,6 +13,7 @@ import { stageReplacementComposerDraft } from "./services/composer-draft-store";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { EvidenceStrip } from "./components/EvidenceStrip";
 import { ManifestComposer } from "./components/ManifestComposer";
+import { IntegrationPackageDialog } from "./components/IntegrationPackageDialog";
 import { PreflightDiagnosticsRail } from "./components/PreflightDiagnosticsRail";
 import {
   PreflightWorkbench,
@@ -39,6 +40,7 @@ import {
 } from "./services/run-surface";
 
 const PROJECT_TOKEN_KEY = "proofline:project-token";
+const SHARE_TOKEN_PATTERN = /^share_[a-f0-9]{64}$/;
 const UNAVAILABLE_STORAGE = {
   getItem: () => null,
   setItem: () => undefined,
@@ -92,7 +94,40 @@ function useProductEventEmitter(analytics: ProductAnalyticsPort | undefined) {
   );
 }
 
-function sessionProjectToken(): string {
+function shareSessionKey(runId: string): string {
+  return `proofline:share-token:${runId}`;
+}
+
+function scrubShareLocation(url: URL): void {
+  globalThis.history.replaceState({}, "", `${url.pathname}${url.search}`);
+}
+
+function sessionAccessToken(): string {
+  const runId = deepRouteRunId();
+  if (runId && globalThis.location) {
+    const url = new URL(globalThis.location.href);
+    const queryShare = url.searchParams.has("share");
+    if (queryShare) url.searchParams.delete("share");
+    const fragmentAttempt = url.hash.startsWith("#share=");
+    const fragmentValue = fragmentAttempt ? url.hash.slice("#share=".length) : "";
+    if (queryShare || fragmentAttempt) {
+      url.hash = "";
+      scrubShareLocation(url);
+      if (queryShare || !SHARE_TOKEN_PATTERN.test(fragmentValue)) return "";
+      try {
+        browserSessionStorage().setItem(shareSessionKey(runId), fragmentValue);
+      } catch {
+        return "";
+      }
+      return fragmentValue;
+    }
+    try {
+      const shared = browserSessionStorage().getItem(shareSessionKey(runId));
+      if (shared && SHARE_TOKEN_PATTERN.test(shared)) return shared;
+    } catch {
+      return "";
+    }
+  }
   try {
     return browserSessionStorage().getItem(PROJECT_TOKEN_KEY) ?? "";
   } catch {
@@ -277,15 +312,24 @@ function diagnosticsPanelFromLocation(): boolean {
   return new URLSearchParams(globalThis.location?.search ?? "").get("panel") === "diagnostics";
 }
 
-function writeDiagnosticsPanel(open: boolean): void {
+type SecondaryPanel = "diagnostics" | "consumer" | "integration";
+
+function secondaryPanelFromLocation(): SecondaryPanel | null {
+  const panel = new URLSearchParams(globalThis.location?.search ?? "").get("panel");
+  return panel === "diagnostics" || panel === "consumer" || panel === "integration"
+    ? panel
+    : null;
+}
+
+function writeSecondaryPanel(panel: SecondaryPanel | null): void {
   const url = new URL(globalThis.location.href);
-  if (open) url.searchParams.set("panel", "diagnostics");
+  if (panel) url.searchParams.set("panel", panel);
   else url.searchParams.delete("panel");
-  globalThis.history.pushState(
-    {},
-    "",
-    `${url.pathname}${url.search}${url.hash}`,
-  );
+  globalThis.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function writeDiagnosticsPanel(open: boolean): void {
+  writeSecondaryPanel(open ? "diagnostics" : null);
 }
 
 type RunJourneyStep = "preflight" | "submission";
@@ -346,18 +390,24 @@ function reportFailureKind(cause: unknown): Exclude<PreflightReportSurfaceState[
 function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {}) {
   const [diagnosticExpanded, setDiagnosticExpanded] = useState(diagnosticsPanelFromLocation);
   const [runStep, setRunStep] = useState(runStepFromLocation);
-  const [verificationOpen, setVerificationOpen] = useState(false);
+  const [verificationOpen, setVerificationOpen] = useState(
+    () => secondaryPanelFromLocation() === "consumer",
+  );
+  const [integrationOpen, setIntegrationOpen] = useState(
+    () => secondaryPanelFromLocation() === "integration",
+  );
   const [bundleState, setBundleState] = useState<"idle" | "running" | "verified" | "error">("idle");
   const [bundleSource, setBundleSource] = useState<string | null>(null);
   const [bundleError, setBundleError] = useState("");
   const [sessionToken, setSessionToken] = useState(
-    () => projectToken ?? sessionProjectToken(),
+    () => projectToken ?? sessionAccessToken(),
   );
   const [hydratedRun, setHydratedRun] = useState<HydratedRunView | null>(null);
   const [hydrationError, setHydrationError] = useState("");
   const [hydrationRevision, setHydrationRevision] = useState(0);
   const [preflightReportState, setPreflightReportState] = useState<PreflightReportSurfaceState>({ kind: "loading" });
   const verifyTrigger = useRef<HTMLButtonElement>(null);
+  const integrationTrigger = useRef<HTMLButtonElement>(null);
   const observedProofState = useRef(new Map<string, ProofObservation>());
   const observedPreflightState = useRef(new Map<string, PreflightObservation>());
   const recordedProofRuns = useRef(new Set<string>());
@@ -397,7 +447,10 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
 
   useEffect(() => {
     const restoreRouteState = () => {
-      setDiagnosticExpanded(diagnosticsPanelFromLocation());
+      const panel = secondaryPanelFromLocation();
+      setDiagnosticExpanded(panel === "diagnostics");
+      setVerificationOpen(panel === "consumer");
+      setIntegrationOpen(panel === "integration");
       setRunStep(runStepFromLocation());
     };
     globalThis.addEventListener("popstate", restoreRouteState);
@@ -614,13 +667,36 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
 
   const closeVerification = () => {
     setVerificationOpen(false);
+    if (secondaryPanelFromLocation() === "consumer") writeSecondaryPanel(null);
     verifyTrigger.current?.focus();
+  };
+
+  const openVerification = () => {
+    writeSecondaryPanel("consumer");
+    setVerificationOpen(true);
+    setIntegrationOpen(false);
+  };
+
+  const closeIntegration = () => {
+    setIntegrationOpen(false);
+    if (secondaryPanelFromLocation() === "integration") writeSecondaryPanel(null);
+    integrationTrigger.current?.focus();
+  };
+
+  const openIntegration = () => {
+    writeSecondaryPanel("integration");
+    setVerificationOpen(false);
+    setIntegrationOpen(true);
   };
 
   const toggleDiagnostics = () => {
     const nextExpanded = !diagnosticExpanded;
     writeDiagnosticsPanel(nextExpanded);
     setDiagnosticExpanded(nextExpanded);
+    if (nextExpanded) {
+      setVerificationOpen(false);
+      setIntegrationOpen(false);
+    }
   };
 
   const continueToSubmission = () => {
@@ -762,6 +838,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const startedAt = displayStartedAt(hydratedRun.startedAt);
   const timeline = timelineFromProjection(hydratedRun.stages, hydratedRun.stageDetails);
   const consumerFailed = hydratedRun.stages.consumer === "failed";
+  const consumerTerminal = hydratedRun.stages.consumer === "completed";
   const proofAvailable = hydratedRun.stages.proof === "completed";
   const activeStage = currentStage(hydratedRun.stages);
   const activeStageLabel = sentenceCase(activeStage.stage);
@@ -882,11 +959,17 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
               <div className="next-action-content">
                 {proofAvailable ? (
                   <>
-                    <h2 id="next-action-title">Proof is ready.</h2>
-                    <p>Verify your consumer contract before consuming the attestation.</p>
-                    <button ref={verifyTrigger} className="verify-button" type="button" onClick={() => setVerificationOpen(true)}>{consumerFailed ? "Retry verification" : "Verify consumer"}<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
+                    <h2 id="next-action-title">{consumerTerminal ? "Evidence is ready." : "Proof is ready."}</h2>
+                    <p>{consumerTerminal ? "Take the verified receipt and integration artifacts into your repository." : "Verify your consumer contract before consuming the attestation."}</p>
+                    {consumerTerminal ? (
+                      <button ref={integrationTrigger} className="verify-button" type="button" onClick={openIntegration}>Open integration package<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
+                    ) : isProjectAccess ? (
+                      <button ref={verifyTrigger} className="verify-button" type="button" onClick={openVerification}>{consumerFailed ? "Retry verification" : "Verify consumer"}<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
+                    ) : (
+                      <span className="stage-waiting-state is-pending">Read-only shared run · consumer evidence pending</span>
+                    )}
                     <div className="action-footer">
-                      <span>Next step: Verify consumer invariants and enforcement.</span>
+                      <span>{consumerTerminal ? "Next step: Add the persisted artifacts to your repository." : "Next step: Verify consumer invariants and enforcement."}</span>
                       {bundleState === "verified" && bundleSource ? (
                         <a
                           className="bundle-download"
@@ -941,6 +1024,14 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
           onClose={closeVerification}
           onVerified={() => setHydrationRevision((value) => value + 1)}
           onProductEvent={emitProductEvent}
+          onOpenIntegration={openIntegration}
+        />
+      ) : null}
+      {integrationOpen ? (
+        <IntegrationPackageDialog
+          context={{ runId: activeRunId, projectToken: resolvedToken }}
+          services={servicePort}
+          onClose={closeIntegration}
         />
       ) : null}
     </div>
@@ -954,7 +1045,7 @@ function ProductEntry({
   route,
 }: AppProps & { route: "runs" | "new" }) {
   const [sessionToken, setSessionToken] = useState(
-    () => projectToken ?? sessionProjectToken(),
+    () => projectToken ?? sessionAccessToken(),
   );
   const [connectOpen, setConnectOpen] = useState(false);
   const [createdRunId, setCreatedRunId] = useState<string | null>(null);

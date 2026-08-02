@@ -1273,8 +1273,9 @@ export function createProductionProoflineService(input: {
         ],
       );
       return {
-        token: raw,
-        url: `${input.publicWebOrigin.replace(/\/+$/, "")}/runs/${runId}?share=${raw}`,
+        version: "1" as const,
+        runId,
+        url: `${input.publicWebOrigin.replace(/\/+$/, "")}/runs/${runId}#share=${raw}`,
       };
     },
   };

@@ -68,6 +68,7 @@ describe("Slice 020B browser integration service contracts", () => {
       baseUrl: "https://api.proofline.test",
       projectToken: SHARE_TOKEN,
       storage: { getItem: () => null, setItem: () => undefined },
+      fetch,
     });
     const getEvidenceReceipt = requiredMethod(services, "getEvidenceReceipt");
     const createShare = requiredMethod(services, "createShare");

@@ -143,8 +143,11 @@ describe("Slice 007 terminal API immutability", () => {
         idempotencyKey: "terminal-share",
       }),
     ).resolves.toMatchObject({
-      token: expect.stringMatching(/^share_[a-f0-9]{64}$/),
-      url: expect.stringContaining(`/runs/${RUN_ID}?share=`),
+      version: "1",
+      runId: RUN_ID,
+      url: expect.stringMatching(
+        new RegExp(`^https://proofline\\.test/runs/${RUN_ID}#share=share_[a-f0-9]{64}$`),
+      ),
     });
 
     expect(

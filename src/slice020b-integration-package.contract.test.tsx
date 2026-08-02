@@ -7,6 +7,7 @@ import {
   canonicalSerializeProofBundle,
   createEvidenceReceipt,
   createProofBundle,
+  generateSafeWeb2JsonConsumer,
 } from "../packages/domain/src";
 import { App } from "./App";
 import type { HydratedRunView, RunSurfaceServices } from "./services/run-surface";
@@ -56,6 +57,18 @@ const bundle = canonicalSerializeProofBundle(createProofBundle(makeBundleInput()
 const receipt = createEvidenceReceipt(bundle);
 const receiptBytes = canonicalSerializeEvidenceReceipt(receipt);
 const manifestBytes = JSON.stringify(validManifest);
+const safeSource = generateSafeWeb2JsonConsumer(validManifest, {
+  contractName: "ProoflineSafeWeb2JsonConsumer",
+});
+const safeReport = {
+  ...consumerLabReport,
+  runId: RUN_ID,
+  safeConsumer: {
+    ...consumerLabReport.safeConsumer,
+    source: safeSource,
+    sha256: receipt.safeConsumerChecksum,
+  },
+};
 
 const terminalRun = {
   runId: RUN_ID,
@@ -81,7 +94,7 @@ function services(overrides: Record<string, unknown> = {}) {
   return {
     hydrateRun: vi.fn().mockResolvedValue(terminalRun),
     getEvidenceReceipt: vi.fn().mockResolvedValue(receipt),
-    getConsumerLabReport: vi.fn().mockResolvedValue(consumerLabReport),
+    getConsumerLabReport: vi.fn().mockResolvedValue(safeReport),
     exportBundle: vi.fn().mockResolvedValue(bundle),
     createShare: vi.fn().mockResolvedValue(SHARE_LINK),
     verifyConsumer: vi.fn(),
@@ -132,10 +145,10 @@ describe("Slice 020B Integration Package surface", () => {
       ["receipt", `${RUN_ID}.receipt.json`, receiptBytes],
       ["bundle", `${RUN_ID}.proofline.json`, bundle],
       ["manifest", `${RUN_ID}.manifest.json`, manifestBytes],
-      ["Solidity", "ProoflineSafeWeb2JsonConsumer.sol", consumerLabReport.safeConsumer.source],
+      ["Solidity", "ProoflineSafeWeb2JsonConsumer.sol", safeReport.safeConsumer.source],
     ] as const;
     for (const [label, filename, bytes] of expected) {
-      const link = within(dialog).getByRole("link", {
+      const link = await within(dialog).findByRole("link", {
         name: new RegExp(`download ${label}`, "i"),
       });
       expect(link).toHaveAttribute("download", filename);
@@ -162,7 +175,7 @@ describe("Slice 020B Integration Package surface", () => {
     const user = userEvent.setup();
     render(<App projectToken={PROJECT_TOKEN} services={ports} />);
     const dialog = await screen.findByRole("dialog", { name: /integration package/i });
-    const share = within(dialog).getByRole("button", { name: /create read-only share link/i });
+    const share = await within(dialog).findByRole("button", { name: /create read-only share link/i });
     await user.dblClick(share);
 
     await waitFor(() => expect(createShare).toHaveBeenCalledOnce());

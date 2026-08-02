@@ -305,7 +305,10 @@ export function createProoflineApi(input: {
           request.method === "POST" &&
           /^\/v1\/runs\/[^/]+\/share$/.test(url.pathname)
         ) {
-          return json(await input.service.createShare(context), 201);
+          return json(await input.service.createShare(context), 201, {
+            "cache-control": "no-store",
+            "referrer-policy": "no-referrer",
+          });
         }
         return error(404, "NOT_FOUND", "Route not found");
       } catch (cause) {

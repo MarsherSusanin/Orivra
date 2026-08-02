@@ -299,7 +299,7 @@ export function makeBundleInput() {
     events: makeRunEvents(),
     requestBytes: "0x574542324a534f4e",
     network: {
-      chainId: 114,
+      chainId: 114 as const,
       blockNumber: validPreflightReport.registrySnapshot.blockNumber,
       registryAddress: "0x2222222222222222222222222222222222222222",
       resolvedContracts: {
