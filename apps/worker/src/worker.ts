@@ -911,11 +911,36 @@ function preflightEvidence(context: RunExecutionContext) {
   }>(context, "preflight-evidence");
 }
 
+function isCategorizedReplayError(value: unknown): value is {
+  category: string;
+  code: string;
+  retryable: boolean;
+} {
+  const categorized = recordValue(value);
+  return Boolean(
+    categorized &&
+    typeof categorized.category === "string" &&
+    SAFE_FAILURE_CATEGORIES.has(categorized.category) &&
+    typeof categorized.code === "string" &&
+    /^[A-Z][A-Z0-9_]{0,127}$/.test(categorized.code) &&
+    typeof categorized.retryable === "boolean",
+  );
+}
+
 function assertReplaySource(
   serialized: string,
   manifest: Web2JsonManifestV1,
 ): ProofBundleV1 {
-  const source = replayProofBundle(serialized);
+  let source: ProofBundleV1;
+  try {
+    source = replayProofBundle(serialized);
+  } catch (cause) {
+    if (isCategorizedReplayError(cause)) throw cause;
+    throw preflightBoundaryError(
+      "REPLAY_EVIDENCE_INVALID",
+      "Recorded replay evidence is invalid",
+    );
+  }
   const comparable = (value: Web2JsonManifestV1) => ({
     ...value,
     submission: { ...value.submission, mode: "replay" as const },
