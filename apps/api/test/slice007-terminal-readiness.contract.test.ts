@@ -202,11 +202,17 @@ describe("Slice 007 stable preflight readiness contract", () => {
           attempts += 1;
           if (attempts === 1) {
             throw Object.assign(new Error("Preflight evidence is not durable yet"), {
-              status: 404,
+              status: 409,
               code: "PREFLIGHT_NOT_READY",
             });
           }
-          return { mode: "wallet", transaction };
+          return {
+            version: "1",
+            runId: RUN_ID,
+            mode: "wallet",
+            effectOwner: "wallet",
+            transaction,
+          };
         },
       },
     });
