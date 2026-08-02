@@ -1154,11 +1154,41 @@ export async function assemblePersistedProofBundle(input: {
   const safeConsumer = [...input.artifacts]
     .reverse()
     .find((item) => item.kind === "safe-consumer");
-  if (!safeConsumer) throw new Error("Persisted safe-consumer evidence is required");
-  const safeConsumerSha256 =
-    typeof safeConsumer.sha256 === "string"
-      ? safeConsumer.sha256.replace(/^sha256:/, "")
-      : sha256Hex(artifactBytes(safeConsumer));
+  const invalidSafeConsumer = () =>
+    preflightBoundaryError(
+      "SAFE_CONSUMER_ARTIFACT_INVALID",
+      "Persisted safe-consumer artifact is invalid",
+    );
+  if (!safeConsumer) throw invalidSafeConsumer();
+  let safeConsumerBytes: Uint8Array;
+  try {
+    safeConsumerBytes = artifactBytes(safeConsumer);
+  } catch {
+    throw invalidSafeConsumer();
+  }
+  const safeConsumerSha256 = sha256Hex(safeConsumerBytes);
+  if (safeConsumer.sha256 !== undefined) {
+    const storedSha256 =
+      typeof safeConsumer.sha256 === "string"
+        ? safeConsumer.sha256.replace(/^sha256:/, "")
+        : safeConsumer.sha256.length === 32
+          ? Buffer.from(safeConsumer.sha256).toString("hex")
+          : "";
+    if (
+      !/^[a-f0-9]{64}$/.test(storedSha256) ||
+      storedSha256 !== safeConsumerSha256
+    ) {
+      throw invalidSafeConsumer();
+    }
+  }
+  const expectedSafeConsumerBytes = encoder.encode(
+    generateSafeWeb2JsonConsumer(input.manifest, {
+      contractName: "ProoflineSafeWeb2JsonConsumer",
+    }),
+  );
+  if (!isDeepStrictEqual(safeConsumerBytes, expectedSafeConsumerBytes)) {
+    throw invalidSafeConsumer();
+  }
   const consumer = [...input.events]
     .reverse()
     .find((item) => item.type === "CONSUMER_VERIFIED");

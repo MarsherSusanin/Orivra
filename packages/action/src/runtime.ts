@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { Web2JsonManifestV1Schema } from "@proofline/contracts";
 import {
   canonicalSerializeProofBundle,
@@ -487,10 +488,7 @@ export function createPersistedActionRunClient(input: {
     ]);
     const manifest = Web2JsonManifestV1Schema.parse(JSON.parse(manifestSource));
     const bundle = replayProofBundle(serialized);
-    if (
-      JSON.stringify(bundle.manifest) !==
-      JSON.stringify(manifest)
-    ) {
+    if (!isDeepStrictEqual(bundle.manifest, manifest)) {
       throw new Error(
         "Local Proofline bundle manifest does not match the requested manifest",
       );
