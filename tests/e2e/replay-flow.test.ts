@@ -143,6 +143,24 @@ describe("hermetic Web2Json vertical replay", () => {
     expect(artifact.source).toContain("requireHost");
     expect(artifact.compilation).toMatchObject({ success: true });
 
+    const consumerLab = await system.api.fetch(
+      request(`/v1/runs/${runId}/consumer-lab`),
+    );
+    expect(consumerLab.status).toBe(200);
+    const consumerLabReport = await consumerLab.json();
+    expect(consumerLabReport).toMatchObject({
+      version: "1",
+      runId,
+      statement: "Valid proof ≠ trusted URL",
+      safeConsumer: {
+        source: artifact.source,
+        compileStatus: "passed",
+      },
+    });
+    for (const line of artifact.source.trimEnd().split("\n")) {
+      expect(consumerLabReport.safeConsumer.diff).toContain(`+${line}`);
+    }
+
     const bundleResponse = await system.api.fetch(request(`/v1/runs/${runId}/bundle`));
     expect(bundleResponse.status).toBe(200);
     const canonicalBundle = await bundleResponse.text();

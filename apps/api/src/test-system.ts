@@ -550,6 +550,68 @@ export function createHermeticProoflineSystem(input: {
       };
     },
 
+    async getConsumerLabReport(context: { runId: string }) {
+      const stored = run(context.runId);
+      if (!stored.artifactSource) {
+        throw Object.assign(new Error("Consumer Lab evidence is not available"), {
+          status: 409,
+          code: "CONSUMER_LAB_PENDING",
+        });
+      }
+      const source = stored.artifactSource;
+      const contractName = /contract\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(source)?.[1];
+      if (!contractName) throw new Error("Safe consumer contract name is missing");
+      const observedUrl = new URL(canonicalizeManifestUrl(stored.manifest));
+      const expectedQuery = new URLSearchParams(
+        Object.entries(stored.manifest.consumer.expectedQuery)
+          .sort(([left], [right]) => left.localeCompare(right)),
+      ).toString();
+      const checks = [
+        ["scheme", stored.manifest.consumer.expectedScheme, observedUrl.protocol.replace(/:$/, "")],
+        ["host", stored.manifest.consumer.expectedHost, observedUrl.hostname],
+        ["path", stored.manifest.consumer.expectedPathPrefix, observedUrl.pathname],
+        ["query", expectedQuery, observedUrl.searchParams.toString()],
+      ].map(([invariant, expected, observed]) => ({
+        invariant,
+        expected,
+        observed,
+        enforced: true,
+        passed: true,
+      })) as [
+        { invariant: "scheme"; expected: string; observed: string; enforced: true; passed: true },
+        { invariant: "host"; expected: string; observed: string; enforced: true; passed: true },
+        { invariant: "path"; expected: string; observed: string; enforced: true; passed: true },
+        { invariant: "query"; expected: string; observed: string; enforced: true; passed: true },
+      ];
+      const sha256 = createHash("sha256").update(source).digest("hex");
+      return {
+        version: "1" as const,
+        runId: stored.runId,
+        statement: "Valid proof ≠ trusted URL" as const,
+        proofValid: true,
+        consumerIdentity: "canonical-safe" as const,
+        passed: true,
+        checks,
+        diagnostics: [],
+        safeConsumer: {
+          identity: "canonical-safe" as const,
+          contractName,
+          compilerVersion: "solc-0.8.36",
+          compileStatus: "passed" as const,
+          sha256: `sha256:${sha256}`,
+          source,
+          diff: [
+            "--- canonical-vulnerable",
+            `+++ ${contractName}`,
+            `@@ -0,0 +1,${source.trimEnd().split("\n").length} @@`,
+            ...source.trimEnd().split("\n").map((line) => `+${line}`),
+            "",
+          ].join("\n"),
+        },
+        verdict: { state: "safe-to-integrate" as const, missingChecks: 0 },
+      };
+    },
+
     async getBundle(context: { runId: string }) {
       const stored = run(context.runId);
       const preflightEvidence = stored.preflightEvidence;
