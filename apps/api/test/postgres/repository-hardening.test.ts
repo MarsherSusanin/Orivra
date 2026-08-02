@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { makeRunEvents } from "../../../../packages/contracts/test/fixtures";
 import {
+  POSTGRES_QUERIES,
   createPostgresCommandRepository,
   createPostgresRunRepository,
 } from "../../src/postgres";
@@ -139,6 +140,7 @@ describe("PostgreSQL command lease hardening", () => {
     expect(client.query.mock.calls.map(([text]) => text.trim())).toEqual([
       "BEGIN",
       expect.stringMatching(/WITH candidate/i),
+      POSTGRES_QUERIES.loadEvents.trim(),
       "COMMIT",
     ]);
     expect(client.release).toHaveBeenCalledOnce();

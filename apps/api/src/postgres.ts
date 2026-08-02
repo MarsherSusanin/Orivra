@@ -878,7 +878,7 @@ export function createPostgresCommandRepository(input: {
           return null;
         }
         const attempts = Number(row.attempts);
-        if (attempts > 1 && row.last_error) {
+        if (attempts > 1) {
           const prior = await client.query(POSTGRES_QUERIES.loadEvents, [
             String(row.run_id),
           ]);
@@ -893,11 +893,15 @@ export function createPostgresCommandRepository(input: {
             events,
             String(row.id),
           );
+          const stage = latest?.payload.stage ?? failureStage(row.kind);
+          const resumeFrom = latest?.payload.resumeFrom ?? recoveryCheckpoint(row.kind);
+          const evidence = latest?.payload.preservedEvidence ?? preservedEvidence(events);
           let resumeSequence = events.length + 1;
           if (
             !latestRecovery &&
-            latest?.type === "RUN_RESUMED" &&
-            latest.payload.attempt === attempts - 1
+            ((latest?.type === "RUN_RESUMED" &&
+              latest.payload.attempt === attempts - 1) ||
+              (!latest && attempts === 2))
           ) {
             const occurredAt = new Date().toISOString();
             await appendEventInTransaction(
@@ -912,11 +916,11 @@ export function createPostgresCommandRepository(input: {
                 payload: {
                   version: "1",
                   state: "retryable",
-                  stage: latest.payload.stage,
+                  stage,
                   attempt: attempts - 1,
                   retryAfter: occurredAt,
-                  resumeFrom: latest.payload.resumeFrom,
-                  preservedEvidence: latest.payload.preservedEvidence,
+                  resumeFrom,
+                  preservedEvidence: evidence,
                   updatedAt: occurredAt,
                   error: {
                     version: "1",
@@ -935,7 +939,8 @@ export function createPostgresCommandRepository(input: {
           if (
             latest?.type === "STAGE_WAITING" ||
             latest?.type === "STAGE_RETRY_SCHEDULED" ||
-            latest?.type === "RUN_RESUMED"
+            latest?.type === "RUN_RESUMED" ||
+            (!latest && attempts === 2)
           ) {
             await appendEventInTransaction(
               client,
@@ -947,10 +952,10 @@ export function createPostgresCommandRepository(input: {
                 occurredAt: new Date().toISOString(),
                 type: "RUN_RESUMED",
                 payload: {
-                  stage: latest.payload.stage,
+                  stage,
                   attempt: attempts,
-                  resumeFrom: latest.payload.resumeFrom,
-                  preservedEvidence: latest.payload.preservedEvidence,
+                  resumeFrom,
+                  preservedEvidence: evidence,
                 },
               }),
             );
