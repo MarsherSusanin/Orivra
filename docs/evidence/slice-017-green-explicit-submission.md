@@ -20,6 +20,8 @@
   `311e6a679336ffbe0b5efc0427e20528b808dc1c`.
 - Canonical Action artifact correction: commit
   `76fabfd593a1588bcfcd5035cac30ff3acd0627c`.
+- Corrective verifier-finding hardening: commit
+  `49151b16e06aebf0214fe97f6ab98ff896aa919d`.
 
 Production authors did not edit frozen acceptance tests. Legacy expectations
 were reconciled in separate test-only commits.
@@ -39,6 +41,20 @@ were reconciled in separate test-only commits.
   `144352973fdcce214bcd5d03a00f9897a7de7124dd236d7327c13e6f796fd6d1`;
 - author visual check: desktop `1488x1058`, mobile `390x844`, axe zero
   serious/critical and clean application console.
+
+The first frozen candidate `fbbc93b24006fa6aa5c196a583b5b2f15f4d162b`
+did not receive either formal PASS. Independent verification found a real CLI
+readiness mismatch, missing strict CLI response parsing and an EIP-1193 `4001`
+recovery gap. Those findings were converted to the corrective RED evidence in
+`slice-017-red-corrective-verifier-findings.md` before the production fix.
+
+Corrective focused GREEN results:
+
+- verifier-finding contracts: `39/39`;
+- nearest CLI, Action and wallet controls: `153/153`;
+- CLI coverage: 93.10% statements and 94.35% branches;
+- run-client coverage: 96.19% statements and 85.15% branches;
+- CLI build, syntax check, typecheck and diff check: PASS.
 
 These are implementation-wave results, not independent verification PASS.
 The complete runbook matrix, candidate identity and two verifier reports are
