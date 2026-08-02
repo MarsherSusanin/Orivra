@@ -813,7 +813,9 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
               {hydrationError ? <span className="hydration-error" role="alert">{hydrationError}</span> : null}
               {hydratedRun.sync?.state === "partial" ? (
                 <span className="hydration-error" role="alert">
-                  Partial journal: persisted projection is ahead of locally loaded events.
+                  {hydratedRun.sync.eventSequence > hydratedRun.sync.projectionSequence
+                    ? "Partial journal: event feed is ahead of the persisted projection snapshot."
+                    : "Partial journal: persisted projection is ahead of locally loaded events."}
                 </span>
               ) : null}
             </header>
