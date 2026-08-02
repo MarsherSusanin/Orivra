@@ -15,6 +15,7 @@ import {
   UINT256_OVERFLOW,
   validPreflightReport,
 } from "../../../packages/contracts/test/fixtures";
+import { Web2JsonManifestV1Schema } from "@proofline/contracts";
 import {
   canonicalSerializeProofBundle,
   canonicalizeManifestUrl,
@@ -864,6 +865,97 @@ describe("Slice 016A replay report sidecar", () => {
       ...sourceReport,
       runId: TARGET_RUN_ID,
     });
+  });
+
+  it("accepts semantically identical replay manifests with reordered JSONB keys", async () => {
+    const source = replaySource();
+    const persistedManifest = {
+      submission: {
+        feeCapWei: source.manifest.submission.feeCapWei,
+        mode: source.manifest.submission.mode,
+      },
+      consumer: {
+        expectedQuery: Object.fromEntries(
+          Object.entries(source.manifest.consumer.expectedQuery).reverse(),
+        ),
+        expectedPathPrefix: source.manifest.consumer.expectedPathPrefix,
+        expectedHost: source.manifest.consumer.expectedHost,
+        expectedScheme: source.manifest.consumer.expectedScheme,
+      },
+      request: {
+        abiSignature: source.manifest.request.abiSignature,
+        jq: source.manifest.request.jq,
+        query: Object.fromEntries(
+          Object.entries(source.manifest.request.query).reverse(),
+        ),
+        url: source.manifest.request.url,
+        method: source.manifest.request.method,
+      },
+      network: source.manifest.network,
+      attestationType: source.manifest.attestationType,
+      version: source.manifest.version,
+    };
+    const sourceParsed = Web2JsonManifestV1Schema.parse(source.manifest);
+    const persistedParsed = Web2JsonManifestV1Schema.parse(persistedManifest);
+    expect(persistedParsed).toEqual(sourceParsed);
+    expect(Object.keys(persistedManifest)).not.toEqual(
+      Object.keys(source.manifest),
+    );
+    expect(Object.keys(persistedManifest.request)).not.toEqual(
+      Object.keys(source.manifest.request),
+    );
+
+    const fixture = handlerHarness({
+      runId: TARGET_RUN_ID,
+      manifest: persistedManifest,
+      preflight: async () => {
+        throw new Error("live preflight must not execute in replay");
+      },
+      loadReplayBundle: async () => canonicalSerializeProofBundle(source),
+      loadReplayPreflightReport: async () =>
+        JSON.stringify(boundReport(source)),
+    });
+
+    const outcome = await fixture.handlers.RUN_PREFLIGHT(command(TARGET_RUN_ID));
+
+    expect(outcome.artifacts.map((item: any) => item.kind)).toEqual([
+      "replay-source",
+      "preflight-evidence",
+      "preflight-report-v1",
+    ]);
+    expect(fixture.ports.preflight).not.toHaveBeenCalled();
+    expect(fixture.ports.loadReplayBundle).toHaveBeenCalledOnce();
+    expect(fixture.ports.loadReplayPreflightReport).toHaveBeenCalledOnce();
+    expect(fixture.ports.signRelayerTransaction).not.toHaveBeenCalled();
+    expect(fixture.repository.persistRelayerTransaction).not.toHaveBeenCalled();
+    expect(fixture.repository.markRelayerBroadcast).not.toHaveBeenCalled();
+
+    const changedManifest = {
+      ...persistedManifest,
+      consumer: {
+        ...persistedManifest.consumer,
+        expectedHost: "mirror.example.net",
+      },
+    };
+    const changedFixture = handlerHarness({
+      runId: TARGET_RUN_ID,
+      manifest: changedManifest,
+      preflight: async () => {
+        throw new Error("live preflight must not execute in replay");
+      },
+      loadReplayBundle: async () => canonicalSerializeProofBundle(source),
+      loadReplayPreflightReport: async () =>
+        JSON.stringify(boundReport(source)),
+    });
+    await expect(
+      changedFixture.handlers.RUN_PREFLIGHT(command(TARGET_RUN_ID)),
+    ).rejects.toMatchObject({
+      category: "schema-invalid",
+      code: "REPLAY_EVIDENCE_INVALID",
+      retryable: false,
+    });
+    expect(changedFixture.ports.preflight).not.toHaveBeenCalled();
+    expect(changedFixture.ports.loadReplayPreflightReport).not.toHaveBeenCalled();
   });
 
   it.each([
