@@ -6,6 +6,10 @@ import {
 } from "@proofline/contracts";
 import { canonicalJson } from "./canonical-json";
 import { generateSafeWeb2JsonConsumer } from "./codegen";
+import {
+  canonicalizeManifestUrl,
+  diagnoseConsumerRequest,
+} from "./diagnostics";
 import { projectRun } from "./run-lifecycle";
 import { sha256Hex } from "./sha256";
 
@@ -96,6 +100,30 @@ function assertSemanticIntegrity(bundle: ProofBundleV1): void {
       bundle.requestBytes.toLowerCase()
   ) {
     throw new Error("Proof bundle request bytes do not match preflight evidence");
+  }
+
+  if (preflight.payload.canonicalUrl !== canonicalizeManifestUrl(bundle.manifest)) {
+    throw new Error(
+      "Proof bundle accepted preflight URL does not match the manifest request",
+    );
+  }
+
+  if (
+    diagnoseConsumerRequest(bundle.manifest, preflight.payload.canonicalUrl)
+      .length > 0
+  ) {
+    throw new Error(
+      "Proof bundle accepted preflight URL contradicts consumer Trust invariants",
+    );
+  }
+
+  if (
+    BigInt(preflight.payload.quotedFeeWei) >
+    BigInt(bundle.manifest.submission.feeCapWei)
+  ) {
+    throw new Error(
+      "Proof bundle accepted preflight fee quote exceeds the manifest fee cap",
+    );
   }
 
   const round = bundle.events.find((event) => event.type === "ROUND_FINALIZED");
