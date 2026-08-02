@@ -108,6 +108,20 @@ function clearPendingWalletMarker(
   }
 }
 
+function isUserRejectedProviderRequest(cause: unknown): boolean {
+  if (cause && typeof cause === "object") {
+    try {
+      if ("code" in cause) {
+        const code = (cause as { code?: unknown }).code;
+        return code === 4001 || code === "4001";
+      }
+    } catch {
+      return false;
+    }
+  }
+  return cause instanceof Error && /user rejected/i.test(cause.message);
+}
+
 export const reconcileWalletSubmission = Object.freeze(
   (input: {
     runId: string;
@@ -474,7 +488,7 @@ export function submitWithEip1193(input: {
         ],
       });
     } catch (cause) {
-      if (cause instanceof Error && /user rejected/i.test(cause.message)) {
+      if (isUserRejectedProviderRequest(cause)) {
         clearPendingWalletMarker(recoveryStorage, recoveryKey);
       }
       throw cause;

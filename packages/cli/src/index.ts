@@ -1,4 +1,8 @@
-import { Web2JsonManifestV1Schema } from "@proofline/contracts";
+import {
+  SubmissionResponseV1Schema,
+  Web2JsonManifestV1Schema,
+  type SubmissionResponseV1,
+} from "@proofline/contracts";
 import {
   createWalletClient,
   http,
@@ -34,6 +38,58 @@ function safeMessage(error: unknown): string {
   return message
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
     .replace(/0x[a-f0-9]{16,}/gi, "[REDACTED]");
+}
+
+type SubmissionMode = SubmissionResponseV1["mode"];
+
+function isSubmissionMode(value: string): value is SubmissionMode {
+  return value === "wallet" || value === "relayer" || value === "replay";
+}
+
+function submissionErrorCode(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const body = value as Record<string, unknown>;
+  const nested =
+    body.error && typeof body.error === "object"
+      ? (body.error as Record<string, unknown>).code
+      : undefined;
+  const code = nested ?? body.code;
+  return typeof code === "string" &&
+    code.length <= 64 &&
+    /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(code)
+    ? code
+    : undefined;
+}
+
+async function readSubmissionErrorCode(
+  response: Response,
+): Promise<string | undefined> {
+  try {
+    return submissionErrorCode(await response.json());
+  } catch {
+    return undefined;
+  }
+}
+
+function parseSubmissionResponse(
+  value: unknown,
+  request: { runId: string; mode: SubmissionMode },
+): SubmissionResponseV1 {
+  const parsed = SubmissionResponseV1Schema.safeParse(value);
+  const expectedEffectOwner = {
+    wallet: "wallet",
+    relayer: "worker",
+    replay: "none",
+  } as const;
+  if (
+    !parsed.success ||
+    parsed.data.runId !== request.runId ||
+    parsed.data.mode !== request.mode ||
+    parsed.data.effectOwner !== expectedEffectOwner[request.mode]
+  ) {
+    throw new Error("Proofline returned an invalid submission response contract");
+  }
+  return parsed.data;
 }
 
 const rootHelp = [
@@ -88,7 +144,7 @@ export async function runProoflineCli(input: CliDependencies): Promise<number> {
     if (group === "run" && command === "create") {
       const manifestPath = option(input.argv, "--manifest");
       const mode = option(input.argv, "--mode") ?? "replay";
-      if (!manifestPath || !["replay", "wallet", "relayer"].includes(mode)) {
+      if (!manifestPath || !isSubmissionMode(mode)) {
         throw new Error("run create requires --manifest and a supported --mode");
       }
       const privateKey =
@@ -207,7 +263,14 @@ export function createProductionCliDependencies(input: {
       };
     });
   let idempotencySequence = 0;
-  async function requestApi(path: string, init: RequestInit = {}) {
+  function nextIdempotencyKey(): string {
+    return `cli-${input.clock.now()}-${++idempotencySequence}`;
+  }
+  async function requestApi(
+    path: string,
+    init: RequestInit = {},
+    idempotencyKey?: string,
+  ) {
     const method = init.method ?? "GET";
     return input.fetch(`${apiOrigin}${path}`, {
       ...init,
@@ -217,7 +280,7 @@ export function createProductionCliDependencies(input: {
         ...(method === "POST"
           ? {
               "content-type": "application/json",
-              "idempotency-key": `cli-${input.clock.now()}-${++idempotencySequence}`,
+              "idempotency-key": idempotencyKey ?? nextIdempotencyKey(),
             }
           : {}),
         ...Object.fromEntries(new Headers(init.headers)),
@@ -243,28 +306,37 @@ export function createProductionCliDependencies(input: {
         body: JSON.stringify({ manifest }),
       }).then((response) => response.json());
     },
-    async prepareSubmission(request: { runId: string; mode: string }) {
+    async prepareSubmission(request: { runId: string; mode: SubmissionMode }) {
       const path = `/v1/runs/${encodeURIComponent(request.runId)}/submissions`;
       const startedAt = input.clock.now();
       const timeoutMs = 60_000;
+      const idempotencyKey = nextIdempotencyKey();
       while (true) {
-        const response = await requestApi(path, {
-          method: "POST",
-          body: JSON.stringify({ mode: request.mode }),
-        });
+        const response = await requestApi(
+          path,
+          {
+            method: "POST",
+            body: JSON.stringify({ mode: request.mode }),
+          },
+          idempotencyKey,
+        );
         if (response.ok) {
-          const value: any = await response.json();
-          return value.transaction ?? value;
-        }
-        let code: unknown;
-        if (response.status === 404) {
+          let value: unknown;
           try {
-            code = ((await response.json()) as any)?.error?.code;
+            value = await response.json();
           } catch {
-            code = undefined;
+            throw new Error(
+              "Proofline returned an invalid submission response contract",
+            );
           }
+          const parsed = parseSubmissionResponse(value, request);
+          return parsed.mode === "wallet" ? parsed.transaction : parsed;
         }
-        if (response.status !== 404 || code !== "PREFLIGHT_NOT_READY") {
+        const code =
+          response.status === 409
+            ? await readSubmissionErrorCode(response)
+            : undefined;
+        if (response.status !== 409 || code !== "PREFLIGHT_NOT_READY") {
           throw new Error(
             `Proofline API rejected POST ${path} (${response.status})`,
           );
