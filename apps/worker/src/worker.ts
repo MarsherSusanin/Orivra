@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import {
   DiagnosticV1Schema,
   isCanonicalUint256Decimal,
@@ -946,8 +947,7 @@ function assertReplaySource(
     submission: { ...value.submission, mode: "replay" as const },
   });
   if (
-    JSON.stringify(comparable(source.manifest)) !==
-      JSON.stringify(comparable(manifest)) ||
+    !isDeepStrictEqual(comparable(source.manifest), comparable(manifest)) ||
     projectRun(source.events).terminal !== true ||
     source.verification.proofVerified !== true ||
     source.verification.consumerVerified !== true
