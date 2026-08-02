@@ -25,6 +25,7 @@ export function VerificationDialog({
   onVerified,
   onProductEvent,
   onOpenIntegration,
+  resumePersisted = false,
 }: {
   context: RunServiceContext;
   services: RunSurfaceServices;
@@ -32,6 +33,7 @@ export function VerificationDialog({
   onVerified?: () => void;
   onProductEvent?: (event: ProductEventInputV1) => void;
   onOpenIntegration?: () => void;
+  resumePersisted?: boolean;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -69,6 +71,36 @@ export function VerificationDialog({
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!resumePersisted || !services.getConsumerLabReport) return;
+    let cancelled = false;
+    void services.getConsumerLabReport(context).then((persisted) => {
+      if (cancelled) return;
+      setReport(persisted);
+      setGenerated({
+        source: persisted.safeConsumer.source,
+        sha256: persisted.safeConsumer.sha256,
+      });
+      setResult({
+        summary: persisted.passed
+          ? "Consumer verification passed"
+          : `Consumer needs ${persisted.verdict.missingChecks} ${persisted.verdict.missingChecks === 1 ? "fix" : "fixes"}`,
+        code: persisted.diagnostics[0]?.code ?? "CONSUMER_VERIFIED",
+        checks: persisted.checks.map((check) => ({
+          label: `${check.invariant[0].toUpperCase()}${check.invariant.slice(1)} invariant`,
+          status: check.passed ? "passed" as const : "failed" as const,
+        })),
+      });
+      setArtifactVerified(true);
+      setStatus("complete");
+    }).catch(() => {
+      // A missing artifact is the normal first-open state; the primary journey remains available.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [context, resumePersisted, services]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Tab") return;

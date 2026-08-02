@@ -964,7 +964,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
                     {consumerTerminal ? (
                       <button ref={integrationTrigger} className="verify-button" type="button" onClick={openIntegration}>Open integration package<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
                     ) : isProjectAccess ? (
-                      <button ref={verifyTrigger} className="verify-button" type="button" onClick={openVerification}>{consumerFailed ? "Retry verification" : "Verify consumer"}<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
+                      <button ref={verifyTrigger} className="verify-button" type="button" onClick={openVerification}>{consumerFailed ? "Resume Consumer Lab" : "Verify consumer"}<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
                     ) : (
                       <span className="stage-waiting-state is-pending">Read-only shared run · consumer evidence pending</span>
                     )}
@@ -1025,6 +1025,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
           onVerified={() => setHydrationRevision((value) => value + 1)}
           onProductEvent={emitProductEvent}
           onOpenIntegration={openIntegration}
+          resumePersisted={consumerFailed}
         />
       ) : null}
       {integrationOpen ? (

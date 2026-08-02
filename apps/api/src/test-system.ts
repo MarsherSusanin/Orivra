@@ -28,6 +28,7 @@ interface StoredRun {
     network: ProofBundleV1["network"];
   };
   artifactSource?: string;
+  consumerIdentity?: "canonical-vulnerable" | "canonical-safe";
 }
 
 interface QueuedCommand {
@@ -39,6 +40,7 @@ interface QueuedCommand {
     | "ADVANCE_RELAYER"
     | "ADVANCE_WALLET"
     | "VERIFY_CONSUMER";
+  consumer?: "canonical-vulnerable" | "canonical-safe";
 }
 
 interface MemoryDatabase {
@@ -213,7 +215,22 @@ export function createHermeticProoflineSystem(input: {
       input.fixture === "web2json-host-invariant"
         ? "https://mirror.example.net/prices/eth?currency=USD&source=primary"
         : canonicalizeManifestUrl(stored.manifest);
+    stored.consumerIdentity = command.consumer ?? "canonical-vulnerable";
     stored.diagnostics = diagnoseConsumerRequest(stored.manifest, requestUrl);
+    if (
+      stored.consumerIdentity === "canonical-vulnerable" &&
+      stored.diagnostics.length === 0
+    ) {
+      stored.diagnostics = [{
+        version: "1",
+        code: "EXPECTED_HOST_NOT_ENFORCED",
+        severity: "warning",
+        confidence: "high",
+        summary: "The canonical vulnerable consumer does not enforce the expected source host.",
+        evidence: { missingChecks: ["host"], requestUrl },
+        remediation: "Use the generated safe consumer and enforce every URL invariant.",
+      }];
+    }
     append(stored, {
       commandId: command.id,
       type: "CONSUMER_VERIFIED",
@@ -522,6 +539,7 @@ export function createHermeticProoflineSystem(input: {
     async verifyConsumer(context: {
       runId: string;
       idempotencyKey: string;
+      consumer?: "canonical-vulnerable" | "canonical-safe";
     }) {
       run(context.runId);
       enqueue(
@@ -529,6 +547,7 @@ export function createHermeticProoflineSystem(input: {
           id: commandId("cmd_consumer", context.idempotencyKey),
           runId: context.runId,
           kind: "VERIFY_CONSUMER",
+          consumer: context.consumer ?? "canonical-vulnerable",
         },
         `${context.runId}:consumer:${context.idempotencyKey}`,
       );
@@ -541,7 +560,7 @@ export function createHermeticProoflineSystem(input: {
     }) {
       const stored = run(context.runId);
       stored.artifactSource = generateSafeWeb2JsonConsumer(stored.manifest, {
-        contractName: context.contractName ?? "ProoflineSafeConsumer",
+        contractName: context.contractName ?? "ProoflineSafeWeb2JsonConsumer",
       });
       return {
         artifactId: `artifact_${stored.runId}`,
@@ -566,33 +585,42 @@ export function createHermeticProoflineSystem(input: {
         Object.entries(stored.manifest.consumer.expectedQuery)
           .sort(([left], [right]) => left.localeCompare(right)),
       ).toString();
+      const identity = stored.consumerIdentity ?? "canonical-vulnerable";
+      const mismatched = new Set(stored.diagnostics.flatMap((diagnostic) => {
+        if (diagnostic.code === "CONSUMER_SCHEME_MISMATCH") return ["scheme"];
+        if (diagnostic.code === "CONSUMER_HOST_MISMATCH") return ["host"];
+        if (diagnostic.code === "CONSUMER_PATH_MISMATCH") return ["path"];
+        if (diagnostic.code === "CONSUMER_QUERY_MISMATCH") return ["query"];
+        return [];
+      }));
       const checks = [
-        ["scheme", stored.manifest.consumer.expectedScheme, observedUrl.protocol.replace(/:$/, "")],
-        ["host", stored.manifest.consumer.expectedHost, observedUrl.hostname],
-        ["path", stored.manifest.consumer.expectedPathPrefix, observedUrl.pathname],
-        ["query", expectedQuery, observedUrl.searchParams.toString()],
-      ].map(([invariant, expected, observed]) => ({
+        ["scheme", stored.manifest.consumer.expectedScheme, observedUrl.protocol.replace(/:$/, ""), observedUrl.protocol.replace(/:$/, "") === stored.manifest.consumer.expectedScheme],
+        ["host", stored.manifest.consumer.expectedHost, observedUrl.hostname, observedUrl.hostname === stored.manifest.consumer.expectedHost],
+        ["path", stored.manifest.consumer.expectedPathPrefix, observedUrl.pathname, observedUrl.pathname === stored.manifest.consumer.expectedPathPrefix || observedUrl.pathname.startsWith(`${stored.manifest.consumer.expectedPathPrefix.replace(/\/$/, "")}/`)],
+        ["query", expectedQuery, observedUrl.searchParams.toString(), expectedQuery === observedUrl.searchParams.toString()],
+      ].map(([invariant, expected, observed, matches]) => ({
         invariant,
         expected,
         observed,
-        enforced: true,
-        passed: true,
+        enforced: identity === "canonical-safe",
+        passed: identity === "canonical-safe" && matches === true && !mismatched.has(String(invariant)),
       })) as [
-        { invariant: "scheme"; expected: string; observed: string; enforced: true; passed: true },
-        { invariant: "host"; expected: string; observed: string; enforced: true; passed: true },
-        { invariant: "path"; expected: string; observed: string; enforced: true; passed: true },
-        { invariant: "query"; expected: string; observed: string; enforced: true; passed: true },
+        { invariant: "scheme"; expected: string; observed: string; enforced: boolean; passed: boolean },
+        { invariant: "host"; expected: string; observed: string; enforced: boolean; passed: boolean },
+        { invariant: "path"; expected: string; observed: string; enforced: boolean; passed: boolean },
+        { invariant: "query"; expected: string; observed: string; enforced: boolean; passed: boolean },
       ];
+      const missingChecks = checks.filter((check) => !check.enforced || !check.passed).length;
       const sha256 = createHash("sha256").update(source).digest("hex");
       return {
         version: "1" as const,
         runId: stored.runId,
         statement: "Valid proof ≠ trusted URL" as const,
         proofValid: true,
-        consumerIdentity: "canonical-safe" as const,
-        passed: true,
+        consumerIdentity: identity,
+        passed: stored.diagnostics.length === 0,
         checks,
-        diagnostics: [],
+        diagnostics: stored.diagnostics,
         safeConsumer: {
           identity: "canonical-safe" as const,
           contractName,
@@ -608,7 +636,9 @@ export function createHermeticProoflineSystem(input: {
             "",
           ].join("\n"),
         },
-        verdict: { state: "safe-to-integrate" as const, missingChecks: 0 },
+        verdict: identity === "canonical-safe" && stored.diagnostics.length === 0 && missingChecks === 0
+          ? { state: "safe-to-integrate" as const, missingChecks: 0 }
+          : { state: "needs-fixes" as const, missingChecks },
       };
     },
 
@@ -624,7 +654,7 @@ export function createHermeticProoflineSystem(input: {
       const source =
         stored.artifactSource ??
         generateSafeWeb2JsonConsumer(stored.manifest, {
-          contractName: "ProoflineSafeConsumer",
+          contractName: "ProoflineSafeWeb2JsonConsumer",
         });
       const bundle = createProofBundle({
         version: "1",
