@@ -102,7 +102,22 @@ node packages/cli/dist/index.js --help
 
 Production API commands требуют `PROOFLINE_API_URL` и `PROOFLINE_PROJECT_TOKEN`. Wallet signing использует локальный `PROOFLINE_COSTON2_PRIVATE_KEY`; private key не отправляется API. Доступные команды: `run create`, `run watch`, `run verify`, `bundle export`, `replay`.
 
-## 7. Проверки перед candidate freeze
+## 7. Ритм проверок и candidate freeze
+
+Внутренний TDD-цикл не запускает весь репозиторий после каждой правки:
+
+1. `RED` — новый focused contract/acceptance test и ближайший зелёный baseline.
+2. `GREEN` — focused tests изменяемого package и прямых потребителей.
+3. Перед коммитом волны — `npm run typecheck`, affected regression и affected
+   coverage gate.
+4. Перед freeze каждого вертикального среза — полная матрица ниже.
+
+Изменение public schema, миграции, auth/trust boundary, journal/replay,
+workspace/build graph, Action artifact или Sites запускает соответствующие
+полные gates уже в affected regression. Полный проход нельзя откладывать до
+окончания нескольких срезов.
+
+### Полная матрица перед freeze
 
 Минимальная герметичная проверка:
 

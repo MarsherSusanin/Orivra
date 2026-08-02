@@ -30,6 +30,26 @@ The root coordinator acts as Slice Architect. Other roles use independent agents
 - Any production edit after either PASS invalidates both passes and starts a new candidate freeze.
 - Merge only after both independent PASS reports exist for the same tree hash.
 
+## Validation cadence
+
+TDD uses the smallest test loop that can prove the current state. A full
+repository matrix is a candidate-freeze gate, not an inner-loop command:
+
+| Moment | Required validation |
+|---|---|
+| RED | New frozen tests plus the nearest unchanged baseline; record the exact expected failure reason |
+| GREEN core | Focused contracts/domain/package tests for the changed core and its direct dependants |
+| GREEN surfaces | Focused acceptance tests, `npm run typecheck`, and the affected Web/API/worker/CLI/Action package matrix |
+| Refactor / wave commit | Affected regression suite and affected coverage threshold |
+| Candidate freeze | The complete hermetic, coverage, PostgreSQL, Solidity, E2E, build and Sites matrix from `docs/runbook.md` |
+| Verification | Both independent verifiers recheck the same frozen tree; Product Verification additionally performs the affected black-box browser/CLI/Action journey |
+
+Run the full matrix earlier when a change crosses public contracts, package
+boundaries, migrations, authentication, journal/replay semantics, workspace
+build configuration, Action artifacts or Sites behavior. Do not postpone the
+first full matrix until several vertical slices have accumulated: every
+independently accepted slice freezes and verifies its own candidate.
+
 ## Slice Contract minimum
 
 Each Slice Contract names:

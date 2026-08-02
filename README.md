@@ -86,5 +86,6 @@ Web2JsonManifestV1
 - [ARCHITECTURE.md](ARCHITECTURE.md) — границы, потоки данных и trust model.
 - [docs/runbook.md](docs/runbook.md) — запуск, миграции, диагностика и release gates.
 - [docs/development/roles.md](docs/development/roles.md) — RED → GREEN → verification protocol.
+- [docs/development/product-roadmap.md](docs/development/product-roadmap.md) — current product slices and delivery status.
 - [docs/adr/README.md](docs/adr/README.md) — индекс архитектурных решений.
 - [docs/examples/README.md](docs/examples/README.md) — canonical reference paths.

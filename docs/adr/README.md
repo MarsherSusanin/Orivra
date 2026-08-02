@@ -20,5 +20,6 @@ ADR фиксирует архитектурное решение, которое
 | [0015](0015-composer-finalization-and-draft-recovery.md) | Composer finalization и безопасное восстановление draft |
 | [0016](0016-public-preflight-report-boundary.md) | Redacted persisted preflight report как public evidence boundary |
 | [0017](0017-persisted-preflight-workbench.md) | Persisted preflight Workbench, URL state и transition analytics |
+| [0018](0018-explicit-submission-confirmation.md) | Explicit confirmation как единственная граница wallet/relayer/replay submission |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.
