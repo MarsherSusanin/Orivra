@@ -146,7 +146,10 @@ describe("production service read, artifact, replay, and share coverage", () => 
         return result([{ manifest: validManifest }]);
       }
       if (/artifact\.kind = 'proof-bundle'/i.test(text)) {
-        return result([{ canonical_bytes: Buffer.from(serialized) }]);
+        return result([{
+          canonical_bytes: Buffer.from(serialized),
+          sha256: createHash("sha256").update(serialized).digest(),
+        }]);
       }
       if (/SELECT id, project_id, manifest, projection, last_sequence/i.test(text)) {
         return result([
@@ -189,7 +192,7 @@ describe("production service read, artifact, replay, and share coverage", () => 
     });
     await expect(
       production.getBundle({ runId: RUN_ID, projectId: PROJECT_ID }),
-    ).resolves.toEqual(bundle);
+    ).resolves.toEqual(serialized);
     await expect(production.replay({ bundle: serialized })).resolves.toEqual({
       runId: bundle.runId,
       byteIdentical: true,

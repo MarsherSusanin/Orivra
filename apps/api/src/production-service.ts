@@ -15,6 +15,7 @@ import {
 import {
   canonicalSerializeProofBundle,
   canonicalSerializePreflightReport,
+  createEvidenceReceipt,
   generateSafeWeb2JsonConsumer,
   projectRun,
   replayProofBundle,
@@ -261,6 +262,40 @@ export function createProductionProoflineService(input: {
     const run = await loadOwnedRun(context);
     assertMutableProjection(run.projection);
     return run;
+  }
+
+  async function loadVerifiedBundleBytes(
+    context: Record<string, unknown>,
+    codes: { pending: string; invalid: string },
+  ): Promise<string> {
+    const runId = requireRunId(context.runId);
+    const result = await input.pool.query(
+      `SELECT artifact.canonical_bytes, artifact.sha256
+       FROM proofline_private.run_artifacts AS artifact
+       JOIN proofline_private.runs AS run ON run.id = artifact.run_id
+       WHERE artifact.run_id = $1 AND run.project_id = $2
+         AND artifact.kind = 'proof-bundle'
+       ORDER BY artifact.created_at DESC
+       LIMIT 1`,
+      [runId, context.projectId],
+    );
+    const row = result.rows[0];
+    if (!result.rowCount || !row?.canonical_bytes || !row?.sha256) {
+      throw Object.assign(new Error("Proof bundle is not available"), {
+        status: 409,
+        code: codes.pending,
+      });
+    }
+    const bytes = Buffer.from(row.canonical_bytes);
+    const stored = Buffer.from(row.sha256).toString("hex");
+    const actual = createHash("sha256").update(bytes).digest("hex");
+    if (stored !== actual) {
+      throw Object.assign(new Error("Persisted proof bundle checksum mismatch"), {
+        status: 500,
+        code: codes.invalid,
+      });
+    }
+    return bytes.toString("utf8");
   }
 
   async function findCommandIntent(
@@ -1167,22 +1202,26 @@ export function createProductionProoflineService(input: {
     },
 
     async getBundle(context: Record<string, unknown>) {
-      const result = await input.pool.query(
-        `SELECT canonical_bytes
-         FROM proofline_private.run_artifacts AS artifact
-         JOIN proofline_private.runs AS run ON run.id = artifact.run_id
-         WHERE artifact.run_id = $1 AND run.project_id = $2
-           AND artifact.kind = 'proof-bundle'
-         ORDER BY artifact.created_at DESC
-         LIMIT 1`,
-        [requireRunId(context.runId), context.projectId],
-      );
-      if (!result.rowCount) {
-        throw Object.assign(new Error("Proof bundle is not available"), {
-          status: 409,
+      return loadVerifiedBundleBytes(context, {
+        pending: "PROOF_BUNDLE_PENDING",
+        invalid: "PROOF_BUNDLE_INVALID",
+      });
+    },
+
+    async getEvidenceReceipt(context: Record<string, unknown>) {
+      try {
+        const serialized = await loadVerifiedBundleBytes(context, {
+          pending: "EVIDENCE_RECEIPT_PENDING",
+          invalid: "EVIDENCE_RECEIPT_INVALID",
+        });
+        return createEvidenceReceipt(serialized);
+      } catch (cause) {
+        if (cause && typeof cause === "object" && "status" in cause) throw cause;
+        throw Object.assign(new Error("Persisted receipt evidence is invalid"), {
+          status: 500,
+          code: "EVIDENCE_RECEIPT_INVALID",
         });
       }
-      return JSON.parse(Buffer.from(result.rows[0].canonical_bytes).toString("utf8"));
     },
 
     async replay(context: Record<string, unknown>) {

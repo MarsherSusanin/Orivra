@@ -1339,3 +1339,61 @@ export const ProofBundleV1Schema = ProofBundleContentV1Schema.extend({
 }).strict();
 
 export type ProofBundleV1 = z.infer<typeof ProofBundleV1Schema>;
+
+const Sha256EnvelopeV1Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+
+export const EvidenceReceiptV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    runId: NonEmptyIdSchema,
+    network: z.literal("coston2"),
+    submissionMode: z.enum(["wallet", "relayer", "replay"]),
+    transactionHash: Bytes32Schema.optional(),
+    votingRound: z.number().int().nonnegative(),
+    proofChecksum: Sha256EnvelopeV1Schema,
+    bundleChecksum: Sha256EnvelopeV1Schema,
+    consumerResult: z
+      .object({
+        passed: z.boolean(),
+        diagnosticCodes: z
+          .array(z.string().regex(/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/))
+          .refine((codes) => new Set(codes).size === codes.length, {
+            message: "Diagnostic codes must be unique",
+          }),
+      })
+      .strict(),
+    safeConsumerChecksum: Sha256EnvelopeV1Schema,
+    replayResult: z
+      .object({
+        byteIdentical: z.literal(true),
+        checksum: Sha256EnvelopeV1Schema,
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((receipt, context) => {
+    const live = receipt.submissionMode !== "replay";
+    if (live !== (receipt.transactionHash !== undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["transactionHash"],
+        message: "Live receipts require a transaction hash and replay receipts omit it",
+      });
+    }
+    if (receipt.replayResult.checksum !== receipt.bundleChecksum) {
+      context.addIssue({
+        code: "custom",
+        path: ["replayResult", "checksum"],
+        message: "Replay checksum must match the canonical bundle checksum",
+      });
+    }
+    if (receipt.consumerResult.passed !== (receipt.consumerResult.diagnosticCodes.length === 0)) {
+      context.addIssue({
+        code: "custom",
+        path: ["consumerResult"],
+        message: "Consumer result must agree with its diagnostic evidence",
+      });
+    }
+  });
+
+export type EvidenceReceiptV1 = z.infer<typeof EvidenceReceiptV1Schema>;

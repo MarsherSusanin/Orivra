@@ -8,6 +8,7 @@ import type {
 import {
   canonicalSerializeProofBundle,
   canonicalizeManifestUrl,
+  createEvidenceReceipt,
   createProofBundle,
   diagnoseConsumerRequest,
   generateSafeWeb2JsonConsumer,
@@ -585,6 +586,11 @@ export function createHermeticProoflineSystem(input: {
         },
       });
       return canonicalSerializeProofBundle(bundle);
+    },
+
+    async getEvidenceReceipt(context: { runId: string }) {
+      const serialized = await service.getBundle(context);
+      return createEvidenceReceipt(serialized);
     },
 
     async replay(context: { bundle: string }) {

@@ -6,6 +6,10 @@ export {
   replayProofBundle,
   verifyProofBundleChecksum,
 } from "./proof-bundle";
+export {
+  canonicalSerializeEvidenceReceipt,
+  createEvidenceReceipt,
+} from "./evidence-receipt";
 export { generateSafeWeb2JsonConsumer, type SafeConsumerOptions } from "./codegen";
 export {
   PRODUCT_ANALYTICS_QUEUE_KEY_V1,
