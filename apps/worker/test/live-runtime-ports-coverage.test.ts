@@ -9,11 +9,18 @@ import {
 } from "viem";
 import fdcVerificationAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFdcVerification.sol/IFdcVerification.json";
 import {
+  OCCURRED_AT,
+  RUN_ID,
   exactTrustManifest,
   expectedCanonicalUrl,
   validManifest,
 } from "../../../packages/contracts/test/fixtures";
+import { projectRun } from "@proofline/domain";
 import { createLiveCoston2PipelinePorts } from "../src/live-runtime";
+import {
+  createProductionCommandHandlers,
+  createRunWorker,
+} from "../src/worker";
 
 const ADDRESSES = {
   FdcHub: "0x3333333333333333333333333333333333333333",
@@ -168,6 +175,103 @@ function harness() {
   return { ports, publicClient, walletClient, daClient, dependencies, verifier };
 }
 
+async function composedRelayerSubmission(quotaRemaining: number) {
+  const live = harness();
+  const manifest = {
+    ...exactTrustManifest,
+    submission: {
+      ...exactTrustManifest.submission,
+      mode: "relayer" as const,
+    },
+  };
+  const state = {
+    events: [
+      {
+        version: "1" as const,
+        runId: RUN_ID,
+        sequence: 1,
+        commandId: "command_create",
+        occurredAt: OCCURRED_AT,
+        type: "RUN_CREATED" as const,
+        payload: { manifest },
+      },
+    ] as any[],
+    artifacts: [] as any[],
+  };
+  const loadRelayerPolicy = vi.fn(async () => ({
+    projectFeeCapWei: BigInt(manifest.submission.feeCapWei),
+    globalFeeCapWei: 20_000_000_000_000_000n,
+    quotaRemaining,
+    balanceFloorWei: 1_000n,
+  }));
+  const completeCommand = vi.fn();
+  const retryCommand = vi.fn();
+  const persistRelayerTransaction = vi.fn();
+  const repository = {
+    loadRunExecutionContext: vi.fn(async () => ({
+      runId: RUN_ID,
+      projectId: "11111111-1111-4111-8111-111111111111",
+      manifest,
+      events: [...state.events],
+      projection: projectRun(state.events),
+      artifacts: [...state.artifacts],
+    })),
+    loadRelayerPolicy,
+    findRelayerTransactionByRun: vi.fn().mockResolvedValue(null),
+    findRelayerTransaction: vi.fn().mockResolvedValue(null),
+    persistRelayerTransaction,
+    markRelayerBroadcast: vi.fn(),
+    claimNextCommand: vi.fn().mockResolvedValueOnce({
+      claimToken: "claim_zero_quota",
+      command: {
+        id: "command_submit_relayer",
+        kind: "SUBMIT_RELAYER",
+        runId: RUN_ID,
+        attempts: 1,
+        payload: { idempotencyKey: "submission-zero-quota" },
+      },
+    }),
+    completeCommand,
+    retryCommand,
+  };
+  const handlers = createProductionCommandHandlers({
+    repository: repository as any,
+    ports: live.ports,
+    clock: { now: () => OCCURRED_AT },
+  });
+  const preflight = await handlers.RUN_PREFLIGHT({
+    id: "command_preflight",
+    kind: "RUN_PREFLIGHT",
+    runId: RUN_ID,
+    attempts: 1,
+    payload: {},
+  });
+  state.events.push(...(preflight.events ?? []));
+  state.artifacts.push(...(preflight.artifacts ?? []));
+
+  const worker = createRunWorker({
+    environment: "production",
+    mode: "live",
+    adapters: {
+      coston2: { kind: "live" },
+      pipeline: { kind: "live" },
+    },
+    repository,
+    handlers,
+    logger: { info: vi.fn(), error: vi.fn() },
+  });
+  await worker.processOne();
+  return {
+    ...live,
+    state,
+    repository,
+    loadRelayerPolicy,
+    completeCommand,
+    retryCommand,
+    persistRelayerTransaction,
+  };
+}
+
 describe("live Coston2 pipeline port coverage", () => {
   it.each([
     ["private key", { PROOFLINE_COSTON2_PRIVATE_KEY: "" }, /missing/i],
@@ -244,13 +348,39 @@ describe("live Coston2 pipeline port coverage", () => {
     );
   });
 
-  it("rejects malformed persisted relayer policy before nonce or signing", async () => {
+  it("accepts zero remaining as persisted policy evidence and delegates exhaustion to the validator", async () => {
     const fixture = harness();
 
     await expect(
       fixture.ports.signRelayerTransaction(
         relayerSigningInput({ quotaRemaining: 0 }),
       ),
+    ).rejects.toMatchObject({
+      category: "configuration",
+      code: "RELAYER_QUOTA_EXHAUSTED",
+      retryable: false,
+    });
+    expect(fixture.walletClient.signTransaction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["negative", relayerSigningInput({ quotaRemaining: -1 })],
+    ["noninteger", relayerSigningInput({ quotaRemaining: 0.5 })],
+    [
+      "malformed",
+      {
+        ...relayerSigningInput(),
+        policy: {
+          ...relayerSigningInput().policy,
+          quotaRemaining: "not-a-number",
+        },
+      },
+    ],
+  ])("rejects %s persisted relayer policy evidence before nonce or signing", async (_label, input) => {
+    const fixture = harness();
+
+    await expect(
+      fixture.ports.signRelayerTransaction(input as any),
     ).rejects.toMatchObject({
       category: "schema-invalid",
       code: "RELAYER_POLICY_EVIDENCE_INVALID",
@@ -259,6 +389,56 @@ describe("live Coston2 pipeline port coverage", () => {
     expect(fixture.publicClient.getBalance).not.toHaveBeenCalled();
     expect(fixture.publicClient.getTransactionCount).not.toHaveBeenCalled();
     expect(fixture.walletClient.signTransaction).not.toHaveBeenCalled();
+  });
+
+  it("terminalizes composed zero-quota submission before signing or broadcast effects", async () => {
+    const fixture = await composedRelayerSubmission(0);
+    const policyArtifact = fixture.state.artifacts.find(
+      (artifact) => artifact.kind === "relayer-policy",
+    );
+
+    expect(fixture.loadRelayerPolicy).toHaveBeenCalledExactlyOnceWith(
+      "11111111-1111-4111-8111-111111111111",
+      BigInt(exactTrustManifest.submission.feeCapWei),
+    );
+    expect(
+      JSON.parse(
+        new TextDecoder().decode(policyArtifact?.canonicalBytes),
+      ),
+    ).toMatchObject({ version: "1", quotaRemaining: 0 });
+    expect(fixture.retryCommand).toHaveBeenCalledExactlyOnceWith(
+      "command_submit_relayer",
+      "claim_zero_quota",
+      expect.objectContaining({
+        category: "configuration",
+        code: "RELAYER_QUOTA_EXHAUSTED",
+        retryable: false,
+        terminal: true,
+      }),
+    );
+    expect(fixture.completeCommand).not.toHaveBeenCalled();
+    expect(fixture.persistRelayerTransaction).not.toHaveBeenCalled();
+    expect(fixture.walletClient.signTransaction).not.toHaveBeenCalled();
+    expect(fixture.publicClient.sendRawTransaction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the composed positive-quota submission path green", async () => {
+    const fixture = await composedRelayerSubmission(1);
+
+    expect(fixture.loadRelayerPolicy).toHaveBeenCalledOnce();
+    expect(fixture.retryCommand).not.toHaveBeenCalled();
+    expect(fixture.completeCommand).toHaveBeenCalledExactlyOnceWith(
+      "command_submit_relayer",
+      "claim_zero_quota",
+      expect.objectContaining({
+        nextCommands: [
+          expect.objectContaining({ kind: "BROADCAST_RELAYER_TRANSACTION" }),
+        ],
+      }),
+    );
+    expect(fixture.persistRelayerTransaction).toHaveBeenCalledOnce();
+    expect(fixture.walletClient.signTransaction).toHaveBeenCalledOnce();
+    expect(fixture.publicClient.sendRawTransaction).not.toHaveBeenCalled();
   });
 
   it("rejects persisted relayer policy drift before wallet effects", async () => {
