@@ -330,16 +330,6 @@ describe("Slice 007 replay command graph coverage", () => {
       },
     ],
     [
-      "nonterminal source",
-      () => {
-        const source = replayBundle({ terminal: false });
-        return {
-          serialized: canonicalSerializeProofBundle(source),
-          manifest: source.manifest,
-        };
-      },
-    ],
-    [
       "failed consumer",
       () => {
         const source = replayBundle({ consumerPassed: false });
@@ -355,6 +345,44 @@ describe("Slice 007 replay command graph coverage", () => {
     await expect(
       fixture.handlers.RUN_PREFLIGHT(command("RUN_PREFLIGHT")),
     ).rejects.toThrow(/terminal|passing|lifecycle|proof/i);
+  });
+
+  it("rejects nonterminal source replay evidence with one safe error", async () => {
+    const source = replayBundle({ terminal: false });
+    const fixture = replayHarness(
+      canonicalSerializeProofBundle(source),
+      source.manifest,
+    );
+
+    const rejection = await fixture.handlers
+      .RUN_PREFLIGHT(command("RUN_PREFLIGHT"))
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(rejection).toMatchObject({
+      message: "Recorded replay evidence is invalid",
+      category: "schema-invalid",
+      code: "REPLAY_EVIDENCE_INVALID",
+      retryable: false,
+    });
+    expect(rejection).not.toHaveProperty("cause");
+    expect(
+      JSON.stringify({
+        message: (rejection as any)?.message,
+        category: (rejection as any)?.category,
+        code: (rejection as any)?.code,
+        retryable: (rejection as any)?.retryable,
+        cause: (rejection as any)?.cause,
+      }),
+    ).not.toMatch(/terminal|passing|lifecycle|proof|SyntaxError|Error:/i);
+    expect(fixture.state.events).toEqual([targetCreated(source.manifest)]);
+    expect(fixture.state.artifacts).toEqual([]);
+    expect(fixture.ports.loadReplayBundle).toHaveBeenCalledOnce();
+    expect(fixture.ports.loadReplayPreflightReport).not.toHaveBeenCalled();
+    expect(fixture.repository.persistRelayerTransaction).not.toHaveBeenCalled();
+    expect(fixture.repository.markRelayerBroadcast).not.toHaveBeenCalled();
   });
 
   it("requires the durable replay-source artifact before applying evidence", async () => {
