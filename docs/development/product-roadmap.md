@@ -11,8 +11,8 @@ The product journey is delivered as independently frozen vertical slices:
 | 014 | Honest routing and persisted run discovery | Complete |
 | 015 | Four-step manifest Composer and recoverable local draft | Complete |
 | 016 | Persisted preflight evidence and decision Workbench | Complete; independently verified |
-| 017A | Manifest-owned submission decision and confirmation evidence | In progress |
-| 017B | Wallet, relayer and replay confirmation through one persisted path | Planned in current slice |
+| 017A | Manifest-owned submission decision and confirmation evidence | Implemented; pre-freeze gates pending |
+| 017B | Wallet, relayer and replay confirmation through one persisted path | Implemented; pre-freeze gates pending |
 | 018 | Restart-safe waiting, retry and terminal recovery semantics | Pending |
 | 019 | Consumer evidence matrix and deterministic safe artifact | Pending |
 | 020 | Evidence receipt, integration package and read-only handoff | Pending |
@@ -41,3 +41,7 @@ Each row above is a separate candidate. RED/GREEN development stays focused and
 fast; the full matrix runs before that row is frozen, followed by two independent
 PASS reports on one tree hash. See `docs/development/roles.md` and
 `docs/runbook.md` for the exact cadence and commands.
+
+Slice 017 is not complete until the full freeze matrix and both independent
+verification roles PASS one identical commit and tree hash. Focused GREEN
+evidence is recorded in `docs/evidence/slice-017-green-explicit-submission.md`.
