@@ -1,4 +1,7 @@
-import { Web2JsonManifestV1Schema } from "@proofline/contracts";
+import {
+  SubmissionRequestV1Schema,
+  Web2JsonManifestV1Schema,
+} from "@proofline/contracts";
 import { z } from "zod";
 
 type AuthContext =
@@ -19,9 +22,7 @@ const CreateRunBodySchema = z
   .object({ manifest: Web2JsonManifestV1Schema })
   .strict();
 const ReplayBodySchema = z.object({ bundle: z.string().min(1).optional() }).strict();
-const SubmissionBodySchema = z
-  .object({ mode: z.enum(["wallet", "relayer"]).optional() })
-  .strict();
+const SubmissionBodySchema = SubmissionRequestV1Schema;
 const TransactionBodySchema = z
   .object({ transactionHash: TransactionHashSchema.optional() })
   .strict();
@@ -201,9 +202,7 @@ export function createProoflineApi(input: {
         const parsed = bodySchema.safeParse(body);
         const productionRequiredFieldMissing =
           process.env.NODE_ENV !== "test" &&
-          ((/^\/v1\/runs\/[^/]+\/submissions$/.test(url.pathname) &&
-            !("mode" in (parsed.success ? parsed.data : {}))) ||
-            (/^\/v1\/runs\/[^/]+\/transactions$/.test(url.pathname) &&
+          ((/^\/v1\/runs\/[^/]+\/transactions$/.test(url.pathname) &&
               !("transactionHash" in (parsed.success ? parsed.data : {}))) ||
             (url.pathname === "/v1/replays" &&
               !("bundle" in (parsed.success ? parsed.data : {}))));

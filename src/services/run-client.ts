@@ -2,11 +2,14 @@ import type {
   CreateRunResultV1,
   PreflightReportV1,
   RunListPageV1,
+  SubmissionResponseV1,
   Web2JsonManifestV1,
+  WalletTransactionV1,
 } from "../../packages/contracts/src";
 import {
   CreateRunResultV1Schema,
   PreflightReportV1Schema,
+  SubmissionResponseV1Schema,
 } from "../../packages/contracts/src";
 
 const LAST_RUN_KEY = "proofline:last-run";
@@ -14,15 +17,13 @@ const COSTON2_CHAIN_ID = "0x72";
 const TRANSACTION_HASH = /^0x[0-9a-fA-F]{64}$/;
 
 type StoragePort = Pick<Storage, "getItem" | "setItem">;
+type RecoveryStoragePort = Pick<
+  Storage,
+  "getItem" | "setItem" | "removeItem"
+>;
 type FetchPort = typeof globalThis.fetch;
 
-export type WalletTransaction = {
-  chainId: "0x72";
-  from?: `0x${string}`;
-  to: `0x${string}`;
-  data: `0x${string}`;
-  value: `0x${string}`;
-};
+export type WalletTransaction = WalletTransactionV1;
 
 export type Eip1193Provider = {
   request(input: { method: string; params?: unknown[] }): Promise<unknown>;
@@ -154,6 +155,29 @@ export function createRunClient(input: {
     return (await response.json()) as T;
   }
 
+  async function confirmSubmission(
+    runId: string,
+    mode: "wallet" | "relayer" | "replay",
+    idempotencyKey: string,
+  ): Promise<SubmissionResponseV1> {
+    const result = await request<unknown>(
+      `/runs/${encodeURIComponent(runId)}/submissions`,
+      {
+        method: "POST",
+        body: { mode },
+        idempotencyKey,
+      },
+    );
+    const parsed = SubmissionResponseV1Schema.safeParse(result);
+    if (!parsed.success || parsed.data.runId !== runId || parsed.data.mode !== mode) {
+      throw new ProoflineClientError(
+        "Proofline returned an invalid submission response contract",
+        { status: 502, code: "SUBMISSION_RESPONSE_INVALID" },
+      );
+    }
+    return parsed.data;
+  }
+
   return {
     listRuns(filters: {
       status?: "active" | "completed" | "failed";
@@ -213,18 +237,21 @@ export function createRunClient(input: {
       return result;
     },
 
+    confirmSubmission,
+
     async prepareSubmission(runId: string, idempotencyKey: string) {
-      const result = await request<
-        WalletTransaction | { mode: "wallet"; transaction: WalletTransaction }
-      >(
-        `/runs/${encodeURIComponent(runId)}/submissions`,
-        {
-          method: "POST",
-          body: { mode: "wallet" },
-          idempotencyKey,
-        },
+      const result = await confirmSubmission(
+        runId,
+        "wallet",
+        idempotencyKey,
       );
-      return "transaction" in result ? result.transaction : result;
+      if (result.mode !== "wallet") {
+        throw new ProoflineClientError(
+          "Proofline returned an invalid wallet submission response",
+          { status: 502, code: "SUBMISSION_RESPONSE_INVALID" },
+        );
+      }
+      return result.transaction;
     },
 
     attachTransaction(
@@ -299,7 +326,29 @@ export async function submitWithEip1193(input: {
   idempotencyKey: string;
   provider: Eip1193Provider;
   client: Pick<RunClient, "prepareSubmission" | "attachTransaction">;
+  recoveryStorage?: RecoveryStoragePort;
 }) {
+  const recoveryStorage =
+    input.recoveryStorage ??
+    (typeof globalThis.sessionStorage === "undefined"
+      ? null
+      : globalThis.sessionStorage);
+  const recoveryKey = `proofline:${encodeURIComponent(input.runId)}:wallet:${encodeURIComponent(input.idempotencyKey)}`;
+  const recoveredHash = recoveryStorage?.getItem(recoveryKey) ?? null;
+  if (recoveredHash !== null) {
+    if (!TRANSACTION_HASH.test(recoveredHash)) {
+      recoveryStorage?.removeItem(recoveryKey);
+    } else {
+      await input.client.attachTransaction(
+        input.runId,
+        { transactionHash: recoveredHash },
+        input.idempotencyKey,
+      );
+      recoveryStorage?.removeItem(recoveryKey);
+      return { transactionHash: recoveredHash };
+    }
+  }
+
   const transaction = await input.client.prepareSubmission(
     input.runId,
     input.idempotencyKey,
@@ -331,10 +380,12 @@ export async function submitWithEip1193(input: {
     throw new Error("The wallet did not return a valid transaction hash");
   }
 
+  recoveryStorage?.setItem(recoveryKey, transactionHash);
   await input.client.attachTransaction(
     input.runId,
     { transactionHash },
     input.idempotencyKey,
   );
+  recoveryStorage?.removeItem(recoveryKey);
   return { transactionHash };
 }

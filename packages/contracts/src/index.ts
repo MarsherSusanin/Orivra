@@ -266,6 +266,57 @@ export const CreateRunResultV1Schema = z
 
 export type CreateRunResultV1 = z.infer<typeof CreateRunResultV1Schema>;
 
+export const SubmissionRequestV1Schema = z
+  .object({
+    mode: z.enum(["wallet", "relayer", "replay"]),
+  })
+  .strict();
+
+export type SubmissionRequestV1 = z.infer<typeof SubmissionRequestV1Schema>;
+
+export const WalletTransactionV1Schema = z
+  .object({
+    chainId: z.literal("0x72"),
+    to: AddressSchema,
+    data: HexBytesSchema,
+    value: z.string().regex(/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/),
+  })
+  .strict();
+
+export type WalletTransactionV1 = z.infer<typeof WalletTransactionV1Schema>;
+
+export const SubmissionResponseV1Schema = z.discriminatedUnion("mode", [
+  z
+    .object({
+      version: VersionV1Schema,
+      runId: NonEmptyIdSchema,
+      mode: z.literal("wallet"),
+      effectOwner: z.literal("wallet"),
+      transaction: WalletTransactionV1Schema,
+    })
+    .strict(),
+  z
+    .object({
+      version: VersionV1Schema,
+      runId: NonEmptyIdSchema,
+      mode: z.literal("relayer"),
+      effectOwner: z.literal("worker"),
+      commandId: NonEmptyIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      version: VersionV1Schema,
+      runId: NonEmptyIdSchema,
+      mode: z.literal("replay"),
+      effectOwner: z.literal("none"),
+      commandId: NonEmptyIdSchema,
+    })
+    .strict(),
+]);
+
+export type SubmissionResponseV1 = z.infer<typeof SubmissionResponseV1Schema>;
+
 const Sha256EnvelopeSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const MAX_PREFLIGHT_REPORT_UTF8_BYTES = 65_536;
 const PRIVATE_REPORT_TEXT_PATTERN =

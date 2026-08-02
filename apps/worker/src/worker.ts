@@ -1250,7 +1250,7 @@ export function createProductionCommandHandlers(input: {
 
   function assertSubmissionMode(
     context: RunExecutionContext,
-    expectedMode: "wallet" | "relayer",
+    expectedMode: "wallet" | "relayer" | "replay",
   ): void {
     if (context.manifest.submission.mode !== expectedMode) {
       throw Object.assign(
@@ -1273,7 +1273,7 @@ export function createProductionCommandHandlers(input: {
     async RUN_PREFLIGHT(command) {
       const context = await load(command);
       if (context.manifest.submission.mode === "replay") {
-        const nextCommands = [child(context, "APPLY_REPLAY_EVIDENCE")];
+        const nextCommands: CommandOutcome["nextCommands"] = [];
         if (hasEvent(context, "PREFLIGHT_ACCEPTED")) return { nextCommands };
         if (!input.ports.loadReplayBundle) {
           throw Object.assign(
@@ -1349,14 +1349,7 @@ export function createProductionCommandHandlers(input: {
         });
         return persistedReplayOutcome(report);
       }
-      const nextCommands =
-        context.manifest.submission.mode === "relayer"
-          ? [
-              child(context, "SUBMIT_RELAYER", {
-                idempotencyKey: `${context.runId}:relayer`,
-              }),
-            ]
-          : [];
+      const nextCommands: CommandOutcome["nextCommands"] = [];
       if (hasEvent(context, "PREFLIGHT_ACCEPTED")) return { nextCommands };
       const outcomeValue: unknown = await input.ports.preflight({
         manifest: context.manifest,
@@ -1434,6 +1427,7 @@ export function createProductionCommandHandlers(input: {
 
     async APPLY_REPLAY_EVIDENCE(command) {
       const context = await load(command);
+      assertSubmissionMode(context, "replay");
       if (hasEvent(context, "CONSUMER_VERIFIED")) {
         return { nextCommands: [child(context, "BUILD_PROOF_BUNDLE")] };
       }
@@ -1695,6 +1689,21 @@ export function createProductionCommandHandlers(input: {
         runId: context.runId,
       });
       if (
+        typeof command.payload.transactionHash !== "string" ||
+        typeof observed.transactionHash !== "string" ||
+        observed.transactionHash.toLowerCase() !==
+          command.payload.transactionHash.toLowerCase()
+      ) {
+        throw Object.assign(
+          new Error("Observed wallet transaction hash differs from the attached hash"),
+          {
+            category: "configuration",
+            code: "WALLET_TRANSACTION_HASH_MISMATCH",
+            retryable: false,
+          },
+        );
+      }
+      if (
         observed.chainId !== 114 ||
         !sameHex(observed.target, preflight.network.resolvedContracts.FdcHub) ||
         !sameHex(observed.calldata, preflight.requestCalldata) ||
@@ -1712,14 +1721,14 @@ export function createProductionCommandHandlers(input: {
                 "REQUEST_SUBMITTED",
                 {
                   mode: "wallet",
-                  transactionHash: observed.transactionHash,
+                  transactionHash: command.payload.transactionHash,
                 },
                 input.clock.now(),
               ),
             ],
         nextCommands: [
           child(context, "POLL_TRANSACTION_RECEIPT", {
-            transactionHash: observed.transactionHash,
+            transactionHash: command.payload.transactionHash,
           }),
         ],
       };

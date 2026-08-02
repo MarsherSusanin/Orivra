@@ -5,6 +5,7 @@ import {
   RunEventV1Schema,
   RunListPageV1Schema,
   RunProjectionV1Schema,
+  SubmissionResponseV1Schema,
   Web2JsonManifestV1Schema,
   type RunStageNameV1,
   type RunEventV1,
@@ -28,6 +29,16 @@ function fingerprint(value: unknown): Buffer {
 function requireRunId(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) {
     throw Object.assign(new Error("Run id is required"), { status: 400 });
+  }
+  return value;
+}
+
+function requireIdempotencyKey(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 256) {
+    throw Object.assign(new Error("A bounded idempotency key is required"), {
+      status: 400,
+      code: "IDEMPOTENCY_KEY_REQUIRED",
+    });
   }
   return value;
 }
@@ -115,7 +126,7 @@ export function createProductionProoflineService(input: {
 
   function assertSubmissionMode(
     manifest: { submission: { mode: string } },
-    expectedMode: "wallet" | "relayer",
+    expectedMode: "wallet" | "relayer" | "replay",
   ): void {
     if (manifest.submission.mode !== expectedMode) {
       throw Object.assign(
@@ -124,6 +135,19 @@ export function createProductionProoflineService(input: {
         ),
         { status: 409, code: "SUBMISSION_MODE_MISMATCH" },
       );
+    }
+  }
+
+  function assertCompletedPreflight(projection: unknown): void {
+    const preflight =
+      projection && typeof projection === "object"
+        ? (projection as { stages?: { preflight?: unknown } }).stages?.preflight
+        : undefined;
+    if (preflight !== "completed") {
+      throw Object.assign(new Error("Preflight evidence is not ready"), {
+        status: 409,
+        code: "PREFLIGHT_NOT_READY",
+      });
     }
   }
 
@@ -156,7 +180,7 @@ export function createProductionProoflineService(input: {
     idempotencyKey: unknown,
   ) {
     const result = await input.pool.query(
-      `SELECT project_id, run_id, idempotency_key, kind, payload
+      `SELECT project_id, run_id, idempotency_key, kind, payload, id
        FROM proofline_private.run_commands
        WHERE project_id = $1 AND idempotency_key = $2`,
       [projectId, idempotencyKey],
@@ -164,12 +188,16 @@ export function createProductionProoflineService(input: {
     return result.rows[0] as Record<string, unknown> | undefined;
   }
 
-  async function findRelayerCommandByRun(runId: string) {
+  async function findSubmissionCommandByRun(runId: string) {
     const result = await input.pool.query(
-      `SELECT project_id, run_id, idempotency_key, kind, payload
+      `SELECT project_id, run_id, idempotency_key, kind, payload, id
        FROM proofline_private.run_commands
        WHERE run_id = $1
-         AND kind = 'SUBMIT_RELAYER'
+         AND kind IN (
+           'ATTACH_WALLET_TRANSACTION',
+           'SUBMIT_RELAYER',
+           'APPLY_REPLAY_EVIDENCE'
+         )
          AND status <> 'cancelled'
        LIMIT 1`,
       [runId],
@@ -197,11 +225,15 @@ export function createProductionProoflineService(input: {
   ) {
     const owned = await loadOwnedRun(context);
     const runId = String(owned.id);
-    if (kind === "SUBMIT_RELAYER") {
-      assertSubmissionMode(owned.manifest, "relayer");
-    } else if (kind === "ATTACH_WALLET_TRANSACTION") {
-      assertSubmissionMode(owned.manifest, "wallet");
-    }
+    const expectedMode =
+      kind === "SUBMIT_RELAYER"
+        ? "relayer"
+        : kind === "ATTACH_WALLET_TRANSACTION"
+          ? "wallet"
+          : kind === "APPLY_REPLAY_EVIDENCE"
+            ? "replay"
+            : null;
+    if (expectedMode) assertSubmissionMode(owned.manifest, expectedMode);
     const existing = await findCommandIntent(
       context.projectId,
       context.idempotencyKey,
@@ -212,30 +244,36 @@ export function createProductionProoflineService(input: {
           status: 409,
         });
       }
-      return { accepted: true, runId };
+      return {
+        accepted: true,
+        runId,
+        commandId: String(existing.id ?? ""),
+      };
     }
     assertMutableProjection(owned.projection);
+    if (expectedMode) assertCompletedPreflight(owned.projection);
 
-    if (kind === "SUBMIT_RELAYER") {
-      const priorRelayerCommand = await findRelayerCommandByRun(runId);
-      if (priorRelayerCommand) {
+    if (expectedMode) {
+      const priorSubmission = await findSubmissionCommandByRun(runId);
+      if (priorSubmission) {
         throw Object.assign(
-          new Error("Run already has one relayer submission command"),
-          { status: 409, code: "RELAYER_SUBMISSION_EXISTS" },
+          new Error("Run already has one active submission authority"),
+          { status: 409, code: "SUBMISSION_AUTHORITY_EXISTS" },
         );
       }
     }
 
     let inserted;
+    const commandId = randomUUID();
     try {
       inserted = await input.pool.query(
         `INSERT INTO proofline_private.run_commands
           (id, project_id, run_id, idempotency_key, kind, payload)
          VALUES ($1, $2, $3, $4, $5, $6::jsonb)
          ON CONFLICT (project_id, idempotency_key) DO NOTHING
-         RETURNING project_id, run_id, idempotency_key, kind, payload`,
+         RETURNING project_id, run_id, idempotency_key, kind, payload, id`,
         [
-          randomUUID(),
+          commandId,
           context.projectId,
           runId,
           context.idempotencyKey,
@@ -244,12 +282,12 @@ export function createProductionProoflineService(input: {
         ],
       );
     } catch (cause) {
-      if (kind === "SUBMIT_RELAYER" && isUniqueViolation(cause)) {
-        const racedRelayerCommand = await findRelayerCommandByRun(runId);
-        if (racedRelayerCommand) {
+      if (expectedMode && isUniqueViolation(cause)) {
+        const racedSubmission = await findSubmissionCommandByRun(runId);
+        if (racedSubmission) {
           throw Object.assign(
-            new Error("Run already has one relayer submission command"),
-            { status: 409, code: "RELAYER_SUBMISSION_EXISTS" },
+            new Error("Run already has one active submission authority"),
+            { status: 409, code: "SUBMISSION_AUTHORITY_EXISTS" },
           );
         }
       }
@@ -266,7 +304,15 @@ export function createProductionProoflineService(input: {
         });
       }
     }
-    return { accepted: true, runId };
+    const accepted = inserted.rows[0] ?? (await findCommandIntent(
+      context.projectId,
+      context.idempotencyKey,
+    ));
+    return {
+      accepted: true,
+      runId,
+      commandId: String(accepted?.id ?? (inserted.rowCount ? commandId : "")),
+    };
   }
 
   async function persistCompletedIntent(
@@ -728,7 +774,14 @@ export function createProductionProoflineService(input: {
     },
 
     async createSubmission(context: Record<string, unknown>) {
-      const mode = String(context.mode ?? "relayer");
+      requireIdempotencyKey(context.idempotencyKey);
+      const mode = context.mode;
+      if (mode !== "wallet" && mode !== "relayer" && mode !== "replay") {
+        throw Object.assign(new Error("Explicit submission mode is required"), {
+          status: 400,
+          code: "INVALID_SUBMISSION_MODE",
+        });
+      }
       if (mode === "wallet") {
         const runId = requireRunId(context.runId);
         const result = await input.pool.query(
@@ -756,9 +809,10 @@ export function createProductionProoflineService(input: {
         const persistedManifest = Web2JsonManifestV1Schema.parse(row.manifest);
         assertSubmissionMode(persistedManifest, "wallet");
         assertMutableProjection(row.projection);
+        assertCompletedPreflight(row.projection);
         if (!row.canonical_bytes) {
           throw Object.assign(new Error("Preflight evidence is not ready"), {
-            status: 404,
+            status: 409,
             code: "PREFLIGHT_NOT_READY",
           });
         }
@@ -772,7 +826,12 @@ export function createProductionProoflineService(input: {
             "",
         );
         const requestCalldata = String(evidence.requestCalldata ?? "");
-        const quotedFeeWei = BigInt(String(evidence.quotedFeeWei ?? "-1"));
+        let quotedFeeWei = -1n;
+        try {
+          quotedFeeWei = BigInt(String(evidence.quotedFeeWei ?? "-1"));
+        } catch {
+          // The stable invalid-evidence response below owns malformed numerics.
+        }
         if (
           chainId !== 114 ||
           !/^0x[0-9a-fA-F]{40}$/.test(fdcHub) ||
@@ -781,62 +840,73 @@ export function createProductionProoflineService(input: {
         ) {
           throw Object.assign(new Error("Persisted preflight evidence is invalid"), {
             status: 409,
+            code: "PREFLIGHT_EVIDENCE_INVALID",
           });
         }
-        return {
+        return SubmissionResponseV1Schema.parse({
+          version: "1",
+          runId,
           mode: "wallet",
+          effectOwner: "wallet",
           transaction: {
             chainId: "0x72",
             to: fdcHub,
             data: requestCalldata,
             value: `0x${quotedFeeWei.toString(16)}`,
           },
-        };
-      }
-      if (mode !== "relayer") {
-        throw Object.assign(new Error("Unsupported submission mode"), {
-          status: 400,
         });
       }
       const owned = await loadOwnedRun(context);
       const runId = String(owned.id);
-      assertSubmissionMode(owned.manifest, "relayer");
+      assertSubmissionMode(owned.manifest, mode);
+      const kind =
+        mode === "relayer" ? "SUBMIT_RELAYER" : "APPLY_REPLAY_EVIDENCE";
       const payload = { idempotencyKey: context.idempotencyKey };
       const existing = await findCommandIntent(
         context.projectId,
         context.idempotencyKey,
       );
       if (existing) {
-        if (!sameIntent(existing, runId, "SUBMIT_RELAYER", payload)) {
+        if (!sameIntent(existing, runId, kind, payload)) {
           throw Object.assign(
             new Error("Idempotency key command intent conflict"),
-            { status: 409 },
+            { status: 409, code: "SUBMISSION_INTENT_CONFLICT" },
           );
         }
-        return { accepted: true, runId };
-      }
-      assertMutableProjection(owned.projection);
-      const priorRelayerCommand = await findRelayerCommandByRun(runId);
-      if (
-        priorRelayerCommand &&
-        String(priorRelayerCommand.idempotency_key) ===
-          `${runId}:submit_relayer`
-      ) {
-        return { accepted: true, runId };
-      }
-      const preflightStage = (owned.projection as any)?.stages?.preflight;
-      if (preflightStage !== undefined && preflightStage !== "completed") {
-        throw Object.assign(new Error("Preflight evidence is not ready"), {
-          status: 404,
-          code: "PREFLIGHT_NOT_READY",
+        return SubmissionResponseV1Schema.parse({
+          version: "1",
+          runId,
+          mode,
+          effectOwner: mode === "relayer" ? "worker" : "none",
+          commandId: String(existing.id),
         });
       }
-      return enqueue(context, "SUBMIT_RELAYER", payload);
+      assertMutableProjection(owned.projection);
+      assertCompletedPreflight(owned.projection);
+      const accepted = await enqueue(context, kind, payload);
+      return SubmissionResponseV1Schema.parse({
+        version: "1",
+        runId,
+        mode,
+        effectOwner: mode === "relayer" ? "worker" : "none",
+        commandId: accepted.commandId,
+      });
     },
-    attachTransaction(context: Record<string, unknown>) {
-      return enqueue(context, "ATTACH_WALLET_TRANSACTION", {
+    async attachTransaction(context: Record<string, unknown>) {
+      requireIdempotencyKey(context.idempotencyKey);
+      if (
+        typeof context.transactionHash !== "string" ||
+        !/^0x[0-9a-fA-F]{64}$/.test(context.transactionHash)
+      ) {
+        throw Object.assign(new Error("A valid wallet transaction hash is required"), {
+          status: 400,
+          code: "INVALID_WALLET_TRANSACTION",
+        });
+      }
+      const accepted = await enqueue(context, "ATTACH_WALLET_TRANSACTION", {
         transactionHash: context.transactionHash,
       });
+      return { accepted: true, runId: accepted.runId };
     },
     verifyConsumer(context: Record<string, unknown>) {
       if (

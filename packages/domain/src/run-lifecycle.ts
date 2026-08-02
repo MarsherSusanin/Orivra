@@ -97,7 +97,9 @@ function completedStages(count: number): Record<string, RunStageStatusV1> {
   for (let index = 0; index < completedCount; index += 1) {
     stages[STAGE_NAMES[index]] = "completed";
   }
-  if (count >= 1 && count <= STAGE_NAMES.length) {
+  // Accepted preflight is a deliberate confirmation boundary: request remains
+  // pending until an explicit wallet, relayer, or replay submission exists.
+  if (count >= 1 && count <= STAGE_NAMES.length && count !== 2) {
     stages[STAGE_NAMES[count - 1]] = "active";
   }
   return stages;

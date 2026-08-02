@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
 import { redactEvidence } from "./errors";
 
+function relayerPolicyError(code: string, message: string): Error {
+  return Object.assign(new Error(message), {
+    category: "configuration" as const,
+    code,
+    retryable: false,
+  });
+}
+
 export interface RelayerSubmission {
   idempotencyKey: string;
   chainId: number;
@@ -34,9 +42,17 @@ export function validateRelayerSubmission<T extends RelayerSubmission>(input: T)
     throw new Error("Relayer fee exceeds the project fee cap");
   }
   if (input.valueWei > input.globalFeeCapWei) {
-    throw new Error("Relayer fee exceeds the global fee cap");
+    throw relayerPolicyError(
+      "GLOBAL_FEE_CAP_EXCEEDED",
+      "Relayer fee exceeds the global fee cap",
+    );
   }
-  if (input.quotaRemaining <= 0) throw new Error("Relayer quota is exhausted");
+  if (input.quotaRemaining <= 0) {
+    throw relayerPolicyError(
+      "RELAYER_QUOTA_EXHAUSTED",
+      "Relayer quota is exhausted",
+    );
+  }
   if (typeof input.gasLimit !== "bigint" || input.gasLimit <= 0n) {
     throw new Error("Positive relayer gas limit evidence is required");
   }
@@ -51,7 +67,8 @@ export function validateRelayerSubmission<T extends RelayerSubmission>(input: T)
     input.balanceWei - input.valueWei - worstCaseGasWei <
     input.balanceFloorWei
   ) {
-    throw new Error(
+    throw relayerPolicyError(
+      "BALANCE_FLOOR_VIOLATION",
       "Insufficient relayer balance to preserve the floor after worst-case gas",
     );
   }

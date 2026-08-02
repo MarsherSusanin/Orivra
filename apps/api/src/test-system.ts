@@ -32,7 +32,12 @@ interface StoredRun {
 interface QueuedCommand {
   id: string;
   runId: string;
-  kind: "ADVANCE_REPLAY" | "ADVANCE_WALLET" | "VERIFY_CONSUMER";
+  kind:
+    | "RUN_PREFLIGHT"
+    | "APPLY_REPLAY_EVIDENCE"
+    | "ADVANCE_RELAYER"
+    | "ADVANCE_WALLET"
+    | "VERIFY_CONSUMER";
 }
 
 interface MemoryDatabase {
@@ -159,14 +164,30 @@ export function createHermeticProoflineSystem(input: {
 
   async function processCommand(command: QueuedCommand): Promise<void> {
     const stored = run(command.runId);
-    if (command.kind === "ADVANCE_REPLAY") {
+    if (command.kind === "RUN_PREFLIGHT") {
       appendPreflight(stored);
+      return;
+    }
+    if (command.kind === "APPLY_REPLAY_EVIDENCE") {
       append(stored, {
         commandId: "cmd_replay_submission",
         type: "REQUEST_SUBMITTED",
         payload: {
           mode: "relayer",
           transactionHash: txHash("hermetic-replay-submission"),
+        },
+      });
+      appendProofLifecycle(stored);
+      return;
+    }
+    if (command.kind === "ADVANCE_RELAYER") {
+      broadcastCount += 1;
+      append(stored, {
+        commandId: command.id,
+        type: "REQUEST_SUBMITTED",
+        payload: {
+          mode: "relayer",
+          transactionHash: txHash(`hermetic-relayer:${command.id}`),
         },
       });
       appendProofLifecycle(stored);
@@ -225,12 +246,10 @@ export function createHermeticProoflineSystem(input: {
       });
       db.runs.set(runId, stored);
       db.createKeys.set(createKey, runId);
-      if (context.manifest.submission.mode === "replay") {
-        enqueue(
-          { id: "command_replay", runId, kind: "ADVANCE_REPLAY" },
-          `${runId}:advance-replay`,
-        );
-      }
+      enqueue(
+        { id: "command_preflight", runId, kind: "RUN_PREFLIGHT" },
+        `${runId}:preflight`,
+      );
       return { status: "accepted", runId, location: `/v1/runs/${runId}` };
     },
 
@@ -325,11 +344,30 @@ export function createHermeticProoflineSystem(input: {
       };
     },
 
-    async createSubmission(context: { runId: string; mode?: string }) {
-      run(context.runId);
+    async createSubmission(context: {
+      runId: string;
+      mode: "wallet" | "relayer" | "replay";
+      idempotencyKey: string;
+    }) {
+      const stored = run(context.runId);
+      if (stored.manifest.submission.mode !== context.mode) {
+        throw Object.assign(new Error("Submission mode does not match manifest"), {
+          status: 409,
+          code: "SUBMISSION_MODE_MISMATCH",
+        });
+      }
+      if (!stored.events.some((event) => event.type === "PREFLIGHT_ACCEPTED")) {
+        throw Object.assign(new Error("Preflight evidence is not ready"), {
+          status: 409,
+          code: "PREFLIGHT_NOT_READY",
+        });
+      }
       if (context.mode === "wallet") {
         return {
+          version: "1" as const,
+          runId: context.runId,
           mode: "wallet",
+          effectOwner: "wallet" as const,
           transaction: {
             chainId: "0x72",
             to: "0x3333333333333333333333333333333333333333",
@@ -338,7 +376,31 @@ export function createHermeticProoflineSystem(input: {
           },
         };
       }
-      return { mode: context.mode ?? "relayer", accepted: true };
+      const id = commandId(`command_${context.mode}`, context.idempotencyKey);
+      if (context.mode === "replay") {
+        enqueue(
+          { id, runId: context.runId, kind: "APPLY_REPLAY_EVIDENCE" },
+          `${context.runId}:submission:${context.idempotencyKey}`,
+        );
+        return {
+          version: "1" as const,
+          runId: context.runId,
+          mode: "replay" as const,
+          effectOwner: "none" as const,
+          commandId: id,
+        };
+      }
+      enqueue(
+        { id, runId: context.runId, kind: "ADVANCE_RELAYER" },
+        `${context.runId}:submission:${context.idempotencyKey}`,
+      );
+      return {
+        version: "1" as const,
+        runId: context.runId,
+        mode: "relayer" as const,
+        effectOwner: "worker" as const,
+        commandId: id,
+      };
     },
 
     async attachTransaction(context: {
@@ -350,7 +412,12 @@ export function createHermeticProoflineSystem(input: {
       const dedupe = `${context.runId}:tx:${context.idempotencyKey}`;
       if (!db.commandKeys.has(dedupe)) {
         db.commandKeys.add(dedupe);
-        if (stored.events.length === 1) appendPreflight(stored);
+        if (!stored.events.some((event) => event.type === "PREFLIGHT_ACCEPTED")) {
+          throw Object.assign(new Error("Preflight evidence is not ready"), {
+            status: 409,
+            code: "PREFLIGHT_NOT_READY",
+          });
+        }
         if (!stored.events.some((event) => event.type === "REQUEST_SUBMITTED")) {
           append(stored, {
             commandId: commandId("cmd_tx", context.idempotencyKey),
