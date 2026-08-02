@@ -38,6 +38,8 @@ describe("Slice 019 ConsumerLabReportV1", () => {
     expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, consumerIdentity: "canonical-safe", passed: true, checks: safeChecks, diagnostics: [], verdict: { state: "safe-to-integrate", missingChecks: 0 } }).success).toBe(true);
     expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, consumerIdentity: "canonical-safe", passed: true, checks: safeChecks, diagnostics: [], verdict: { state: "needs-fixes", missingChecks: 0 } }).success).toBe(false);
     expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, consumerIdentity: "canonical-safe", passed: false, checks: safeChecks, diagnostics: [], verdict: { state: "needs-fixes", missingChecks: 0 } }).success).toBe(false);
+    const unenforcedPassingChecks = safeChecks.map((check, index) => index === 0 ? { ...check, enforced: false } : check) as typeof consumerLabReport.checks;
+    expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, consumerIdentity: "canonical-safe", passed: false, checks: unenforcedPassingChecks, diagnostics: [], verdict: { state: "needs-fixes", missingChecks: 1 } }).success).toBe(false);
     expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, passed: true }).success).toBe(false);
     expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, verdict: { state: "needs-fixes", missingChecks: 3 } }).success).toBe(false);
     expect(ConsumerLabReportV1Schema.safeParse({ ...consumerLabReport, proofValid: false, consumerIdentity: "canonical-safe", passed: true, checks: safeChecks, diagnostics: [], verdict: { state: "safe-to-integrate", missingChecks: 0 } }).success).toBe(false);
