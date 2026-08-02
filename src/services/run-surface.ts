@@ -6,8 +6,11 @@ import {
 } from "./run-client";
 import {
   CreateRunResultV1Schema,
+  RunRecoveryV1Schema,
+  Web2JsonManifestV1Schema,
   type CreateRunResultV1,
   type PreflightReportV1,
+  type RunRecoveryV1,
   type RunListPageV1,
   type SubmissionResponseV1,
   type Web2JsonManifestV1,
@@ -85,6 +88,13 @@ export type HydratedRunView = {
   startedAt?: string;
   sequence: number;
   terminal: boolean;
+  manifest?: Web2JsonManifestV1;
+  recovery?: RunRecoveryV1;
+  sync?: {
+    state: "current" | "partial";
+    projectionSequence: number;
+    eventSequence: number;
+  };
   stages: ProjectionStages;
   stageDetails?: Partial<
     Record<keyof ProjectionStages, Pick<RunStage, "time" | "duration">>
@@ -398,6 +408,13 @@ function hydrateView(
     : consumerEvent && validConsumerEventDiagnostics !== undefined
       ? validConsumerEventDiagnostics
       : undefined;
+  const recovery = RunRecoveryV1Schema.safeParse(run.recovery);
+  const parsedManifest = Web2JsonManifestV1Schema.safeParse(manifest);
+  const projectionSequence =
+    typeof run.sequence === "number" && Number.isSafeInteger(run.sequence)
+      ? run.sequence
+      : events.length;
+  const eventSequence = Number(events.at(-1)?.sequence ?? 0);
   return {
     runId,
     title: titleFrom(run, events),
@@ -405,11 +422,15 @@ function hydrateView(
       stringValue(run.attestationType) ?? stringValue(manifest?.attestationType),
     network: stringValue(run.network) ?? stringValue(manifest?.network),
     startedAt,
-    sequence:
-      typeof run.sequence === "number" && Number.isSafeInteger(run.sequence)
-        ? run.sequence
-        : events.length,
+    sequence: projectionSequence,
     terminal: run.terminal === true,
+    ...(parsedManifest.success ? { manifest: parsedManifest.data } : {}),
+    ...(recovery.success ? { recovery: recovery.data } : {}),
+    sync: {
+      state: eventSequence < projectionSequence ? "partial" : "current",
+      projectionSequence,
+      eventSequence,
+    },
     stages: projectionStages(run.stages),
     stageDetails: stageDetailsFrom(events),
     submissionMode:

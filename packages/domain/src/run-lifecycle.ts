@@ -226,7 +226,7 @@ export function projectRun(eventValues: readonly RunEventV1[]): RunProjectionV1 
 
   const recovery = [...unresolved.values()].sort(
     (left, right) => right.order - left.order,
-  )[0]?.recovery;
+  )[0]?.recovery ?? (failed ? lastLifecycle.payload.recovery : undefined);
 
   return RunProjectionV1Schema.parse({
     version: "1",
@@ -234,7 +234,14 @@ export function projectRun(eventValues: readonly RunEventV1[]): RunProjectionV1 
     sequence: last.sequence,
     terminal,
     stages,
-    ...(failed ? { terminalFailure: lastLifecycle.payload } : {}),
+    ...(failed
+      ? {
+          terminalFailure: {
+            stage: lastLifecycle.payload.stage,
+            error: lastLifecycle.payload.error,
+          },
+        }
+      : {}),
     ...(recovery ? { recovery } : {}),
   });
 }

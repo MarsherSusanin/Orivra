@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createLocalProductAnalytics,
@@ -24,7 +24,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SubmissionDecision } from "./components/SubmissionDecision";
 import { Topbar } from "./components/Topbar";
 import { VerificationDialog } from "./components/VerificationDialog";
-import type { PreflightReportV1 } from "../packages/contracts/src";
+import type { PreflightReportV1, RunRecoveryV1 } from "../packages/contracts/src";
 import {
   timelineFromProjection,
   type EvidenceItem,
@@ -151,9 +151,12 @@ function evidenceFromRun(run: HydratedRunView): EvidenceItem[] {
 
 function safeHydrationError(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : "Run hydration failed";
-  return message
+  const redacted = message
     .replace(/(?:project|share)_[a-f0-9]{64}/gi, "[REDACTED]")
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]");
+  return /failed to fetch|network|connection|offline/i.test(redacted)
+    ? "Connection lost. Persisted evidence is still available."
+    : redacted;
 }
 
 const RUN_STAGE_ORDER = [
@@ -195,6 +198,78 @@ function pendingActionCopy(stage: string, state: string) {
     title: `Waiting for ${stage}.`,
     description: `The ${stage} stage has not started yet. Existing evidence remains available below.`,
   };
+}
+
+function recoveryTitle(recovery: RunRecoveryV1): string {
+  if (recovery.state === "waiting") return "Waiting safely";
+  if (recovery.state === "retryable") return "Retry scheduled";
+  return "Recovery stopped";
+}
+
+function recoveryDetail(recovery: RunRecoveryV1): string {
+  const checkpoint = recovery.resumeFrom.replaceAll("-", " ");
+  if (recovery.state === "waiting") {
+    return `Proofline is observing the persisted ${checkpoint}; no manual retry is required.`;
+  }
+  if (recovery.state === "retryable") {
+    return `Proofline will retry the same command from ${checkpoint} without creating another effect.`;
+  }
+  return recovery.retrySafety === "new-run-required"
+    ? `The preserved evidence cannot safely continue. Create a new run from the original manifest.`
+    : `The effect state is ambiguous. Review persisted evidence before any operator action.`;
+}
+
+function RecoveryPanel({
+  recovery,
+  projectAccess,
+  onRefresh,
+  onCreateRun,
+  onReview,
+}: {
+  recovery: RunRecoveryV1;
+  projectAccess: boolean;
+  onRefresh(): void;
+  onCreateRun(): void;
+  onReview(): void;
+}) {
+  const updated = new Date(recovery.updatedAt).toLocaleString("en", {
+    timeZone: "UTC",
+    timeZoneName: "short",
+  });
+  const evidence = recovery.preservedEvidence.length > 0
+    ? recovery.preservedEvidence.join(", ")
+    : "No effect evidence yet";
+  return (
+    <section className={`run-recovery is-${recovery.state}`} role="region" aria-label="Run recovery">
+      <div className="run-recovery-heading">
+        <span className="section-label">Recovery</span>
+        <h2>{recoveryTitle(recovery)}</h2>
+        <p>{recoveryDetail(recovery)}</p>
+      </div>
+      <dl className="run-recovery-facts">
+        <div><dt>Stage</dt><dd>{sentenceCase(recovery.stage)}</dd></div>
+        <div><dt>Attempt</dt><dd>Attempt {recovery.attempt}</dd></div>
+        <div><dt>Resume from</dt><dd>{recovery.resumeFrom.replaceAll("-", " ")}</dd></div>
+        <div><dt>Last update</dt><dd>{updated}</dd></div>
+        <div><dt>Saved evidence</dt><dd>{evidence}</dd></div>
+        <div><dt>Retry safety</dt><dd>{recovery.retrySafety.replaceAll("-", " ")}</dd></div>
+      </dl>
+      {"retryAfter" in recovery && recovery.retryAfter ? (
+        <p className="run-recovery-next">Expected wait until {new Date(recovery.retryAfter).toLocaleTimeString("en", { timeZone: "UTC", timeZoneName: "short" })}</p>
+      ) : null}
+      {recovery.state === "retryable" ? (
+        <button className="recovery-action" type="button" onClick={onRefresh}>
+          <ArrowClockwise size={19} aria-hidden="true" />Refresh status
+        </button>
+      ) : null}
+      {recovery.state === "terminal" && recovery.retrySafety === "new-run-required" && projectAccess ? (
+        <button className="recovery-action" type="button" onClick={onCreateRun}>Create new run</button>
+      ) : null}
+      {recovery.state === "terminal" && recovery.retrySafety === "operator-review" ? (
+        <button className="recovery-action" type="button" onClick={onReview}>Review evidence</button>
+      ) : null}
+    </section>
+  );
 }
 
 function diagnosticsPanelFromLocation(): boolean {
@@ -690,6 +765,14 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const activeStage = currentStage(hydratedRun.stages);
   const activeStageLabel = sentenceCase(activeStage.stage);
   const waitingCopy = pendingActionCopy(activeStage.stage, activeStage.state);
+  const refreshStatus = () => {
+    setHydrationError("");
+    setHydrationRevision((value) => value + 1);
+  };
+  const createReplacementRun = () => {
+    globalThis.history.pushState({}, "", `/runs/new?from=${encodeURIComponent(activeRunId)}`);
+    globalThis.dispatchEvent(new PopStateEvent("popstate"));
+  };
 
   return (
     <div className="app-shell">
@@ -709,9 +792,24 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
               <h1 id="run-title">{title}</h1>
               <p>Attestation: <strong>{attestationType}</strong><span aria-hidden="true">•</span>Network: <strong>{network}</strong><span aria-hidden="true">•</span>Started: {startedAt}</p>
               {hydrationError ? <span className="hydration-error" role="alert">{hydrationError}</span> : null}
+              {hydratedRun.sync?.state === "partial" ? (
+                <span className="hydration-error" role="alert">
+                  Partial journal: persisted projection is ahead of locally loaded events.
+                </span>
+              ) : null}
             </header>
             <RunTimeline stages={timeline} />
-            {showsPreflightWorkbench ? (
+            {hydratedRun.recovery ? (
+              <RecoveryPanel
+                recovery={hydratedRun.recovery}
+                projectAccess={isProjectAccess}
+                onRefresh={refreshStatus}
+                onCreateRun={createReplacementRun}
+                onReview={() => {
+                  if (!diagnosticExpanded) toggleDiagnostics();
+                }}
+              />
+            ) : showsPreflightWorkbench ? (
               <PreflightWorkbench
                 state={preflightReportState}
                 readOnly={!isProjectAccess}
@@ -797,6 +895,11 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
               </div>
             </section>
             )}
+            {(hydrationError || hydratedRun.sync?.state === "partial") && hydratedRun.recovery?.state !== "retryable" ? (
+              <button className="recovery-action recovery-refresh" type="button" onClick={refreshStatus}>
+                <ArrowClockwise size={19} aria-hidden="true" />Refresh status
+              </button>
+            ) : null}
           </section>
           {needsPreflightReport ? (
             <PreflightDiagnosticsRail

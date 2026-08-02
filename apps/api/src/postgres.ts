@@ -3,6 +3,7 @@ import { appendRunEvents, projectRun } from "@proofline/domain";
 import {
   NormalizedFdcErrorSchema,
   RunEventV1Schema,
+  RunRecoveryV1Schema,
   Web2JsonManifestV1Schema,
   type RunEventV1,
 } from "@proofline/contracts";
@@ -88,7 +89,7 @@ export const POSTGRES_QUERIES = {
       AND lease_token = $2::uuid
       AND status = 'leased'
       AND lease_expires_at > now()
-    RETURNING id, run_id, kind
+    RETURNING id, run_id, kind, attempts, available_at, last_error
   `,
   renewLease: `
     UPDATE proofline_private.run_commands
@@ -188,6 +189,35 @@ function failureStage(commandKind: unknown) {
   return "preflight" as const;
 }
 
+function recoveryCheckpoint(commandKind: unknown) {
+  const kind = String(commandKind ?? "");
+  if (kind === "RUN_PREFLIGHT") return "preflight" as const;
+  if (
+    kind === "SUBMIT_RELAYER" ||
+    kind === "BROADCAST_RELAYER_TRANSACTION" ||
+    kind === "ATTACH_WALLET_TRANSACTION" ||
+    kind === "APPLY_REPLAY_EVIDENCE"
+  ) return "submission" as const;
+  if (kind === "POLL_TRANSACTION_RECEIPT") return "transaction-receipt" as const;
+  if (kind === "POLL_RELAY_FINALIZATION") return "relay-finalization" as const;
+  if (kind === "FETCH_DA_PROOF") return "da-proof" as const;
+  if (kind === "VERIFY_PROOF") return "proof-verification" as const;
+  return "consumer-verification" as const;
+}
+
+function preservedEvidence(events: readonly RunEventV1[]) {
+  const evidence: Array<
+    "preflight" | "transaction" | "round" | "proof" | "verification" | "consumer"
+  > = [];
+  if (events.some((event) => event.type === "PREFLIGHT_ACCEPTED")) evidence.push("preflight");
+  if (events.some((event) => event.type === "REQUEST_SUBMITTED")) evidence.push("transaction");
+  if (events.some((event) => event.type === "ROUND_FINALIZED")) evidence.push("round");
+  if (events.some((event) => event.type === "PROOF_AVAILABLE")) evidence.push("proof");
+  if (events.some((event) => event.type === "PROOF_VERIFIED")) evidence.push("verification");
+  if (events.some((event) => event.type === "CONSUMER_VERIFIED")) evidence.push("consumer");
+  return evidence;
+}
+
 function terminalError(failure: Record<string, unknown>) {
   const categories = new Set([
     "configuration",
@@ -221,6 +251,35 @@ function terminalError(failure: Record<string, unknown>) {
   });
 }
 
+function recoveryError(
+  failure: Record<string, unknown>,
+  retryable: boolean,
+) {
+  const error = terminalError(failure);
+  return NormalizedFdcErrorSchema.parse({ ...error, retryable });
+}
+
+function terminalRetrySafety(failure: Record<string, unknown>) {
+  const category = String(failure.category ?? "");
+  const code = String(failure.code ?? "");
+  return category === "consensus-miss" ||
+    category === "proof-invalid" ||
+    /(?:REVERTED|CONSENSUS_MISS|PROOF_INVALID)/.test(code)
+    ? "new-run-required" as const
+    : "operator-review" as const;
+}
+
+function eventDedupeKey(event: RunEventV1): string {
+  if (
+    event.type === "STAGE_WAITING" ||
+    event.type === "STAGE_RETRY_SCHEDULED" ||
+    event.type === "RUN_RESUMED"
+  ) {
+    return `${event.commandId}:${event.type}:${event.payload.attempt}`;
+  }
+  return event.commandId;
+}
+
 async function appendEventInTransaction(
   client: SqlClient,
   event: RunEventV1,
@@ -242,7 +301,7 @@ async function appendEventInTransaction(
   await client.query(POSTGRES_QUERIES.insertEvent, [
     event.runId,
     event.sequence,
-    event.commandId,
+    eventDedupeKey(event),
     event.type,
     JSON.stringify(event),
     event.occurredAt,
@@ -736,16 +795,56 @@ export function createPostgresCommandRepository(input: {
           claimToken,
           "30 seconds",
         ]);
-        await client.query("COMMIT");
         const row = result.rows[0];
-        if (!row) return null;
+        if (!row) {
+          await client.query("COMMIT");
+          return null;
+        }
+        const attempts = Number(row.attempts);
+        if (attempts > 1 && row.last_error) {
+          const prior = await client.query(POSTGRES_QUERIES.loadEvents, [
+            String(row.run_id),
+          ]);
+          const events = prior.rows.map((item) =>
+            RunEventV1Schema.parse(item.event_payload),
+          );
+          const latestRecovery = [...events].reverse().find(
+            (event) =>
+              event.commandId === String(row.id) &&
+              (event.type === "STAGE_WAITING" ||
+                event.type === "STAGE_RETRY_SCHEDULED"),
+          );
+          if (
+            latestRecovery?.type === "STAGE_WAITING" ||
+            latestRecovery?.type === "STAGE_RETRY_SCHEDULED"
+          ) {
+            await appendEventInTransaction(
+              client,
+              RunEventV1Schema.parse({
+                version: "1",
+                runId: String(row.run_id),
+                sequence: events.length + 1,
+                commandId: String(row.id),
+                occurredAt: new Date().toISOString(),
+                type: "RUN_RESUMED",
+                payload: {
+                  stage: latestRecovery.payload.stage,
+                  attempt: attempts,
+                  resumeFrom: latestRecovery.payload.resumeFrom,
+                  preservedEvidence: latestRecovery.payload.preservedEvidence,
+                },
+              }),
+            );
+          }
+        }
+        await client.query("COMMIT");
         return {
           claimToken,
           command: {
             id: String(row.id),
             kind: String(row.kind),
             runId: String(row.run_id),
-            attempts: Number(row.attempts),
+            attempts,
             payload:
               row.payload && typeof row.payload === "object"
                 ? (row.payload as Record<string, unknown>)
@@ -858,6 +957,55 @@ export function createPostgresCommandRepository(input: {
           throw new Error("Command lease is stale; retry rejected");
         }
         const runId = result.rows[0]?.run_id;
+        const retryAttempt = Number(result.rows[0]?.attempts);
+        const retryAvailableAt = new Date(String(result.rows[0]?.available_at));
+        if (
+          failure.retryable === true &&
+          typeof runId === "string" &&
+          Number.isInteger(retryAttempt) &&
+          retryAttempt > 0 &&
+          Number.isFinite(retryAvailableAt.getTime())
+        ) {
+          const prior = await client.query(POSTGRES_QUERIES.loadEvents, [runId]);
+          const events = prior.rows.map((row) =>
+            RunEventV1Schema.parse(row.event_payload),
+          );
+          const attempt = retryAttempt;
+          const retryAfter = retryAvailableAt.toISOString();
+          const state = failure.recoveryState === "waiting" ||
+            failure.category === "not-finalized"
+            ? "waiting"
+            : "retryable";
+          const recovery = RunRecoveryV1Schema.parse({
+            version: "1",
+            state,
+            stage: failureStage(result.rows[0]?.kind),
+            attempt,
+            retryAfter,
+            resumeFrom: recoveryCheckpoint(result.rows[0]?.kind),
+            preservedEvidence: preservedEvidence(events),
+            updatedAt: new Date().toISOString(),
+            error: recoveryError(failure, true),
+            retrySafety: state === "waiting" &&
+              failureStage(result.rows[0]?.kind) !== "preflight"
+              ? "observe-only"
+              : "same-command",
+          });
+          await appendEventInTransaction(
+            client,
+            RunEventV1Schema.parse({
+              version: "1",
+              runId,
+              sequence: events.length + 1,
+              commandId,
+              occurredAt: recovery.updatedAt,
+              type: state === "waiting"
+                ? "STAGE_WAITING"
+                : "STAGE_RETRY_SCHEDULED",
+              payload: recovery,
+            }),
+          );
+        }
         if (failure.terminal === true && typeof runId === "string") {
           const locked = await client.query(POSTGRES_QUERIES.lockRun, [runId]);
           if (locked.rowCount !== 1) {
@@ -870,16 +1018,33 @@ export function createPostgresCommandRepository(input: {
             (projection as { terminal?: unknown }).terminal === true;
           if (!alreadyTerminal) {
             const sequence = Number(locked.rows[0]?.last_sequence ?? 0) + 1;
+            const prior = await client.query(POSTGRES_QUERIES.loadEvents, [runId]);
+            const events = prior.rows.map((row) =>
+              RunEventV1Schema.parse(row.event_payload),
+            );
+            const error = terminalError(failure);
+            const updatedAt = new Date().toISOString();
             const terminalEvent = RunEventV1Schema.parse({
               version: "1",
               runId,
               sequence,
               commandId,
-              occurredAt: new Date().toISOString(),
+              occurredAt: updatedAt,
               type: "RUN_FAILED",
               payload: {
                 stage: failureStage(result.rows[0]?.kind),
-                error: terminalError(failure),
+                error,
+                recovery: {
+                  version: "1",
+                  state: "terminal",
+                  stage: failureStage(result.rows[0]?.kind),
+                  attempt: Math.max(1, Number(result.rows[0]?.attempts ?? 1)),
+                  resumeFrom: recoveryCheckpoint(result.rows[0]?.kind),
+                  preservedEvidence: preservedEvidence(events),
+                  updatedAt,
+                  error,
+                  retrySafety: terminalRetrySafety(failure),
+                },
               },
             });
             await appendEventInTransaction(client, terminalEvent);

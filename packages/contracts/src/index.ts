@@ -883,7 +883,7 @@ const WaitingRecoveryV1Schema = z
     ...RunRecoveryCommonV1,
     state: z.literal("waiting"),
     retryAfter: z.string().datetime({ offset: true }).optional(),
-    retrySafety: RecoveryRetrySafetyV1Schema,
+    retrySafety: z.enum(["same-command", "observe-only"]),
   })
   .strict();
 
@@ -1013,6 +1013,7 @@ export const RunEventV1Schema = z.discriminatedUnion("type", [
       .object({
         stage: RunStageNameV1Schema,
         error: NormalizedFdcErrorSchema,
+        recovery: TerminalRecoveryV1Schema.optional(),
       })
       .strict(),
   ),
