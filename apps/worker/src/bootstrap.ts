@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { readFile } from "node:fs/promises";
 import { createPostgresCommandRepository } from "@proofline/api/src/postgres";
+import { isCanonicalUint256Decimal } from "@proofline/contracts";
 import { createWeb2JsonVerifierClient } from "@proofline/fdc-coston2";
 import { createLiveCoston2PipelinePorts } from "./live-runtime";
 import {
@@ -19,8 +20,8 @@ function required(environment: Environment, name: string): string {
 
 function unsignedBigInt(environment: Environment, name: string): bigint {
   const value = required(environment, name);
-  if (!/^[0-9]+$/.test(value)) {
-    throw new Error(`${name} must be an unsigned integer`);
+  if (!isCanonicalUint256Decimal(value)) {
+    throw new Error(`${name} must be an unsigned canonical uint256 integer`);
   }
   return BigInt(value);
 }

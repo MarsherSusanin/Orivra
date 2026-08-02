@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   DiagnosticV1Schema,
+  isCanonicalUint256Decimal,
   NormalizedFdcErrorSchema,
   PreflightReportV1Schema,
   type NormalizedFdcError,
@@ -641,7 +642,11 @@ function canonicalHex(value: unknown): value is string {
 }
 
 function canonicalUnsignedInteger(value: unknown): value is string {
-  return typeof value === "string" && /^(?:0|[1-9][0-9]*)$/.test(value);
+  return typeof value === "string" && isCanonicalUint256Decimal(value);
+}
+
+function isUint256(value: bigint): boolean {
+  return value >= 0n && isCanonicalUint256Decimal(value.toString());
 }
 
 function normalizedAddress(value: unknown): string | null {
@@ -840,7 +845,7 @@ function validateProductionPreflightOutcome(input: {
     !expectedRequestCalldata ||
     !sameHex(requestCalldata, expectedRequestCalldata) ||
     typeof quotedFeeWei !== "bigint" ||
-    quotedFeeWei < 0n ||
+    !isUint256(quotedFeeWei) ||
     quotedFeeWei.toString() !== report.fee.quotedWei ||
     !network ||
     !hasOnlyKeys(network, [
@@ -987,6 +992,11 @@ function replayPreflightReport(input: {
     );
   }
   const report = parsed.data;
+  const canonicalUrl = canonicalizeManifestUrl(input.source.manifest);
+  const trustBlockers = deriveWeb2JsonPreflightTrustBlockers(
+    input.source.manifest,
+    canonicalUrl,
+  );
   const requestIdentitySha256 = `sha256:${sha256HexBytes(
     input.source.requestBytes,
   )}`;
@@ -995,15 +1005,23 @@ function replayPreflightReport(input: {
   const mismatched =
     report.runId !== input.source.runId ||
     report.verdict === "blocked" ||
+    trustBlockers.length !== 0 ||
+    JSON.stringify(reportedTrustBlockers(report)) !==
+      JSON.stringify(trustBlockers) ||
+    report.canonicalUrl !== canonicalUrl ||
+    input.accepted.payload.canonicalUrl !== canonicalUrl ||
     report.canonicalUrl !== input.accepted.payload.canonicalUrl ||
     report.requestIdentitySha256 !== requestIdentitySha256 ||
     report.fee.quotedWei !== input.accepted.payload.quotedFeeWei ||
     report.fee.capWei !== input.source.manifest.submission.feeCapWei ||
     reportNetwork.chainId !== sourceNetwork.chainId ||
+    reportNetwork.blockNumber !== sourceNetwork.blockNumber ||
     reportNetwork.registryAddress.toLowerCase() !==
       sourceNetwork.registryAddress.toLowerCase() ||
     reportNetwork.resolvedContracts.FdcHub.toLowerCase() !==
       sourceNetwork.resolvedContracts.FdcHub.toLowerCase() ||
+    reportNetwork.resolvedContracts.FdcRequestFeeConfigurations.toLowerCase() !==
+      sourceNetwork.resolvedContracts.FdcRequestFeeConfigurations.toLowerCase() ||
     reportNetwork.resolvedContracts.FdcVerification.toLowerCase() !==
       sourceNetwork.resolvedContracts.FdcVerification.toLowerCase() ||
     reportNetwork.resolvedContracts.Relay.toLowerCase() !==
@@ -1050,11 +1068,11 @@ function persistedRelayerPolicy(context: RunExecutionContext): RelayerPolicy | n
   const quotaRemaining = Number(value.quotaRemaining);
   const balanceFloorWei = BigInt(String(value.balanceFloorWei ?? "-1"));
   if (
-    projectFeeCapWei < 0n ||
-    globalFeeCapWei < 0n ||
+    !isUint256(projectFeeCapWei) ||
+    !isUint256(globalFeeCapWei) ||
     !Number.isInteger(quotaRemaining) ||
     quotaRemaining < 0 ||
-    balanceFloorWei < 0n
+    !isUint256(balanceFloorWei)
   ) {
     throw new Error("Persisted relayer policy evidence is invalid");
   }
@@ -1090,9 +1108,11 @@ export async function assemblePersistedProofBundle(input: {
     requestBytes: string;
     network: {
       chainId: 114;
+      blockNumber: string;
       registryAddress: string;
       resolvedContracts: {
         FdcHub: string;
+        FdcRequestFeeConfigurations: string;
         FdcVerification: string;
         Relay: string;
       };
@@ -1131,9 +1151,12 @@ export async function assemblePersistedProofBundle(input: {
     requestBytes: preflight.requestBytes,
     network: {
       chainId: preflight.network.chainId,
+      blockNumber: preflight.network.blockNumber,
       registryAddress: preflight.network.registryAddress,
       resolvedContracts: {
         FdcHub: preflight.network.resolvedContracts.FdcHub,
+        FdcRequestFeeConfigurations:
+          preflight.network.resolvedContracts.FdcRequestFeeConfigurations,
         FdcVerification:
           preflight.network.resolvedContracts.FdcVerification,
         Relay: preflight.network.resolvedContracts.Relay,

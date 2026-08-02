@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type {
   DiagnosticV1,
+  ProofBundleV1,
   RunEventV1,
   Web2JsonManifestV1,
 } from "@proofline/contracts";
@@ -21,6 +22,10 @@ interface StoredRun {
   manifest: Web2JsonManifestV1;
   events: RunEventV1[];
   diagnostics: DiagnosticV1[];
+  preflightEvidence?: {
+    requestBytes: string;
+    network: ProofBundleV1["network"];
+  };
   artifactSource?: string;
 }
 
@@ -106,12 +111,27 @@ export function createHermeticProoflineSystem(input: {
   }
 
   function appendPreflight(stored: StoredRun): void {
+    stored.preflightEvidence ??= {
+      requestBytes: "0x1234abcd",
+      network: {
+        chainId: 114,
+        blockNumber: "12345678",
+        registryAddress: "0x2222222222222222222222222222222222222222",
+        resolvedContracts: {
+          FdcHub: "0x3333333333333333333333333333333333333333",
+          FdcRequestFeeConfigurations:
+            "0x6666666666666666666666666666666666666666",
+          FdcVerification: "0x1111111111111111111111111111111111111111",
+          Relay: "0x4444444444444444444444444444444444444444",
+        },
+      },
+    };
     append(stored, {
       commandId: "cmd_preflight",
       type: "PREFLIGHT_ACCEPTED",
       payload: {
         canonicalUrl: canonicalizeManifestUrl(stored.manifest),
-        requestBytes: "0x1234abcd",
+        requestBytes: stored.preflightEvidence.requestBytes,
         quotedFeeWei: "12345",
       },
     });
@@ -386,6 +406,13 @@ export function createHermeticProoflineSystem(input: {
 
     async getBundle(context: { runId: string }) {
       const stored = run(context.runId);
+      const preflightEvidence = stored.preflightEvidence;
+      if (!preflightEvidence) {
+        throw Object.assign(new Error("Persisted preflight evidence is not ready"), {
+          status: 409,
+          code: "PREFLIGHT_NOT_READY",
+        });
+      }
       const source =
         stored.artifactSource ??
         generateSafeWeb2JsonConsumer(stored.manifest, {
@@ -396,16 +423,8 @@ export function createHermeticProoflineSystem(input: {
         runId: stored.runId,
         manifest: stored.manifest,
         events: stored.events,
-        requestBytes: "0x1234abcd",
-        network: {
-          chainId: 114,
-          registryAddress: "0x2222222222222222222222222222222222222222",
-          resolvedContracts: {
-            FdcHub: "0x3333333333333333333333333333333333333333",
-            FdcVerification: "0x1111111111111111111111111111111111111111",
-            Relay: "0x4444444444444444444444444444444444444444",
-          },
-        },
+        requestBytes: preflightEvidence.requestBytes,
+        network: preflightEvidence.network,
         proof: {
           votingRound: 42871,
           merkleProof: [txHash("hermetic-merkle")],

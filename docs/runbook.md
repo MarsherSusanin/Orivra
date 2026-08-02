@@ -29,6 +29,7 @@ npm run dev
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/001_initial.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/002_one_active_submission.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/003_run_discovery.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/004_preflight_report.sql
 ```
 
 Автоматизированного production migration runner и down migrations в репозитории нет. Перед инфраструктурным rollout необходимо выбрать владельца миграций и backup/restore процедуру; до этого безопасная стратегия изменения схемы — additive migration и roll-forward.
@@ -75,6 +76,7 @@ npm run start --workspace apps/worker
 | `PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA` | Положительный per-project daily quota |
 | `PROOFLINE_SAFE_CONSUMER_ADDRESS` | Адрес canonical safe consumer |
 | `PROOFLINE_REPLAY_BUNDLE_PATH` | Canonical local replay fixture для replay commands |
+| `PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH` | Recorded public preflight report sidecar, обязательный companion для `PROOFLINE_REPLAY_BUNDLE_PATH`; отсутствие или mismatch останавливает replay до любых live I/O |
 
 Дополнительная конфигурация:
 

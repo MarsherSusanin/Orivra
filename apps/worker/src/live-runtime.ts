@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { request as httpsRequest } from "node:https";
 import {
+  isCanonicalUint256Decimal,
   Web2JsonAbiParameterV1Schema,
   type Web2JsonManifestV1,
 } from "@proofline/contracts";
@@ -247,8 +248,8 @@ type PipelineContracts = Record<PipelineContractName, Address>;
 
 function positiveBigInt(environment: LiveEnvironment, name: string): bigint {
   const value = required(environment, name);
-  if (!/^[0-9]+$/.test(value)) {
-    throw Object.assign(new Error(`${name} must be an unsigned integer`), {
+  if (!isCanonicalUint256Decimal(value)) {
+    throw Object.assign(new Error(`${name} must be an unsigned canonical uint256 integer`), {
       kind: "configuration",
     });
   }
@@ -299,11 +300,11 @@ function relayerPolicyFromEvidence(value: unknown) {
     const quotaRemaining = Number(policy.quotaRemaining);
     const balanceFloorWei = BigInt(String(policy.balanceFloorWei ?? "-1"));
     if (
-      projectFeeCapWei < 0n ||
-      globalFeeCapWei < 0n ||
+      !isCanonicalUint256Decimal(projectFeeCapWei.toString()) ||
+      !isCanonicalUint256Decimal(globalFeeCapWei.toString()) ||
       !Number.isInteger(quotaRemaining) ||
       quotaRemaining <= 0 ||
-      balanceFloorWei < 0n
+      !isCanonicalUint256Decimal(balanceFloorWei.toString())
     ) {
       throw new Error("invalid policy values");
     }
@@ -568,6 +569,7 @@ export function createLiveCoston2PipelinePorts(input: {
       const valueWei = BigInt(String(value.valueWei ?? "-1"));
       const policy = relayerPolicyFromEvidence(value.policy);
       if (
+        !isCanonicalUint256Decimal(valueWei.toString()) ||
         policy.projectFeeCapWei !==
           BigInt(manifest.submission.feeCapWei) ||
         policy.globalFeeCapWei !== globalFeeCapWei ||

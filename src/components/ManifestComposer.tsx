@@ -65,11 +65,19 @@ function browserDraftStorage() {
   }
 }
 
-function stepFromLocation(): ComposerStepV1 {
+function locationStep():
+  | { state: "absent" | "invalid" }
+  | { state: "valid"; step: ComposerStepV1 } {
   const value = new URLSearchParams(globalThis.location?.search ?? "").get("step");
+  if (value === null) return { state: "absent" };
   return COMPOSER_STEPS.includes(value as ComposerStepV1)
-    ? value as ComposerStepV1
-    : "source";
+    ? { state: "valid", step: value as ComposerStepV1 }
+    : { state: "invalid" };
+}
+
+function stepFromLocation(): ComposerStepV1 {
+  const requested = locationStep();
+  return requested.state === "valid" ? requested.step : "source";
 }
 
 function stepHref(step: ComposerStepV1): string {
@@ -173,11 +181,20 @@ export function ManifestComposer({
   );
   const [startup] = useState(() => {
     const loaded = draftStore.load();
-    const requestedStep = stepFromLocation();
+    const requested = locationStep();
+    const requestedStep = requested.state === "valid"
+      ? requested.step
+      : "source";
     if (loaded.state === "restored") {
+      const restoredStep = requested.state === "absent"
+        ? loaded.draft.step
+        : requestedStep;
       return {
-        draft: loaded.draft as Web2JsonManifestDraftV1 | null,
-        step: loaded.draft.step,
+        draft: {
+          ...loaded.draft,
+          step: restoredStep,
+        } as Web2JsonManifestDraftV1 | null,
+        step: restoredStep,
         restoreState: "restored" as const,
         storageUnavailable: false,
       };
@@ -229,21 +246,21 @@ export function ManifestComposer({
   };
 
   useEffect(() => {
+    const requested = locationStep();
+    if (requested.state !== "valid" || requested.step !== startup.step) {
+      globalThis.history.replaceState({}, "", stepHref(startup.step));
+    }
+
     const restoreStep = () => {
-      const locationStep = stepFromLocation();
-      const requested = new URLSearchParams(globalThis.location.search).get("step");
-      const restored = restoreState === "restored" && draft
-        ? draft.step
-        : locationStep;
-      if (requested !== restored) {
-        globalThis.history.replaceState({}, "", stepHref(restored));
-      }
-      setStep(restored);
+      const next = stepFromLocation();
+      setStep(next);
+      setDraft((current) => current && current.step !== next
+        ? { ...current, step: next }
+        : current);
     };
-    restoreStep();
     globalThis.addEventListener("popstate", restoreStep);
     return () => globalThis.removeEventListener("popstate", restoreStep);
-  }, [draft, restoreState]);
+  }, [startup.step]);
 
   useEffect(() => {
     if (!focusField) return;
