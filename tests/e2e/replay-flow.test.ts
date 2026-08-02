@@ -59,8 +59,45 @@ describe("hermetic Web2Json vertical replay", () => {
       processed: expect.any(Number),
       idle: true,
     });
-    const projectionResponse = await system.api.fetch(request(`/v1/runs/${runId}`));
-    expect(await projectionResponse.json()).toMatchObject({
+    const preflightProjection = await (
+      await system.api.fetch(request(`/v1/runs/${runId}`))
+    ).json();
+    expect(preflightProjection).toMatchObject({
+      runId,
+      stages: {
+        preflight: "completed",
+        request: "pending",
+        round: "pending",
+        proof: "pending",
+      },
+    });
+
+    const replaySubmissionKey = "replay-flow-confirm-replay";
+    const submission = await system.api.fetch(
+      request(
+        `/v1/runs/${runId}/submissions`,
+        "POST",
+        { mode: "replay" },
+        replaySubmissionKey,
+      ),
+    );
+    expect(submission.status).toBe(202);
+    expect(await submission.json()).toMatchObject({
+      version: "1",
+      runId,
+      mode: "replay",
+      effectOwner: "none",
+      commandId: expect.any(String),
+    });
+
+    await expect(system.worker.drain()).resolves.toMatchObject({
+      processed: expect.any(Number),
+      idle: true,
+    });
+    const lifecycleProjection = await system.api.fetch(
+      request(`/v1/runs/${runId}`),
+    );
+    expect(await lifecycleProjection.json()).toMatchObject({
       runId,
       stages: {
         preflight: "completed",
@@ -71,6 +108,7 @@ describe("hermetic Web2Json vertical replay", () => {
         consumer: "active",
       },
     });
+    expect(system.adapters.broadcastCount).toBe(0);
 
     const verify = await system.api.fetch(
       request(
@@ -117,6 +155,7 @@ describe("hermetic Web2Json vertical replay", () => {
     const replayEvidence = await replay.json();
     expect(replayEvidence).toMatchObject({ byteIdentical: true });
     expect(replayEvidence.canonicalBundle).toBe(canonicalBundle);
+    expect(system.adapters.broadcastCount).toBe(0);
   });
 
   it("survives API/worker reconstruction without duplicating an already attached tx hash", async () => {
@@ -125,13 +164,24 @@ describe("hermetic Web2Json vertical replay", () => {
       fixture: "web2json-wallet",
       persistentDatabaseId: "restart-fixture",
     });
-    const created = await (
-      await first.api.fetch(
-        request("/v1/runs", "POST", { manifest: validManifest }, "create-wallet"),
-      )
-    ).json();
+    const create = await first.api.fetch(
+      request("/v1/runs", "POST", { manifest: validManifest }, "create-wallet"),
+    );
+    expect(create.status).toBe(202);
+    const created = await create.json();
     const runId = created.runId;
-    await first.api.fetch(
+    await expect(first.worker.drain()).resolves.toMatchObject({
+      processed: expect.any(Number),
+      idle: true,
+    });
+    expect(
+      await (await first.api.fetch(request(`/v1/runs/${runId}`))).json(),
+    ).toMatchObject({
+      runId,
+      stages: { preflight: "completed", request: "pending" },
+    });
+
+    const attachment = await first.api.fetch(
       request(
         `/v1/runs/${runId}/transactions`,
         "POST",
@@ -142,6 +192,8 @@ describe("hermetic Web2Json vertical replay", () => {
         "attach-wallet-tx",
       ),
     );
+    expect(attachment.status).toBe(202);
+    expect(await attachment.json()).toEqual({ accepted: true });
 
     const restarted = createHermeticProoflineSystem({
       projectToken,
@@ -150,6 +202,10 @@ describe("hermetic Web2Json vertical replay", () => {
     });
     await restarted.worker.drain();
     expect(restarted.adapters.broadcastCount).toBe(0);
-    expect(restarted.repository.events(runId).filter((event) => event.type === "REQUEST_SUBMITTED")).toHaveLength(1);
+    expect(
+      restarted.repository.events(runId).filter(
+        (event) => event.type === "REQUEST_SUBMITTED",
+      ),
+    ).toHaveLength(1);
   });
 });
