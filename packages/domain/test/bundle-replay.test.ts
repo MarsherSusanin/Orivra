@@ -16,8 +16,16 @@ describe("canonical proof bundles", () => {
     const reordered = {
       ...input,
       network: {
-        resolvedContracts: input.network.resolvedContracts,
+        resolvedContracts: {
+          Relay: input.network.resolvedContracts.Relay,
+          FdcVerification:
+            input.network.resolvedContracts.FdcVerification,
+          FdcRequestFeeConfigurations:
+            input.network.resolvedContracts.FdcRequestFeeConfigurations,
+          FdcHub: input.network.resolvedContracts.FdcHub,
+        },
         registryAddress: input.network.registryAddress,
+        blockNumber: input.network.blockNumber,
         chainId: input.network.chainId,
       },
     };
