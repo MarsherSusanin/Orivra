@@ -6,7 +6,8 @@
 - GREEN 020A: `b106247`.
 - RED 020B: `4f06d62`.
 - GREEN/corrective series: `cf83ad5`, `82d287b`, `a69c444`, `4201d6e`,
-  `3dc1e05`, `3fa7279`.
+  `3dc1e05`, `3fa7279`, `95ca24e`, `9a57aa4`, `801c0bf`, `b824b28`,
+  `8379417`.
 - Candidate commit and tree are recorded after this evidence document is
   committed. Both independent verifiers must inspect that exact tree.
 
@@ -35,14 +36,15 @@
 ## Hermetic and coverage evidence
 
 - `npm run typecheck`: PASS.
-- `npm test`: 168 files PASS, 4 infrastructure-conditioned files skipped;
-  1488 tests PASS, 14 skipped.
+- `npm test`: 169 files PASS, 4 infrastructure-conditioned files skipped;
+  1490 tests PASS, 14 skipped.
 - `npm run test:core:coverage`: 356 tests PASS; statements, branches,
   functions and lines all 100%.
 - `npm run test:coverage:backend`: 770 PASS, 14 skipped; 92.08% statements,
   87.76% branches, 92.99% lines.
-- `npm run test:coverage:web`: 309 PASS; 87.84% statements, 83.95% branches,
-  89.66% lines.
+- `npm run test:coverage:web`: 311 PASS; 89.04% statements, 84.71% branches,
+  91.03% lines. The Web gate explicitly excludes `apps/**`; imported hermetic
+  API code remains covered by the separate backend gate.
 - `npm run test:solidity`: 214 PASS.
 - `npm run test:e2e`: 7 PASS, including persisted Consumer Lab handoff and
   exact generated-diff evidence.
@@ -95,6 +97,26 @@ receipt verdicts were not rejected. Those findings were converted into frozen
 RED contracts in `3dc1e05` and closed in `3fa7279`. The complete matrix above
 was rerun after the production correction; the earlier verifier signatures are
 invalid and are not counted toward release.
+
+The next Product Integration Verification correctly found that the real
+hermetic vulnerable-consumer journey could not reach handoff: Consumer Lab
+invented a passing safe verification while the receipt retained the vulnerable
+failure, and reload exposed only a terminal retry action. The finding became
+two full-path RED acceptance tests in `95ca24e` and `9a57aa4`. The correction:
+
+- preserves `canonical-vulnerable`, failure and diagnostic evidence in both
+  Consumer Lab and receipt;
+- carries the separately compiled safe artifact without claiming it was
+  executed successfully;
+- resumes persisted Consumer Lab after reload without a second terminal
+  verification POST;
+- uses the canonical generated contract identity required by the bundle
+  checksum.
+
+The complete matrix above, including real PostgreSQL, was rerun after this
+production correction. All earlier verifier decisions are invalidated; two new
+independent PASS decisions are required on the final tree recorded after this
+document is committed.
 
 ## Scope note
 
