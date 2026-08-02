@@ -12,12 +12,18 @@ import {
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { EvidenceStrip } from "./components/EvidenceStrip";
 import { ManifestComposer } from "./components/ManifestComposer";
+import { PreflightDiagnosticsRail } from "./components/PreflightDiagnosticsRail";
+import {
+  PreflightWorkbench,
+  type PreflightReportSurfaceState,
+} from "./components/PreflightWorkbench";
 import { ProjectTokenDialog } from "./components/ProjectTokenDialog";
 import { RunTimeline } from "./components/RunTimeline";
 import { RunsIndex } from "./components/RunsIndex";
 import { Sidebar } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { VerificationDialog } from "./components/VerificationDialog";
+import type { PreflightReportV1 } from "../packages/contracts/src";
 import {
   timelineFromProjection,
   type EvidenceItem,
@@ -204,10 +210,38 @@ function writeDiagnosticsPanel(open: boolean): void {
   );
 }
 
+type RunJourneyStep = "preflight" | "submission";
+
+function runStepFromLocation(): RunJourneyStep | null {
+  const step = new URLSearchParams(globalThis.location?.search ?? "").get("step");
+  return step === "preflight" || step === "submission" ? step : null;
+}
+
+function writeRunStep(step: RunJourneyStep): void {
+  const url = new URL(globalThis.location.href);
+  url.searchParams.set("step", step);
+  globalThis.history.pushState(
+    {},
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
 type ProofObservation = {
   sequence: number;
   state: HydratedRunView["stages"]["proof"];
 };
+
+type PreflightObservation = {
+  sequence: number;
+  state: HydratedRunView["stages"]["preflight"];
+};
+
+type PreflightReportAttempt =
+  | { kind: "loading"; sequence: number; promise: Promise<PreflightReportV1> }
+  | { kind: "pending"; sequence: number }
+  | { kind: "terminal"; sequence: number }
+  | { kind: "valid"; sequence: number };
 
 function proofStateRank(state: ProofObservation["state"]): number {
   if (state === "pending") return 0;
@@ -215,8 +249,25 @@ function proofStateRank(state: ProofObservation["state"]): number {
   return 2;
 }
 
+function preflightStateRank(state: PreflightObservation["state"]): number {
+  if (state === "pending") return 0;
+  if (state === "active") return 1;
+  return 2;
+}
+
+function reportFailureKind(cause: unknown): Exclude<PreflightReportSurfaceState["kind"], "loading" | "valid"> {
+  const code = cause && typeof cause === "object" && "code" in cause
+    ? (cause as { code?: unknown }).code
+    : undefined;
+  if (code === "PREFLIGHT_REPORT_PENDING") return "pending";
+  if (code === "PREFLIGHT_REPORT_UNAVAILABLE") return "unavailable";
+  if (code === "PREFLIGHT_REPORT_INVALID") return "invalid";
+  return "transport";
+}
+
 function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {}) {
   const [diagnosticExpanded, setDiagnosticExpanded] = useState(diagnosticsPanelFromLocation);
+  const [runStep, setRunStep] = useState(runStepFromLocation);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [bundleState, setBundleState] = useState<"idle" | "running" | "verified" | "error">("idle");
   const [bundleSource, setBundleSource] = useState<string | null>(null);
@@ -227,9 +278,13 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const [hydratedRun, setHydratedRun] = useState<HydratedRunView | null>(null);
   const [hydrationError, setHydrationError] = useState("");
   const [hydrationRevision, setHydrationRevision] = useState(0);
+  const [preflightReportState, setPreflightReportState] = useState<PreflightReportSurfaceState>({ kind: "loading" });
   const verifyTrigger = useRef<HTMLButtonElement>(null);
   const observedProofState = useRef(new Map<string, ProofObservation>());
+  const observedPreflightState = useRef(new Map<string, PreflightObservation>());
   const recordedProofRuns = useRef(new Set<string>());
+  const recordedPreflightRuns = useRef(new Set<string>());
+  const preflightReportAttempts = useRef(new Map<string, PreflightReportAttempt>());
   const [routeRunId] = useState(deepRouteRunId);
   const resolvedToken = projectToken ?? sessionToken;
   const emitProductEvent = useProductEventEmitter(analytics);
@@ -251,11 +306,21 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
     resolvedToken &&
     (runId || routeRunId || resumedRun?.runId),
   );
+  const isProjectAccess = resolvedToken.startsWith("project_");
+  const effectiveRunStep = runStep ?? (
+    hydratedRun?.stages.preflight === "active" || hydratedRun?.stages.preflight === "failed"
+      ? "preflight"
+      : null
+  );
+  const showsPreflightWorkbench = effectiveRunStep === "preflight";
 
   useEffect(() => {
-    const restorePanel = () => setDiagnosticExpanded(diagnosticsPanelFromLocation());
-    globalThis.addEventListener("popstate", restorePanel);
-    return () => globalThis.removeEventListener("popstate", restorePanel);
+    const restoreRouteState = () => {
+      setDiagnosticExpanded(diagnosticsPanelFromLocation());
+      setRunStep(runStepFromLocation());
+    };
+    globalThis.addEventListener("popstate", restoreRouteState);
+    return () => globalThis.removeEventListener("popstate", restoreRouteState);
   }, []);
 
   useEffect(() => {
@@ -265,13 +330,51 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
 
     const load = async (after: number) => {
       try {
-        const run = await servicePort.hydrateRun!({
+        const runPromise = servicePort.hydrateRun!({
           runId: activeRunId,
           projectToken: resolvedToken,
           after,
         });
+        const existingReportAttempt = preflightReportAttempts.current.get(activeRunId);
+        const initialReportPromise = runStepFromLocation() === "preflight" && existingReportAttempt === undefined
+          ? servicePort.getPreflightReport
+            ? (() => {
+                const promise = servicePort.getPreflightReport!({
+                  runId: activeRunId,
+                  projectToken: resolvedToken,
+                });
+                preflightReportAttempts.current.set(activeRunId, {
+                  kind: "loading",
+                  sequence: after,
+                  promise,
+                });
+                return promise.then(
+                  (report) => ({ kind: "valid" as const, report }),
+                  (cause: unknown) => ({ kind: reportFailureKind(cause) }),
+                );
+              })()
+            : Promise.resolve({ kind: "unavailable" as const })
+          : Promise.resolve(null);
+        const [run, initialReport] = await Promise.all([
+          runPromise,
+          initialReportPromise,
+        ]);
         if (cancelled) return;
+        if (initialReport?.kind === "valid") {
+          preflightReportAttempts.current.set(activeRunId, {
+            kind: "valid",
+            sequence: run.sequence,
+          });
+          setPreflightReportState({ kind: "valid", report: initialReport.report });
+        } else if (initialReport) {
+          preflightReportAttempts.current.set(activeRunId, {
+            kind: initialReport.kind === "pending" ? "pending" : "terminal",
+            sequence: run.sequence,
+          });
+          setPreflightReportState({ kind: initialReport.kind });
+        }
         const previousProof = observedProofState.current.get(run.runId);
+        const previousPreflight = observedPreflightState.current.get(run.runId);
         const proofCompletedNow =
           previousProof !== undefined &&
           run.sequence > previousProof.sequence &&
@@ -293,6 +396,24 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
             metadata: { source: proofSource },
           });
         }
+        const preflightCompletedNow =
+          previousPreflight !== undefined &&
+          run.sequence > previousPreflight.sequence &&
+          (previousPreflight.state === "pending" || previousPreflight.state === "active") &&
+          (run.stages.preflight === "completed" || run.stages.preflight === "failed");
+        if (
+          preflightCompletedNow &&
+          isProjectAccess &&
+          !recordedPreflightRuns.current.has(run.runId)
+        ) {
+          recordedPreflightRuns.current.add(run.runId);
+          emitProductEvent({
+            name: "PREFLIGHT_COMPLETED",
+            metadata: {
+              outcome: run.stages.preflight === "completed" ? "accepted" : "rejected",
+            },
+          });
+        }
         if (
           previousProof === undefined ||
           (
@@ -305,6 +426,20 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
           observedProofState.current.set(run.runId, {
             sequence: run.sequence,
             state: run.stages.proof,
+          });
+        }
+        if (
+          previousPreflight === undefined ||
+          (
+            run.sequence > previousPreflight.sequence &&
+            previousPreflight.state !== "completed" &&
+            previousPreflight.state !== "failed" &&
+            preflightStateRank(run.stages.preflight) >= preflightStateRank(previousPreflight.state)
+          )
+        ) {
+          observedPreflightState.current.set(run.runId, {
+            sequence: run.sequence,
+            state: run.stages.preflight,
           });
         }
         setHydratedRun(run);
@@ -325,7 +460,64 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
     };
   // `hydratedRun` is intentionally read as the cursor without making each response restart the effect.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRunId, emitProductEvent, hydrationRevision, resolvedToken, servicePort, shouldHydrate]);
+  }, [activeRunId, emitProductEvent, hydrationRevision, isProjectAccess, resolvedToken, servicePort, shouldHydrate]);
+
+  useEffect(() => {
+    if (!showsPreflightWorkbench || !hydratedRun) return;
+    let cancelled = false;
+    const runSequence = hydratedRun.sequence;
+    const attempt = preflightReportAttempts.current.get(activeRunId);
+
+    if (attempt?.kind === "valid") return;
+    if (attempt?.kind === "terminal") return;
+    if (attempt?.kind === "pending" && runSequence <= attempt.sequence) return;
+
+    if (!servicePort.getPreflightReport) {
+      preflightReportAttempts.current.set(activeRunId, {
+        kind: "terminal",
+        sequence: runSequence,
+      });
+      setPreflightReportState({ kind: "unavailable" });
+      return;
+    }
+
+    const request = attempt?.kind === "loading"
+      ? attempt.promise
+      : servicePort.getPreflightReport({
+          runId: activeRunId,
+          projectToken: resolvedToken,
+        });
+    if (attempt?.kind !== "loading") {
+      preflightReportAttempts.current.set(activeRunId, {
+        kind: "loading",
+        sequence: runSequence,
+        promise: request,
+      });
+      setPreflightReportState({ kind: "loading" });
+    }
+
+    void request.then(
+      (report) => {
+        preflightReportAttempts.current.set(activeRunId, {
+          kind: "valid",
+          sequence: runSequence,
+        });
+        if (!cancelled) setPreflightReportState({ kind: "valid", report });
+      },
+      (cause: unknown) => {
+        const kind = reportFailureKind(cause);
+        preflightReportAttempts.current.set(activeRunId, {
+          kind: kind === "pending" ? "pending" : "terminal",
+          sequence: runSequence,
+        });
+        if (!cancelled) setPreflightReportState({ kind });
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRunId, hydratedRun?.sequence, resolvedToken, servicePort, showsPreflightWorkbench]);
 
   const connectProject = (token: string) => {
     try {
@@ -345,6 +537,16 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
     const nextExpanded = !diagnosticExpanded;
     writeDiagnosticsPanel(nextExpanded);
     setDiagnosticExpanded(nextExpanded);
+  };
+
+  const continueToSubmission = () => {
+    writeRunStep("submission");
+    setRunStep("submission");
+  };
+
+  const returnToPreflight = () => {
+    writeRunStep("preflight");
+    setRunStep("preflight");
   };
 
   const exportBundle = async () => {
@@ -481,6 +683,24 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
               {hydrationError ? <span className="hydration-error" role="alert">{hydrationError}</span> : null}
             </header>
             <RunTimeline stages={timeline} />
+            {showsPreflightWorkbench ? (
+              <PreflightWorkbench
+                state={preflightReportState}
+                readOnly={!isProjectAccess}
+                onContinue={continueToSubmission}
+              />
+            ) : effectiveRunStep === "submission" ? (
+              <section className="next-action submission-placeholder" aria-labelledby="next-action-title">
+                <span className="next-action-icon" aria-hidden="true"><FileMagnifyingGlass size={51} /></span>
+                <div className="next-action-content">
+                  <h2 id="next-action-title">Submission is next.</h2>
+                  <p>Preflight evidence is preserved. Transaction execution begins in the next product slice.</p>
+                  <button className="bundle-action submission-back" type="button" onClick={returnToPreflight}>
+                    Review preflight evidence
+                  </button>
+                </div>
+              </section>
+            ) : (
             <section className="next-action" aria-labelledby="next-action-title">
               <span className="next-action-icon" aria-hidden="true"><FileMagnifyingGlass size={51} /></span>
               <div className="next-action-content">
@@ -519,8 +739,17 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
                 )}
               </div>
             </section>
+            )}
           </section>
-          <DiagnosticsPanel diagnostics={hydratedRun.diagnostics} expanded={diagnosticExpanded} onToggle={toggleDiagnostics} />
+          {showsPreflightWorkbench || (effectiveRunStep === "submission" && preflightReportState.kind === "valid") ? (
+            <PreflightDiagnosticsRail
+              state={preflightReportState}
+              expanded={diagnosticExpanded}
+              onToggle={toggleDiagnostics}
+            />
+          ) : (
+            <DiagnosticsPanel diagnostics={hydratedRun.diagnostics} expanded={diagnosticExpanded} onToggle={toggleDiagnostics} />
+          )}
           <EvidenceStrip items={evidence} />
         </main>
       </div>
