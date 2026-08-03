@@ -7,7 +7,7 @@
 - RED 020B: `4f06d62`.
 - GREEN/corrective series: `cf83ad5`, `82d287b`, `a69c444`, `4201d6e`,
   `3dc1e05`, `3fa7279`, `95ca24e`, `9a57aa4`, `801c0bf`, `b824b28`,
-  `8379417`, `f97df13`, `8b1d4ce`.
+  `8379417`, `f97df13`, `8b1d4ce`, `a870c5e`, `7f8a2fd`.
 - Candidate commit and tree are recorded after this evidence document is
   committed. Both independent verifiers must inspect that exact tree.
 
@@ -37,13 +37,13 @@
 
 - `npm run typecheck`: PASS.
 - `npm test`: 169 files PASS, 4 infrastructure-conditioned files skipped;
-  1491 tests PASS, 14 skipped.
+  1492 tests PASS, 14 skipped.
 - `npm run test:core:coverage`: 356 tests PASS; statements, branches,
   functions and lines all 100%.
 - `npm run test:coverage:backend`: 770 PASS, 14 skipped; 92.08% statements,
   87.76% branches, 92.99% lines.
-- `npm run test:coverage:web`: 312 PASS; 89.04% statements, 84.54% branches,
-  91.07% lines. The Web gate explicitly excludes `apps/**`; imported hermetic
+- `npm run test:coverage:web`: 313 PASS; 89.11% statements, 84.65% branches,
+  91.14% lines. The Web gate explicitly excludes `apps/**`; imported hermetic
   API code remains covered by the separate backend gate.
 - `npm run test:solidity`: 214 PASS.
 - `npm run test:e2e`: 7 PASS, including persisted Consumer Lab handoff and
@@ -131,6 +131,20 @@ frozen in `f97df13` and closed in `8b1d4ce`:
 The full matrix and standalone Action artifact-sync test were rerun again after
 these corrections. As before, no earlier verifier decision applies to the next
 candidate tree.
+
+The final Product Integration RED wave in `a870c5e` reproduced two handoff
+barriers on exact persisted evidence. The correction in `7f8a2fd`:
+
+- gives a fragment share recipient access to the read-only Integration Package
+  when the persisted vulnerable-consumer result is terminal, without exposing
+  any owner mutation;
+- restores focus to the available cockpit trigger when `Escape` closes that
+  package, including the Consumer Lab handoff path where the integration
+  trigger was not mounted before the dialog opened.
+
+The entire hermetic, coverage, Solidity, browser, build, Sites, Action artifact
+and real PostgreSQL matrix above was rerun after this correction. This is the
+only wave eligible for the final two independent PASS decisions.
 
 ## Scope note
 
