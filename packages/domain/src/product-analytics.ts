@@ -1,8 +1,11 @@
 import {
   ProductEventV1Schema,
+  ProductQaReportV1Schema,
   type ProductEventNameV1,
   type ProductEventV1,
+  type ProductQaReportV1,
 } from "@proofline/contracts";
+import { canonicalJson } from "./canonical-json";
 
 export const PRODUCT_ANALYTICS_QUEUE_KEY_V1 = "proofline:product-analytics:v1";
 
@@ -51,6 +54,7 @@ export interface ProductAnalyticsPort {
 
 export interface LocalProductAnalytics extends ProductAnalyticsPort {
   readEvents(): ProductEventV1[];
+  exportQaReport(): string;
 }
 
 export interface ProductFunnelV1 {
@@ -62,8 +66,13 @@ export interface ProductFunnelV1 {
   steps: Array<{ name: ProductEventNameV1; sessions: number }>;
 }
 
-function parsePersistedEvents(value: string | null): ProductEventV1[] {
-  if (value === null) return [];
+type ProductQaQueueStatus = ProductQaReportV1["queue"]["status"];
+
+function parsePersistedEvents(value: string | null): {
+  events: ProductEventV1[];
+  recovered: boolean;
+} {
+  if (value === null) return { events: [], recovered: false };
 
   try {
     const candidate = JSON.parse(value) as unknown;
@@ -72,7 +81,7 @@ function parsePersistedEvents(value: string | null): ProductEventV1[] {
       typeof candidate !== "object" ||
       Array.isArray(candidate)
     ) {
-      return [];
+      return { events: [], recovered: true };
     }
 
     const record = candidate as Record<string, unknown>;
@@ -82,15 +91,15 @@ function parsePersistedEvents(value: string | null): ProductEventV1[] {
       !Array.isArray(record.events) ||
       record.events.length > MAX_QUEUE_EVENTS
     ) {
-      return [];
+      return { events: [], recovered: true };
     }
 
     const parsed = record.events.map((event) => ProductEventV1Schema.safeParse(event));
     return parsed.every((result) => result.success)
-      ? parsed.map((result) => result.data)
-      : [];
+      ? { events: parsed.map((result) => result.data), recovered: false }
+      : { events: [], recovered: true };
   } catch {
-    return [];
+    return { events: [], recovered: true };
   }
 }
 
@@ -99,18 +108,22 @@ export function createLocalProductAnalytics({
 }: {
   storage: ProductAnalyticsStorage;
 }): LocalProductAnalytics {
-  let available = true;
+  let queueStatus: ProductQaQueueStatus = "healthy";
   let events: ProductEventV1[] = [];
 
   try {
-    events = parsePersistedEvents(storage.getItem(PRODUCT_ANALYTICS_QUEUE_KEY_V1));
+    const restored = parsePersistedEvents(
+      storage.getItem(PRODUCT_ANALYTICS_QUEUE_KEY_V1),
+    );
+    events = restored.events;
+    if (restored.recovered) queueStatus = "recovered";
   } catch {
-    available = false;
+    queueStatus = "unavailable";
   }
 
   return {
     emit(event) {
-      if (!available) return;
+      if (queueStatus === "unavailable") return;
 
       const parsed = ProductEventV1Schema.safeParse(event);
       if (!parsed.success) return;
@@ -123,14 +136,181 @@ export function createLocalProductAnalytics({
         );
         events = nextEvents;
       } catch {
-        available = false;
+        queueStatus = "unavailable";
         events = [];
       }
     },
     readEvents() {
-      return available ? structuredClone(events) : [];
+      return queueStatus === "unavailable" ? [] : structuredClone(events);
+    },
+    exportQaReport() {
+      return canonicalSerializeProductQaReport(
+        reduceProductQaReport(events, queueStatus),
+      );
     },
   };
+}
+
+type QaJourneyState = {
+  currentStep: number;
+  completed: boolean;
+  consumerFailed: boolean;
+  resumed: boolean;
+  reached: Set<ProductEventNameV1>;
+};
+
+type QaSessionState = {
+  invalid: boolean;
+  lastOccurredAt: number;
+  journeys: QaJourneyState[];
+};
+
+function createQaJourney(): QaJourneyState {
+  return {
+    currentStep: -1,
+    completed: false,
+    consumerFailed: false,
+    resumed: false,
+    reached: new Set<ProductEventNameV1>(),
+  };
+}
+
+function acceptedProductOutcome(event: ProductEventV1): boolean {
+  if (event.name === "MANIFEST_VALIDATED" || event.name === "PREFLIGHT_COMPLETED") {
+    return event.metadata.outcome === "accepted";
+  }
+  if (event.name === "BUNDLE_REPLAYED") {
+    return event.metadata.outcome === "byte-identical";
+  }
+  return true;
+}
+
+function emptyCounter(): ProductQaReportV1["sessions"] {
+  return {
+    observed: 0,
+    valid: 0,
+    invalid: 0,
+    completed: 0,
+    consumerFailed: 0,
+    resumed: 0,
+  };
+}
+
+export function reduceProductQaReport(
+  eventValues: readonly ProductEventV1[],
+  queueStatus: ProductQaQueueStatus = "healthy",
+): ProductQaReportV1 {
+  const events = queueStatus === "unavailable"
+    ? []
+    : eventValues.map((event) => ProductEventV1Schema.parse(event));
+  const sessions = new Map<string, QaSessionState>();
+
+  for (const event of events) {
+    const state = sessions.get(event.sessionId) ?? {
+      invalid: false,
+      lastOccurredAt: Number.NEGATIVE_INFINITY,
+      journeys: [createQaJourney()],
+    };
+    sessions.set(event.sessionId, state);
+
+    const occurredAt = Date.parse(event.occurredAt);
+    if (occurredAt < state.lastOccurredAt) state.invalid = true;
+    state.lastOccurredAt = Math.max(state.lastOccurredAt, occurredAt);
+    if (state.invalid) continue;
+
+    let journey = state.journeys.at(-1)!;
+
+    if (event.name === "RUN_RESUMED") {
+      journey.resumed = true;
+      journey.reached.add(event.name);
+      continue;
+    }
+
+    if (event.name === "CONSUMER_VERIFICATION_FAILED") {
+      if (journey.currentStep < 4) {
+        state.invalid = true;
+      } else {
+        journey.consumerFailed = true;
+        journey.reached.add(event.name);
+      }
+      continue;
+    }
+
+    if (event.name === "COMPOSER_STARTED") {
+      if (journey.completed) {
+        journey = createQaJourney();
+        state.journeys.push(journey);
+      } else if (journey.currentStep > 0) {
+        state.invalid = true;
+        continue;
+      }
+      journey.currentStep = 0;
+      journey.reached.add(event.name);
+      continue;
+    }
+
+    const step = CANONICAL_HANDOFF_STEPS.indexOf(event.name);
+    if (step === journey.currentStep) continue;
+    if (step !== journey.currentStep + 1) {
+      state.invalid = true;
+      continue;
+    }
+    if (!acceptedProductOutcome(event)) continue;
+
+    journey.currentStep = step;
+    journey.reached.add(event.name);
+    if (event.name === "BUNDLE_REPLAYED") journey.completed = true;
+  }
+
+  const sessionValues = [...sessions.values()];
+  const validSessions = sessionValues.filter((session) => !session.invalid);
+  const validJourneys = validSessions.flatMap((session) => session.journeys);
+  const invalidJourneyCount = sessionValues
+    .filter((session) => session.invalid)
+    .reduce((count, session) => count + session.journeys.length, 0);
+
+  const sessionCounters = emptyCounter();
+  sessionCounters.observed = sessionValues.length;
+  sessionCounters.valid = validSessions.length;
+  sessionCounters.invalid = sessionValues.length - validSessions.length;
+  sessionCounters.completed = validSessions.filter((session) =>
+    session.journeys.some((journey) => journey.completed)).length;
+  sessionCounters.consumerFailed = validSessions.filter((session) =>
+    session.journeys.some((journey) => journey.consumerFailed)).length;
+  sessionCounters.resumed = validSessions.filter((session) =>
+    session.journeys.some((journey) => journey.resumed)).length;
+
+  const journeyCounters = emptyCounter();
+  journeyCounters.observed = validJourneys.length + invalidJourneyCount;
+  journeyCounters.valid = validJourneys.length;
+  journeyCounters.invalid = invalidJourneyCount;
+  journeyCounters.completed = validJourneys.filter((journey) => journey.completed).length;
+  journeyCounters.consumerFailed = validJourneys.filter(
+    (journey) => journey.consumerFailed,
+  ).length;
+  journeyCounters.resumed = validJourneys.filter((journey) => journey.resumed).length;
+
+  return ProductQaReportV1Schema.parse({
+    version: "1",
+    queue: {
+      status: queueStatus,
+      retainedEventCount: events.length,
+    },
+    sessions: sessionCounters,
+    journeys: journeyCounters,
+    steps: FUNNEL_STEPS.map((name) => ({
+      name,
+      sessions: validSessions.filter((session) =>
+        session.journeys.some((journey) => journey.reached.has(name))).length,
+      journeys: validJourneys.filter((journey) => journey.reached.has(name)).length,
+    })),
+  });
+}
+
+export function canonicalSerializeProductQaReport(
+  reportValue: ProductQaReportV1,
+): string {
+  return canonicalJson(ProductQaReportV1Schema.parse(reportValue));
 }
 
 export function reduceProductFunnel(

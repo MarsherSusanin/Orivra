@@ -13,8 +13,10 @@ export {
 export { generateSafeWeb2JsonConsumer, type SafeConsumerOptions } from "./codegen";
 export {
   PRODUCT_ANALYTICS_QUEUE_KEY_V1,
+  canonicalSerializeProductQaReport,
   createLocalProductAnalytics,
   reduceProductFunnel,
+  reduceProductQaReport,
   type LocalProductAnalytics,
   type ProductAnalyticsPort,
   type ProductFunnelV1,

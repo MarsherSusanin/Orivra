@@ -1248,6 +1248,111 @@ export const ProductEventV1Schema = z.discriminatedUnion("name", [
 export type ProductEventNameV1 = z.infer<typeof ProductEventNameV1Schema>;
 export type ProductEventV1 = z.infer<typeof ProductEventV1Schema>;
 
+const ProductQaQueueV1Schema = z
+  .object({
+    status: z.enum(["healthy", "recovered", "unavailable"]),
+    retainedEventCount: z.number().int().min(0).max(500),
+  })
+  .strict()
+  .refine(
+    (queue) => queue.status !== "unavailable" || queue.retainedEventCount === 0,
+    "An unavailable queue cannot retain trusted events",
+  );
+
+const ProductQaCounterV1Schema = z
+  .object({
+    observed: z.number().int().nonnegative(),
+    valid: z.number().int().nonnegative(),
+    invalid: z.number().int().nonnegative(),
+    completed: z.number().int().nonnegative(),
+    consumerFailed: z.number().int().nonnegative(),
+    resumed: z.number().int().nonnegative(),
+  })
+  .strict()
+  .refine(
+    (counter) => counter.observed === counter.valid + counter.invalid,
+    "Observed evidence must equal valid plus invalid evidence",
+  )
+  .refine(
+    (counter) => counter.completed <= counter.valid,
+    "Completed evidence cannot exceed valid evidence",
+  )
+  .refine(
+    (counter) => counter.consumerFailed <= counter.valid,
+    "Consumer-failed evidence cannot exceed valid evidence",
+  )
+  .refine(
+    (counter) => counter.resumed <= counter.valid,
+    "Resumed evidence cannot exceed valid evidence",
+  );
+
+const productQaStep = <TName extends z.infer<typeof ProductEventNameV1Schema>>(
+  name: TName,
+) => z
+  .object({
+    name: z.literal(name),
+    sessions: z.number().int().nonnegative(),
+    journeys: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const ProductQaStepsV1Schema = z.tuple([
+  productQaStep("COMPOSER_STARTED"),
+  productQaStep("MANIFEST_VALIDATED"),
+  productQaStep("PREFLIGHT_COMPLETED"),
+  productQaStep("SUBMISSION_REQUESTED"),
+  productQaStep("PROOF_AVAILABLE"),
+  productQaStep("CONSUMER_VERIFICATION_FAILED"),
+  productQaStep("SAFE_CODEGEN_GENERATED"),
+  productQaStep("BUNDLE_REPLAYED"),
+  productQaStep("RUN_RESUMED"),
+]);
+
+const ProductQaCounterNames = [
+  "observed",
+  "valid",
+  "invalid",
+  "completed",
+  "consumerFailed",
+  "resumed",
+] as const;
+
+export const ProductQaReportV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    queue: ProductQaQueueV1Schema,
+    sessions: ProductQaCounterV1Schema,
+    journeys: ProductQaCounterV1Schema,
+    steps: ProductQaStepsV1Schema,
+  })
+  .strict()
+  .refine(
+    (report) => ProductQaCounterNames.every(
+      (name) => report.sessions[name] <= report.journeys[name],
+    ),
+    "Journey aggregates must cover session aggregates",
+  )
+  .refine(
+    (report) => report.steps.every(
+      (step) => step.sessions <= report.sessions.valid,
+    ),
+    "Step session counts cannot exceed valid sessions",
+  )
+  .refine(
+    (report) => report.steps.every(
+      (step) => step.journeys <= report.journeys.valid,
+    ),
+    "Step journey counts cannot exceed valid journeys",
+  )
+  .refine(
+    (report) => report.steps.every(
+      (step) => step.sessions <= step.journeys,
+    ),
+    "A step cannot cover more sessions than journeys",
+  );
+
+export type ProductQaReportV1 = z.infer<typeof ProductQaReportV1Schema>;
+
 export const RunSummaryV1Schema = z
   .object({
     version: VersionV1Schema,
