@@ -23,7 +23,7 @@ flowchart LR
 | Область | Ответственность | Не должна делать |
 |---|---|---|
 | `packages/contracts` | Versioned schemas и API types | I/O, clocks, persistence |
-| `packages/domain` | State machine, journal, projection, diagnostics, replay, checksum, codegen | Network, PostgreSQL, process env |
+| `packages/domain` | State machine, journal, projection, diagnostics, replay, checksum, codegen, aggregate QA reporting | Network, PostgreSQL, process env |
 | `packages/fdc-coston2` | Verifier, RPC, registry, Relay и DA ports/adapters | Владеть пользовательским flow или persistence |
 | `apps/api` | Auth, idempotent HTTP commands, journal/artifact reads, PostgreSQL composition | Хранить private keys, выполнять relayer effect |
 | `apps/worker` | Claim persisted commands, выполнять external effects, append outcomes, resume after restart | Принимать команды в обход API или использовать test adapters в production |
@@ -94,9 +94,12 @@ API/worker hosting provider пока не выбран. Это операцио�
 
 В текущем scope: Coston2, Web2Json, public HTTPS GET, query/JQ/ABI, canonical vulnerable/safe consumers, wallet/relayer, replay, CLI, Action и Sites.
 
+Product instrumentation остаётся локальным: bounded privacy-safe event queue
+сводится в canonical aggregate QA bytes. Raw events и identifiers не входят в
+report, сетевого analytics transport нет.
+
 Вне scope: mainnet, custody пользовательских ключей, arbitrary methods/headers/body, произвольные Solidity contracts и автоматический production deploy.
 
 ## Решения
 
 История решений и их статус находятся в [docs/adr/README.md](docs/adr/README.md). Критические runtime-инварианты закреплены в ADR 0001, 0005 и 0011–0013.
-

@@ -13,24 +13,27 @@ The product journey is delivered as independently frozen vertical slices:
 | 016 | Persisted preflight evidence and decision Workbench | Complete; independently verified |
 | 017A | Manifest-owned submission decision and confirmation evidence | Complete; independently verified |
 | 017B | Wallet, relayer and replay confirmation through one persisted path | Complete; independently verified |
-| 018 | Restart-safe waiting, retry and terminal recovery semantics | Implemented; candidate freeze gates pending |
-| 019 | Consumer evidence matrix and deterministic safe artifact | Pending |
-| 020 | Evidence receipt, integration package and read-only handoff | Pending |
-| 021B | Deterministic local product funnel report | Pending |
+| 018 | Restart-safe waiting, retry and terminal recovery semantics | Complete; independently verified |
+| 019 | Consumer evidence matrix and deterministic safe artifact | Complete; independently verified in the final handoff journey |
+| 020 | Evidence receipt, integration package and read-only handoff | Complete; independently verified |
+| 021B | Deterministic local product QA report | Complete; final candidate verification follows this documentation freeze |
 
-## Current Slice 018 objective
+## Completed pre-infrastructure product journey
 
-Make every long-running or interrupted Coston2 stage explain its persisted state
-without creating another effect path. Recovery is derived from append-only
-events and the existing command queue, survives restart, and distinguishes safe
-waiting from same-command retry and terminal new-run outcomes.
+The roadmap now delivers one coherent local and persisted journey from run
+discovery through evidence handoff:
 
-- Waiting transaction, Relay and DA stages have no manual retry.
-- Retryable pre-effect failure reuses the same persisted command.
-- A recorded transaction hash is observation-only and forbids rebroadcast.
-- Terminal revert, consensus miss and invalid proof create a new run from the
-  persisted manifest; the original journal stays immutable.
-- Consumer invariant failure routes to Slice 019 Consumer Lab.
+- recovery distinguishes waiting, same-command retry and terminal new-run
+  outcomes without rebroadcast after a recorded transaction hash;
+- Consumer Lab persists exact invariant evidence and deterministic safe Solidity
+  bytes;
+- Integration Package binds receipt, bundle, manifest and generated consumer,
+  then hands them to a read-only fragment share recipient;
+- local product reporting reduces bounded privacy-safe events into a strict
+  aggregate-only `ProductQaReportV1` with deterministic canonical bytes.
+
+No external analytics provider, deployment automation or live-infrastructure
+PASS is part of these slices.
 
 ## Validation policy
 
@@ -41,6 +44,8 @@ PASS reports on one tree hash. See `docs/development/roles.md` and
 
 Slice 017 passed both independent verification roles on commit
 `57099232f957123f11574e8137948de1467d1d6d` and tree
-`3d99a54a249648781f63afb8519074b1b92c38a1`. Slice 018 is not complete until its
-full freeze matrix and both independent verification roles PASS one new,
-identical tree hash.
+`3d99a54a249648781f63afb8519074b1b92c38a1`. Slice 020, including the complete
+Consumer Lab handoff, passed both roles on commit
+`24957228b59b32f0df2d77b902cd177af0489c4b` and tree
+`e2813a3eafec08b28f3b88f780e33a5ca1b91e28`. Slice 021B uses the same final
+freeze rule; its exact candidate is recorded after the documentation commit.

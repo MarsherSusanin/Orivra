@@ -8,6 +8,8 @@ Proofline — developer tool для Coston2 Web2Json: один versioned manifes
 
 - Реализованы Web, PostgreSQL API, restart-safe worker, CLI, GitHub Action и Sites package.
 - PR-путь герметичен и воспроизводит canonical bundle без сети.
+- Privacy-safe product events сводятся локально в детерминированный
+  aggregate-only QA report; внешний analytics provider не используется.
 - Live Coston2 release gate работает только через persisted API/worker path и ограничен одним общим дедлайном в 10 минут.
 - Размещение API, worker и PostgreSQL ещё не выбрано. До подключения инфраструктуры live gate остаётся операционно заблокированным, но не заменяется симулятором.
 
@@ -64,7 +66,8 @@ Web2JsonManifestV1
 - `apps/api` — HTTP API, authentication и PostgreSQL composition.
 - `apps/worker` — persisted command worker и единственное место хранения relayer key.
 - `packages/contracts` — versioned public schemas.
-- `packages/domain` — pure event journal, projection, diagnostics, replay и codegen.
+- `packages/domain` — pure journal/projection, diagnostics, replay, codegen и
+  deterministic product QA reporting.
 - `packages/fdc-coston2` — verifier/RPC/registry/Relay/DA adapters.
 - `packages/cli` — Node 22 release client.
 - `packages/action` — Node 20 GitHub Action: local replay для PR и persisted live path для merge queue.

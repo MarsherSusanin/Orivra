@@ -19,6 +19,20 @@ Proofline can measure whether the product journey succeeds without adding an ext
 - Non-throwing local export for QA/CI; no raw events, session identifiers or timestamps.
 - Corrupt local state fails closed and analytics failure never blocks the product flow.
 
+## Delivered public API
+
+- `ProductQaReportV1Schema` rejects extra privacy-sensitive fields and invalid
+  counter arithmetic.
+- `reduceProductQaReport(events, queueStatus)` handles accepted retries,
+  repeated journeys, duplicate events, consumer failure and resume evidence.
+- `canonicalSerializeProductQaReport(report)` produces byte-identical canonical
+  JSON without a clock-dependent field.
+- `LocalProductAnalytics.exportQaReport()` returns only aggregates and preserves
+  the queue state `healthy`, `recovered` or `unavailable`.
+
+This remains a QA/CI export. There is no analytics dashboard, network transport
+or third-party analytics SDK.
+
 ## Frozen privacy contract
 
 - Event metadata is a strict enumerated object and cannot include URL, manifest, query values, tokens, transaction hashes, private keys, response bodies, or error stacks.
