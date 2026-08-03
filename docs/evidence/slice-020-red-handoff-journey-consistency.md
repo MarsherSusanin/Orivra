@@ -137,3 +137,51 @@ npx vitest run tests/action-artifact-sync.contract.test.ts --reporter=verbose
 
 Result: expected RED, `1/1` failed because `packages/action/dist/index.js` is
 not byte-identical to a clean deterministic build of `packages/action/src/entry.ts`.
+
+## Final Product UX corrective RED
+
+Corrective extension base:
+
+- Rejected commit: `1d4a9af`.
+- Rejected tree: `8121d6994e1a866bbdb95beab0f0bbe785b7002d`.
+- Role: Contract & Test Designer.
+- Scope: the existing real hermetic acceptance suite and this evidence only;
+  no production changes.
+
+The extension freezes two final handoff requirements:
+
+1. A project owner completes the canonical failed-vulnerable journey, persists
+   the safe artifact and creates a real run-scoped share link. A recipient then
+   navigates that exact fragment URL. Proofline must synchronously scrub the
+   fragment, retain the capability only in run-scoped session state, and show
+   exactly one `Open Integration Package` action. The recipient downloads the
+   exact persisted receipt, bundle, manifest and Solidity bytes. No consumer
+   verification, codegen, replay or share mutation is exposed or sent.
+2. When Integration Package is opened from Consumer Lab rather than the
+   cockpit's integration trigger, `Escape` closes it and returns focus to the
+   visible `Resume Consumer Lab` cockpit action. Focus must never fall through
+   to `BODY`.
+
+```text
+npm run typecheck
+```
+
+Result: PASS.
+
+```text
+npx vitest run src/slice020-handoff-journey-consistency.acceptance.test.tsx --reporter=verbose
+```
+
+Result: expected RED, `2` failed and `2` passed:
+
+- the share capability is created, moved from the fragment into the correct
+  session key and scrubbed from the address bar, but the failed-vulnerable
+  share recipient receives no `Open Integration Package` action;
+- `Escape` closes Integration Package and leaves a visible `Resume Consumer
+  Lab` action, but focus incorrectly lands on `BODY` rather than that action;
+- reload after persisted codegen and reload before codegen remain green and do
+  not issue a second terminal consumer-verification POST.
+
+The share-recipient contract also freezes the downstream exact-byte downloads
+and mutation counters. Those assertions become reachable only after the missing
+handoff action is implemented; they must not be removed to reach GREEN.

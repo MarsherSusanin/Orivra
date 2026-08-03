@@ -201,6 +201,16 @@ describe("Slice 020 canonical hermetic handoff journey", () => {
     expect(integration).toHaveTextContent("uses: ./packages/action");
     expect(integration).toHaveTextContent(`manifest: ${runId}.manifest.json`);
     expect(integration).toHaveTextContent(`bundle: ${runId}.proofline.json`);
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: /integration package/i }))
+      .not.toBeInTheDocument();
+    const resumeAction = screen.getByRole("button", {
+      name: /^resume consumer lab$/i,
+    });
+    expect(resumeAction).toBeVisible();
+    expect(resumeAction).toHaveFocus();
+    expect(document.activeElement).not.toBe(document.body);
   }, 15_000);
 
   it("restores persisted safe codegen after reload without rerunning terminal verification", async () => {
@@ -438,5 +448,170 @@ describe("Slice 020 canonical hermetic handoff journey", () => {
       `node packages/cli/dist/index.js replay ${runId}.proofline.json`,
     );
     expect(consumerVerificationPosts).toBe(1);
+  }, 15_000);
+
+  it("hands exact failed-vulnerable evidence to a fragment share recipient without mutations", async () => {
+    const system = createHermeticProoflineSystem({
+      projectToken: PROJECT_TOKEN,
+      fixture: "web2json-host-invariant",
+      now: "2025-05-15T12:04:11.000Z",
+    });
+    const create = await system.api.fetch(projectRequest(
+      "/v1/runs",
+      "POST",
+      { manifest: replayManifest },
+      "slice020-share-recipient-create",
+    ));
+    const { runId } = await create.json() as { runId: string };
+    await system.worker.drain();
+    await system.api.fetch(projectRequest(
+      `/v1/runs/${runId}/submissions`,
+      "POST",
+      { mode: "replay" },
+      "slice020-share-recipient-submit",
+    ));
+    await system.worker.drain();
+
+    const mutations = {
+      consumerVerification: 0,
+      consumerCodegen: 0,
+      replay: 0,
+      share: 0,
+    };
+    const hermeticFetch: typeof globalThis.fetch = async (input, init) => {
+      const request = new Request(input, init);
+      const pathname = new URL(request.url).pathname;
+      if (request.method === "POST") {
+        if (/\/consumer-verifications$/.test(pathname)) mutations.consumerVerification += 1;
+        if (/\/artifacts\/consumer$/.test(pathname)) mutations.consumerCodegen += 1;
+        if (pathname === "/v1/replays") mutations.replay += 1;
+        if (/\/share$/.test(pathname)) mutations.share += 1;
+      }
+      const response = await system.api.fetch(request);
+      if (
+        response.ok &&
+        request.method === "POST" &&
+        /\/consumer-verifications$/.test(pathname)
+      ) {
+        await system.worker.drain();
+      }
+      return response;
+    };
+    const projectServices = createLiveSurfaceServices({
+      baseUrl: "https://api.proofline.test",
+      projectToken: PROJECT_TOKEN,
+      expectedWebOrigin: "https://proofline.test",
+      fetch: hermeticFetch,
+      storage: localStorage,
+      recoveryStorage: sessionStorage,
+    });
+
+    window.history.replaceState({}, "", `/runs/${runId}`);
+    const user = userEvent.setup();
+    const ownerSession = render(
+      <App projectToken={PROJECT_TOKEN} services={projectServices} />,
+    );
+    await user.click(await screen.findByRole("button", { name: /^verify consumer$/i }));
+    const consumerLab = await screen.findByRole("dialog", {
+      name: /consumer verification/i,
+    });
+    await user.click(within(consumerLab).getByRole("button", {
+      name: /run verification/i,
+    }));
+    expect(await within(consumerLab).findByText("CONSUMER_HOST_MISMATCH"))
+      .toBeVisible();
+    await user.click(within(consumerLab).getByRole("button", {
+      name: /generate safe consumer/i,
+    }));
+    await user.click(await within(consumerLab).findByRole("button", {
+      name: /^verify generated consumer$/i,
+    }));
+    await user.click(await within(consumerLab).findByRole("button", {
+      name: /open integration package/i,
+    }));
+    const ownerIntegration = await screen.findByRole("dialog", {
+      name: /integration package/i,
+    });
+    await within(ownerIntegration).findByRole("link", { name: /download receipt/i });
+    await user.click(within(ownerIntegration).getByRole("button", {
+      name: /create read-only share link/i,
+    }));
+    const shareLink = await within(ownerIntegration).findByRole("link", {
+      name: /open read-only share/i,
+    });
+    const shareUrl = shareLink.getAttribute("href") ?? "";
+    const parsedShareUrl = new URL(shareUrl);
+    const shareToken = parsedShareUrl.hash.slice("#share=".length);
+    expect(shareToken).toMatch(/^share_[a-f0-9]{64}$/);
+
+    const context = { runId, projectToken: PROJECT_TOKEN };
+    const [persistedReceipt, persistedReport, persistedBundle] = await Promise.all([
+      projectServices.getEvidenceReceipt!(context),
+      projectServices.getConsumerLabReport!(context),
+      projectServices.exportBundle(context),
+    ]);
+    const expectedMutations = { ...mutations };
+    expect(expectedMutations).toEqual({
+      consumerVerification: 1,
+      consumerCodegen: 1,
+      replay: 0,
+      share: 1,
+    });
+
+    ownerSession.unmount();
+    sessionStorage.clear();
+    localStorage.clear();
+    window.history.replaceState(
+      {},
+      "",
+      `${parsedShareUrl.pathname}${parsedShareUrl.hash}`,
+    );
+    const recipientServices = createLiveSurfaceServices({
+      baseUrl: "https://api.proofline.test",
+      projectToken: shareToken,
+      expectedWebOrigin: "https://proofline.test",
+      fetch: hermeticFetch,
+      storage: localStorage,
+      recoveryStorage: sessionStorage,
+    });
+    render(<App services={recipientServices} />);
+
+    expect(window.location.hash).toBe("");
+    expect(window.location.search).toBe("");
+    expect(sessionStorage.getItem(`proofline:share-token:${runId}`)).toBe(shareToken);
+    const recipientAction = await screen.findByRole("button", {
+      name: /^open integration package$/i,
+    });
+    expect(screen.getAllByRole("button", {
+      name: /^open integration package$/i,
+    })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /verify consumer/i }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /generate safe consumer/i }))
+      .not.toBeInTheDocument();
+
+    await user.click(recipientAction);
+    const recipientIntegration = await screen.findByRole("dialog", {
+      name: /integration package/i,
+    });
+    const expectedDownloads = [
+      ["receipt", `${runId}.receipt.json`, canonicalSerializeEvidenceReceipt(persistedReceipt)],
+      ["bundle", `${runId}.proofline.json`, persistedBundle],
+      ["manifest", `${runId}.manifest.json`, JSON.stringify(replayManifest)],
+      ["Solidity", `${persistedReport.safeConsumer.contractName}.sol`, persistedReport.safeConsumer.source],
+    ] as const;
+    for (const [label, filename, bytes] of expectedDownloads) {
+      const link = await within(recipientIntegration).findByRole("link", {
+        name: new RegExp(`download ${label}`, "i"),
+      });
+      expect(link).toHaveAttribute("download", filename);
+      expect(decodedDownload(link)).toBe(bytes);
+    }
+    expect(within(recipientIntegration).getByText(/read-only shared run/i))
+      .toBeVisible();
+    expect(within(recipientIntegration).queryByRole("button", {
+      name: /create.*share|verify|generate|replay bundle/i,
+    })).not.toBeInTheDocument();
+    expect(mutations).toEqual(expectedMutations);
   }, 15_000);
 });
