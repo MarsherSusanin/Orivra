@@ -700,7 +700,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const closeIntegration = () => {
     setIntegrationOpen(false);
     if (secondaryPanelFromLocation() === "integration") writeSecondaryPanel(null);
-    integrationTrigger.current?.focus();
+    (integrationTrigger.current ?? verifyTrigger.current)?.focus();
   };
 
   const openIntegration = () => {
@@ -859,6 +859,8 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const timeline = timelineFromProjection(hydratedRun.stages, hydratedRun.stageDetails);
   const consumerFailed = hydratedRun.stages.consumer === "failed";
   const consumerTerminal = hydratedRun.stages.consumer === "completed";
+  const readOnlyHandoff = !isProjectAccess && consumerFailed;
+  const handoffReady = consumerTerminal || readOnlyHandoff;
   const proofAvailable = hydratedRun.stages.proof === "completed";
   const activeStage = currentStage(hydratedRun.stages);
   const activeStageLabel = sentenceCase(activeStage.stage);
@@ -979,9 +981,9 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
               <div className="next-action-content">
                 {proofAvailable ? (
                   <>
-                    <h2 id="next-action-title">{consumerTerminal ? "Evidence is ready." : "Proof is ready."}</h2>
-                    <p>{consumerTerminal ? "Take the verified receipt and integration artifacts into your repository." : "Verify your consumer contract before consuming the attestation."}</p>
-                    {consumerTerminal ? (
+                    <h2 id="next-action-title">{handoffReady ? "Evidence is ready." : "Proof is ready."}</h2>
+                    <p>{handoffReady ? "Take the verified receipt and integration artifacts into your repository." : "Verify your consumer contract before consuming the attestation."}</p>
+                    {handoffReady ? (
                       <button ref={integrationTrigger} className="verify-button" type="button" onClick={openIntegration}>Open integration package<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
                     ) : isProjectAccess ? (
                       <button ref={verifyTrigger} className="verify-button" type="button" onClick={openVerification}>{consumerFailed ? "Resume Consumer Lab" : "Verify consumer"}<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
@@ -989,7 +991,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
                       <span className="stage-waiting-state is-pending">Read-only shared run · consumer evidence pending</span>
                     )}
                     <div className="action-footer">
-                      <span>{consumerTerminal ? "Next step: Add the persisted artifacts to your repository." : "Next step: Verify consumer invariants and enforcement."}</span>
+                      <span>{handoffReady ? "Next step: Add the persisted artifacts to your repository." : "Next step: Verify consumer invariants and enforcement."}</span>
                       {isProjectAccess && bundleState === "verified" && bundleSource ? (
                         <a
                           className="bundle-download"
