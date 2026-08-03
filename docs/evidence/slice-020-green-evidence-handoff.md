@@ -7,7 +7,7 @@
 - RED 020B: `4f06d62`.
 - GREEN/corrective series: `cf83ad5`, `82d287b`, `a69c444`, `4201d6e`,
   `3dc1e05`, `3fa7279`, `95ca24e`, `9a57aa4`, `801c0bf`, `b824b28`,
-  `8379417`.
+  `8379417`, `f97df13`, `8b1d4ce`.
 - Candidate commit and tree are recorded after this evidence document is
   committed. Both independent verifiers must inspect that exact tree.
 
@@ -37,13 +37,13 @@
 
 - `npm run typecheck`: PASS.
 - `npm test`: 169 files PASS, 4 infrastructure-conditioned files skipped;
-  1490 tests PASS, 14 skipped.
+  1491 tests PASS, 14 skipped.
 - `npm run test:core:coverage`: 356 tests PASS; statements, branches,
   functions and lines all 100%.
 - `npm run test:coverage:backend`: 770 PASS, 14 skipped; 92.08% statements,
   87.76% branches, 92.99% lines.
-- `npm run test:coverage:web`: 311 PASS; 89.04% statements, 84.71% branches,
-  91.03% lines. The Web gate explicitly excludes `apps/**`; imported hermetic
+- `npm run test:coverage:web`: 312 PASS; 89.04% statements, 84.54% branches,
+  91.07% lines. The Web gate explicitly excludes `apps/**`; imported hermetic
   API code remains covered by the separate backend gate.
 - `npm run test:solidity`: 214 PASS.
 - `npm run test:e2e`: 7 PASS, including persisted Consumer Lab handoff and
@@ -117,6 +117,20 @@ The complete matrix above, including real PostgreSQL, was rerun after this
 production correction. All earlier verifier decisions are invalidated; two new
 independent PASS decisions are required on the final tree recorded after this
 document is committed.
+
+A later rejected candidate exposed three further release edges. They were
+frozen in `f97df13` and closed in `8b1d4ce`:
+
+- reload before codegen reconstructs persisted vulnerable failure and offers
+  codegen directly; it never exposes or sends another terminal verification;
+- Consumer Lab matrix values come from the exact request URL that produced the
+  diagnostic, so observed host/query and diagnostic provenance agree;
+- the checked-in GitHub Action artifact is regenerated and independently
+  byte-identical to a clean deterministic node20 build.
+
+The full matrix and standalone Action artifact-sync test were rerun again after
+these corrections. As before, no earlier verifier decision applies to the next
+candidate tree.
 
 ## Scope note
 
