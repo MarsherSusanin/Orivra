@@ -72,3 +72,6 @@ Tests       99 passed (99)
 `npm run typecheck` and `git diff --check` pass. The full release matrix remains
 deferred; this corrective RED changes only the rejected candidate's frozen
 auth contract and its focused evidence.
+
+The remaining shared response-schema gap found on the next candidate is frozen
+in [Slice 023A final corrective RED](slice-023a-final-corrective-red-auth-response-timestamps.md).

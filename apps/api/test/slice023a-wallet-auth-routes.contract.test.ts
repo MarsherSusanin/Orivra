@@ -93,6 +93,61 @@ describe("Slice 023A public wallet auth route boundary", () => {
   });
 
   it.each([
+    [
+      "challenge",
+      "/v1/auth/wallet/challenges",
+      { version: "1", address: ADDRESS },
+      "2026-08-09T00:00:00Z",
+    ],
+    [
+      "session",
+      "/v1/auth/wallet/sessions",
+      { version: "1", challengeId: CHALLENGE_ID, signature: SIGNATURE },
+      "2026-08-09T12:00:00.000+00:00",
+    ],
+  ] as const)(
+    "sanitizes a non-canonical %s service timestamp without echoing it",
+    async (kind, path, body, invalidTimestamp) => {
+      const { api, service } = harness();
+      if (kind === "challenge") {
+        service.createWalletChallenge.mockResolvedValueOnce({
+          version: "1",
+          challengeId: CHALLENGE_ID,
+          address: ADDRESS,
+          purpose: "browser-session",
+          network: "coston2",
+          chainId: 114,
+          message: "server-authored-message",
+          issuedAt: invalidTimestamp,
+          expiresAt: "2026-08-09T00:05:00.000Z",
+        });
+      } else {
+        service.createWalletSession.mockResolvedValueOnce({
+          version: "1",
+          wallet: { kind: "eoa", address: ADDRESS },
+          project: { kind: "default", projectId: "11111111-1111-4111-8111-111111111111" },
+          projectToken: PROJECT_TOKEN,
+          issuedAt: "2026-08-09T00:00:00.000Z",
+          expiresAt: invalidTimestamp,
+        });
+      }
+
+      const response = await api.fetch(request(path, body));
+      expect(response.status).toBe(500);
+      expectPrivateResponseHeaders(response);
+      const responseText = await response.text();
+      expect(responseText).toBe(JSON.stringify({
+        version: "1",
+        error: {
+          code: "REQUEST_FAILED",
+          message: "Request could not be completed",
+        },
+      }));
+      expect(responseText).not.toContain(invalidTimestamp);
+    },
+  );
+
+  it.each([
     ["challenge message", "/v1/auth/wallet/challenges", { version: "1", address: ADDRESS, message: "caller" }],
     ["challenge domain", "/v1/auth/wallet/challenges", { version: "1", address: ADDRESS, domain: "caller.example" }],
     ["challenge URI", "/v1/auth/wallet/challenges", { version: "1", address: ADDRESS, uri: "https://caller.example" }],

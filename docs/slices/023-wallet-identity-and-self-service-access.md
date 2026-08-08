@@ -31,6 +31,10 @@ Pure auth module contract:
 - Challenge messages are bounded to 8192 UTF-8 bytes consistently in the
   builder, public schema and API output parser; limits never count JavaScript
   characters as bytes.
+- Every auth response timestamp uses the same canonical
+  `YYYY-MM-DDTHH:mm:ss.sssZ` contract, including challenge/session issue and
+  expiry plus account-token creation, expiry and revocation. Missing
+  milliseconds, offsets, RFC1123 and impossible calendar dates fail closed.
 
 HTTP boundary:
 

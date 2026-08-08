@@ -30,6 +30,15 @@ type PublicSchema = {
   safeParse(value: unknown): { success: boolean };
 };
 
+type TimestampVariant = "canonical" | "missing-milliseconds" | "offset" | "rfc1123" | "impossible";
+
+type TimestampFieldCase = {
+  name: string;
+  schema: PublicSchema;
+  canonical: string;
+  value(timestamp: string, variant: TimestampVariant): unknown;
+};
+
 function requiredSchema(name: string): PublicSchema {
   const schema = (Contracts as Record<string, unknown>)[name] as
     | PublicSchema
@@ -40,6 +49,102 @@ function requiredSchema(name: string): PublicSchema {
 }
 
 describe("Slice 023A wallet auth public contracts", () => {
+  function timestampFieldCases(): TimestampFieldCase[] {
+    const challenge = requiredSchema("WalletChallengeV1Schema");
+    const session = requiredSchema("WalletSessionV1Schema");
+    const summary = requiredSchema("AccountTokenSummaryV1Schema");
+    const challengeValue = {
+      version: "1",
+      challengeId: CHALLENGE_ID,
+      address: ADDRESS,
+      purpose: "browser-session",
+      network: "coston2",
+      chainId: 114,
+      message: MESSAGE,
+      issuedAt: ISSUED_AT,
+      expiresAt: CHALLENGE_EXPIRES_AT,
+    };
+    const sessionValue = {
+      version: "1",
+      wallet: { kind: "eoa", address: ADDRESS },
+      project: { kind: "default", projectId: PROJECT_ID },
+      projectToken: PROJECT_TOKEN,
+      issuedAt: ISSUED_AT,
+      expiresAt: SESSION_EXPIRES_AT,
+    };
+    const tokenValue = {
+      version: "1",
+      tokenId: TOKEN_ID,
+      kind: "cli",
+      label: "Local CLI",
+      createdAt: ISSUED_AT,
+      expiresAt: "2026-09-08T00:00:00.000Z",
+      revokedAt: "2026-08-10T00:00:00.000Z",
+    };
+
+    const fieldCase = (
+      name: string,
+      schema: PublicSchema,
+      value: Record<string, unknown>,
+      field: string,
+      impossibleCompanion: Record<string, string> = {},
+    ): TimestampFieldCase => ({
+      name,
+      schema,
+      canonical: value[field] as string,
+      value: (timestamp, variant) => ({
+        ...value,
+        [field]: timestamp,
+        ...(variant === "impossible" ? impossibleCompanion : {}),
+      }),
+    });
+
+    return [
+      fieldCase("challenge.issuedAt", challenge, challengeValue, "issuedAt", {
+        expiresAt: "2026-03-02T00:05:00.000Z",
+      }),
+      fieldCase("challenge.expiresAt", challenge, challengeValue, "expiresAt", {
+        issuedAt: "2026-03-02T00:00:00.000Z",
+      }),
+      fieldCase("session.issuedAt", session, sessionValue, "issuedAt", {
+        expiresAt: "2026-03-02T12:00:00.000Z",
+      }),
+      fieldCase("session.expiresAt", session, sessionValue, "expiresAt", {
+        issuedAt: "2026-03-02T00:00:00.000Z",
+      }),
+      fieldCase("accountToken.createdAt", summary, tokenValue, "createdAt"),
+      fieldCase("accountToken.expiresAt", summary, tokenValue, "expiresAt"),
+      fieldCase("accountToken.revokedAt", summary, tokenValue, "revokedAt"),
+    ];
+  }
+
+  it("accepts canonical millisecond-UTC values for every auth response timestamp", () => {
+    for (const field of timestampFieldCases()) {
+      expect(
+        field.schema.safeParse(field.value(field.canonical, "canonical")).success,
+        field.name,
+      ).toBe(true);
+    }
+  });
+
+  it("rejects every non-canonical or impossible auth response timestamp", () => {
+    const accepted: string[] = [];
+    for (const field of timestampFieldCases()) {
+      const variants: Array<[Exclude<TimestampVariant, "canonical">, string]> = [
+        ["missing-milliseconds", field.canonical.replace(".000Z", "Z")],
+        ["offset", field.canonical.replace("Z", "+00:00")],
+        ["rfc1123", new Date(field.canonical).toUTCString()],
+        ["impossible", field.canonical.replace(/^2026-\d{2}-\d{2}/, "2026-02-30")],
+      ];
+      for (const [variant, timestamp] of variants) {
+        if (field.schema.safeParse(field.value(timestamp, variant)).success) {
+          accepted.push(`${field.name}:${variant}`);
+        }
+      }
+    }
+    expect(accepted).toEqual([]);
+  });
+
   it("freezes strict server-authored challenge contracts", () => {
     const request = requiredSchema("WalletChallengeRequestV1Schema");
     const challenge = requiredSchema("WalletChallengeV1Schema");
