@@ -50,6 +50,29 @@ persisted; Web may retain the raw token only in `sessionStorage`. Account
 settings may issue independently revocable `cli` or `action` tokens for 1–90
 days. Existing bearer and run-scoped share semantics remain unchanged.
 
+Account inspection, CLI/Action issuance, token revocation and current-session
+sign-out require an authenticated `browser` token backed by its private token
+and wallet-identity IDs. The credential kind and IDs come only from the token
+digest lookup; request bodies cannot select them. CLI, Action and legacy project
+tokens remain valid for ordinary project API calls but receive private `403
+ACCOUNT_SESSION_REQUIRED` on account-management routes. Share tokens remain
+read-only and cannot access account state.
+
+Issuance uses a route-specific `Idempotency-Key` of
+`token_issue_` plus 64 lowercase hexadecimal characters. The literal product
+requirement that a raw secret is displayed only once takes precedence over
+generic response replay: the first committed effect returns the secret, a
+same-key/same-fingerprint retry returns private `409
+ACCOUNT_TOKEN_SECRET_ALREADY_ISSUED`, and a changed fingerprint returns private
+`409 IDEMPOTENCY_CONFLICT`. Proofline neither derives a deterministic token nor
+persists a replayable raw response. If the first response is lost, the operator
+revokes the visible summary and issues a replacement with a fresh key.
+
+`DELETE /v1/auth/wallet/sessions/current` revokes only the authenticated browser
+token using the private auth-context IDs and a millisecond PostgreSQL clock. It
+accepts no body or idempotency key and returns `204` with no bytes. A repeated
+request is unauthenticated (`401`), which clients treat as already signed out.
+
 Challenge consumption is a separate short transaction which atomically marks
 one unexpired, unconsumed challenge and commits before local EOA recovery. An
 invalid signature therefore spends the challenge. Missing, expired and already
@@ -86,6 +109,12 @@ wallet identity and expiry; authentication accepts null-expiry legacy rows but
 rejects expired or revoked rows. The API role alone receives the minimum new
 table privileges; the worker receives none.
 
+Migration 007 adds keyed issuance-key digests and intent fingerprints to
+`api_tokens`, CLI/Action-only constraints, a project-scoped partial unique
+issuance index and a stable account-list index. Raw tokens are never stored.
+Account lists never select token digests and order CLI/Action summaries by
+`created_at DESC, id DESC`. Revocation preserves the first `revoked_at` value.
+
 ## Delivery waves
 
 - **023A — contracts and crypto:** public schemas, deterministic EIP-4361
@@ -95,8 +124,9 @@ table privileges; the worker receives none.
   default-project creation, digest-only 12-hour browser sessions,
   browser-token authentication and the cross-origin API composition required
   by the Sites/API topology.
-- **023B2 — account token management:** account read plus CLI/Action issue and
-  revoke endpoints for 1–90 day tokens.
+- **023B2 — account token management:** browser-session-only account read,
+  CLI/Action issue and revoke endpoints for 1–90 day tokens, plus current
+  browser-session sign-out.
 - **023C — Web session and Settings:** wallet states, lazy wallet code,
   session-only token retention, reconnect/sign-out and CLI/Action token UI.
 - **023D — quotas and hardening:** challenge/run limits, active-live-run cap,
