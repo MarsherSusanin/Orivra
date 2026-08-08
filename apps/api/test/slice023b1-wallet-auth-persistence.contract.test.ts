@@ -16,6 +16,10 @@ const PROJECT_ID = "11111111-1111-4111-8111-111111111123";
 const WALLET_ID = "22222222-2222-4222-8222-222222222123";
 const NONCE = "a1".repeat(32);
 const EXPIRES_AT = "2026-08-09T00:05:00.000Z";
+const DB_CHALLENGE_NOW = "2026-08-09T01:02:03.456Z";
+const DB_CHALLENGE_EXPIRES_AT = "2026-08-09T01:07:03.456Z";
+const DB_SESSION_NOW = "2026-08-09T04:05:06.789Z";
+const DB_SESSION_EXPIRES_AT = "2026-08-09T16:05:06.789Z";
 const MESSAGE = [
   "proofline.example wants you to sign in with your Ethereum account:",
   ADDRESS,
@@ -84,7 +88,14 @@ describe("Slice 023B1 persisted wallet auth service", () => {
   });
 
   it("creates distinct canonical 256-bit challenges and persists the exact evidence", async () => {
-    const query = vi.fn(async () => result());
+    const query = vi.fn(async (text: string) =>
+      /clock_timestamp\(\)/i.test(text)
+        ? result([{
+            issued_at: new Date(DB_CHALLENGE_NOW),
+            expires_at: new Date(DB_CHALLENGE_EXPIRES_AT),
+          }])
+        : result()
+    );
     const client = { query, release: vi.fn() };
     const auth = service({
       pool: { query, connect: vi.fn(async () => client) },
@@ -100,16 +111,29 @@ describe("Slice 023B1 persisted wallet auth service", () => {
     }));
     const nonce = (value: typeof first) => /\nNonce: ([a-f0-9]{64})\n/.exec(value.message)?.[1];
 
-    expect(first.issuedAt).toBe(NOW);
-    expect(first.expiresAt).toBe("2026-08-09T00:05:00.000Z");
+    expect(first.issuedAt).toBe(DB_CHALLENGE_NOW);
+    expect(first.expiresAt).toBe(DB_CHALLENGE_EXPIRES_AT);
+    expect(first.message).toContain(`Issued At: ${DB_CHALLENGE_NOW}`);
+    expect(first.message).toContain(`Expiration Time: ${DB_CHALLENGE_EXPIRES_AT}`);
     expect(first.challengeId).not.toBe(second.challengeId);
     expect(nonce(first)).toMatch(/^[a-f0-9]{64}$/);
     expect(nonce(first)).not.toBe(nonce(second));
 
-    const inserts = query.mock.calls.filter(([text]) =>
-      /INSERT INTO proofline_private\.wallet_challenges/i.test(String(text))
-    );
+    const insertIndices = query.mock.calls
+      .map(([text], index) => /INSERT INTO proofline_private\.wallet_challenges/i.test(String(text)) ? index : -1)
+      .filter((index) => index >= 0);
+    const clockReadIndices = query.mock.calls
+      .map(([text], index) => /clock_timestamp\(\)/i.test(String(text)) ? index : -1)
+      .filter((index) => index >= 0);
+    const inserts = insertIndices.map((index) => query.mock.calls[index]!);
+    const clockReads = clockReadIndices.map((index) => query.mock.calls[index]!);
+    expect(clockReads).toHaveLength(2);
     expect(inserts).toHaveLength(2);
+    for (const [text] of clockReads) {
+      expect(text).toMatch(/date_trunc\s*\(\s*'milliseconds'\s*,\s*clock_timestamp\(\)\s*\)/i);
+    }
+    expect(clockReadIndices[0]).toBeLessThan(insertIndices[0] ?? Infinity);
+    expect(clockReadIndices[1]).toBeLessThan(insertIndices[1] ?? Infinity);
     for (const [index, persisted] of inserts.entries()) {
       const [sql, values = []] = persisted as [string, readonly unknown[]];
       const challenge = index === 0 ? first : second;
@@ -119,6 +143,11 @@ describe("Slice 023B1 persisted wallet auth service", () => {
         challenge.challengeId,
         challenge.message,
       ]));
+      for (const timestamp of [challenge.issuedAt, challenge.expiresAt]) {
+        expect(values.some((value) =>
+          value === timestamp || (value instanceof Date && value.toISOString() === timestamp)
+        )).toBe(true);
+      }
       expect(values.some((value) =>
         value === challengeNonce ||
         (value instanceof Uint8Array && Buffer.from(value).toString("hex") === challengeNonce)
@@ -167,6 +196,11 @@ describe("Slice 023B1 persisted wallet auth service", () => {
       .find((text) => /UPDATE proofline_private\.wallet_challenges/i.test(text));
     expect(consumeSql).toMatch(/consumed_at\s+IS\s+NULL/i);
     expect(consumeSql).toMatch(/expires_at\s*>\s*now\(\)/i);
+    const consumedAtAssignment = /SET\s+consumed_at\s*=([\s\S]*?)\s+WHERE/i.exec(consumeSql ?? "")?.[1] ?? "";
+    expect(consumedAtAssignment).toMatch(
+      /date_trunc\s*\(\s*'milliseconds'\s*,\s*clock_timestamp\(\)\s*\)/i,
+    );
+    expect(consumedAtAssignment).toMatch(/\bissued_at\b/i);
   });
 
   it("returns every persisted reconstruction input from atomic consumption", async () => {
@@ -278,6 +312,12 @@ describe("Slice 023B1 persisted wallet auth service", () => {
         : result()
     );
     const provisionQuery = vi.fn(async (text: string) => {
+      if (/clock_timestamp\(\)/i.test(text)) {
+        return result([{
+          issued_at: new Date(DB_SESSION_NOW),
+          expires_at: new Date(DB_SESSION_EXPIRES_AT),
+        }]);
+      }
       if (/SELECT[\s\S]+FROM proofline_private\.wallet_identities/i.test(text)) return result();
       if (/INSERT INTO proofline_private\.projects/i.test(text)) return result([{ id: PROJECT_ID }]);
       if (/INSERT INTO proofline_private\.wallet_identities/i.test(text)) {
@@ -304,8 +344,8 @@ describe("Slice 023B1 persisted wallet auth service", () => {
     expect(session).toMatchObject({
       wallet: { kind: "eoa", address: ADDRESS },
       project: { kind: "default", projectId: PROJECT_ID },
-      issuedAt: NOW,
-      expiresAt: "2026-08-09T12:00:00.000Z",
+      issuedAt: DB_SESSION_NOW,
+      expiresAt: DB_SESSION_EXPIRES_AT,
     });
     expect(session.projectToken).toMatch(/^project_[a-f0-9]{64}$/);
     expect(connect).toHaveBeenCalledTimes(2);
@@ -318,11 +358,24 @@ describe("Slice 023B1 persisted wallet auth service", () => {
     expect(JSON.stringify(provisionCalls[lockIndex])).toContain("114");
     expect(JSON.stringify(provisionCalls[lockIndex]).toLowerCase()).toContain(ADDRESS);
 
+    const beginIndex = provisionCalls.findIndex(([text]) => /^BEGIN$/i.test(text));
+    const clockIndex = provisionCalls.findIndex(([text]) => /clock_timestamp\(\)/i.test(text));
+    expect(clockIndex).toBeGreaterThan(beginIndex);
+    expect(provisionCalls[clockIndex]?.[0]).toMatch(
+      /date_trunc\s*\(\s*'milliseconds'\s*,\s*clock_timestamp\(\)\s*\)/i,
+    );
+
     const tokenInsert = provisionCalls.find(([text]) =>
       /INSERT INTO proofline_private\.api_tokens/i.test(text)
     );
-    expect(tokenInsert?.[0]).toMatch(/\bkind\b[\s\S]*\bexpires_at\b[\s\S]*\bwallet_identity_id\b/i);
+    expect(clockIndex).toBeLessThan(provisionCalls.indexOf(tokenInsert!));
+    expect(tokenInsert?.[0]).toMatch(/\bkind\b[\s\S]*\bcreated_at\b[\s\S]*\bexpires_at\b[\s\S]*\bwallet_identity_id\b/i);
     expect(JSON.stringify(provisionCalls)).not.toContain(session.projectToken);
+    for (const timestamp of [DB_SESSION_NOW, DB_SESSION_EXPIRES_AT]) {
+      expect(tokenInsert?.[1]?.some((value) =>
+        value === timestamp || (value instanceof Date && value.toISOString() === timestamp)
+      )).toBe(true);
+    }
     expect(tokenInsert?.[1]?.some((value) =>
       value instanceof Uint8Array && value.byteLength === 32
     )).toBe(true);

@@ -137,6 +137,13 @@ describe.runIf(enabled)("Slice 023B1 real PostgreSQL wallet sessions", () => {
     }
   }
 
+  async function databaseClock() {
+    const clock = await pool.query<{ at: Date }>(
+      "SELECT date_trunc('milliseconds', clock_timestamp()) AS at",
+    );
+    return clock.rows[0]!.at.getTime();
+  }
+
   function service(
     recoveredAddress = ADDRESS,
     recoverAddress = vi.fn(async () => recoveredAddress),
@@ -306,6 +313,90 @@ describe.runIf(enabled)("Slice 023B1 real PostgreSQL wallet sessions", () => {
       [challenge.challengeId],
     );
     expect(persisted.rows[0].consumed_at).not.toBeNull();
+  });
+
+  it("keeps challenge, concurrent session and invalid-signature flows on the database clock", async () => {
+    await reset();
+    await applyThrough(6);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2099-01-01T00:00:00.000Z"));
+      const validAuth = service();
+      const challengeWindowStart = await databaseClock();
+      const challenge = WalletChallengeV1Schema.parse(await validAuth.createWalletChallenge({
+        version: "1",
+        address: ADDRESS,
+      }));
+      const challengeWindowEnd = await databaseClock();
+      expect(Date.parse(challenge.issuedAt)).toBeGreaterThanOrEqual(challengeWindowStart);
+      expect(Date.parse(challenge.issuedAt)).toBeLessThanOrEqual(challengeWindowEnd);
+      expect(Date.parse(challenge.expiresAt) - Date.parse(challenge.issuedAt)).toBe(5 * 60_000);
+
+      const sessionWindowStart = await databaseClock();
+      const concurrent = await Promise.allSettled([
+        validAuth.createWalletSession({
+          version: "1",
+          challengeId: challenge.challengeId,
+          signature: SIGNATURE,
+        }),
+        validAuth.createWalletSession({
+          version: "1",
+          challengeId: challenge.challengeId,
+          signature: SIGNATURE,
+        }),
+      ]);
+      const sessionWindowEnd = await databaseClock();
+      const fulfilled = concurrent.filter((attempt) => attempt.status === "fulfilled");
+      const rejected = concurrent.filter((attempt) => attempt.status === "rejected");
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
+        code: "CHALLENGE_UNAVAILABLE",
+      });
+      const session = WalletSessionV1Schema.parse(
+        (fulfilled[0] as PromiseFulfilledResult<unknown>).value,
+      );
+      expect(Date.parse(session.issuedAt)).toBeGreaterThanOrEqual(sessionWindowStart);
+      expect(Date.parse(session.issuedAt)).toBeLessThanOrEqual(sessionWindowEnd);
+      expect(Date.parse(session.expiresAt) - Date.parse(session.issuedAt)).toBe(12 * 60 * 60_000);
+      const persistedToken = await pool.query<{ created_at: Date; expires_at: Date }>(
+        `SELECT created_at, expires_at
+         FROM proofline_private.api_tokens
+         WHERE kind = 'browser'`,
+      );
+      expect(persistedToken.rows).toHaveLength(1);
+      expect(persistedToken.rows[0]!.created_at.toISOString()).toBe(session.issuedAt);
+      expect(persistedToken.rows[0]!.expires_at.toISOString()).toBe(session.expiresAt);
+
+      vi.setSystemTime(new Date("2000-01-01T00:00:00.000Z"));
+      const invalidAuth = service(OTHER_ADDRESS);
+      const invalidWindowStart = await databaseClock();
+      const invalidChallenge = WalletChallengeV1Schema.parse(await invalidAuth.createWalletChallenge({
+        version: "1",
+        address: ADDRESS,
+      }));
+      const invalidWindowEnd = await databaseClock();
+      expect(Date.parse(invalidChallenge.issuedAt)).toBeGreaterThanOrEqual(invalidWindowStart);
+      expect(Date.parse(invalidChallenge.issuedAt)).toBeLessThanOrEqual(invalidWindowEnd);
+      expect(Date.parse(invalidChallenge.expiresAt) - Date.parse(invalidChallenge.issuedAt)).toBe(5 * 60_000);
+      await expect(invalidAuth.createWalletSession({
+        version: "1",
+        challengeId: invalidChallenge.challengeId,
+        signature: SIGNATURE,
+      })).rejects.toMatchObject({ code: "WALLET_SIGNATURE_INVALID" });
+      await expect(invalidAuth.createWalletSession({
+        version: "1",
+        challengeId: invalidChallenge.challengeId,
+        signature: SIGNATURE,
+      })).rejects.toMatchObject({ code: "CHALLENGE_UNAVAILABLE" });
+      const consumed = await pool.query<{ consumed_at: Date | null }>(
+        "SELECT consumed_at FROM proofline_private.wallet_challenges WHERE id = $1",
+        [invalidChallenge.challengeId],
+      );
+      expect(consumed.rows[0]!.consumed_at).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects sub-millisecond evidence at storage and again at atomic consumption", async () => {

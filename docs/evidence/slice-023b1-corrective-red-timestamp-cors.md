@@ -81,3 +81,7 @@ Tests       89 passed (89)
 
 `npm run typecheck` passes. No production source, SQL migration, dependency,
 full matrix, affected coverage, real PostgreSQL PASS or release PASS is claimed.
+
+Independent Product Integration Verification later rejected the GREEN
+candidate for application/PostgreSQL clock skew. The final corrective contract
+is recorded in [Slice 023B1 database-clock RED](slice-023b1-final-corrective-red-db-clock.md).

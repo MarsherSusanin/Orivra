@@ -55,13 +55,18 @@ UPDATE of `wallet_challenges.consumed_at`. No new worker privilege is granted.
 ## Transaction contract
 
 Challenge creation uses independent cryptographically random 32-byte challenge
-identity and nonce values, server time and the configured HTTPS Web origin. It
-persists the exact response evidence before returning.
+identity and nonce values, a millisecond-truncated PostgreSQL time and the
+configured HTTPS Web origin. The database time is read before constructing the
+message; the application clock is not authentication authority. It persists the
+exact response evidence before returning, with expiry exactly five minutes
+after issue.
 
 Session creation first runs a short consumption transaction:
 
-1. Atomically update one row where `consumed_at IS NULL` and
-   `expires_at > now()` and return address, nonce, message and both timestamps.
+1. Atomically update one row where `consumed_at IS NULL`, `expires_at > now()`
+   and both timestamps retain millisecond precision. `consumed_at` is a
+   millisecond database timestamp no earlier than the persisted `issued_at`;
+   return address, nonce, message and both timestamps.
 2. Commit and release the connection.
 3. Rebuild the canonical EIP-4361 message using `publicWebOrigin` and those
    persisted authority fields, then compare its UTF-8 bytes with the stored
@@ -78,10 +83,11 @@ never reach recovery, identity/project creation or token issuance.
 
 After valid recovery a second transaction obtains an advisory lock derived from
 `(114, normalized address)`, finds or creates the single wallet identity and
-default project, creates a fresh random `project_` token with an exact 12-hour
-expiry, persists only its keyed digest and commits. Concurrent attempts for one
-challenge yield at most one session. Distinct later sessions reuse the same
-identity and project.
+default project, then reads a millisecond database issue time. It creates a
+fresh random `project_` token with an exact 12-hour expiry and persists its
+database issue/expiry evidence plus only the keyed digest. The public response
+uses those exact timestamps. Concurrent attempts for one challenge yield at
+most one session. Distinct later sessions reuse the same identity and project.
 
 Authentication keeps existing project/share behavior. Project-token selection
 requires `revoked_at IS NULL` and `(expires_at IS NULL OR expires_at > now())`:
@@ -120,6 +126,13 @@ Final corrective RED freezes the PostgreSQL millisecond constraint and consume
 guard, including a gated real-PG paired `+1 microsecond` corruption probe. It
 also freezes the exact-origin preflight and actual-response policy needed for a
 Sites Web client to call the separately hosted API.
+
+The final clock-skew RED makes PostgreSQL the only auth-time authority. Hermetic
+tests place the application clock away from returned database timestamps and
+freeze query ordering, persisted values and response values. A gated real-PG
+case moves application `Date` far ahead and behind the database while exercising
+canonical, concurrent and durable invalid-signature flows without constraint
+failures.
 
 Real PostgreSQL cases are checked in behind `PROOFLINE_TESTCONTAINERS=1`. They
 must pass during GREEN verification and cover idempotent 001→006 migration,

@@ -28,7 +28,9 @@ unsupported for the MLP rather than guessed from a failed EOA recovery.
 The two public POST routes require an exact `Origin` equal to the configured Web
 origin, are exempt from generic bearer and idempotency middleware, accept at
 most 8 KiB at the Fetch `Request` boundary, and return `Cache-Control: no-store` plus
-`Referrer-Policy: no-referrer`. Every other route remains bearer-protected.
+`Referrer-Policy: no-referrer`. The existing public `GET /v1/networks` remains
+the only other unauthenticated V1 route; all remaining routes keep their bearer
+boundary.
 
 Because Sites and the API are separate origins, API composition provides one
 exact-origin CORS policy for the current `/v1/*` browser surface. A valid
@@ -66,6 +68,16 @@ rows whose `issued_at` or `expires_at` has sub-millisecond precision, and the
 atomic consume predicate repeats both precision checks as defense in depth.
 This prevents the PostgreSQL driver's millisecond `Date` hydration from hiding
 microsecond corruption before reconstruction.
+
+PostgreSQL is the sole clock authority for persisted wallet authentication.
+Challenge creation reads a millisecond-truncated database timestamp before
+building or storing EIP-4361 evidence. Session provisioning reads its issue time
+inside the provisioning transaction and uses that same value for the persisted
+token and public response; expiry is exactly twelve hours later. Consumption
+uses a millisecond database time that is never earlier than the persisted
+`issued_at`, while retaining expiry and precision guards. Application `Date`
+clock skew therefore cannot create future challenge evidence or violate the
+consumption constraint.
 
 Migration 006 adds `wallet_identities` and `wallet_challenges` plus additive
 `api_tokens` kind, label, expiry and wallet-identity metadata. Existing project
