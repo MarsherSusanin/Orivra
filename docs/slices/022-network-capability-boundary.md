@@ -14,6 +14,8 @@ while Flare is visible but cannot start a run or reach network effects.
 - `NetworkCapabilitiesV1` is a versioned ordered response containing Coston2
   first and Flare second.
 - `Web2JsonManifestV1.network` recognizes the same closed network vocabulary.
+- `Coston2Web2JsonManifestV1` is the narrower persisted and executable
+  contract. Recognition by the generic manifest never grants execution.
 - `GET /v1/networks` is public and does not require a project or share token.
 - `POST /v1/runs` returns `409 NETWORK_CAPABILITY_DISABLED` for Flare before
   calling the run service. Unknown networks remain a strict `400` body error.
@@ -35,6 +37,10 @@ Canonical capabilities:
 - Share tokens remain read-only and cannot create a run.
 - Persisted run, preflight, bundle and wallet-transaction schemas remain
   Coston2-only until Flare has a production adapter and live acceptance evidence.
+- `RUN_CREATED`, replay input, proof bundles, verifier preparation, preflight
+  and every production worker entry parse the Coston2-only contract before
+  calling a source, verifier, registry, fee, RPC, Relay or DA port. A Flare
+  manifest paired with a Coston2 network snapshot is invalid evidence.
 - No production Flare adapter, feature-flag bypass or simulator is introduced.
 
 Architecture decision: [ADR 0023](../adr/0023-network-capability-boundary.md).
@@ -48,6 +54,9 @@ Architecture decision: [ADR 0023](../adr/0023-network-capability-boundary.md).
   not parse.
 - The manifest accepts Coston2 and recognized Flare, but still rejects Songbird
   and all unknown identities.
+- A dedicated Coston2 manifest schema accepts the existing Coston2 baseline and
+  rejects Flare; `RUN_CREATED`, bundle and checksum-valid replay evidence use
+  that narrower schema.
 - `GET /v1/networks` succeeds without authentication and returns the strict
   ordered response.
 - A project-authenticated Flare create request returns the stable `409` error and
@@ -57,6 +66,8 @@ Architecture decision: [ADR 0023](../adr/0023-network-capability-boundary.md).
 - Wallet submission rejects a disabled capability with
   `NETWORK_CAPABILITY_DISABLED` before requesting accounts, switching chain or
   broadcasting.
+- Direct preflight, verifier and production-worker calls also reject Flare
+  before any effect-capable port, even if an internal caller bypasses the API.
 
 Expected RED reason: the new public schemas and route do not exist, the manifest
 still accepts only Coston2, and the browser wallet coordinator has no capability
