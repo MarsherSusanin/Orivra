@@ -76,3 +76,7 @@ Tests       92 passed (92)
 `npm run typecheck` and `git diff --check` pass. No production source, SQL
 migration, public schema, dependency, real PostgreSQL PASS, coverage or full
 suite is part of this RED freeze.
+
+Independent verification later rejected the GREEN candidate at the production
+Node empty-DELETE bridge. The corrective boundary is recorded in
+[Slice 023B2 Node empty DELETE RED](slice-023b2-corrective-red-node-empty-delete.md).
