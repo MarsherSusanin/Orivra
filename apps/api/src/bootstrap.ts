@@ -33,14 +33,16 @@ export function createProductionApi(input: {
       idleTimeoutMillis: 30_000,
     });
   const tokenDigestKey = required(environment, "PROOFLINE_TOKEN_DIGEST_KEY");
+  const publicWebOrigin =
+    environment.PROOFLINE_WEB_ORIGIN ?? "https://proofline.example";
   const service = createProductionProoflineService({
     pool,
     tokenDigestKey,
-    publicWebOrigin:
-      environment.PROOFLINE_WEB_ORIGIN ?? "https://proofline.example",
+    publicWebOrigin,
   });
   const api = createProoflineApi({
     service,
+    publicWebOrigin,
     async authenticate(rawToken) {
       const digest = digestOpaqueToken(rawToken, tokenDigestKey);
       const result = await pool.query(

@@ -1,6 +1,10 @@
 import {
   NetworkCapabilitiesV1Schema,
   SubmissionRequestV1Schema,
+  WalletChallengeRequestV1Schema,
+  WalletChallengeV1Schema,
+  WalletSessionRequestV1Schema,
+  WalletSessionV1Schema,
   Web2JsonManifestV1Schema,
 } from "@proofline/contracts";
 import { z } from "zod";
@@ -14,6 +18,11 @@ interface ProoflineApiService {
 }
 
 const TOKEN_PATTERN = /^(?:project|share)_[a-f0-9]{64}$/i;
+const PUBLIC_AUTH_BODY_LIMIT_BYTES = 8 * 1_024;
+const PRIVATE_RESPONSE_HEADERS = {
+  "cache-control": "no-store",
+  "referrer-policy": "no-referrer",
+} as const;
 const PRIVATE_KEY_PATTERN =
   /private.?key|seed.?phrase|mnemonic|(?:^|[_-])secret(?:$|[_-])/i;
 const TransactionHashSchema = z
@@ -72,6 +81,42 @@ function error(status: number, code: string, message: string): Response {
   return json({ version: "1", error: { code, message } }, status);
 }
 
+function privateError(status: number, code: string, message: string): Response {
+  return json(
+    { version: "1", error: { code, message } },
+    status,
+    PRIVATE_RESPONSE_HEADERS,
+  );
+}
+
+function responseError(
+  cause: unknown,
+  privateResponse = false,
+): Response {
+  const status =
+    cause && typeof cause === "object" && "status" in cause
+      ? Number((cause as { status: unknown }).status)
+      : 500;
+  const causeCode =
+    cause &&
+    typeof cause === "object" &&
+    "code" in cause &&
+    typeof (cause as { code?: unknown }).code === "string"
+      ? String((cause as { code: string }).code)
+      : "REQUEST_FAILED";
+  const safeStatus =
+    Number.isInteger(status) && status >= 400 && status < 600 ? status : 500;
+  const safeCode = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(causeCode)
+    ? causeCode
+    : "REQUEST_FAILED";
+  const message = safeStatus === 500
+    ? "Request could not be completed"
+    : "Request rejected";
+  return privateResponse
+    ? privateError(safeStatus, safeCode, message)
+    : error(safeStatus, safeCode, message);
+}
+
 function containsPrivateKey(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(containsPrivateKey);
   if (value && typeof value === "object") {
@@ -89,6 +134,53 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
     throw new Error("JSON request body must be an object");
   }
   return value as Record<string, unknown>;
+}
+
+class PublicAuthBodyTooLargeError extends Error {}
+
+async function readPublicAuthBody(
+  request: Request,
+): Promise<Record<string, unknown>> {
+  const mediaType = request.headers
+    .get("content-type")
+    ?.split(";", 1)[0]
+    ?.trim()
+    .toLowerCase();
+  if (mediaType !== "application/json") {
+    throw new Error("Wallet auth requires a JSON request body");
+  }
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.byteLength > PUBLIC_AUTH_BODY_LIMIT_BYTES) {
+    throw new PublicAuthBodyTooLargeError("Wallet auth request body is too large");
+  }
+  const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  const value: unknown = JSON.parse(decoded);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Wallet auth request body must be an object");
+  }
+  return value as Record<string, unknown>;
+}
+
+function normalizePublicWebOrigin(value: string | undefined): string | null {
+  if (value === undefined) return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Public web origin must be a valid HTTPS root origin");
+  }
+  if (
+    url.protocol !== "https:" ||
+    (url.port !== "" && url.port !== "443") ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.pathname !== "/" ||
+    url.search !== "" ||
+    url.hash !== ""
+  ) {
+    throw new Error("Public web origin must be an HTTPS default-port root origin");
+  }
+  return url.origin;
 }
 
 function bearer(request: Request): string | null {
@@ -163,7 +255,9 @@ function runListQuery(url: URL):
 export function createProoflineApi(input: {
   service: ProoflineApiService;
   authenticate(rawToken: string): Promise<AuthContext | null>;
+  publicWebOrigin?: string;
 }) {
+  const publicWebOrigin = normalizePublicWebOrigin(input.publicWebOrigin);
   return {
     async fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
@@ -177,6 +271,69 @@ export function createProoflineApi(input: {
           );
         } catch {
           return error(500, "REQUEST_FAILED", "Request could not be completed");
+        }
+      }
+
+      const publicWalletAuthRoute =
+        request.method === "POST" &&
+        (url.pathname === "/v1/auth/wallet/challenges" ||
+          url.pathname === "/v1/auth/wallet/sessions");
+      if (publicWalletAuthRoute) {
+        if (publicWebOrigin === null) {
+          return privateError(
+            503,
+            "AUTH_CONFIGURATION_INVALID",
+            "Wallet authentication is unavailable",
+          );
+        }
+        if (request.headers.get("origin") !== publicWebOrigin) {
+          return privateError(
+            403,
+            "AUTH_ORIGIN_FORBIDDEN",
+            "Request rejected",
+          );
+        }
+
+        let body: Record<string, unknown>;
+        try {
+          body = await readPublicAuthBody(request);
+        } catch (cause) {
+          return cause instanceof PublicAuthBodyTooLargeError
+            ? privateError(
+                413,
+                "REQUEST_BODY_TOO_LARGE",
+                "Request body exceeds 8192 bytes",
+              )
+            : privateError(
+                400,
+                "INVALID_JSON",
+                "JSON request body must be an object",
+              );
+        }
+
+        const challengeRoute =
+          url.pathname === "/v1/auth/wallet/challenges";
+        const parsed = challengeRoute
+          ? WalletChallengeRequestV1Schema.safeParse(body)
+          : WalletSessionRequestV1Schema.safeParse(body);
+        if (!parsed.success) {
+          return privateError(
+            400,
+            "INVALID_REQUEST_BODY",
+            "Request body does not match the endpoint contract",
+          );
+        }
+        try {
+          const result = challengeRoute
+            ? WalletChallengeV1Schema.parse(
+                await input.service.createWalletChallenge(parsed.data),
+              )
+            : WalletSessionV1Schema.parse(
+                await input.service.createWalletSession(parsed.data),
+              );
+          return json(result, 201, PRIVATE_RESPONSE_HEADERS);
+        } catch (cause) {
+          return responseError(cause, true);
         }
       }
 
@@ -338,24 +495,7 @@ export function createProoflineApi(input: {
         }
         return error(404, "NOT_FOUND", "Route not found");
       } catch (cause) {
-        const status =
-          cause && typeof cause === "object" && "status" in cause
-            ? Number((cause as { status: unknown }).status)
-            : 500;
-        const causeCode =
-          cause &&
-          typeof cause === "object" &&
-          "code" in cause &&
-          typeof (cause as { code?: unknown }).code === "string"
-            ? String((cause as { code: string }).code)
-            : "REQUEST_FAILED";
-        return error(
-          Number.isInteger(status) && status >= 400 && status < 600 ? status : 500,
-          /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(causeCode)
-            ? causeCode
-            : "REQUEST_FAILED",
-          status === 500 ? "Request could not be completed" : "Request rejected",
-        );
+        return responseError(cause);
       }
     },
   };

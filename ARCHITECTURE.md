@@ -94,6 +94,10 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
 - Opaque share token привязан к одному run и разрешает только чтение. В Web он
   передаётся только через URL fragment, переносится в session storage и сразу
   удаляется из browser history URL.
+- Wallet-auth boundary 023A принимает только strict challenge/session
+  requests с exact `PROOFLINE_WEB_ORIGIN`, 8 KiB Request limit и private
+  response headers. Challenge persistence, one-time consumption и выпуск
+  browser project token остаются неоперационными до 023B.
 
 ### Keys
 
