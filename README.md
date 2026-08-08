@@ -39,6 +39,11 @@ blockchain-операций.
 - Публичный `GET /v1/networks` различает известную сеть и доступную
   возможность: Coston2 Web2Json включён, Flare Mainnet распознаётся как
   `upstream-unsupported` и отклоняется до создания run или network I/O.
+- API реализует self-service EOA wallet auth: одноразовый пятиминутный
+  EIP-4361 challenge создаёт стабильный default project и возвращает случайный
+  12-часовой browser project token, сохраняя в PostgreSQL только keyed digest.
+  Browser session UI и управление CLI/Action tokens остаются следующими
+  срезами 023C и 023B2.
 - Реализованы, но не размещены Web, PostgreSQL API, restart-safe worker, CLI,
   GitHub Action package и Sites package.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;

@@ -33,8 +33,7 @@ export function createProductionApi(input: {
       idleTimeoutMillis: 30_000,
     });
   const tokenDigestKey = required(environment, "PROOFLINE_TOKEN_DIGEST_KEY");
-  const publicWebOrigin =
-    environment.PROOFLINE_WEB_ORIGIN ?? "https://proofline.example";
+  const publicWebOrigin = required(environment, "PROOFLINE_WEB_ORIGIN");
   const service = createProductionProoflineService({
     pool,
     tokenDigestKey,
@@ -49,6 +48,7 @@ export function createProductionApi(input: {
         `SELECT 'project' AS kind, project_id, NULL::uuid AS run_id
          FROM proofline_private.api_tokens
          WHERE token_digest = $1 AND revoked_at IS NULL
+           AND (expires_at IS NULL OR expires_at > now())
          UNION ALL
          SELECT 'share' AS kind, project_id, run_id
          FROM proofline_private.share_tokens

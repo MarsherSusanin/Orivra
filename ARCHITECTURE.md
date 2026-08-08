@@ -64,7 +64,8 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
 
 Основные таблицы:
 
-- `projects`, `api_tokens`, `share_tokens` — tenancy и capability tokens;
+- `projects`, `wallet_identities`, `wallet_challenges`, `api_tokens`,
+  `share_tokens` — wallet tenancy, single-use auth evidence и capability tokens;
 - `runs`, `run_events`, `run_artifacts` — состояние, preflight/consumer reports,
   bundle, receipt и generated Solidity artifacts;
 - `run_commands` — restart-safe work queue;
@@ -94,10 +95,14 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
 - Opaque share token привязан к одному run и разрешает только чтение. В Web он
   передаётся только через URL fragment, переносится в session storage и сразу
   удаляется из browser history URL.
-- Wallet-auth boundary 023A принимает только strict challenge/session
-  requests с exact `PROOFLINE_WEB_ORIGIN`, 8 KiB Request limit и private
-  response headers. Challenge persistence, one-time consumption и выпуск
-  browser project token остаются неоперационными до 023B.
+- Wallet-auth boundary принимает только strict challenge/session requests с
+  exact `PROOFLINE_WEB_ORIGIN`, 8 KiB Request limit и private response headers.
+  Challenge хранится как exact server-authored EIP-4361 evidence и атомарно
+  потребляется до локального EOA recovery. Успешная проверка под advisory lock
+  переиспользует один wallet identity/default project и выпускает random
+  12-hour browser project token; база хранит только keyed digest. Expired и
+  revoked browser tokens не проходят существующий bearer path, а legacy token
+  без expiry остаётся совместимым.
 
 ### Keys
 

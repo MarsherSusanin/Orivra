@@ -26,6 +26,11 @@ import {
 import type { Pool } from "pg";
 import { z } from "zod";
 import { digestOpaqueToken } from "./postgres";
+import {
+  createPersistedWalletAuthService,
+  viemWalletAuthPorts,
+  type WalletAuthPorts,
+} from "./wallet-session-service";
 
 const PersistedAddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const PersistedUint256Schema = z.string().refine(isCanonicalUint256Decimal);
@@ -216,8 +221,15 @@ export function createProductionProoflineService(input: {
   pool: Pool;
   tokenDigestKey: string;
   publicWebOrigin: string;
+  walletAuthPorts?: WalletAuthPorts;
 }) {
   const publicWebOrigin = normalizePublicWebOrigin(input.publicWebOrigin);
+  const walletAuthService = createPersistedWalletAuthService({
+    pool: input.pool,
+    tokenDigestKey: input.tokenDigestKey,
+    publicWebOrigin,
+    ports: input.walletAuthPorts ?? viemWalletAuthPorts,
+  });
 
   function assertMutableProjection(projection: unknown): void {
     if (
@@ -513,6 +525,7 @@ export function createProductionProoflineService(input: {
   }
 
   return {
+    ...walletAuthService,
     async listNetworks() {
       return NETWORK_CAPABILITIES_V1;
     },

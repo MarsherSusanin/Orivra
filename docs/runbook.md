@@ -36,11 +36,16 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/002_one_active
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/003_run_discovery.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/004_preflight_report.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/005_explicit_submission_authority.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/006_wallet_identity_sessions.sql
 ```
 
 Автоматизированного production migration runner и down migrations в репозитории нет. Перед инфраструктурным rollout необходимо выбрать владельца миграций и backup/restore процедуру; до этого безопасная стратегия изменения схемы — additive migration и roll-forward.
 
-В репозитории также нет production-команды для первичного выпуска project token. Не создавайте token rows вручную без согласованного provisioning flow: API ожидает keyed digest, а не raw token.
+Первичный browser project token выпускают только публичные wallet-auth routes:
+сервер создаёт пятиминутный EIP-4361 challenge, а валидная локально проверенная
+EOA signature получает 12-часовую session для одного default project. Raw token
+возвращается один раз; база хранит только keyed digest. Не создавайте token rows
+вручную. Выпуск CLI/Action tokens будет добавлен отдельным срезом 023B2.
 
 ## 4. API
 
@@ -57,7 +62,7 @@ npm run start --workspace apps/api
 | `PROOFLINE_TOKEN_DIGEST_KEY` | required | Key для digest project/share tokens |
 | `PORT` | optional, default `8080` | HTTP port |
 | `PROOFLINE_API_DB_POOL_SIZE` | optional, default `10` | PostgreSQL pool size |
-| `PROOFLINE_WEB_ORIGIN` | optional в коде | Exact public HTTPS root Origin для wallet-auth requests и share links; default `https://proofline.example` является placeholder и непригоден для production handoff |
+| `PROOFLINE_WEB_ORIGIN` | required | Exact public HTTPS root Origin для wallet-auth requests и share links; placeholder/default отсутствует |
 
 API должен завершаться с ошибкой до начала обслуживания запросов, если обязательная конфигурация отсутствует.
 
