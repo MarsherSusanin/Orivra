@@ -98,7 +98,10 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
 - Wallet-auth boundary принимает только strict challenge/session requests с
   exact `PROOFLINE_WEB_ORIGIN`, 8 KiB Request limit и private response headers.
   Challenge хранится как exact server-authored EIP-4361 evidence и атомарно
-  потребляется до локального EOA recovery. Успешная проверка под advisory lock
+  потребляется до локального EOA recovery. После durable consume API заново
+  строит canonical message из configured origin и persisted address, nonce и
+  timestamps; несовпадение exact UTF-8 bytes fail-closed как unavailable.
+  Успешная проверка под advisory lock
   переиспользует один wallet identity/default project и выпускает random
   12-hour browser project token; база хранит только keyed digest. Expired и
   revoked browser tokens не проходят существующий bearer path, а legacy token

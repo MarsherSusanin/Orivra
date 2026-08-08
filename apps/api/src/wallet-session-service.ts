@@ -64,6 +64,53 @@ function walletSignatureInvalid(): Error {
   });
 }
 
+function hydrateConsumedChallenge(
+  row: Record<string, unknown>,
+  publicWebOrigin: string,
+): { address: `0x${string}`; message: string } {
+  try {
+    const address = persistedWalletAddress(row.address);
+    if (!(row.nonce instanceof Uint8Array) || row.nonce.byteLength !== 32) {
+      throw new Error("Persisted wallet challenge nonce is invalid");
+    }
+    if (
+      !(row.issued_at instanceof Date) ||
+      !Number.isFinite(row.issued_at.getTime())
+    ) {
+      throw new Error("Persisted wallet challenge issue time is invalid");
+    }
+    if (
+      !(row.expires_at instanceof Date) ||
+      !Number.isFinite(row.expires_at.getTime())
+    ) {
+      throw new Error("Persisted wallet challenge expiry is invalid");
+    }
+    if (typeof row.message !== "string") {
+      throw new Error("Persisted wallet challenge message is invalid");
+    }
+    const canonicalMessage = buildEip4361Message({
+      webOrigin: publicWebOrigin,
+      address,
+      nonce: Buffer.from(row.nonce).toString("hex"),
+      issuedAt: row.issued_at.toISOString(),
+      expiresAt: row.expires_at.toISOString(),
+      purpose: "browser-session",
+    });
+    if (
+      !Buffer.from(row.message, "utf8").equals(
+        Buffer.from(canonicalMessage, "utf8"),
+      )
+    ) {
+      throw new Error(
+        "Persisted wallet challenge message does not match its authority fields",
+      );
+    }
+    return { address, message: canonicalMessage };
+  } catch {
+    throw challengeUnavailable();
+  }
+}
+
 export function createPersistedWalletAuthService(input: {
   pool: Pool;
   tokenDigestKey: string;
@@ -117,6 +164,7 @@ export function createPersistedWalletAuthService(input: {
   async function consumeWalletChallenge(challengeId: string) {
     const client = await input.pool.connect();
     let transactionOpen = false;
+    let consumedRow: Record<string, unknown> | undefined;
     try {
       await client.query("BEGIN");
       transactionOpen = true;
@@ -126,17 +174,14 @@ export function createPersistedWalletAuthService(input: {
          WHERE id = $1
            AND consumed_at IS NULL
            AND expires_at > now()
-         RETURNING id, address, message, issued_at, expires_at`,
+         RETURNING id, address, nonce, message, issued_at, expires_at`,
         [challengeId],
       );
       const row = consumed.rows[0];
       if (!consumed.rowCount || !row) throw challengeUnavailable();
       await client.query("COMMIT");
       transactionOpen = false;
-      return {
-        address: persistedWalletAddress(row.address),
-        message: String(row.message),
-      };
+      consumedRow = row;
     } catch (cause) {
       if (transactionOpen) {
         await client.query("ROLLBACK");
@@ -146,6 +191,8 @@ export function createPersistedWalletAuthService(input: {
     } finally {
       client.release();
     }
+    if (!consumedRow) throw challengeUnavailable();
+    return hydrateConsumedChallenge(consumedRow, input.publicWebOrigin);
   }
 
   async function provisionBrowserSession(address: `0x${string}`) {
