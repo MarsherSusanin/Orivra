@@ -44,6 +44,13 @@ invalid signature therefore spends the challenge. Missing, expired and already
 consumed challenges share the private `CHALLENGE_UNAVAILABLE` outcome and do
 not reveal which condition occurred.
 
+The persisted message is evidence, not an independent authentication
+authority. After committed consumption, the service reconstructs the canonical
+message from configured Web origin plus persisted address, 32-byte nonce,
+`issued_at` and `expires_at`, then compares the UTF-8 bytes with the stored
+message before recovery. Any mismatch is handled as `CHALLENGE_UNAVAILABLE`;
+recovery and project/token provisioning are not invoked.
+
 Migration 006 adds `wallet_identities` and `wallet_challenges` plus additive
 `api_tokens` kind, label, expiry and wallet-identity metadata. Existing project
 tokens are backfilled as `legacy` with null expiry. Browser rows require a

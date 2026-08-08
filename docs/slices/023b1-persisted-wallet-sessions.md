@@ -32,6 +32,10 @@ exact five-minute expiry and nullable consumption time. Message storage is
 bounded to 8192 UTF-8 bytes. Expiry is indexed for later cleanup, but cleanup is
 not part of B1.
 
+The stored message cannot override the configured authority. The address,
+nonce and timestamps are the reconstruction inputs; the message is an exact
+byte-integrity witness. The consume query returns all five values.
+
 Migration 006 adds `kind`, `label`, `expires_at` and `wallet_identity_id` to
 `api_tokens`. Existing rows become `legacy` with null expiry. Supported kinds
 are `legacy`, `browser`, `cli` and `action`; B1 creates only `browser`. A browser
@@ -50,13 +54,20 @@ persists the exact response evidence before returning.
 Session creation first runs a short consumption transaction:
 
 1. Atomically update one row where `consumed_at IS NULL` and
-   `expires_at > now()` and return its persisted address/message.
+   `expires_at > now()` and return address, nonce, message and both timestamps.
 2. Commit and release the connection.
-3. Recover the EOA locally from that exact message and submitted signature.
+3. Rebuild the canonical EIP-4361 message using `publicWebOrigin` and those
+   persisted authority fields, then compare its UTF-8 bytes with the stored
+   message.
+4. Only after an exact match, recover the EOA locally from the reconstructed
+   message and submitted signature.
 
 Missing, expired and consumed rows return private `409
 CHALLENGE_UNAVAILABLE`. A wrong EOA returns private `401
 WALLET_SIGNATURE_INVALID`; the spent challenge cannot be retried.
+Corrupt address, nonce, timestamps, domain or message bytes also return the
+same non-sensitive `CHALLENGE_UNAVAILABLE` after consumption commits. They
+never reach recovery, identity/project creation or token issuance.
 
 After valid recovery a second transaction obtains an advisory lock derived from
 `(114, normalized address)`, finds or creates the single wallet identity and
@@ -76,6 +87,10 @@ Hermetic RED freezes service generation, consume-before-recovery ordering,
 unified unavailable errors, advisory-lock provisioning, digest-only storage,
 explicit origin and project-token expiry SQL. Static migration tests freeze the
 schema, upgrade and grants.
+
+Corrective integrity RED also mutates persisted message bytes, domain, nonce
+and timestamps. Each mutation must be durably spent, produce the same fixed
+unavailable result, skip recovery/provisioning and remain unavailable on retry.
 
 Real PostgreSQL cases are checked in behind `PROOFLINE_TESTCONTAINERS=1`. They
 must pass during GREEN verification and cover idempotent 001→006 migration,

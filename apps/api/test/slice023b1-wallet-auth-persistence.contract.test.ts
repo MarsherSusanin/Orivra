@@ -14,7 +14,21 @@ const CHALLENGE_ID = `challenge_${"a".repeat(64)}`;
 const SIGNATURE = `0x${"11".repeat(65)}`;
 const PROJECT_ID = "11111111-1111-4111-8111-111111111123";
 const WALLET_ID = "22222222-2222-4222-8222-222222222123";
-const MESSAGE = "persisted server-authored EIP-4361 message";
+const NONCE = "a1".repeat(32);
+const EXPIRES_AT = "2026-08-09T00:05:00.000Z";
+const MESSAGE = [
+  "proofline.example wants you to sign in with your Ethereum account:",
+  ADDRESS,
+  "",
+  "Sign in to Proofline and create your default project.",
+  "",
+  "URI: https://proofline.example",
+  "Version: 1",
+  "Chain ID: 114",
+  `Nonce: ${NONCE}`,
+  `Issued At: ${NOW}`,
+  `Expiration Time: ${EXPIRES_AT}`,
+].join("\n");
 
 type QueryResult = { rowCount: number; rows: Array<Record<string, unknown>> };
 type AuthService = {
@@ -30,13 +44,15 @@ function result(rows: Array<Record<string, unknown>> = []): QueryResult {
   return { rowCount: rows.length, rows };
 }
 
-function challengeRow() {
+function challengeRow(overrides: Record<string, unknown> = {}) {
   return {
     id: CHALLENGE_ID,
-    address: ADDRESS,
+    address: Buffer.from(ADDRESS.slice(2), "hex"),
+    nonce: Buffer.from(NONCE, "hex"),
     message: MESSAGE,
-    issued_at: NOW,
-    expires_at: "2026-08-09T00:05:00.000Z",
+    issued_at: new Date(NOW),
+    expires_at: new Date(EXPIRES_AT),
+    ...overrides,
   };
 }
 
@@ -151,8 +167,104 @@ describe("Slice 023B1 persisted wallet auth service", () => {
       .find((text) => /UPDATE proofline_private\.wallet_challenges/i.test(text));
     expect(consumeSql).toMatch(/consumed_at\s+IS\s+NULL/i);
     expect(consumeSql).toMatch(/expires_at\s*>\s*now\(\)/i);
-    expect(consumeSql).toMatch(/RETURNING/i);
   });
+
+  it("returns every persisted reconstruction input from atomic consumption", async () => {
+    const query = vi.fn(async (text: string) =>
+      /UPDATE proofline_private\.wallet_challenges/i.test(text)
+        ? result([challengeRow()])
+        : result()
+    );
+    const client = { query, release: vi.fn() };
+    const auth = service({
+      pool: { query, connect: vi.fn(async () => client) },
+      recoverAddress: vi.fn(async () => OTHER_ADDRESS),
+    });
+    await expect(auth.createWalletSession({
+      version: "1",
+      challengeId: CHALLENGE_ID,
+      signature: SIGNATURE,
+    })).rejects.toMatchObject({ code: "WALLET_SIGNATURE_INVALID" });
+    const consumeSql = query.mock.calls
+      .map(([text]) => String(text))
+      .find((text) => /UPDATE proofline_private\.wallet_challenges/i.test(text));
+    const returning = consumeSql?.split(/RETURNING/i)[1] ?? "";
+    for (const column of ["address", "nonce", "message", "issued_at", "expires_at"]) {
+      expect(returning).toMatch(new RegExp(`\\b${column}\\b`, "i"));
+    }
+  });
+
+  it.each([
+    ["message", { message: `${MESSAGE}\n` }],
+    ["domain", { message: MESSAGE.replaceAll("proofline.example", "evil.example") }],
+    ["nonce", { nonce: Buffer.from("b2".repeat(32), "hex") }],
+    [
+      "timestamp",
+      {
+        issued_at: new Date("2026-08-09T00:00:01.000Z"),
+        expires_at: new Date("2026-08-09T00:05:01.000Z"),
+      },
+    ],
+  ])(
+    "spends a corrupted persisted %s without recovery or provisioning",
+    async (_kind, corruption) => {
+      let available = true;
+      const query = vi.fn(async (text: string) => {
+        if (/UPDATE proofline_private\.wallet_challenges/i.test(text)) {
+          if (!available) return result();
+          available = false;
+          return result([challengeRow(corruption)]);
+        }
+        return result();
+      });
+      const client = { query, release: vi.fn() };
+      const connect = vi.fn(async () => client);
+      const recoverAddress = vi.fn(async () => OTHER_ADDRESS);
+      const auth = service({
+        pool: { query, connect },
+        recoverAddress,
+      });
+      const attempt = () => auth.createWalletSession({
+        version: "1",
+        challengeId: CHALLENGE_ID,
+        signature: SIGNATURE,
+      }).then(
+        () => ({ status: "fulfilled" }),
+        (error: unknown) => ({
+          status: (error as { status?: unknown })?.status,
+          code: (error as { code?: unknown })?.code,
+          message: (error as { message?: unknown })?.message,
+        }),
+      );
+
+      const first = await attempt();
+      const retry = await attempt();
+      const sql = query.mock.calls.map(([text]) => String(text)).join("\n");
+      expect({
+        first,
+        retry,
+        consumptionCommits: query.mock.calls.filter(([text]) =>
+          String(text).trim().toUpperCase() === "COMMIT"
+        ).length,
+        recoveryCalls: recoverAddress.mock.calls.length,
+        provisioned: /wallet_identities|INSERT INTO proofline_private\.projects|INSERT INTO proofline_private\.api_tokens/i.test(sql),
+      }).toEqual({
+        first: {
+          status: 409,
+          code: "CHALLENGE_UNAVAILABLE",
+          message: "Wallet challenge is unavailable",
+        },
+        retry: {
+          status: 409,
+          code: "CHALLENGE_UNAVAILABLE",
+          message: "Wallet challenge is unavailable",
+        },
+        consumptionCommits: 1,
+        recoveryCalls: 0,
+        provisioned: false,
+      });
+    },
+  );
 
   it("provisions one locked default project and stores only the browser token digest", async () => {
     const consumeQuery = vi.fn(async (text: string) =>

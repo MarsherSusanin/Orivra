@@ -66,3 +66,6 @@ Tests       81 passed (81)
 
 `npm run typecheck` and `git diff --check` pass. No coverage, full repository
 matrix or real PostgreSQL PASS is claimed at RED freeze.
+
+Persisted challenge reconstruction is frozen by the later
+[023B1 corrective RED](slice-023b1-corrective-red-challenge-integrity.md).
