@@ -41,6 +41,17 @@ are absent, production authentication does not expose credential-kind/private
 IDs, account service methods do not exist, and migration 007 is absent. The five
 real PostgreSQL cases are gated and skipped; they are not PASS evidence.
 
+The aggregate empty/previous-schema harness now also freezes the exact planned
+filename `007_account_token_management.sql`, version lists through 7 and the
+001→007 rerun title. Its container case remains gated while migration 007 is
+absent and is not counted as PASS or in the isolated RED totals above.
+
+Focused migration evidence remains intentional RED at 3 failed static
+expectations and 5 gated skips. The nearest migration baseline
+(`slice023b1-wallet-auth-migration.contract.test.ts` plus the aggregate
+`testcontainers.test.ts`) reports 3 PASS and 6 gated skips; the skips are not
+claimed as PostgreSQL evidence.
+
 ## Nearest green baseline
 
 ```text
