@@ -15,6 +15,7 @@ second default project.
 - local EOA recovery through the wallet-auth recovery port; production
   composition uses viem and performs no RPC;
 - browser-token authentication in the existing bearer path;
+- exact-origin CORS composition for the current `/v1/*` browser surface;
 - explicit production `PROOFLINE_WEB_ORIGIN` with no placeholder authority.
 
 023B2 account/token endpoints, 023C Web state, 023D rate limits/quotas/cleanup
@@ -31,6 +32,12 @@ address, 32-byte nonce, exact persisted EIP-4361 message, canonical issue time,
 exact five-minute expiry and nullable consumption time. Message storage is
 bounded to 8192 UTF-8 bytes. Expiry is indexed for later cleanup, but cleanup is
 not part of B1.
+
+Both timestamps must equal their PostgreSQL millisecond truncation. The atomic
+consume predicate repeats that condition for `issued_at` and `expires_at`, so a
+row cannot become authentication authority if constraints were bypassed or
+disabled. Canonical millisecond rows remain consumable; paired microsecond
+changes fail closed before recovery or provisioning.
 
 The stored message cannot override the configured authority. The address,
 nonce and timestamps are the reconstruction inputs; the message is an exact
@@ -81,6 +88,23 @@ requires `revoked_at IS NULL` and `(expires_at IS NULL OR expires_at > now())`:
 null expiry preserves legacy rows, while browser rows expire. Share selection
 and run scope are unchanged.
 
+## Cross-origin API contract
+
+The configured `publicWebOrigin` is the sole browser origin. A valid `OPTIONS`
+request is answered before bearer and idempotency middleware with status `204`,
+the exact `Access-Control-Allow-Origin`, `Vary: Origin`, methods `GET`, `POST`,
+`DELETE`, and request headers `accept`, `content-type`, `authorization`,
+`idempotency-key`. Actual responses for public, wallet-auth, authenticated and
+rejected `/v1/*` requests carry the same exact-origin authority and expose
+`Location`.
+
+Wildcard origin and `Access-Control-Allow-Credentials` are forbidden. A
+missing/wrong origin, unapproved method or unapproved header on a preflight
+returns a private fixed rejection without `Access-Control-Allow-Origin` and
+does not call bearer authentication or a service port. Requests without an
+`Origin` remain available to server-to-server clients, except the two wallet
+auth POST routes, whose existing exact-actual-Origin rule remains mandatory.
+
 ## RED and gates
 
 Hermetic RED freezes service generation, consume-before-recovery ordering,
@@ -92,10 +116,16 @@ Corrective integrity RED also mutates persisted message bytes, domain, nonce
 and timestamps. Each mutation must be durably spent, produce the same fixed
 unavailable result, skip recovery/provisioning and remain unavailable on retry.
 
+Final corrective RED freezes the PostgreSQL millisecond constraint and consume
+guard, including a gated real-PG paired `+1 microsecond` corruption probe. It
+also freezes the exact-origin preflight and actual-response policy needed for a
+Sites Web client to call the separately hosted API.
+
 Real PostgreSQL cases are checked in behind `PROOFLINE_TESTCONTAINERS=1`. They
 must pass during GREEN verification and cover idempotent 001→006 migration,
 legacy backfill, concurrent single consumption, digest-only browser tokens,
 expired/revoked authentication, default-project uniqueness and durable invalid
-signature consumption. A skipped container block is not PASS evidence.
+signature consumption, timestamp-precision rejection and consume-time
+defense-in-depth. A skipped container block is not PASS evidence.
 
 Architecture decision: [ADR 0024](../adr/0024-wallet-identity-and-self-service-access.md).

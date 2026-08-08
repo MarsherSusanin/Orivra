@@ -74,3 +74,8 @@ Tests       43 passed | 4 skipped (47)
 The skipped tests are the unchanged real PostgreSQL gates and are not claimed
 as PASS. `npm run typecheck` and `git diff --check` pass. No full matrix or real
 PostgreSQL PASS is claimed.
+
+This candidate was subsequently rejected by independent verification for two
+additional P1 boundaries: PostgreSQL sub-millisecond timestamp corruption and
+missing cross-origin API composition. Their final corrective RED is recorded in
+[Slice 023B1 timestamp and CORS corrective RED](slice-023b1-corrective-red-timestamp-cors.md).

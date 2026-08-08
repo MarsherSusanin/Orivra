@@ -70,6 +70,11 @@ describe("Slice 023B1 migration 006 source contract", () => {
     expect(sql).toMatch(/id[^;]+challenge_\[a-f0-9\][^;]*64/i);
     expect(sql).toMatch(/message[^;]+octet_length\s*\(\s*message\s*\)[^;]+8192/i);
     expect(sql).toMatch(/expires_at\s*=\s*issued_at\s*\+\s*interval\s*'5 minutes'/i);
+    for (const column of ["issued_at", "expires_at"]) {
+      expect(sql).toMatch(
+        new RegExp(`${column}\\s*=\\s*date_trunc\\s*\\(\\s*'milliseconds'\\s*,\\s*${column}\\s*\\)`, "i"),
+      );
+    }
     expect(sql).toMatch(/consumed_at\s+IS\s+NULL\s+OR\s+consumed_at\s*>=\s*issued_at/i);
     expect(sql).toMatch(/CREATE INDEX[^;]+wallet_challenges[^;]+expires_at/i);
 
@@ -132,7 +137,10 @@ describe.runIf(enabled)("Slice 023B1 real PostgreSQL wallet sessions", () => {
     }
   }
 
-  function service(recoveredAddress = ADDRESS) {
+  function service(
+    recoveredAddress = ADDRESS,
+    recoverAddress = vi.fn(async () => recoveredAddress),
+  ) {
     const factory = createProductionProoflineService as unknown as (
       input: Record<string, unknown>,
     ) => {
@@ -144,7 +152,7 @@ describe.runIf(enabled)("Slice 023B1 real PostgreSQL wallet sessions", () => {
       tokenDigestKey: DIGEST_KEY,
       publicWebOrigin: "https://proofline.example",
       walletAuthPorts: {
-        recoverAddress: vi.fn(async () => recoveredAddress),
+        recoverAddress,
       },
     });
   }
@@ -298,5 +306,92 @@ describe.runIf(enabled)("Slice 023B1 real PostgreSQL wallet sessions", () => {
       [challenge.challengeId],
     );
     expect(persisted.rows[0].consumed_at).not.toBeNull();
+  });
+
+  it("rejects sub-millisecond evidence at storage and again at atomic consumption", async () => {
+    await reset();
+    await applyThrough(6);
+
+    await expect(pool.query(
+      `INSERT INTO proofline_private.wallet_challenges
+        (id, address, nonce, message, issued_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz)`,
+      [
+        `challenge_${"c".repeat(64)}`,
+        Buffer.from(ADDRESS.slice(2), "hex"),
+        Buffer.alloc(32, 3),
+        "sub-millisecond storage probe",
+        "2026-08-09T00:00:00.000001Z",
+        "2026-08-09T00:05:00.000001Z",
+      ],
+    )).rejects.toMatchObject({ code: "23514" });
+
+    const precisionConstraints = await pool.query<{ ddl: string }>(
+      `SELECT format(
+         'ALTER TABLE proofline_private.wallet_challenges DROP CONSTRAINT %I',
+         conname
+       ) AS ddl
+       FROM pg_constraint
+       WHERE conrelid = 'proofline_private.wallet_challenges'::regclass
+         AND contype = 'c'
+         AND pg_get_constraintdef(oid) ILIKE '%date_trunc%'`,
+    );
+    expect(precisionConstraints.rowCount).toBeGreaterThan(0);
+    for (const { ddl } of precisionConstraints.rows) await pool.query(ddl);
+
+    const recoverAddress = vi.fn(async () => ADDRESS);
+    const auth = service(ADDRESS, recoverAddress);
+    const corrupted = WalletChallengeV1Schema.parse(await auth.createWalletChallenge({
+      version: "1",
+      address: ADDRESS,
+    }));
+    const shifted = await pool.query(
+      `UPDATE proofline_private.wallet_challenges
+       SET issued_at = issued_at + interval '1 microsecond',
+           expires_at = expires_at + interval '1 microsecond'
+       WHERE id = $1`,
+      [corrupted.challengeId],
+    );
+    expect(shifted.rowCount).toBe(1);
+
+    const attemptCorrupted = () => auth.createWalletSession({
+      version: "1",
+      challengeId: corrupted.challengeId,
+      signature: SIGNATURE,
+    });
+    await expect(attemptCorrupted()).rejects.toMatchObject({
+      status: 409,
+      code: "CHALLENGE_UNAVAILABLE",
+    });
+    await expect(attemptCorrupted()).rejects.toMatchObject({
+      status: 409,
+      code: "CHALLENGE_UNAVAILABLE",
+    });
+    expect(recoverAddress).not.toHaveBeenCalled();
+    const rejectedCounts = await pool.query(
+      `SELECT
+        (SELECT count(*)::integer FROM proofline_private.wallet_identities) AS identities,
+        (SELECT count(*)::integer FROM proofline_private.projects) AS projects,
+        (SELECT count(*)::integer FROM proofline_private.api_tokens WHERE kind = 'browser') AS tokens,
+        (SELECT consumed_at IS NULL FROM proofline_private.wallet_challenges WHERE id = $1) AS available`,
+      [corrupted.challengeId],
+    );
+    expect(rejectedCounts.rows[0]).toEqual({
+      identities: 0,
+      projects: 0,
+      tokens: 0,
+      available: true,
+    });
+
+    const canonical = WalletChallengeV1Schema.parse(await auth.createWalletChallenge({
+      version: "1",
+      address: ADDRESS,
+    }));
+    WalletSessionV1Schema.parse(await auth.createWalletSession({
+      version: "1",
+      challengeId: canonical.challengeId,
+      signature: SIGNATURE,
+    }));
+    expect(recoverAddress).toHaveBeenCalledOnce();
   });
 });

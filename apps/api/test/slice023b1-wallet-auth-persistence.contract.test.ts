@@ -192,6 +192,11 @@ describe("Slice 023B1 persisted wallet auth service", () => {
     for (const column of ["address", "nonce", "message", "issued_at", "expires_at"]) {
       expect(returning).toMatch(new RegExp(`\\b${column}\\b`, "i"));
     }
+    for (const column of ["issued_at", "expires_at"]) {
+      expect(consumeSql).toMatch(
+        new RegExp(`${column}\\s*=\\s*date_trunc\\s*\\(\\s*'milliseconds'\\s*,\\s*${column}\\s*\\)`, "i"),
+      );
+    }
   });
 
   it.each([
