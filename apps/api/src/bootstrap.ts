@@ -102,14 +102,17 @@ export function createNodeRequestHandler(input: {
     const origin = `http://${request.headers.host ?? `127.0.0.1:${input.port}`}`;
     const body: Uint8Array[] = [];
     for await (const chunk of request) body.push(chunk as Uint8Array);
+    const bufferedBody = Buffer.concat(body);
     const apiResponse = await input.api.fetch(
       new Request(new URL(request.url ?? "/", origin), {
         method: request.method,
         headers: request.headers as HeadersInit,
         body:
-          request.method === "GET" || request.method === "HEAD"
+          request.method === "GET" ||
+          request.method === "HEAD" ||
+          bufferedBody.byteLength === 0
             ? undefined
-            : Buffer.concat(body),
+            : bufferedBody,
       }),
     );
     response.writeHead(
