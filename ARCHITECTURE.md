@@ -112,6 +112,12 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
   12-hour browser project token; база хранит только keyed digest. Expired и
   revoked browser tokens не проходят существующий bearer path, а legacy token
   без expiry остаётся совместимым.
+  Только подтверждённая browser session может читать account, выпускать и
+  отзывать CLI/Action tokens или завершать саму себя. Issuance возвращает
+  случайный 256-bit raw token ровно один раз, хранит только keyed digest и
+  отдельное digest evidence idempotency intent; повтор никогда не возвращает
+  секрет. CLI, Action и legacy credentials сохраняют обычный project API, но не
+  получают account-management authority.
 
 ### Keys
 

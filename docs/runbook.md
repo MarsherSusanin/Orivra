@@ -37,6 +37,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/003_run_discov
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/004_preflight_report.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/005_explicit_submission_authority.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/006_wallet_identity_sessions.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/007_account_token_management.sql
 ```
 
 Автоматизированного production migration runner и down migrations в репозитории нет. Перед инфраструктурным rollout необходимо выбрать владельца миграций и backup/restore процедуру; до этого безопасная стратегия изменения схемы — additive migration и roll-forward.
@@ -45,7 +46,12 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/006_wallet_ide
 сервер создаёт пятиминутный EIP-4361 challenge, а валидная локально проверенная
 EOA signature получает 12-часовую session для одного default project. Raw token
 возвращается один раз; база хранит только keyed digest. Не создавайте token rows
-вручную. Выпуск CLI/Action tokens будет добавлен отдельным срезом 023B2.
+вручную. Только browser session может использовать `GET /v1/account`, выпускать
+CLI/Action token через `POST /v1/account/tokens`, отзывать его через
+`DELETE /v1/account/tokens/:tokenId` и завершать текущую session через
+`DELETE /v1/auth/wallet/sessions/current`. Issuance требует новый
+`Idempotency-Key: token_issue_<64 lowercase hex>`; raw token возвращается только
+при первом committed effect и не может быть восстановлен повтором запроса.
 
 ## 4. API
 

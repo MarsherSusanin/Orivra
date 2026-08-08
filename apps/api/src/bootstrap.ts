@@ -45,12 +45,15 @@ export function createProductionApi(input: {
     async authenticate(rawToken) {
       const digest = digestOpaqueToken(rawToken, tokenDigestKey);
       const result = await pool.query(
-        `SELECT 'project' AS kind, project_id, NULL::uuid AS run_id
+        `SELECT 'project' AS kind, project_id, NULL::uuid AS run_id,
+                kind AS credential_kind, id AS token_id, wallet_identity_id
          FROM proofline_private.api_tokens
          WHERE token_digest = $1 AND revoked_at IS NULL
            AND (expires_at IS NULL OR expires_at > now())
          UNION ALL
-         SELECT 'share' AS kind, project_id, run_id
+         SELECT 'share' AS kind, project_id, run_id,
+                NULL::text AS credential_kind, NULL::uuid AS token_id,
+                NULL::uuid AS wallet_identity_id
          FROM proofline_private.share_tokens
          WHERE token_digest = $1 AND revoked_at IS NULL
            AND (expires_at IS NULL OR expires_at > now())
@@ -65,7 +68,24 @@ export function createProductionApi(input: {
             projectId: String(row.project_id),
             runId: String(row.run_id),
           }
-        : { kind: "project" as const, projectId: String(row.project_id) };
+        : {
+            kind: "project" as const,
+            projectId: String(row.project_id),
+            ...(row.credential_kind === "browser" ||
+            row.credential_kind === "cli" ||
+            row.credential_kind === "action" ||
+            row.credential_kind === "legacy"
+              ? { credentialKind: row.credential_kind }
+              : {}),
+            ...(row.credential_kind === "browser" &&
+            row.token_id !== null &&
+            row.wallet_identity_id !== null
+              ? {
+                  tokenId: String(row.token_id),
+                  walletIdentityId: String(row.wallet_identity_id),
+                }
+              : {}),
+          };
     },
   });
   return { api, pool, port: parsePort(environment.PORT) };

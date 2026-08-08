@@ -25,6 +25,7 @@ import {
 } from "@proofline/domain";
 import type { Pool } from "pg";
 import { z } from "zod";
+import { createAccountTokenService } from "./account-token-service";
 import { digestOpaqueToken } from "./postgres";
 import {
   createPersistedWalletAuthService,
@@ -229,6 +230,10 @@ export function createProductionProoflineService(input: {
     tokenDigestKey: input.tokenDigestKey,
     publicWebOrigin,
     ports: input.walletAuthPorts ?? viemWalletAuthPorts,
+  });
+  const accountTokenService = createAccountTokenService({
+    pool: input.pool,
+    tokenDigestKey: input.tokenDigestKey,
   });
 
   function assertMutableProjection(projection: unknown): void {
@@ -526,6 +531,7 @@ export function createProductionProoflineService(input: {
 
   return {
     ...walletAuthService,
+    ...accountTokenService,
     async listNetworks() {
       return NETWORK_CAPABILITIES_V1;
     },

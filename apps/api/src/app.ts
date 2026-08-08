@@ -1,4 +1,8 @@
 import {
+  AccountTokenCreateRequestV1Schema,
+  AccountTokenCreatedV1Schema,
+  AccountTokenRevokedV1Schema,
+  AccountV1Schema,
   NetworkCapabilitiesV1Schema,
   SubmissionRequestV1Schema,
   WalletChallengeRequestV1Schema,
@@ -10,7 +14,13 @@ import {
 import { z } from "zod";
 
 type AuthContext =
-  | { kind: "project"; projectId: string }
+  | {
+      kind: "project";
+      projectId: string;
+      credentialKind?: "browser" | "cli" | "action" | "legacy";
+      tokenId?: string;
+      walletIdentityId?: string;
+    }
   | { kind: "share"; projectId: string; runId: string };
 
 interface ProoflineApiService {
@@ -73,6 +83,32 @@ const RunListLimitSchema = z
   .regex(/^[1-9]\d*$/)
   .transform(Number)
   .refine((value) => value <= 50);
+const ACCOUNT_TOKEN_ISSUANCE_KEY = /^token_issue_[a-f0-9]{64}$/;
+const ACCOUNT_TOKEN_PATH = /^\/v1\/account\/tokens\/(token_[a-f0-9]{32})$/;
+
+type AccountRoute =
+  | { kind: "get-account" }
+  | { kind: "create-token" }
+  | { kind: "revoke-token"; tokenId: string }
+  | { kind: "revoke-current-session" };
+
+function accountRoute(request: Request, url: URL): AccountRoute | null {
+  if (url.search !== "") return null;
+  if (request.method === "GET" && url.pathname === "/v1/account") {
+    return { kind: "get-account" };
+  }
+  if (request.method === "POST" && url.pathname === "/v1/account/tokens") {
+    return { kind: "create-token" };
+  }
+  if (request.method === "DELETE") {
+    const token = ACCOUNT_TOKEN_PATH.exec(url.pathname);
+    if (token) return { kind: "revoke-token", tokenId: token[1] };
+    if (url.pathname === "/v1/auth/wallet/sessions/current") {
+      return { kind: "revoke-current-session" };
+    }
+  }
+  return null;
+}
 
 function json(value: unknown, status = 200, headers?: HeadersInit): Response {
   const body = typeof value === "string" ? value : JSON.stringify(value);
@@ -443,13 +479,119 @@ export function createProoflineApi(input: {
         }
       }
 
+      const accountManagementRoute = accountRoute(request, url);
+
       const token = bearer(request);
       if (!token || !TOKEN_PATTERN.test(token)) {
-        return error(401, "UNAUTHORIZED", "A valid opaque bearer token is required");
+        return accountManagementRoute
+          ? privateError(401, "UNAUTHORIZED", "A valid opaque bearer token is required")
+          : error(401, "UNAUTHORIZED", "A valid opaque bearer token is required");
       }
 
       const auth = await input.authenticate(token);
-      if (!auth) return error(401, "UNAUTHORIZED", "Bearer token is not authorized");
+      if (!auth) {
+        return accountManagementRoute
+          ? privateError(401, "UNAUTHORIZED", "Bearer token is not authorized")
+          : error(401, "UNAUTHORIZED", "Bearer token is not authorized");
+      }
+
+      if (accountManagementRoute) {
+        if (auth.kind === "share") {
+          return privateError(403, "SHARE_READ_ONLY", "Request rejected");
+        }
+        if (
+          auth.credentialKind !== "browser" ||
+          typeof auth.tokenId !== "string" ||
+          typeof auth.walletIdentityId !== "string"
+        ) {
+          return privateError(403, "ACCOUNT_SESSION_REQUIRED", "Request rejected");
+        }
+        try {
+          if (accountManagementRoute.kind === "get-account") {
+            return json(
+              AccountV1Schema.parse(
+                await input.service.getAccount({ projectId: auth.projectId }),
+              ),
+              200,
+              PRIVATE_RESPONSE_HEADERS,
+            );
+          }
+          if (accountManagementRoute.kind === "create-token") {
+            const idempotencyKey = request.headers.get("idempotency-key");
+            if (!idempotencyKey) {
+              return privateError(
+                400,
+                "IDEMPOTENCY_KEY_REQUIRED",
+                "Request rejected",
+              );
+            }
+            let rawBody: Record<string, unknown>;
+            try {
+              rawBody = await readBody(request);
+            } catch {
+              return privateError(400, "INVALID_JSON", "Request rejected");
+            }
+            const parsed = AccountTokenCreateRequestV1Schema.safeParse(rawBody);
+            if (!parsed.success) {
+              return privateError(
+                400,
+                "INVALID_REQUEST_BODY",
+                "Request rejected",
+              );
+            }
+            if (!ACCOUNT_TOKEN_ISSUANCE_KEY.test(idempotencyKey)) {
+              return privateError(
+                400,
+                "INVALID_IDEMPOTENCY_KEY",
+                "Request rejected",
+              );
+            }
+            return json(
+              AccountTokenCreatedV1Schema.parse(
+                await input.service.createAccountToken({
+                  ...parsed.data,
+                  projectId: auth.projectId,
+                  idempotencyKey,
+                }),
+              ),
+              201,
+              PRIVATE_RESPONSE_HEADERS,
+            );
+          }
+          if (accountManagementRoute.kind === "revoke-token") {
+            return json(
+              AccountTokenRevokedV1Schema.parse(
+                await input.service.revokeAccountToken({
+                  projectId: auth.projectId,
+                  tokenId: accountManagementRoute.tokenId,
+                }),
+              ),
+              200,
+              PRIVATE_RESPONSE_HEADERS,
+            );
+          }
+          if (
+            request.body !== null ||
+            request.headers.has("idempotency-key")
+          ) {
+            return privateError(400, "INVALID_REQUEST_BODY", "Request rejected");
+          }
+          const result = await input.service.revokeCurrentWalletSession({
+            projectId: auth.projectId,
+            tokenId: auth.tokenId,
+            walletIdentityId: auth.walletIdentityId,
+          });
+          if (result !== undefined) {
+            throw new Error("Current session revocation returned unexpected output");
+          }
+          return new Response(null, {
+            status: 204,
+            headers: PRIVATE_RESPONSE_HEADERS,
+          });
+        } catch (cause) {
+          return responseError(cause, true);
+        }
+      }
 
       const runId = routeRunId(url.pathname);
       if (auth.kind === "share") {

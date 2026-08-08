@@ -42,8 +42,9 @@ blockchain-операций.
 - API реализует self-service EOA wallet auth: одноразовый пятиминутный
   EIP-4361 challenge создаёт стабильный default project и возвращает случайный
   12-часовой browser project token, сохраняя в PostgreSQL только keyed digest.
-  Browser session UI и управление CLI/Action tokens остаются следующими
-  срезами 023C и 023B2.
+  Browser-сессия может просматривать account, однократно выпускать и отзывать
+  1–90-дневные CLI/Action tokens и завершать текущую сессию. Browser session UI
+  остаётся следующим срезом 023C.
 - Реализованы, но не размещены Web, PostgreSQL API, restart-safe worker, CLI,
   GitHub Action package и Sites package.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;

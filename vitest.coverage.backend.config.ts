@@ -19,6 +19,7 @@ export default defineConfig({
         "apps/api/src/app.ts",
         "apps/api/src/wallet-auth.ts",
         "apps/api/src/wallet-session-service.ts",
+        "apps/api/src/account-token-service.ts",
         "apps/api/src/postgres.ts",
         "apps/api/src/production-service.ts",
         "apps/api/src/bootstrap.ts",
