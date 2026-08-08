@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { request as httpsRequest } from "node:https";
 import {
+  Coston2Web2JsonManifestV1Schema,
   isCanonicalUint256Decimal,
   Web2JsonAbiParameterV1Schema,
   type Web2JsonManifestV1,
@@ -483,6 +484,7 @@ export function createLiveCoston2PipelinePorts(input: {
       manifest: Web2JsonManifestV1;
       runId: string;
     }) {
+      const coston2Manifest = Coston2Web2JsonManifestV1Schema.parse(manifest);
       const blockNumber = (await publicClient.getBlockNumber()) as bigint;
       const addresses = await resolveContracts(blockNumber);
       const networkSnapshot = {
@@ -505,7 +507,7 @@ export function createLiveCoston2PipelinePorts(input: {
       });
       const outcome = await runWeb2JsonPreflight({
         runId,
-        manifest,
+        manifest: coston2Manifest,
         samples: 5,
         fdcHub: addresses.FdcHub,
         networkSnapshot,
@@ -560,8 +562,8 @@ export function createLiveCoston2PipelinePorts(input: {
     },
 
     async signRelayerTransaction(value: Record<string, unknown>) {
+      const manifest = Coston2Web2JsonManifestV1Schema.parse(value.manifest);
       const addresses = await resolveContracts();
-      const manifest = value.manifest as Web2JsonManifestV1;
       const runId = String(value.runId ?? "");
       const idempotencyKey = String(value.idempotencyKey ?? "");
       const target = getAddress(String(value.target ?? ""));
@@ -808,9 +810,9 @@ export function createLiveCoston2PipelinePorts(input: {
     },
 
     async verifyConsumer(value: Record<string, unknown>) {
+      const manifest = Coston2Web2JsonManifestV1Schema.parse(value.manifest);
       const proof = rawProofFromEvidence(value.proof);
       const decoded = decodeProof(proof);
-      const manifest = value.manifest as Web2JsonManifestV1;
       const requestUrl = String(
         (decoded.data as { requestBody: { url: string } }).requestBody.url,
       );

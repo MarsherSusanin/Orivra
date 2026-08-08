@@ -49,8 +49,11 @@ Manifest может сохранить обе известные identity, чт�
 validation отклоняет Flare с `409 NETWORK_CAPABILITY_DISABLED` до
 `service.createRun`. Production service повторяет guard до PostgreSQL. Поэтому
 registry, verifier, source fetch, RPC, Relay и DA для Flare недостижимы.
-Persisted run/proof/bundle/transaction schemas и единственный production FDC
-adapter остаются Coston2-only. Условия будущей активации зафиксированы в
+Отдельный `Coston2Web2JsonManifestV1` дополнительно защищает `RUN_CREATED`,
+proof bundle/replay, persisted reads, preflight, verifier и production
+worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
+единственный production FDC adapter остаются Coston2-only. Условия будущей
+активации зафиксированы в
 [ADR 0023](docs/adr/0023-network-capability-boundary.md).
 
 ## Persisted run model

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
+  Coston2Web2JsonManifestV1Schema,
   DiagnosticV1Schema,
   isCanonicalUint256Decimal,
   NormalizedFdcErrorSchema,
@@ -1138,11 +1139,12 @@ export async function assemblePersistedProofBundle(input: {
   events: RunEventV1[];
   artifacts: PersistedArtifact[];
 }) {
+  const manifest = Coston2Web2JsonManifestV1Schema.parse(input.manifest);
   projectRun(input.events);
   const context = {
     runId: input.runId,
     projectId: "bundle-assembly",
-    manifest: input.manifest,
+    manifest,
     events: input.events,
     projection: projectRun(input.events),
     artifacts: input.artifacts,
@@ -1200,7 +1202,7 @@ export async function assemblePersistedProofBundle(input: {
     }
   }
   const expectedSafeConsumerBytes = encoder.encode(
-    generateSafeWeb2JsonConsumer(input.manifest, {
+    generateSafeWeb2JsonConsumer(manifest, {
       contractName: "ProoflineSafeWeb2JsonConsumer",
     }),
   );
@@ -1219,7 +1221,7 @@ export async function assemblePersistedProofBundle(input: {
   const bundle = createProofBundle({
     version: "1",
     runId: input.runId,
-    manifest: input.manifest,
+    manifest,
     events: input.events,
     requestBytes: preflight.requestBytes,
     network: {
@@ -1263,8 +1265,15 @@ export function createProductionCommandHandlers(input: {
   ports: ProductionPipelinePorts;
   clock: { now(): string };
 }) {
-  const load = (command: ProductionCommand) =>
-    input.repository.loadRunExecutionContext(command.runId);
+  const load = async (command: ProductionCommand) => {
+    const context = await input.repository.loadRunExecutionContext(
+      command.runId,
+    );
+    return {
+      ...context,
+      manifest: Coston2Web2JsonManifestV1Schema.parse(context.manifest),
+    };
+  };
 
   function assertSubmissionMode(
     context: RunExecutionContext,

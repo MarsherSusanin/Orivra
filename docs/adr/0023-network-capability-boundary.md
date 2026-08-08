@@ -38,6 +38,12 @@ before invoking `service.createRun`. A Flare manifest returns HTTP `409` with
 stable code `NETWORK_CAPABILITY_DISABLED`. Unknown networks remain invalid and
 return HTTP `400`.
 
+`Coston2Web2JsonManifestV1` is the narrower persistence and execution contract.
+`RUN_CREATED`, proof bundles and replay parse it, as do Coston2 preflight,
+verifier, worker and live-adapter entries. This second boundary rejects a
+recognized Flare manifest before source, verifier, registry, fee, RPC, Relay or
+DA effects even if an internal caller bypasses the HTTP guard.
+
 No Flare production adapter, registry snapshot, persisted run, proof bundle or
 wallet transaction can be created in this slice. Existing persisted evidence
 schemas therefore remain Coston2-only. Enabling Flare later requires new live

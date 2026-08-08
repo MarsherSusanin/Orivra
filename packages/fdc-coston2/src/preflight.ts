@@ -1,7 +1,9 @@
 import {
+  Coston2Web2JsonManifestV1Schema,
   isSafePublicUrlQueryEntry,
   PreflightReportV1Schema,
   Web2JsonManifestV1Schema,
+  type Coston2Web2JsonManifestV1,
   type NormalizedFdcError,
   type PreflightBlockerV1,
   type PreflightDiagnosticV1,
@@ -51,7 +53,9 @@ export interface PreflightPorts {
   transformJq(value: unknown, jq: string): Promise<unknown>;
   abiEncode(value: unknown, signature: string): string;
   verifier: {
-    prepareRequest(manifest: Web2JsonManifestV1): Promise<{ requestBytes: string }>;
+    prepareRequest(
+      manifest: Coston2Web2JsonManifestV1,
+    ): Promise<{ requestBytes: string }>;
   };
   feeOracle: {
     quote(input: { fdcHub: string; requestBytes: string }): Promise<bigint>;
@@ -256,7 +260,7 @@ export async function runWeb2JsonPreflight(
     );
   }
 
-  const manifest = Web2JsonManifestV1Schema.parse(input.manifest);
+  const manifest = Coston2Web2JsonManifestV1Schema.parse(input.manifest);
   assertManifestHasNoSecrets(manifest);
   if (
     input.fdcHub.toLowerCase() !==
@@ -293,7 +297,7 @@ export async function runWeb2JsonPreflight(
     }
   }
 
-  const canonicalManifest: Web2JsonManifestV1 = {
+  const canonicalManifest: Coston2Web2JsonManifestV1 = {
     ...manifest,
     request: { ...manifest.request, url: canonicalUrl },
   };

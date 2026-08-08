@@ -1,11 +1,11 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { appendRunEvents, projectRun } from "@proofline/domain";
 import {
+  Coston2Web2JsonManifestV1Schema,
   NormalizedFdcErrorSchema,
   RecoveryErrorV1Schema,
   RunEventV1Schema,
   RunRecoveryV1Schema,
-  Web2JsonManifestV1Schema,
   type RunEventV1,
 } from "@proofline/contracts";
 
@@ -814,7 +814,7 @@ export function createPostgresCommandRepository(input: {
         return {
           runId: String(row.id),
           projectId: String(row.project_id),
-          manifest: Web2JsonManifestV1Schema.parse(row.manifest),
+          manifest: Coston2Web2JsonManifestV1Schema.parse(row.manifest),
           projection: projectRun(journal),
           events: journal,
           artifacts: artifacts.rows.map((item) => ({

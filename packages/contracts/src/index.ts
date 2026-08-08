@@ -356,6 +356,15 @@ export const Web2JsonManifestV1Schema = z
 
 export type Web2JsonManifestV1 = z.infer<typeof Web2JsonManifestV1Schema>;
 
+export const Coston2Web2JsonManifestV1Schema =
+  Web2JsonManifestV1Schema.extend({
+    network: z.literal("coston2"),
+  }).strict();
+
+export type Coston2Web2JsonManifestV1 = z.infer<
+  typeof Coston2Web2JsonManifestV1Schema
+>;
+
 const CreateRunIdV1Schema = z
   .string()
   .min(1)
@@ -1161,7 +1170,7 @@ function runEvent<TType extends string, TPayload extends z.ZodType>(
 export const RunEventV1Schema = z.discriminatedUnion("type", [
   runEvent(
     "RUN_CREATED",
-    z.object({ manifest: Web2JsonManifestV1Schema }).strict(),
+    z.object({ manifest: Coston2Web2JsonManifestV1Schema }).strict(),
   ),
   runEvent(
     "PREFLIGHT_ACCEPTED",
@@ -1537,7 +1546,7 @@ export const ProofBundleContentV1Schema = z
   .object({
     version: VersionV1Schema,
     runId: NonEmptyIdSchema,
-    manifest: Web2JsonManifestV1Schema,
+    manifest: Coston2Web2JsonManifestV1Schema,
     events: z.array(RunEventV1Schema).min(1),
     requestBytes: HexBytesSchema,
     network: NetworkSnapshotV1Schema,

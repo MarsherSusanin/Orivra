@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
+  Coston2Web2JsonManifestV1Schema,
   NETWORK_CAPABILITIES_V1,
   ConsumerLabReportV1Schema,
   DiagnosticV1Schema,
@@ -279,7 +280,7 @@ export function createProductionProoflineService(input: {
     return {
       ...result.rows[0],
       id: runId,
-      manifest: Web2JsonManifestV1Schema.parse(result.rows[0].manifest),
+      manifest: Coston2Web2JsonManifestV1Schema.parse(result.rows[0].manifest),
     };
   }
 
@@ -866,7 +867,7 @@ export function createProductionProoflineService(input: {
       );
       const pageRows = result.rows.slice(0, limit);
       const runs = pageRows.map((row) => {
-        const manifest = Web2JsonManifestV1Schema.parse(row.manifest);
+        const manifest = Coston2Web2JsonManifestV1Schema.parse(row.manifest);
         const projection = RunProjectionV1Schema.parse(row.projection);
         const hasFailedStage = RUN_STAGES.some(
           (stage) => projection.stages[stage] === "failed",
@@ -958,7 +959,9 @@ export function createProductionProoflineService(input: {
           });
         }
         const row = result.rows[0];
-        const persistedManifest = Web2JsonManifestV1Schema.parse(row.manifest);
+        const persistedManifest = Coston2Web2JsonManifestV1Schema.parse(
+          row.manifest,
+        );
         assertSubmissionMode(persistedManifest, "wallet");
         assertMutableProjection(row.projection);
         assertCompletedPreflight(row.projection);
@@ -1134,7 +1137,7 @@ export function createProductionProoflineService(input: {
         });
       }
       try {
-        const manifest = Web2JsonManifestV1Schema.parse(row.manifest);
+        const manifest = Coston2Web2JsonManifestV1Schema.parse(row.manifest);
         const evidence = JSON.parse(Buffer.from(row.consumer_bytes).toString("utf8")) as Record<string, unknown>;
         const diagnostics = DiagnosticV1Schema.array().parse(evidence.diagnostics);
         const passed = evidence.passed === true;

@@ -1,4 +1,7 @@
-import type { Web2JsonManifestV1 } from "@proofline/contracts";
+import {
+  Coston2Web2JsonManifestV1Schema,
+  type Web2JsonManifestV1,
+} from "@proofline/contracts";
 import { request, type Dispatcher } from "undici";
 import { createFdcError, normalizeFdcError } from "./errors";
 
@@ -21,17 +24,18 @@ export function createWeb2JsonVerifierClient(options: Web2JsonVerifierClientOpti
   const sourceId = toBytes32Utf8("PublicWeb2");
   return {
     async prepareRequest(manifest: Web2JsonManifestV1) {
+      const coston2Manifest = Coston2Web2JsonManifestV1Schema.parse(manifest);
       const payload = {
         attestationType,
         sourceId,
         requestBody: {
-          url: manifest.request.url,
+          url: coston2Manifest.request.url,
           httpMethod: "GET",
           headers: "{}",
-          queryParams: JSON.stringify(manifest.request.query),
+          queryParams: JSON.stringify(coston2Manifest.request.query),
           body: "{}",
-          postProcessJq: manifest.request.jq,
-          abiSignature: manifest.request.abiSignature,
+          postProcessJq: coston2Manifest.request.jq,
+          abiSignature: coston2Manifest.request.abiSignature,
         },
       };
       let decoded: unknown;

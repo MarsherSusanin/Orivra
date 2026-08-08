@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
+  Coston2Web2JsonManifestV1Schema,
   NETWORK_CAPABILITIES_V1,
+  type Coston2Web2JsonManifestV1,
   type DiagnosticV1,
   type ProofBundleV1,
   type RunEventV1,
@@ -21,7 +23,7 @@ import { createProoflineApi } from "./app";
 interface StoredRun {
   runId: string;
   projectId: string;
-  manifest: Web2JsonManifestV1;
+  manifest: Coston2Web2JsonManifestV1;
   events: RunEventV1[];
   diagnostics: DiagnosticV1[];
   preflightEvidence?: {
@@ -260,6 +262,7 @@ export function createHermeticProoflineSystem(input: {
           code: "NETWORK_CAPABILITY_DISABLED",
         });
       }
+      const manifest = Coston2Web2JsonManifestV1Schema.parse(context.manifest);
       const createKey = `${context.projectId}:${context.idempotencyKey}`;
       const existing = db.createKeys.get(createKey);
       if (existing) {
@@ -276,14 +279,14 @@ export function createHermeticProoflineSystem(input: {
       const stored: StoredRun = {
         runId,
         projectId: context.projectId,
-        manifest: context.manifest,
+        manifest,
         events: [],
         diagnostics: [],
       };
       append(stored, {
         commandId: commandId("cmd_create", context.idempotencyKey),
         type: "RUN_CREATED",
-        payload: { manifest: context.manifest },
+        payload: { manifest },
       });
       db.runs.set(runId, stored);
       db.createKeys.set(createKey, runId);
