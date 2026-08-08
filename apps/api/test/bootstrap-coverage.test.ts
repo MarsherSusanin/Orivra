@@ -37,6 +37,7 @@ describe("production API bootstrap", () => {
         createProductionApi({
           environment: {
             PROOFLINE_TOKEN_DIGEST_KEY: "digest-key",
+            PROOFLINE_WEB_ORIGIN: "https://proofline.example",
             ...(port === undefined ? { PORT: "" } : { PORT: port }),
           },
           pool: { query: vi.fn() } as any,
@@ -45,17 +46,17 @@ describe("production API bootstrap", () => {
     },
   );
 
-  it("requires the digest key and applies default/custom bootstrap values", () => {
+  it("requires the digest key and explicit Web auth authority", () => {
     expect(() =>
       createProductionApi({ environment: {}, pool: { query: vi.fn() } as any }),
     ).toThrow(/PROOFLINE_TOKEN_DIGEST_KEY/);
     const pool = { query: vi.fn() } as any;
-    expect(
+    expect(() =>
       createProductionApi({
         environment: { PROOFLINE_TOKEN_DIGEST_KEY: "digest-key" },
         pool,
       }),
-    ).toMatchObject({ pool, port: 8080 });
+    ).toThrow(/PROOFLINE_WEB_ORIGIN/);
     expect(
       createProductionApi({
         environment: {
@@ -87,7 +88,10 @@ describe("production API bootstrap", () => {
       return { rowCount: 0, rows: [] };
     });
     const { api } = createProductionApi({
-      environment: { PROOFLINE_TOKEN_DIGEST_KEY: "digest-key" },
+      environment: {
+        PROOFLINE_TOKEN_DIGEST_KEY: "digest-key",
+        PROOFLINE_WEB_ORIGIN: "https://proofline.example",
+      },
       pool: { query } as any,
     });
     const rawToken = `${authRow?.kind === "share" ? "share" : "project"}_${"c".repeat(64)}`;
@@ -99,6 +103,24 @@ describe("production API bootstrap", () => {
     expect(response.status).toBe(status);
     expect(JSON.stringify(query.mock.calls)).not.toContain(rawToken);
     expect(queryCount).toBeGreaterThan(0);
+  });
+
+  it("filters revoked and expired project tokens while retaining null-expiry legacy tokens", async () => {
+    const query = vi.fn(async () => ({ rowCount: 0, rows: [] }));
+    const { api } = createProductionApi({
+      environment: {
+        PROOFLINE_TOKEN_DIGEST_KEY: "digest-key",
+        PROOFLINE_WEB_ORIGIN: "https://proofline.example",
+      },
+      pool: { query } as any,
+    });
+    const response = await api.fetch(new Request("https://proofline.test/v1/runs", {
+      headers: { authorization: `Bearer project_${"d".repeat(64)}` },
+    }));
+    expect(response.status).toBe(401);
+    const authSql = String(query.mock.calls[0]?.[0] ?? "").split(/UNION ALL/i)[0];
+    expect(authSql).toMatch(/revoked_at\s+IS\s+NULL/i);
+    expect(authSql).toMatch(/expires_at\s+IS\s+NULL[\s\S]*expires_at\s*>\s*now\(\)/i);
   });
 });
 

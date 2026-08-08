@@ -49,14 +49,22 @@ HTTP boundary:
 Expected RED: schemas and pure auth module are absent; the current API returns
 `401` before reaching both public routes and has no public-body limit.
 
+## 023B1 frozen scope
+
+Persisted wallet challenge/session semantics are specified in the
+[023B1 slice contract](023b1-persisted-wallet-sessions.md). This wave owns
+migration 006, production challenge/session methods, local EOA recovery
+composition, default-project provisioning, browser-token authentication and
+the required production Web origin. It does not own account token endpoints,
+quotas or Web session UI.
+
 ## Deferred RED waves
 
-023B freezes migration, single-use/expiry/concurrency, default-project and token
-digest tests. 023C freezes browser wallet/session/Settings acceptance. 023D
-freezes rate, daily quota, active-live-run, leakage and pre-buffer Node stream
+023B2 freezes account read plus CLI/Action token issue/revoke persistence and
+routes. 023C freezes browser wallet/session/Settings acceptance. 023D freezes
+rate, daily quota, active-live-run, cleanup, leakage and pre-buffer Node stream
 body-limit hardening. The 023A Request-level 413 is not full transport DoS
-evidence. None of those
-implementation details are frozen by 023A tests.
+evidence.
 
 ## Validation cadence
 
