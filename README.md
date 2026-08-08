@@ -1,17 +1,54 @@
 # Proofline
 
-Proofline — developer tool для Coston2 Web2Json: один versioned manifest проходит preflight, отправку, voting round, получение proof, on-chain verification, проверку consumer-инвариантов и экспорт воспроизводимого evidence bundle.
+Proofline — проверочный стенд для Coston2 Web2Json-интеграций. Он показывает,
+может ли smart contract доверять не только полученному proof, но и источнику
+данных, генерирует безопасный consumer и собирает воспроизводимый пакет
+доказательств для разработчика, аудитора и CI.
 
-Продуктовая поверхность построена вокруг Run Cockpit: пользователь видит одну последовательность стадий, следующий безопасный шаг и доказательства результата, а не набор несвязанных blockchain-операций.
+## Проблема простыми словами
+
+Валидный FDC proof подтверждает ответ на конкретный запрос. Но плохо написанный
+consumer может не проверить, что запрос был отправлен именно на разрешённый
+scheme, host, path и query. Это как целая пломба на посылке: она подтверждает,
+что содержимое не меняли, но сама по себе не подтверждает нужного отправителя.
+
+Proofline проводит один manifest по пути `preflight → submission → proof →
+consumer verification → evidence handoff`. Если consumer принимает proof для
+неправильного URL, Consumer Lab показывает отсутствующий invariant, а затем
+выдаёт детерминированный safe Solidity consumer.
+
+Решение доказывается парным сценарием:
+
+```text
+неправильный URL → proof валиден → vulnerable consumer принимает его
+                 → Proofline находит дыру → safe consumer отклоняет его
+
+правильный URL   → proof валиден → safe consumer принимает его
+                 → bundle повторно воспроизводится с тем же checksum
+```
+
+Run Cockpit оставляет пользователю одну последовательность стадий, следующий
+безопасный шаг и точные evidence artifacts вместо набора несвязанных
+blockchain-операций.
 
 ## Текущий статус
 
-- Реализованы Web, PostgreSQL API, restart-safe worker, CLI, GitHub Action и Sites package.
-- PR-путь герметичен и воспроизводит canonical bundle без сети.
+- Завершён pre-infrastructure product journey 014–021: Runs, Composer,
+  Preflight Workbench, submission, recovery, Consumer Lab, Integration Package
+  и локальный QA report.
+- Реализованы, но не размещены Web, PostgreSQL API, restart-safe worker, CLI,
+  GitHub Action package и Sites package.
+- Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
+  готовый workflow и default fixture в репозитории не поставляются.
 - Privacy-safe product events сводятся локально в детерминированный
   aggregate-only QA report; внешний analytics provider не используется.
-- Live Coston2 release gate работает только через persisted API/worker path и ограничен одним общим дедлайном в 10 минут.
-- Размещение API, worker и PostgreSQL ещё не выбрано. До подключения инфраструктуры live gate остаётся операционно заблокированным, но не заменяется симулятором.
+- Persisted live Coston2 gate реализован в коде, работает только через
+  API/PostgreSQL/worker path и ограничен одним дедлайном в 10 минут.
+- В репозитории пока нет `.github/workflows`, production deployment или
+  настроенного merge queue. Поэтому deployed live Coston2 PASS ещё не получен и
+  не заменяется симулятором.
+- Последний независимо проверенный product candidate: commit `b91b4da`, tree
+  `13384b721308a1e1a04319c0391679741fb01760`.
 
 ## Быстрый старт
 
@@ -22,7 +59,10 @@ npm ci
 npm run dev
 ```
 
-Локальный Web использует `/api` по умолчанию. Для отдельного API задайте `VITE_PROOFLINE_API_BASE_URL` перед запуском Vite.
+`npm run dev` поднимает только Web. Он использует `/api` по умолчанию; для
+отдельного backend задайте `VITE_PROOFLINE_API_BASE_URL`. Полный persisted
+journey требует отдельно запущенных PostgreSQL, API и worker по
+[runbook](docs/runbook.md).
 
 ## Основные команды
 
@@ -42,7 +82,11 @@ npm run dev
 
 Полная матрица проверок, конфигурация API/worker и live gate описаны в [операционном runbook](docs/runbook.md).
 
-Browser acceptance — отдельный обязательный **Product Integration Verification** gate на локальном built/preview Web. Он фиксируется для конкретных commit/tree и не имеет отдельной автоматизированной repo-команды; PASS `npm run test:e2e` не заменяет browser PASS.
+Browser acceptance — отдельный обязательный **Product Integration Verification**
+gate на локальном built/preview Web. Он фиксируется для
+конкретных commit/tree и не имеет отдельной автоматизированной repo-команды;
+PASS `npm run test:e2e` не заменяет browser PASS. Автоматический CI workflow
+сейчас также отсутствует: команды из runbook запускаются вручную.
 
 ## Поток продукта
 
@@ -55,6 +99,7 @@ Web2JsonManifestV1
   → FdcVerification.verifyWeb2Json
   → consumer diagnostics
   → safe consumer artifact
+  → evidence receipt и integration package
   → canonical bundle и deterministic replay
 ```
 

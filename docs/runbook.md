@@ -21,6 +21,11 @@ npm run dev
 
 По умолчанию Web обращается к `/api`. Для отдельного backend задайте `VITE_PROOFLINE_API_BASE_URL` в локальном окружении. Не коммитьте `.env` с credentials.
 
+Эта команда поднимает только Vite Web. В репозитории нет Docker Compose или
+одной команды для полного стека: persisted journey требует отдельно запущенных
+PostgreSQL, API и worker. Без API интерфейс обязан показывать честное
+configuration/network state, а не demo run.
+
 ## 3. PostgreSQL и миграции
 
 Применяйте миграции строго по номеру к пустой или поддерживаемой предыдущей схеме:
@@ -52,7 +57,7 @@ npm run start --workspace apps/api
 | `PROOFLINE_TOKEN_DIGEST_KEY` | required | Key для digest project/share tokens |
 | `PORT` | optional, default `8080` | HTTP port |
 | `PROOFLINE_API_DB_POOL_SIZE` | optional, default `10` | PostgreSQL pool size |
-| `PROOFLINE_WEB_ORIGIN` | optional | Public Web origin для share links |
+| `PROOFLINE_WEB_ORIGIN` | optional в коде | Public HTTPS Web origin для share links; default `https://proofline.example` является placeholder и непригоден для production handoff |
 
 API должен завершаться с ошибкой до начала обслуживания запросов, если обязательная конфигурация отсутствует.
 
@@ -103,6 +108,17 @@ node packages/cli/dist/index.js --help
 
 Production API commands требуют `PROOFLINE_API_URL` и `PROOFLINE_PROJECT_TOKEN`. Wallet signing использует локальный `PROOFLINE_COSTON2_PRIVATE_KEY`; private key не отправляется API. Доступные команды: `run create`, `run watch`, `run verify`, `bundle export`, `replay`.
 
+### Локальный Product QA report
+
+Web хранит не более 500 валидированных `ProductEventV1` под versioned key
+`proofline:product-analytics:v1`. Публичный aggregate-only export сейчас
+доступен программно через `LocalProductAnalytics.exportQaReport()`; отдельной
+UI-кнопки, CLI-команды и сетевого analytics endpoint нет.
+
+QA tooling должен экспортировать только canonical `ProductQaReportV1`. Не
+выгружайте содержимое localStorage напрямую: локальная очередь содержит opaque
+session ID и timestamps, хотя её metadata ограничена публичным контрактом.
+
 ## 7. Ритм проверок и candidate freeze
 
 Внутренний TDD-цикл не запускает весь репозиторий после каждой правки:
@@ -132,7 +148,12 @@ npm run test:solidity
 npm run test:e2e
 npm run build
 npm run test:sites
+npx vitest run tests/action-artifact-sync.contract.test.ts --reporter=verbose
 ```
+
+Standalone Action artifact-sync test обязателен после изменения
+`packages/action`, public contracts или импортируемого domain-кода. Checked-in
+`packages/action/dist/index.js` должен быть byte-identical чистой Node 20 build.
 
 Настоящий PostgreSQL:
 
@@ -179,25 +200,42 @@ npm run test:sites
 - `dist/server/index.js`;
 - `dist/.openai/hosting.json`.
 
+Текущая Vite build проходит, но предупреждает о JavaScript chunk больше 500 kB.
+Это известный non-blocking performance warning, а не подтверждение оптимального
+bundle size.
+
 Не изменяйте без отдельного slice contract `.openai/hosting.json`, `worker/index.js`, `scripts/prepare-sites-build.mjs` и `tests/sites-worker.test.mjs`. Sites обслуживает Web и deep links; `/api` и любые write requests обязаны fail closed без SPA fallback.
 
 ## 9. GitHub Action и live gate
 
-PR использует local canonical bundle (`PROOFLINE_REPLAY_BUNDLE_PATH`) и не должен обращаться к сети. Merge queue требует:
+PR использует local canonical bundle (`PROOFLINE_REPLAY_BUNDLE_PATH`) и не должен обращаться к сети. `packages/action/action.yml` содержит default
+`fixtures/proofline.bundle.json`, но такой fixture не входит в репозиторий:
+вызывающий workflow обязан передать существующий `bundle` path или сначала
+создать и проверить canonical bundle. Merge queue требует:
 
 | Переменная | Назначение |
 |---|---|
 | `PROOFLINE_API_URL` | Размещённый persisted API |
 | `PROOFLINE_PROJECT_TOKEN` | Project-scoped capability token |
+| `PROOFLINE_LIVE_MANIFEST` | Manifest file path для `npm run test:live:coston2` |
 | `GITHUB_SHA` | Exact 40-hex commit hash |
 | `PROOFLINE_TREE_HASH` | Exact 40-hex candidate tree hash |
 | Action input `manifest` | Manifest file path |
 
 Live flow имеет один общий timeout 10 минут. PASS требует persisted run identity, tx hash, voting round, proof checksum, успешную consumer verification, byte-identical replay и отсутствие rebroadcast после записанного tx hash.
 
-До выбора инфраструктуры этот gate ожидаемо блокирован отсутствием API/worker/PostgreSQL и их secrets. Не переводите merge queue на direct-worker или simulation fallback.
+В репозитории нет `.github/workflows`; `packages/action/action.yml` — готовый
+Action package, а не доказательство настроенного CI. До выбора инфраструктуры
+live gate ожидаемо блокирован отсутствием размещённых API/worker/PostgreSQL,
+provisioning и secrets. Не переводите merge queue на direct-worker или
+simulation fallback.
 
-## 10. Диагностика
+## 10. Наблюдаемость и диагностика
+
+Сегодня worker пишет structured JSON в stdout/stderr. Production metrics,
+distributed traces, alerting и централизованное log storage не настроены; их
+нельзя указывать как доступные сигналы до выбора инфраструктуры. API не должен
+логировать authorization headers или request bodies с capabilities.
 
 Проверяйте состояние в таком порядке:
 
@@ -209,6 +247,17 @@ Live flow имеет один общий timeout 10 минут. PASS требу�
 6. Публикуемые logs и Action summaries не содержат tokens, API keys или private keys.
 
 Upstream Coston2 outage блокирует release. Override возможен только через отдельное решение Slice Architect с health evidence и полностью зелёным hermetic suite.
+
+Минимальная incident-процедура до появления provider-specific tooling:
+
+1. Остановить новые live submissions, сохранив read-only доступ к evidence.
+2. Зафиксировать commit/tree, run ID, last sequence, command attempt/lease и
+   наличие transaction hash без публикации capabilities.
+3. Определить границу сбоя: API/DB, worker, RPC, verifier, Relay или DA.
+4. Если transaction hash уже записан, разрешены только observation/resume —
+   rebroadcast запрещён.
+5. После mitigation повторить hermetic gates; live gate повторять только когда
+   journal показывает, что новый effect безопасен.
 
 ## 11. Rollback и восстановление
 

@@ -16,6 +16,11 @@ flowchart LR
   DB --> Projection["RunProjectionV1"]
   Projection --> Surface
   DB --> Bundle["ProofBundleV1 + checksum"]
+  DB --> Consumer["ConsumerLabReportV1 + safe .sol"]
+  Bundle --> Handoff["EvidenceReceiptV1 + Integration Package"]
+  Consumer --> Handoff
+  Surface --> LocalQueue["bounded local ProductEventV1 queue"]
+  LocalQueue --> QA["aggregate-only ProductQaReportV1"]
 ```
 
 ## Dependency direction
@@ -40,7 +45,8 @@ flowchart LR
 Основные таблицы:
 
 - `projects`, `api_tokens`, `share_tokens` — tenancy и capability tokens;
-- `runs`, `run_events`, `run_artifacts` — состояние, evidence и generated artifacts;
+- `runs`, `run_events`, `run_artifacts` — состояние, preflight/consumer reports,
+  bundle, receipt и generated Solidity artifacts;
 - `run_commands` — restart-safe work queue;
 - `relayer_transactions` — immutable broadcast/audit evidence.
 
@@ -53,6 +59,8 @@ flowchart LR
 5. Proof проверяется локально и через `FdcVerification.verifyWeb2Json` с `eth_call`.
 6. Consumer Lab проверяет invariant evidence и генерирует safe consumer.
 7. Bundle сериализуется canonical JSON, получает SHA-256 checksum и должен replay byte-identically.
+8. Evidence Receipt и Integration Package связывают exact bundle, manifest,
+   Consumer Lab result и safe Solidity для read-only handoff.
 
 Все runtime-адреса FDC contracts, кроме известной точки registry, разрешаются через registry snapshot и попадают в evidence.
 
@@ -63,7 +71,9 @@ flowchart LR
 - Project и share tokens должны иметь 256 бит энтропии.
 - База хранит keyed digest, а не исходный token.
 - Project token разрешает mutations и relayer requests в пределах проекта.
-- Opaque share token привязан к одному run и разрешает только чтение.
+- Opaque share token привязан к одному run и разрешает только чтение. В Web он
+  передаётся только через URL fragment, переносится в session storage и сразу
+  удаляется из browser history URL.
 
 ### Keys
 
@@ -80,15 +90,28 @@ Preflight принимает только публичный HTTPS GET: port 443
 
 Relayer жёстко ограничен chain ID `114`, вызовом `FdcHub.requestAttestation`, сохранённым request hash, registry fee quote, project/global caps, daily quota и balance floor. У команды один idempotency key, а effect авторизуется повторно непосредственно перед broadcast.
 
-## Release architecture
+## Local product instrumentation
 
-- PR: полностью local replay fixture, без network и secrets.
-- Merge queue: один persisted Coston2 run через GitHub Action → API → PostgreSQL → worker.
+Web emits only enumerated `ProductEventV1` metadata into a bounded local queue.
+`ProductQaReportV1` contains aggregate counters only: no raw events, session
+identifiers, timestamps, URLs, manifests, transaction hashes or credentials.
+Corrupt storage becomes `recovered`, denied storage becomes `unavailable`, and
+analytics failure cannot block the main journey. There is no network transport,
+third-party SDK or user analytics dashboard.
+
+## Release architecture and current operational status
+
+- PR contract: caller-supplied canonical replay bundle, без network и secrets.
+- Merge-queue contract: один persisted Coston2 run через GitHub Action → API → PostgreSQL → worker.
 - Live gate имеет один monotonic deadline 600000 ms на весь flow и не повторяет broadcast после фиксации tx hash.
 - Evidence связывается с exact 40-hex commit hash и tree hash.
 - Sites размещает только Web; `/api` и write requests не получают SPA fallback.
 
-API/worker hosting provider пока не выбран. Это операционное решение не меняет границы пакетов и должно быть записано отдельным ADR до deployment automation.
+Эти release paths реализованы и герметично проверяются локально, но в
+репозитории нет `.github/workflows`, настроенного merge queue или production
+deployment. API/worker hosting provider пока не выбран. Его выбор, provisioning,
+backup/restore и rollback должны быть записаны отдельным ADR до deployment
+automation. До этого deployed live Coston2 PASS не заявляется.
 
 ## Product scope
 
