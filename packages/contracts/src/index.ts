@@ -359,7 +359,21 @@ const AccountTokenIdV1Schema = z
   .string()
   .regex(/^token_[a-f0-9]{32}$/);
 const ProjectIdV1Schema = z.string().uuid();
-const AuthTimestampV1Schema = z.string().datetime({ offset: true });
+const CanonicalAuthTimestampV1Pattern =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+export function isCanonicalAuthTimestampV1(value: string): boolean {
+  if (!CanonicalAuthTimestampV1Pattern.test(value)) return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+
+const AuthTimestampV1Schema = z
+  .string()
+  .refine(
+    isCanonicalAuthTimestampV1,
+    "Expected a valid canonical millisecond-UTC timestamp.",
+  );
 const AccountTokenLabelV1Schema = z
   .string()
   .min(1)

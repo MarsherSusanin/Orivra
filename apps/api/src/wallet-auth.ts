@@ -1,8 +1,8 @@
+import { isCanonicalAuthTimestampV1 } from "@proofline/contracts";
+
 const WALLET_ADDRESS = /^0x[0-9a-f]{40}$/i;
 const WALLET_SIGNATURE = /^0x[0-9a-f]{130}$/i;
 const SERVER_NONCE = /^[a-f0-9]{64}$/;
-const CANONICAL_UTC_TIMESTAMP =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const CHALLENGE_DURATION_MILLISECONDS = 5 * 60_000;
 const MAX_MESSAGE_BYTES = 8_192;
 
@@ -35,17 +35,10 @@ function normalizeWebOrigin(value: string): URL {
 }
 
 function timestamp(value: string, label: string): number {
-  if (!CANONICAL_UTC_TIMESTAMP.test(value)) {
+  if (!isCanonicalAuthTimestampV1(value)) {
     throw new Error(`${label} timestamp must be canonical millisecond UTC`);
   }
-  const parsed = Date.parse(value);
-  if (
-    !Number.isFinite(parsed) ||
-    new Date(parsed).toISOString() !== value
-  ) {
-    throw new Error(`${label} timestamp must be valid canonical millisecond UTC`);
-  }
-  return parsed;
+  return Date.parse(value);
 }
 
 export function buildEip4361Message(input: {
