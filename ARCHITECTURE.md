@@ -101,6 +101,9 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
   потребляется до локального EOA recovery. После durable consume API заново
   строит canonical message из configured origin и persisted address, nonce и
   timestamps; несовпадение exact UTF-8 bytes fail-closed как unavailable.
+  PostgreSQL — единственный clock authority: challenge и browser token получают
+  exact millisecond issue/expiry из DB, а application `Date` не определяет
+  persisted auth evidence.
   Этот же exact configured origin — единственный CORS authority для `/v1/*`:
   preflight завершается до bearer/service dispatch, а actual success/error
   responses получают exact origin без wildcard и credentialed CORS.

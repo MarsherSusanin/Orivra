@@ -64,6 +64,26 @@ function walletSignatureInvalid(): Error {
   });
 }
 
+function persistedAuthWindow(
+  row: Record<string, unknown> | undefined,
+  durationMilliseconds: number,
+): { issuedAt: string; expiresAt: string } {
+  if (
+    !row ||
+    !(row.issued_at instanceof Date) ||
+    !Number.isFinite(row.issued_at.getTime()) ||
+    !(row.expires_at instanceof Date) ||
+    !Number.isFinite(row.expires_at.getTime()) ||
+    row.expires_at.getTime() - row.issued_at.getTime() !== durationMilliseconds
+  ) {
+    throw new Error("Database auth clock returned an invalid time window");
+  }
+  return {
+    issuedAt: row.issued_at.toISOString(),
+    expiresAt: row.expires_at.toISOString(),
+  };
+}
+
 function hydrateConsumedChallenge(
   row: Record<string, unknown>,
   publicWebOrigin: string,
@@ -120,9 +140,16 @@ export function createPersistedWalletAuthService(input: {
   async function createWalletChallenge(rawRequest: unknown) {
     const request = WalletChallengeRequestV1Schema.parse(rawRequest);
     const address = normalizeWalletAddress(request.address);
-    const issuedAt = new Date();
-    const expiresAt = new Date(
-      issuedAt.getTime() + CHALLENGE_LIFETIME_MILLISECONDS,
+    const databaseClock = await input.pool.query(
+      `SELECT auth_clock.issued_at,
+              auth_clock.issued_at + interval '5 minutes' AS expires_at
+       FROM (
+         SELECT date_trunc('milliseconds', clock_timestamp()) AS issued_at
+       ) AS auth_clock`,
+    );
+    const { issuedAt, expiresAt } = persistedAuthWindow(
+      databaseClock.rows[0],
+      CHALLENGE_LIFETIME_MILLISECONDS,
     );
     const challengeId = `challenge_${randomBytes(32).toString("hex")}`;
     const nonce = randomBytes(32);
@@ -130,8 +157,8 @@ export function createPersistedWalletAuthService(input: {
       webOrigin: input.publicWebOrigin,
       address,
       nonce: nonce.toString("hex"),
-      issuedAt: issuedAt.toISOString(),
-      expiresAt: expiresAt.toISOString(),
+      issuedAt,
+      expiresAt,
       purpose: "browser-session",
     });
     const challenge = WalletChallengeV1Schema.parse({
@@ -142,8 +169,8 @@ export function createPersistedWalletAuthService(input: {
       network: "coston2",
       chainId: COSTON2_CHAIN_ID,
       message,
-      issuedAt: issuedAt.toISOString(),
-      expiresAt: expiresAt.toISOString(),
+      issuedAt,
+      expiresAt,
     });
     await input.pool.query(
       `INSERT INTO proofline_private.wallet_challenges
@@ -170,7 +197,10 @@ export function createPersistedWalletAuthService(input: {
       transactionOpen = true;
       const consumed = await client.query(
         `UPDATE proofline_private.wallet_challenges
-         SET consumed_at = now()
+         SET consumed_at = GREATEST(
+           issued_at,
+           date_trunc('milliseconds', clock_timestamp())
+         )
          WHERE id = $1
            AND consumed_at IS NULL
            AND expires_at > now()
@@ -198,10 +228,6 @@ export function createPersistedWalletAuthService(input: {
   }
 
   async function provisionBrowserSession(address: `0x${string}`) {
-    const issuedAt = new Date();
-    const expiresAt = new Date(
-      issuedAt.getTime() + BROWSER_SESSION_LIFETIME_MILLISECONDS,
-    );
     const rawToken = `project_${randomBytes(32).toString("hex")}`;
     const tokenDigest = digestOpaqueToken(rawToken, input.tokenDigestKey);
     const client = await input.pool.connect();
@@ -245,28 +271,41 @@ export function createPersistedWalletAuthService(input: {
         projectId = String(createdIdentity.rows[0]?.project_id ?? projectId);
       }
 
+      const databaseClock = await client.query(
+        `SELECT auth_clock.issued_at,
+                auth_clock.issued_at + interval '12 hours' AS expires_at
+         FROM (
+           SELECT date_trunc('milliseconds', clock_timestamp()) AS issued_at
+         ) AS auth_clock`,
+      );
+      const { issuedAt, expiresAt } = persistedAuthWindow(
+        databaseClock.rows[0],
+        BROWSER_SESSION_LIFETIME_MILLISECONDS,
+      );
+      const session = WalletSessionV1Schema.parse({
+        version: "1",
+        wallet: { kind: "eoa", address },
+        project: { kind: "default", projectId },
+        projectToken: rawToken,
+        issuedAt,
+        expiresAt,
+      });
       await client.query(
         `INSERT INTO proofline_private.api_tokens
-          (id, project_id, token_digest, scope, kind, expires_at, wallet_identity_id)
-         VALUES ($1, $2, $3, 'project', 'browser', $4, $5)`,
+          (id, project_id, token_digest, scope, kind, created_at, expires_at, wallet_identity_id)
+         VALUES ($1, $2, $3, 'project', 'browser', $4, $5, $6)`,
         [
           randomUUID(),
           projectId,
           tokenDigest,
-          expiresAt.toISOString(),
+          session.issuedAt,
+          session.expiresAt,
           walletIdentityId,
         ],
       );
       await client.query("COMMIT");
       transactionOpen = false;
-      return WalletSessionV1Schema.parse({
-        version: "1",
-        wallet: { kind: "eoa", address },
-        project: { kind: "default", projectId },
-        projectToken: rawToken,
-        issuedAt: issuedAt.toISOString(),
-        expiresAt: expiresAt.toISOString(),
-      });
+      return session;
     } catch (cause) {
       if (transactionOpen) await client.query("ROLLBACK");
       throw cause;
