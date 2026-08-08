@@ -410,7 +410,14 @@ export const WalletChallengeV1Schema = z
     purpose: z.literal("browser-session"),
     network: z.literal("coston2"),
     chainId: z.literal(114),
-    message: z.string().min(1).max(8_192),
+    message: z
+      .string()
+      .min(1)
+      .max(8_192)
+      .refine(
+        (message) => new TextEncoder().encode(message).byteLength <= 8_192,
+        "Wallet challenge message cannot exceed 8192 UTF-8 bytes.",
+      ),
     issuedAt: AuthTimestampV1Schema,
     expiresAt: AuthTimestampV1Schema,
   })

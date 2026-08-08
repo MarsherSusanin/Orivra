@@ -1,6 +1,8 @@
 const WALLET_ADDRESS = /^0x[0-9a-f]{40}$/i;
 const WALLET_SIGNATURE = /^0x[0-9a-f]{130}$/i;
 const SERVER_NONCE = /^[a-f0-9]{64}$/;
+const CANONICAL_UTC_TIMESTAMP =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const CHALLENGE_DURATION_MILLISECONDS = 5 * 60_000;
 const MAX_MESSAGE_BYTES = 8_192;
 
@@ -33,8 +35,16 @@ function normalizeWebOrigin(value: string): URL {
 }
 
 function timestamp(value: string, label: string): number {
+  if (!CANONICAL_UTC_TIMESTAMP.test(value)) {
+    throw new Error(`${label} timestamp must be canonical millisecond UTC`);
+  }
   const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) throw new Error(`${label} must be an ISO timestamp`);
+  if (
+    !Number.isFinite(parsed) ||
+    new Date(parsed).toISOString() !== value
+  ) {
+    throw new Error(`${label} timestamp must be valid canonical millisecond UTC`);
+  }
   return parsed;
 }
 
@@ -60,7 +70,7 @@ export function buildEip4361Message(input: {
 
   const webOrigin = normalizeWebOrigin(input.webOrigin);
   const address = normalizeWalletAddress(input.address);
-  return [
+  const message = [
     `${webOrigin.host} wants you to sign in with your Ethereum account:`,
     address,
     "",
@@ -73,6 +83,10 @@ export function buildEip4361Message(input: {
     `Issued At: ${input.issuedAt}`,
     `Expiration Time: ${input.expiresAt}`,
   ].join("\n");
+  if (new TextEncoder().encode(message).byteLength > MAX_MESSAGE_BYTES) {
+    throw new Error("EIP-4361 message exceeds the 8192-byte limit");
+  }
+  return message;
 }
 
 export async function verifyEoaWalletSignature(
