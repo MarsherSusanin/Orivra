@@ -27,7 +27,7 @@ describe("Web2JsonManifestV1Schema", () => {
 
   it.each([
     ["future schema versions", { ...validManifest, version: "2" }],
-    ["other networks", { ...validManifest, network: "flare" }],
+    ["unknown networks", { ...validManifest, network: "songbird" }],
     [
       "non-GET methods",
       { ...validManifest, request: { ...validManifest.request, method: "POST" } },

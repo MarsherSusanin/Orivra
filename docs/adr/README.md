@@ -25,5 +25,6 @@ ADR фиксирует архитектурное решение, которое
 | [0020](0020-persisted-consumer-lab-report.md) | Consumer Lab выводится из persisted consumer evidence и exact safe artifact bytes |
 | [0021](0021-evidence-receipt-and-secure-handoff.md) | Evidence receipt выводится из canonical bundle; share handoff использует только URL fragment |
 | [0022](0022-local-product-qa-report.md) | Локальная аналитика экспортирует aggregate-only deterministic QA/CI report |
+| [0023](0023-network-capability-boundary.md) | Известная сеть отделена от разрешённой Web2Json capability; Flare fail-closed до I/O |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.
