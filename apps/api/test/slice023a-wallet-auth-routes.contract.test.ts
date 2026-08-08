@@ -132,6 +132,73 @@ describe("Slice 023A public wallet auth route boundary", () => {
     expect(service.createWalletChallenge).not.toHaveBeenCalled();
   });
 
+  it("accepts an exact 8192-byte auth Request body", async () => {
+    const { api, service } = harness();
+    const body = JSON.stringify({ version: "1", address: ADDRESS });
+    const rawBody = `${body}${" ".repeat(8_192 - new TextEncoder().encode(body).byteLength)}`;
+    expect(new TextEncoder().encode(rawBody)).toHaveLength(8_192);
+    const response = await api.fetch(request(
+      "/v1/auth/wallet/challenges",
+      {},
+      { rawBody },
+    ));
+    expect(response.status).toBe(201);
+    expect(service.createWalletChallenge).toHaveBeenCalledOnce();
+  });
+
+  it("accepts an exact-boundary UTF-8 challenge but sanitizes an oversized service result", async () => {
+    const exactMessage = "é".repeat(4_096);
+    const oversizedMessage = "é".repeat(4_097);
+    const exact = harness();
+    exact.service.createWalletChallenge.mockResolvedValueOnce({
+      version: "1",
+      challengeId: CHALLENGE_ID,
+      address: ADDRESS,
+      purpose: "browser-session",
+      network: "coston2",
+      chainId: 114,
+      message: exactMessage,
+      issuedAt: "2026-08-09T00:00:00.000Z",
+      expiresAt: "2026-08-09T00:05:00.000Z",
+    });
+    const exactResponse = await exact.api.fetch(request(
+      "/v1/auth/wallet/challenges",
+      { version: "1", address: ADDRESS },
+    ));
+    expect(exactResponse.status).toBe(201);
+    expect((await exactResponse.json()).message).toBe(exactMessage);
+
+    const oversized = harness();
+    oversized.service.createWalletChallenge.mockResolvedValueOnce({
+      version: "1",
+      challengeId: CHALLENGE_ID,
+      address: ADDRESS,
+      purpose: "browser-session",
+      network: "coston2",
+      chainId: 114,
+      message: oversizedMessage,
+      issuedAt: "2026-08-09T00:00:00.000Z",
+      expiresAt: "2026-08-09T00:05:00.000Z",
+    });
+    const oversizedResponse = await oversized.api.fetch(request(
+      "/v1/auth/wallet/challenges",
+      { version: "1", address: ADDRESS },
+    ));
+    expect(oversizedResponse.status).toBe(500);
+    expectPrivateResponseHeaders(oversizedResponse);
+    const responseBytes = new Uint8Array(await oversizedResponse.arrayBuffer());
+    const responseText = new TextDecoder().decode(responseBytes);
+    expect(responseBytes.byteLength).toBeLessThan(8_192);
+    expect(responseText).toBe(JSON.stringify({
+      version: "1",
+      error: {
+        code: "REQUEST_FAILED",
+        message: "Request could not be completed",
+      },
+    }));
+    expect(responseText).not.toContain(oversizedMessage.slice(0, 32));
+  });
+
   it("keeps every non-auth public route behind existing bearer protection", async () => {
     const { api, authenticate } = harness();
     for (const path of ["/v1/account", "/v1/auth/wallet/unknown", "/v1/runs"]) {

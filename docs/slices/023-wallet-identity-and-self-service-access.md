@@ -24,9 +24,13 @@ Public contracts:
 Pure auth module contract:
 
 - `buildEip4361Message` accepts only server inputs and emits the exact EIP-4361
-  Coston2 message.
+  Coston2 message. Timestamps are canonical `YYYY-MM-DDTHH:mm:ss.sssZ`; other
+  parseable RFC3339 variants and RFC1123 are rejected rather than re-emitted.
 - `verifyEoaWalletSignature` delegates recovery to an injected pure port and
   accepts only the expected recovered address.
+- Challenge messages are bounded to 8192 UTF-8 bytes consistently in the
+  builder, public schema and API output parser; limits never count JavaScript
+  characters as bytes.
 
 HTTP boundary:
 

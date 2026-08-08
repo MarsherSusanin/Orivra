@@ -61,3 +61,7 @@ pre-buffer Node stream limit RED. `npm run typecheck` and `git diff --check`
 pass. PostgreSQL, Web, quotas,
 coverage and the full release matrix are deliberately deferred to their owning
 GREEN waves and candidate freeze.
+
+The independently discovered timestamp-canonicalization and UTF-8 byte-limit
+gaps are frozen separately in
+[Slice 023A corrective RED](slice-023a-corrective-red-auth-canonicalization.md).

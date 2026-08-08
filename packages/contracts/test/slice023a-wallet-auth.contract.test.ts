@@ -65,6 +65,29 @@ describe("Slice 023A wallet auth public contracts", () => {
     expect(challenge.safeParse({ ...value, domain: "caller.example" }).success).toBe(false);
   });
 
+  it("bounds challenge messages by UTF-8 bytes rather than JavaScript characters", () => {
+    const challenge = requiredSchema("WalletChallengeV1Schema");
+    const value = {
+      version: "1",
+      challengeId: CHALLENGE_ID,
+      address: ADDRESS,
+      purpose: "browser-session",
+      network: "coston2",
+      chainId: 114,
+      message: "a",
+      issuedAt: ISSUED_AT,
+      expiresAt: CHALLENGE_EXPIRES_AT,
+    };
+    const exactAscii = "a".repeat(8_192);
+    const exactMultibyte = "é".repeat(4_096);
+    const overMultibyte = "é".repeat(4_097);
+    expect(new TextEncoder().encode(exactMultibyte)).toHaveLength(8_192);
+    expect(new TextEncoder().encode(overMultibyte)).toHaveLength(8_194);
+    expect(challenge.safeParse({ ...value, message: exactAscii }).success).toBe(true);
+    expect(challenge.safeParse({ ...value, message: exactMultibyte }).success).toBe(true);
+    expect(challenge.safeParse({ ...value, message: overMultibyte }).success).toBe(false);
+  });
+
   it("freezes strict one-time browser session contracts", () => {
     const request = requiredSchema("WalletSessionRequestV1Schema");
     const session = requiredSchema("WalletSessionV1Schema");
