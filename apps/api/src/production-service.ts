@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
+  NETWORK_CAPABILITIES_V1,
   ConsumerLabReportV1Schema,
   DiagnosticV1Schema,
   PreflightReportV1Schema,
@@ -511,8 +512,18 @@ export function createProductionProoflineService(input: {
   }
 
   return {
+    async listNetworks() {
+      return NETWORK_CAPABILITIES_V1;
+    },
+
     async createRun(context: Record<string, unknown>) {
       const manifest = Web2JsonManifestV1Schema.parse(context.manifest);
+      if (manifest.network !== "coston2") {
+        throw Object.assign(new Error("Network capability is disabled"), {
+          status: 409,
+          code: "NETWORK_CAPABILITY_DISABLED",
+        });
+      }
       const requestFingerprint = fingerprint(manifest);
       const client = await input.pool.connect();
       const accepted = (runId: string) => ({

@@ -36,6 +36,23 @@ flowchart LR
 
 Разрешённое направление зависимостей: contracts → domain → adapters/composition → surfaces. Pure packages не импортируют runtime composition.
 
+## Network capability boundary
+
+`FdcNetworkV1` — закрытый публичный словарь `coston2 | flare`, но выполнение
+Web2Json определяется отдельным `NetworkCapabilityV1`. Публичный
+`GET /v1/networks` возвращает канонические wallet/explorer metadata без
+аутентификации и без upstream I/O: Coston2 имеет статус `enabled`, Flare —
+`upstream-unsupported`.
+
+Manifest может сохранить обе известные identity, чтобы поверхность честно
+объяснила недоступность. API после project authentication и strict body
+validation отклоняет Flare с `409 NETWORK_CAPABILITY_DISABLED` до
+`service.createRun`. Production service повторяет guard до PostgreSQL. Поэтому
+registry, verifier, source fetch, RPC, Relay и DA для Flare недостижимы.
+Persisted run/proof/bundle/transaction schemas и единственный production FDC
+adapter остаются Coston2-only. Условия будущей активации зафиксированы в
+[ADR 0023](docs/adr/0023-network-capability-boundary.md).
+
 ## Persisted run model
 
 `run_events` — append-only источник истины. Каждое событие содержит `runId`, монотонный `sequence`, `type`, `occurredAt` и versioned payload. `RunProjectionV1` и `ProofBundleV1` выводятся из упорядоченного журнала.
@@ -115,13 +132,18 @@ automation. До этого deployed live Coston2 PASS не заявляется
 
 ## Product scope
 
-В текущем scope: Coston2, Web2Json, public HTTPS GET, query/JQ/ABI, canonical vulnerable/safe consumers, wallet/relayer, replay, CLI, Action и Sites.
+В текущем executable scope: Coston2, Web2Json, public HTTPS GET, query/JQ/ABI,
+canonical vulnerable/safe consumers, wallet/relayer, replay, CLI, Action и
+Sites. Flare Mainnet присутствует только как явно выключенная public capability;
+production adapter и persisted Flare evidence отсутствуют.
 
 Product instrumentation остаётся локальным: bounded privacy-safe event queue
 сводится в canonical aggregate QA bytes. Raw events и identifiers не входят в
 report, сетевого analytics transport нет.
 
-Вне scope: mainnet, custody пользовательских ключей, arbitrary methods/headers/body, произвольные Solidity contracts и автоматический production deploy.
+Вне scope: Mainnet execution, custody пользовательских ключей, arbitrary
+methods/headers/body, произвольные Solidity contracts и автоматический
+production deploy.
 
 ## Решения
 

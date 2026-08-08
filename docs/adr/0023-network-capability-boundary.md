@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for Slice 022.
+Accepted for Slice 022.
 
 ## Context
 

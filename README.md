@@ -36,6 +36,9 @@ blockchain-операций.
 - Завершён pre-infrastructure product journey 014–021: Runs, Composer,
   Preflight Workbench, submission, recovery, Consumer Lab, Integration Package
   и локальный QA report.
+- Публичный `GET /v1/networks` различает известную сеть и доступную
+  возможность: Coston2 Web2Json включён, Flare Mainnet распознаётся как
+  `upstream-unsupported` и отклоняется до создания run или network I/O.
 - Реализованы, но не размещены Web, PostgreSQL API, restart-safe worker, CLI,
   GitHub Action package и Sites package.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
@@ -126,6 +129,9 @@ Web2JsonManifestV1
 - Project/share tokens хранятся только как keyed digest; share token даёт только read access.
 - Relayer допускает только Coston2 chain `114` и `FdcHub.requestAttestation`, проверяет calldata, fee caps, quota, balance floor и idempotency.
 - FDC-адреса разрешаются через registry; runtime-код не подменяет live flow симуляцией.
+- Допустимое имя сети не означает доступный adapter: Flare manifest сохраняется
+  клиентом, но `POST /v1/runs` fail-closed отвечает
+  `409 NETWORK_CAPABILITY_DISABLED`; persisted evidence остаётся Coston2-only.
 - Run history append-only; projection и bundle вычисляются из упорядоченных событий.
 - Любой release candidate должен получить два независимых PASS на одном tree hash.
 

@@ -1,9 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
-import type {
-  DiagnosticV1,
-  ProofBundleV1,
-  RunEventV1,
-  Web2JsonManifestV1,
+import {
+  NETWORK_CAPABILITIES_V1,
+  type DiagnosticV1,
+  type ProofBundleV1,
+  type RunEventV1,
+  type Web2JsonManifestV1,
 } from "@proofline/contracts";
 import {
   canonicalSerializeProofBundle,
@@ -244,11 +245,21 @@ export function createHermeticProoflineSystem(input: {
   }
 
   const service = {
+    async listNetworks() {
+      return NETWORK_CAPABILITIES_V1;
+    },
+
     async createRun(context: {
       projectId: string;
       idempotencyKey: string;
       manifest: Web2JsonManifestV1;
     }) {
+      if (context.manifest.network !== "coston2") {
+        throw Object.assign(new Error("Network capability is disabled"), {
+          status: 409,
+          code: "NETWORK_CAPABILITY_DISABLED",
+        });
+      }
       const createKey = `${context.projectId}:${context.idempotencyKey}`;
       const existing = db.createKeys.get(createKey);
       if (existing) {

@@ -233,11 +233,121 @@ const SubmissionV1Schema = z
   })
   .strict();
 
+export const FdcNetworkV1Schema = z.enum(["coston2", "flare"]);
+
+export type FdcNetworkV1 = z.infer<typeof FdcNetworkV1Schema>;
+
+const Coston2NetworkCapabilityV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    network: z.literal("coston2"),
+    displayName: z.literal("Coston2"),
+    web2JsonStatus: z.literal("enabled"),
+    wallet: z
+      .object({
+        chainId: z.literal(114),
+        chainIdHex: z.literal("0x72"),
+        nativeCurrency: z
+          .object({
+            name: z.literal("Coston2 Flare"),
+            symbol: z.literal("C2FLR"),
+            decimals: z.literal(18),
+          })
+          .strict(),
+        explorerBaseUrl: z.literal(
+          "https://coston2-explorer.flare.network",
+        ),
+      })
+      .strict(),
+  })
+  .strict();
+
+const FlareNetworkCapabilityV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    network: z.literal("flare"),
+    displayName: z.literal("Flare"),
+    web2JsonStatus: z.literal("upstream-unsupported"),
+    reason: z.literal("Web2Json is not available on Flare Mainnet."),
+    wallet: z
+      .object({
+        chainId: z.literal(14),
+        chainIdHex: z.literal("0xe"),
+        nativeCurrency: z
+          .object({
+            name: z.literal("Flare"),
+            symbol: z.literal("FLR"),
+            decimals: z.literal(18),
+          })
+          .strict(),
+        explorerBaseUrl: z.literal("https://flare-explorer.flare.network"),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const NetworkCapabilityV1Schema = z.discriminatedUnion("network", [
+  Coston2NetworkCapabilityV1Schema,
+  FlareNetworkCapabilityV1Schema,
+]);
+
+export type NetworkCapabilityV1 = z.infer<typeof NetworkCapabilityV1Schema>;
+
+export const NetworkCapabilitiesV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    networks: z.tuple([
+      Coston2NetworkCapabilityV1Schema,
+      FlareNetworkCapabilityV1Schema,
+    ]),
+  })
+  .strict();
+
+export type NetworkCapabilitiesV1 = z.infer<
+  typeof NetworkCapabilitiesV1Schema
+>;
+
+export const NETWORK_CAPABILITIES_V1: NetworkCapabilitiesV1 =
+  NetworkCapabilitiesV1Schema.parse({
+    version: "1",
+    networks: [
+      {
+        version: "1",
+        network: "coston2",
+        displayName: "Coston2",
+        web2JsonStatus: "enabled",
+        wallet: {
+          chainId: 114,
+          chainIdHex: "0x72",
+          nativeCurrency: {
+            name: "Coston2 Flare",
+            symbol: "C2FLR",
+            decimals: 18,
+          },
+          explorerBaseUrl: "https://coston2-explorer.flare.network",
+        },
+      },
+      {
+        version: "1",
+        network: "flare",
+        displayName: "Flare",
+        web2JsonStatus: "upstream-unsupported",
+        reason: "Web2Json is not available on Flare Mainnet.",
+        wallet: {
+          chainId: 14,
+          chainIdHex: "0xe",
+          nativeCurrency: { name: "Flare", symbol: "FLR", decimals: 18 },
+          explorerBaseUrl: "https://flare-explorer.flare.network",
+        },
+      },
+    ],
+  });
+
 export const Web2JsonManifestV1Schema = z
   .object({
     version: VersionV1Schema,
     attestationType: z.literal("Web2Json"),
-    network: z.literal("coston2"),
+    network: FdcNetworkV1Schema,
     request: Web2JsonRequestV1Schema,
     consumer: Web2JsonConsumerV1Schema,
     submission: SubmissionV1Schema,

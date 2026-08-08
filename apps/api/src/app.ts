@@ -1,4 +1,5 @@
 import {
+  NetworkCapabilitiesV1Schema,
   SubmissionRequestV1Schema,
   Web2JsonManifestV1Schema,
 } from "@proofline/contracts";
@@ -166,6 +167,19 @@ export function createProoflineApi(input: {
   return {
     async fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
+
+      if (request.method === "GET" && url.pathname === "/v1/networks") {
+        try {
+          return json(
+            NetworkCapabilitiesV1Schema.parse(
+              await input.service.listNetworks({}),
+            ),
+          );
+        } catch {
+          return error(500, "REQUEST_FAILED", "Request could not be completed");
+        }
+      }
+
       const token = bearer(request);
       if (!token || !TOKEN_PATTERN.test(token)) {
         return error(401, "UNAUTHORIZED", "A valid opaque bearer token is required");
@@ -216,6 +230,18 @@ export function createProoflineApi(input: {
           );
         }
         body = parsed.data;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/runs" &&
+        (body.manifest as { network: "coston2" | "flare" }).network === "flare"
+      ) {
+        return error(
+          409,
+          "NETWORK_CAPABILITY_DISABLED",
+          "Request rejected",
+        );
       }
 
       const projectId = auth.projectId;

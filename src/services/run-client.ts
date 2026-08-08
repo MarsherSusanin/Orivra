@@ -2,6 +2,7 @@ import type {
   ConsumerLabReportV1,
   CreateRunResultV1,
   EvidenceReceiptV1,
+  NetworkCapabilityV1,
   PreflightReportV1,
   RunListPageV1,
   SubmissionResponseV1,
@@ -13,13 +14,14 @@ import {
   ConsumerLabReportV1Schema,
   CreateRunResultV1Schema,
   EvidenceReceiptV1Schema,
+  NETWORK_CAPABILITIES_V1,
+  NetworkCapabilityV1Schema,
   PreflightReportV1Schema,
   SubmissionResponseV1Schema,
   ShareLinkV1Schema,
 } from "../../packages/contracts/src";
 
 const LAST_RUN_KEY = "proofline:last-run";
-const COSTON2_CHAIN_ID = "0x72";
 const TRANSACTION_HASH = /^0x[0-9a-fA-F]{64}$/;
 const WALLET_BROADCAST_PENDING = "wallet-broadcast-pending";
 const walletSubmissionFlights = new Map<
@@ -517,8 +519,24 @@ export function submitWithEip1193(input: {
   idempotencyKey: string;
   provider: Eip1193Provider;
   client: Pick<RunClient, "prepareSubmission" | "attachTransaction">;
+  networkCapability?: NetworkCapabilityV1;
   recoveryStorage?: RecoveryStoragePort;
 }): Promise<{ transactionHash: string }> {
+  const parsedCapability = NetworkCapabilityV1Schema.safeParse(
+    input.networkCapability ?? NETWORK_CAPABILITIES_V1.networks[0],
+  );
+  if (
+    !parsedCapability.success ||
+    parsedCapability.data.web2JsonStatus !== "enabled"
+  ) {
+    return Promise.reject(
+      new ProoflineClientError("Web2Json is unavailable on this network", {
+        status: 409,
+        code: "NETWORK_CAPABILITY_DISABLED",
+      }),
+    );
+  }
+  const expectedChainId = parsedCapability.data.wallet.chainIdHex.toLowerCase();
   const flightKey = `${input.runId}\u0000${input.idempotencyKey}`;
   const existingFlight = walletSubmissionFlights.get(flightKey);
   if (existingFlight) return existingFlight;
@@ -552,7 +570,7 @@ export function submitWithEip1193(input: {
       input.runId,
       input.idempotencyKey,
     );
-    if (transaction.chainId.toLowerCase() !== COSTON2_CHAIN_ID) {
+    if (transaction.chainId.toLowerCase() !== expectedChainId) {
       throw new Error("Wallet submission was prepared for a network other than Coston2");
     }
 
@@ -561,7 +579,7 @@ export function submitWithEip1193(input: {
     try {
       await input.provider.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: COSTON2_CHAIN_ID }],
+        params: [{ chainId: expectedChainId }],
       });
       accounts = await input.provider.request({ method: "eth_requestAccounts" });
       if (!Array.isArray(accounts) || typeof accounts[0] !== "string") {
@@ -579,7 +597,7 @@ export function submitWithEip1193(input: {
         params: [
           {
             ...transaction,
-            chainId: COSTON2_CHAIN_ID,
+            chainId: expectedChainId,
             from: (accounts as string[])[0],
           },
         ],
