@@ -174,6 +174,8 @@ export function createPersistedWalletAuthService(input: {
          WHERE id = $1
            AND consumed_at IS NULL
            AND expires_at > now()
+           AND issued_at = date_trunc('milliseconds', issued_at)
+           AND expires_at = date_trunc('milliseconds', expires_at)
          RETURNING id, address, nonce, message, issued_at, expires_at`,
         [challengeId],
       );

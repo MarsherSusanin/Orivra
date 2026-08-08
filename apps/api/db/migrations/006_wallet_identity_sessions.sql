@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS proofline_private.wallet_challenges (
     issued_at timestamptz NOT NULL,
     expires_at timestamptz NOT NULL,
     consumed_at timestamptz,
+    CONSTRAINT wallet_challenges_issued_at_millisecond_check
+        CHECK (issued_at = date_trunc('milliseconds', issued_at)),
+    CONSTRAINT wallet_challenges_expires_at_millisecond_check
+        CHECK (expires_at = date_trunc('milliseconds', expires_at)),
     CHECK (expires_at = issued_at + interval '5 minutes'),
     CHECK (consumed_at IS NULL OR consumed_at >= issued_at)
 );

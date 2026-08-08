@@ -62,7 +62,7 @@ npm run start --workspace apps/api
 | `PROOFLINE_TOKEN_DIGEST_KEY` | required | Key для digest project/share tokens |
 | `PORT` | optional, default `8080` | HTTP port |
 | `PROOFLINE_API_DB_POOL_SIZE` | optional, default `10` | PostgreSQL pool size |
-| `PROOFLINE_WEB_ORIGIN` | required | Exact public HTTPS root Origin для wallet-auth requests и share links; placeholder/default отсутствует |
+| `PROOFLINE_WEB_ORIGIN` | required | Единственный exact public HTTPS root Origin для wallet auth, `/v1/*` browser CORS и share links; placeholder/default отсутствует |
 
 API должен завершаться с ошибкой до начала обслуживания запросов, если обязательная конфигурация отсутствует.
 

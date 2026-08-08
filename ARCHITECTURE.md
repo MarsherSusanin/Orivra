@@ -101,6 +101,9 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
   потребляется до локального EOA recovery. После durable consume API заново
   строит canonical message из configured origin и persisted address, nonce и
   timestamps; несовпадение exact UTF-8 bytes fail-closed как unavailable.
+  Этот же exact configured origin — единственный CORS authority для `/v1/*`:
+  preflight завершается до bearer/service dispatch, а actual success/error
+  responses получают exact origin без wildcard и credentialed CORS.
   Успешная проверка под advisory lock
   переиспользует один wallet identity/default project и выпускает random
   12-hour browser project token; база хранит только keyed digest. Expired и

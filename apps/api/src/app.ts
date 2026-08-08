@@ -23,6 +23,14 @@ const PRIVATE_RESPONSE_HEADERS = {
   "cache-control": "no-store",
   "referrer-policy": "no-referrer",
 } as const;
+const CORS_ALLOWED_METHODS = ["GET", "POST", "DELETE"] as const;
+const CORS_ALLOWED_HEADERS = [
+  "accept",
+  "content-type",
+  "authorization",
+  "idempotency-key",
+] as const;
+const CORS_HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const PRIVATE_KEY_PATTERN =
   /private.?key|seed.?phrase|mnemonic|(?:^|[_-])secret(?:$|[_-])/i;
 const TransactionHashSchema = z
@@ -87,6 +95,96 @@ function privateError(status: number, code: string, message: string): Response {
     status,
     PRIVATE_RESPONSE_HEADERS,
   );
+}
+
+function isV1Path(pathname: string): boolean {
+  return pathname === "/v1" || pathname.startsWith("/v1/");
+}
+
+function corsAuthorityHeaders(origin: string): Headers {
+  return new Headers({
+    "access-control-allow-origin": origin,
+    "access-control-expose-headers": "Location",
+    vary: "Origin",
+  });
+}
+
+function parseCorsRequestHeaders(value: string | null): Set<string> | null {
+  if (value === null || value.trim() === "") return new Set();
+  const names = value.split(",").map((item) => item.trim());
+  if (names.some((name) => !CORS_HEADER_NAME.test(name))) return null;
+  return new Set(names.map((name) => name.toLowerCase()));
+}
+
+function corsPreflightResponse(
+  request: Request,
+  url: URL,
+  publicWebOrigin: string | null,
+): Response | null {
+  if (request.method !== "OPTIONS" || !isV1Path(url.pathname)) return null;
+  const requestedMethod = request.headers
+    .get("access-control-request-method")
+    ?.trim()
+    .toUpperCase();
+  const requestedHeaders = parseCorsRequestHeaders(
+    request.headers.get("access-control-request-headers"),
+  );
+  const allowedMethods = new Set<string>(CORS_ALLOWED_METHODS);
+  const allowedHeaders = new Set<string>(CORS_ALLOWED_HEADERS);
+  const allowed =
+    publicWebOrigin !== null &&
+    request.headers.get("origin") === publicWebOrigin &&
+    requestedMethod !== undefined &&
+    allowedMethods.has(requestedMethod) &&
+    requestedHeaders !== null &&
+    [...requestedHeaders].every((name) => allowedHeaders.has(name));
+  if (!allowed) {
+    return privateError(
+      403,
+      "CORS_PREFLIGHT_FORBIDDEN",
+      "Request rejected",
+    );
+  }
+  const headers = corsAuthorityHeaders(publicWebOrigin);
+  headers.set("access-control-allow-methods", CORS_ALLOWED_METHODS.join(", "));
+  headers.set("access-control-allow-headers", CORS_ALLOWED_HEADERS.join(", "));
+  return new Response(null, { status: 204, headers });
+}
+
+function decorateCorsResponse(
+  request: Request,
+  url: URL,
+  response: Response,
+  publicWebOrigin: string | null,
+): Response {
+  if (
+    publicWebOrigin === null ||
+    !isV1Path(url.pathname) ||
+    request.headers.get("origin") !== publicWebOrigin ||
+    !(CORS_ALLOWED_METHODS as readonly string[]).includes(request.method)
+  ) {
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  for (const [name, value] of corsAuthorityHeaders(publicWebOrigin)) {
+    if (name === "vary" && headers.has("vary")) {
+      const existing = headers
+        .get("vary")!
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (!existing.some((item) => item.toLowerCase() === "origin")) {
+        headers.set("vary", [...existing, "Origin"].join(", "));
+      }
+    } else {
+      headers.set(name, value);
+    }
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 function responseError(
@@ -261,6 +359,14 @@ export function createProoflineApi(input: {
   return {
     async fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
+      const preflight = corsPreflightResponse(
+        request,
+        url,
+        publicWebOrigin,
+      );
+      if (preflight) return preflight;
+
+      const response = await (async (): Promise<Response> => {
 
       if (request.method === "GET" && url.pathname === "/v1/networks") {
         try {
@@ -497,6 +603,13 @@ export function createProoflineApi(input: {
       } catch (cause) {
         return responseError(cause);
       }
+      })();
+      return decorateCorsResponse(
+        request,
+        url,
+        response,
+        publicWebOrigin,
+      );
     },
   };
 }
