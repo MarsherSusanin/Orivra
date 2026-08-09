@@ -436,3 +436,34 @@ test("publication evidence is a separate append-only record and is the only veri
     /(?:VDS|Droplet)[\s\S]{0,220}pulls? only[\s\S]{0,180}verified remote digest/i,
   ]);
 });
+
+test("rollback selects only a previously published verified digest bound to its frozen manifest", async () => {
+  const documents = await readMany(["adr", "roadmap", "runbook"]);
+
+  for (const [key, label] of [
+    ["adr", "ADR 0029"],
+    ["roadmap", "product roadmap"],
+    ["runbook", "runbook"],
+  ]) {
+    requirePatterns(documents[key], label, [
+      /application rollback[\s\S]{0,280}prior[\s\S]{0,120}schema[- ]compatible[\s\S]{0,180}verified remote digest/i,
+      /rollback[\s\S]{0,360}prior[\s\S]{0,120}immutable[\s\S]{0,120}publication(?:\/deployment)? evidence/i,
+      /prior[\s\S]{0,280}publication(?:\/deployment)? evidence[\s\S]{0,220}corresponding[\s\S]{0,120}frozenReleaseManifestSha256/i,
+      /frozen release manifest[\s\S]{0,240}schema compatibility metadata/i,
+      /frozen release manifest[\s\S]{0,220}(?:never|must not|is not)[\s\S]{0,120}pull authority/i,
+      /unpublished[\s\S]{0,120}digest[\s\S]{0,120}(?:forbidden|must not|never)/i,
+      /unverified[\s\S]{0,120}digest[\s\S]{0,120}(?:forbidden|must not|never)/i,
+      /(?:evidence|binding)[\s\S]{0,120}mismatch[\s\S]{0,120}(?:blocks?|aborts?|forbids?)[\s\S]{0,80}rollback/i,
+      /(?:missing|absent|absence)[\s\S]{0,160}(?:publication(?:\/deployment)? evidence|binding)[\s\S]{0,120}(?:blocks?|aborts?|forbids?)[\s\S]{0,80}rollback/i,
+    ]);
+  }
+
+  for (const [key, label] of [
+    ["adr", "ADR 0029"],
+    ["runbook", "runbook"],
+  ]) {
+    requirePatterns(documents[key], label, [
+      /(?:database|DB) schema rollback[\s\S]{0,240}forward repair[\s\S]{0,180}new[- ]volume restore/i,
+    ]);
+  }
+});

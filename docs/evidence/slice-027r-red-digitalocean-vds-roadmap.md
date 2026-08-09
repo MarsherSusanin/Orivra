@@ -131,3 +131,38 @@ Recorded on the rejected parent above:
 
 Candidate commit/tree are reported after commit. This wave changes no canonical
 implementation, production, infra, dependency, credential or network surface.
+
+## Rollback authority corrective RED
+
+Rejected candidate `20ba3788f3433cc4baa6e3a117f315bd277457e5` /
+tree `bca38448226863fb07b4d0aa63564573d1151f33` makes all prior fourteen
+documentation contracts GREEN, but rollback still selects a prior digest from
+the frozen release manifest alone. That bypasses the publication authority
+introduced by the preceding correction.
+
+One additional contract requires ADR 0029, roadmap and runbook to state that:
+
+- application rollback selects a prior schema-compatible verified remote
+  digest only from its prior immutable publication/deployment evidence;
+- that evidence is bound to the corresponding frozen manifest through
+  `frozenReleaseManifestSha256`;
+- the frozen manifest supplies schema-compatibility metadata but is never pull
+  authority;
+- unpublished or unverified digests are forbidden, and missing/mismatched
+  evidence blocks rollback;
+- database schema rollback remains forward repair or restore to a new volume.
+
+The previous fourteen tests remain unchanged controls. Recorded on the rejected
+parent above:
+
+- `npm run typecheck` and `git diff --check` — PASS;
+- `node --test --test-reporter=dot
+  tests/slice027r-digitalocean-vds-roadmap.contract.test.mjs` — 15 tests:
+  14 controls PASS and exactly one rollback-authority RED (`..............X`);
+- nearest unchanged documentation contract
+  `npm test -- tests/slice016-runbook.contract.test.ts --maxWorkers=1` — 1 file /
+  3 tests PASS.
+
+Candidate commit/tree are reported after commit. This tests/evidence-only
+correction changes no canonical implementation, production, infra, dependency,
+credential or network surface.
