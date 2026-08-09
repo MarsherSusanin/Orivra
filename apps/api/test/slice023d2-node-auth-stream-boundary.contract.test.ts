@@ -125,6 +125,7 @@ async function collectUntil(input: {
   predicate?: (received: string) => boolean;
   timeoutMs?: number;
   endAfterWrite?: boolean;
+  acceptErrorAfterPredicate?: boolean;
 }): Promise<string> {
   const predicate = input.predicate ?? ((received) => received.includes("\r\n\r\n"));
   const timeoutMs = input.timeoutMs ?? 1_000;
@@ -145,6 +146,10 @@ async function collectUntil(input: {
       if (predicate(received)) finish();
     };
     const onError = (error: Error) => {
+      if (input.acceptErrorAfterPredicate && predicate(received)) {
+        finish();
+        return;
+      }
       cleanup();
       reject(error);
     };
@@ -167,6 +172,16 @@ async function collectUntil(input: {
       else input.socket.write(input.write);
     }
   });
+}
+
+function hasCompleteContentLengthResponse(received: string): boolean {
+  const headerEnd = received.indexOf("\r\n\r\n");
+  if (headerEnd < 0) return false;
+  const match = received.slice(0, headerEnd).match(/^content-length:\s*([0-9]+)\s*$/im);
+  if (!match?.[1]) return false;
+  const contentLength = Number(match[1]);
+  return Number.isSafeInteger(contentLength) &&
+    Buffer.byteLength(received.slice(headerEnd + 4), "latin1") >= contentLength;
 }
 
 async function rawExchange(port: number, request: string): Promise<string> {
@@ -445,16 +460,27 @@ describe("Slice 023D2 exact pre-buffer byte count", () => {
     const interval = setInterval(() => {
       if (!socket.destroyed) socket.write("1\r\nx\r\n");
     }, 20);
+    const stopClientWrites = () => {
+      clearInterval(interval);
+      if (!socket.destroyed && socket.writable) socket.end();
+    };
+    socket.once("data", stopClientWrites);
     try {
       const raw = await collectUntil({
         socket,
         timeoutMs: 350,
-        predicate: (received) => socket.destroyed && received.includes("REQUEST_BODY_TIMEOUT"),
+        acceptErrorAfterPredicate: true,
+        predicate: (received) =>
+          socket.destroyed &&
+          hasCompleteContentLengthResponse(received) &&
+          received.includes("REQUEST_BODY_TIMEOUT"),
       });
       expectRawPrivateRejection(raw, 408, "REQUEST_BODY_TIMEOUT", true);
       expect(recorded.fetch).not.toHaveBeenCalled();
     } finally {
+      socket.off("data", stopClientWrites);
       clearInterval(interval);
+      if (!socket.destroyed) socket.destroy();
     }
   });
 });

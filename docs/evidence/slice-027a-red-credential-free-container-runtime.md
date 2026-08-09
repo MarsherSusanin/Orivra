@@ -172,6 +172,42 @@ future real smoke remains required to record its unique project identity and
 complete `down --volumes --remove-orphans` plus post-cleanup absence after every
 failed or successful attempt.
 
+### Slice 023D2 raw-socket harness correction
+
+During the 027A production wave, the frozen absolute-auth-body-deadline test
+intermittently reported client-side `ECONNRESET`. The active production diff
+only added secret resolution after `startProductionApi`; the guarded body
+reader and direct rejection/close implementation were byte-identical to the
+accepted Slice 023D2 implementation. An approved isolated run passed, while a
+ten-run serial diagnosis produced nine PASS and one `ECONNRESET`. Slice 026
+evidence had already recorded the same timing-sensitive case. This rules out a
+027A production regression and identifies a raw client race: the harness kept
+writing chunks after the server had begun its complete 408 response, while its
+socket error handler rejected even a post-response reset.
+
+The tests-only correction stops the trickle and half-closes the client write
+side on the first response bytes. Socket errors remain failures by default;
+the deadline case opts in to completion only when the socket is closed, the
+full declared `Content-Length` body is captured and the exact
+`REQUEST_BODY_TIMEOUT` predicate is already true. The unchanged exact status,
+private envelope, CORS/cache/referrer headers, connection-close and zero-fetch
+assertions then run normally. Errors or resets before that full predicate still
+fail.
+
+```sh
+# same isolated command executed in 30 separate serial processes
+npx vitest run \
+  apps/api/test/slice023d2-node-auth-stream-boundary.contract.test.ts \
+  -t "uses one absolute body deadline instead of resetting it for each chunk" \
+  --reporter=dot --maxWorkers=1
+npx vitest run \
+  apps/api/test/slice023d2-node-auth-stream-boundary.contract.test.ts \
+  --reporter=dot --maxWorkers=1
+```
+
+Result: isolated deadline `30/30 PASS`; full Slice 023D2 `31/31 PASS`. No
+production source changed for this correction.
+
 ## RED interpretation
 
 Only absent 027A production surfaces are accepted failures. A TypeScript
