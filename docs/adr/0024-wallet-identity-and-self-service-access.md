@@ -185,8 +185,10 @@ subscriber surface, so no observer contract is introduced by this correction.
 - **023C1 — Web access client and session controller:** strict browser
   transport, sanitized failures, session-only token retention, restore,
   cancellation, reconnect/sign-out recovery and forget-browser semantics.
-- **023C2 — wallet provider and sign-in surface:** lazy EIP-1193 loading,
-  challenge/signature orchestration and unsupported/rejected/reconnect states.
+- **023C2A — wallet provider adapter:** lazy EIP-6963/EIP-1193 discovery,
+  enabled-Coston2 EOA verification, exact signing and bounded provider errors.
+- **023C2B — wallet sign-in surface:** provider chooser, persisted
+  challenge/session orchestration and unsupported/rejected/reconnect states.
 - **023C3 — Settings surface:** account inspection plus one-time CLI/Action
   token issue, copy and revoke UX.
 - **023D — quotas and hardening:** challenge/run limits, active-live-run cap,
