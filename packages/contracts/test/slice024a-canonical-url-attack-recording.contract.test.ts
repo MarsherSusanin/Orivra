@@ -5,8 +5,10 @@ import * as Contracts from "../src/index";
 import { replayProofBundle } from "../../domain/src/index";
 import {
   HOST_MISMATCH_SELECTOR,
+  RESPONSE_SHAPE_CANONICAL_JSON,
   makeCanonicalUrlAttackRecording,
   makeCanonicalUrlAttackRecordingContent,
+  sha256,
 } from "./slice024a-canonical-url-attack.fixtures";
 
 const contracts = Contracts as Record<string, any>;
@@ -163,5 +165,88 @@ describe("Slice 024A canonical URL attack recording public contract", () => {
       mutate(value);
       expect(envelopeSchema().safeParse(value).success).toBe(false);
     }
+  });
+
+  it("requires bounded raw reproduction material instead of a hash-only transcript", () => {
+    const value = makeCanonicalUrlAttackRecording();
+    expect(value.reproduction.standardJson.input).toMatch(/^\{"language":"Solidity"/);
+    expect(value.reproduction.standardJson.output).toMatch(/^\{"contracts":/);
+    expect(Object.keys(value.reproduction.sources)).toEqual([
+      "vulnerable",
+      "safe",
+      "invariantLibrary",
+      "web2JsonInterface",
+      "contractRegistry",
+      "exactProofVerifier",
+    ]);
+    expect(value.reproduction.transformedResponseShapeCanonicalJson).toBe(
+      RESPONSE_SHAPE_CANONICAL_JSON,
+    );
+    expect(envelopeSchema().safeParse(value).success).toBe(true);
+
+    const missing: any = structuredClone(value);
+    delete missing.reproduction;
+    expect(envelopeSchema().safeParse(missing).success).toBe(false);
+  });
+
+  it("freezes exact source paths and raw creation/runtime bytecode plus calldata/result anatomy", () => {
+    const value = makeCanonicalUrlAttackRecording();
+    expect(value.reproduction.sources.vulnerable.path).toBe(
+      "contracts/CanonicalVulnerableWeb2JsonConsumer.sol",
+    );
+    expect(value.reproduction.sources.safe.path).toBe(
+      "contracts/CanonicalSafeWeb2JsonConsumer.sol",
+    );
+    expect(value.reproduction.sources.invariantLibrary.path).toBe(
+      "contracts/ProoflineUrlInvariant.sol",
+    );
+    expect(value.reproduction.sources.exactProofVerifier.path).toBe(
+      "contracts/ProoflineExactProofVerifier.sol",
+    );
+    expect(value.reproduction.bytecode.vulnerable).toEqual({
+      creation: expect.stringMatching(/^0x(?:[a-f0-9]{2})+$/),
+      runtime: expect.stringMatching(/^0x(?:[a-f0-9]{2})+$/),
+    });
+    expect(value.reproduction.executions.map((execution) => ({
+      scenario: execution.scenario,
+      consumer: execution.consumer,
+      status: execution.result.status,
+    }))).toEqual([
+      { scenario: "attack", consumer: "canonical-vulnerable", status: "accepted" },
+      { scenario: "attack", consumer: "canonical-safe", status: "reverted" },
+      { scenario: "control", consumer: "canonical-safe", status: "accepted" },
+    ]);
+    expect(envelopeSchema().safeParse(value).success).toBe(true);
+  });
+
+  it("rejects missing, extra, unbounded or malformed raw reproduction fields", () => {
+    expect(
+      envelopeSchema().safeParse(makeCanonicalUrlAttackRecording()).success,
+    ).toBe(true);
+
+    const mutations: Array<[string, (value: any) => void]> = [
+      ["source missing", (value) => { delete value.reproduction.sources.safe.content; }],
+      ["source extra", (value) => { value.reproduction.sources.safe.url = "file:///tmp/fake.sol"; }],
+      ["wrong checked-in path", (value) => { value.reproduction.sources.safe.path = "contracts/Fake.sol"; }],
+      ["non-hex bytecode", (value) => { value.reproduction.bytecode.safe.runtime = "6000"; }],
+      ["odd bytecode", (value) => { value.reproduction.bytecode.safe.creation = "0x123"; }],
+      ["empty calldata", (value) => { value.reproduction.executions[0].calldata = "0x"; }],
+      ["wrong raw revert", (value) => { value.reproduction.executions[1].result.revertData = "0xdeadbeef"; }],
+      ["oversized standard JSON", (value) => { value.reproduction.standardJson.input = "x".repeat(1_048_577); }],
+    ];
+
+    for (const [name, mutate] of mutations) {
+      const value: any = structuredClone(makeCanonicalUrlAttackRecording());
+      mutate(value);
+      expect(envelopeSchema().safeParse(value).success, name).toBe(false);
+    }
+  });
+
+  it("keeps every declared raw source SHA structurally exact", () => {
+    const value = makeCanonicalUrlAttackRecording();
+    for (const source of Object.values(value.reproduction.sources)) {
+      expect(source.sha256).toBe(sha256(source.content));
+    }
+    expect(envelopeSchema().safeParse(value).success).toBe(true);
   });
 });

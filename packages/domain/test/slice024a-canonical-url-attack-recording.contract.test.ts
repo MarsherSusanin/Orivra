@@ -8,6 +8,7 @@ import {
   HOST_MISMATCH_SELECTOR,
   makeCanonicalUrlAttackRecording,
   makeCanonicalUrlAttackRecordingContent,
+  sha256,
 } from "../../contracts/test/slice024a-canonical-url-attack.fixtures";
 
 const domain = Domain as Record<string, any>;
@@ -212,5 +213,72 @@ describe("Slice 024A canonical URL attack recording integrity", () => {
 
     const serialized = serializeRecording(createRecording());
     expect(serialized).not.toMatch(/Bearer|project_[A-Za-z0-9_-]{16,}|private.?key|secret|authorization/i);
+  });
+
+  it("derives every transcript hash from bounded raw reproduction bytes", () => {
+    const valid = makeCanonicalUrlAttackRecordingContent();
+    expect(() => createRecording(valid)).not.toThrow();
+
+    const mutations: Array<[string, (value: any) => void]> = [
+      ["standard JSON input", (value) => { value.reproduction.standardJson.input += " "; }],
+      ["standard JSON output", (value) => { value.reproduction.standardJson.output += " "; }],
+      ["vulnerable source", (value) => { value.reproduction.sources.vulnerable.content += "// forged"; }],
+      ["safe source", (value) => { value.reproduction.sources.safe.content += "// forged"; }],
+      ["invariant source", (value) => { value.reproduction.sources.invariantLibrary.content += "// forged"; }],
+      ["vulnerable creation", (value) => { value.reproduction.bytecode.vulnerable.creation = "0x6000"; }],
+      ["vulnerable runtime", (value) => { value.reproduction.bytecode.vulnerable.runtime = "0x6000"; }],
+      ["safe creation", (value) => { value.reproduction.bytecode.safe.creation = "0x6000"; }],
+      ["safe runtime", (value) => { value.reproduction.bytecode.safe.runtime = "0x6000"; }],
+      ["verifier runtime", (value) => { value.reproduction.bytecode.exactProofVerifier.runtime = "0x6000"; }],
+      ["shape", (value) => { value.reproduction.transformedResponseShapeCanonicalJson = "{}"; }],
+      ["attack calldata", (value) => { value.reproduction.executions[0].calldata = "0x0102"; }],
+      ["safe attack calldata", (value) => { value.reproduction.executions[1].calldata = "0x0102"; }],
+      ["control calldata", (value) => { value.reproduction.executions[2].calldata = "0x0102"; }],
+      ["attack return", (value) => { value.reproduction.executions[0].result.returnData = "0x0102"; }],
+      ["attack revert", (value) => { value.reproduction.executions[1].result.revertData = "0xb828610a00"; }],
+      ["control return", (value) => { value.reproduction.executions[2].result.returnData = "0x0102"; }],
+    ];
+
+    for (const [name, mutate] of mutations) {
+      const value: any = structuredClone(valid);
+      mutate(value);
+      expect(() => createRecording(value), name).toThrow(/recording|checksum|canonical|schema/i);
+    }
+  });
+
+  it("requires canonical standard JSON and canonical transformed-shape bytes", () => {
+    const mutations: Array<[string, (value: any) => void]> = [
+      ["pretty compiler input", (value) => {
+        value.reproduction.standardJson.input = JSON.stringify(
+          JSON.parse(value.reproduction.standardJson.input),
+          null,
+          2,
+        );
+        value.toolchain.compiler.inputSha256 = sha256(
+          value.reproduction.standardJson.input,
+        );
+      }],
+      ["noncanonical compiler output", (value) => {
+        value.reproduction.standardJson.output = '{"z":1,"a":2}';
+        value.toolchain.compiler.outputSha256 = sha256(
+          value.reproduction.standardJson.output,
+        );
+      }],
+      ["noncanonical shape", (value) => {
+        value.reproduction.transformedResponseShapeCanonicalJson = '{"z":1,"a":2}';
+        const hash = sha256(
+          value.reproduction.transformedResponseShapeCanonicalJson,
+        );
+        value.sharedRequest.transformedResponseShapeSha256 = hash;
+        value.bundles.attack.transformedResponseShapeSha256 = hash;
+        value.bundles.control.transformedResponseShapeSha256 = hash;
+      }],
+    ];
+
+    for (const [name, mutate] of mutations) {
+      const value: any = structuredClone(makeCanonicalUrlAttackRecordingContent());
+      mutate(value);
+      expect(() => createRecording(value), name).toThrow(/canonical|checksum|recording/i);
+    }
   });
 });

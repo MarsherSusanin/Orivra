@@ -15,7 +15,8 @@ export const CONTROL_RUN_ID = "run_024_control_live";
 export const RELEASE_COMMIT_SHA = "a".repeat(40);
 export const RELEASE_TREE_SHA = "b".repeat(40);
 export const HOST_MISMATCH_SELECTOR = "0xb828610a";
-export const RESPONSE_SHAPE_SHA256 = sha256("{\"value\":\"uint256\"}");
+export const RESPONSE_SHAPE_CANONICAL_JSON = "{\"value\":\"uint256\"}";
+export const RESPONSE_SHAPE_SHA256 = sha256(RESPONSE_SHAPE_CANONICAL_JSON);
 
 function canonicalJson(value: unknown): string {
   if (value === null || typeof value === "boolean" || typeof value === "string") {
@@ -145,10 +146,77 @@ function bundleEvidence(role: "attack" | "control") {
 export function makeCanonicalUrlAttackRecordingContent() {
   const attack = bundleEvidence("attack");
   const control = bundleEvidence("control");
-  const vulnerableRuntimeSha256 = sha256("vulnerable-runtime-bytecode");
-  const safeRuntimeSha256 = sha256("safe-runtime-bytecode");
-  const attackCalldataSha256 = sha256("attack-consume-calldata");
-  const controlCalldataSha256 = sha256("control-consume-calldata");
+  const sources = {
+    vulnerable: {
+      path: "contracts/CanonicalVulnerableWeb2JsonConsumer.sol" as const,
+      content:
+        "// fixture-only source; production must reread the checked-in file\ncontract CanonicalVulnerableWeb2JsonConsumer {}\n",
+    },
+    safe: {
+      path: "contracts/CanonicalSafeWeb2JsonConsumer.sol" as const,
+      content:
+        "// fixture-only source; production must reread the checked-in file\ncontract CanonicalSafeWeb2JsonConsumer {}\n",
+    },
+    invariantLibrary: {
+      path: "contracts/ProoflineUrlInvariant.sol" as const,
+      content:
+        "// fixture-only source; production must reread the checked-in file\nlibrary ProoflineUrlInvariant { error HostMismatch(); }\n",
+    },
+    web2JsonInterface: {
+      path:
+        "@flarenetwork/flare-periphery-contracts/coston2/IWeb2Json.sol" as const,
+      content: "// fixture-only IWeb2Json compiler input\ninterface IWeb2Json {}\n",
+    },
+    contractRegistry: {
+      path:
+        "@flarenetwork/flare-periphery-contracts/coston2/ContractRegistry.sol" as const,
+      content: "// fixture-only ContractRegistry compiler input\nlibrary ContractRegistry {}\n",
+    },
+    exactProofVerifier: {
+      path: "contracts/ProoflineExactProofVerifier.sol" as const,
+      content:
+        "// fixture-only exact-proof-hash shim\ncontract ProoflineExactProofVerifier {}\n",
+    },
+  };
+  const sourceEvidence = Object.fromEntries(
+    Object.entries(sources).map(([name, source]) => [
+      name,
+      { ...source, sha256: sha256(source.content) },
+    ]),
+  ) as {
+    [Name in keyof typeof sources]: (typeof sources)[Name] & { sha256: string };
+  };
+  const compilerInput = canonicalJson({
+    language: "Solidity",
+    sources: Object.fromEntries(
+      Object.values(sources).map((source) => [
+        source.path,
+        { content: source.content },
+      ]),
+    ),
+    settings: {
+      evmVersion: "cancun",
+      optimizer: { enabled: true, runs: 200 },
+      outputSelection: {
+        "*": { "*": ["abi", "evm.bytecode.object", "evm.deployedBytecode.object"] },
+      },
+    },
+  });
+  const compilerOutput = canonicalJson({ contracts: { fixtureOnly: true } });
+  const vulnerableCreationBytecode = "0x6001600055";
+  const vulnerableRuntimeBytecode = "0x60016000";
+  const safeCreationBytecode = "0x6002600055";
+  const safeRuntimeBytecode = "0x60026000";
+  const exactProofVerifierRuntimeBytecode = "0x60036000";
+  const attackCalldata = "0xaaaaaaaa";
+  const controlCalldata = "0xbbbbbbbb";
+  const attackReturnData = "0x1111";
+  const attackRevertData = HOST_MISMATCH_SELECTOR;
+  const controlReturnData = "0x2222";
+  const vulnerableRuntimeSha256 = sha256HexBytes(vulnerableRuntimeBytecode);
+  const safeRuntimeSha256 = sha256HexBytes(safeRuntimeBytecode);
+  const attackCalldataSha256 = sha256HexBytes(attackCalldata);
+  const controlCalldataSha256 = sha256HexBytes(controlCalldata);
 
   return {
     version: "1" as const,
@@ -176,8 +244,8 @@ export function makeCanonicalUrlAttackRecordingContent() {
       compiler: {
         name: "solc" as const,
         version: "0.8.36",
-        inputSha256: sha256("compiler-input"),
-        outputSha256: sha256("compiler-output"),
+        inputSha256: sha256(compilerInput),
+        outputSha256: sha256(compilerOutput),
         optimizer: { enabled: true as const, runs: 200 },
         evmVersion: "cancun" as const,
       },
@@ -191,20 +259,20 @@ export function makeCanonicalUrlAttackRecordingContent() {
       vulnerable: {
         identity: "canonical-vulnerable" as const,
         contractName: "CanonicalVulnerableWeb2JsonConsumer",
-        sourceSha256: sha256("vulnerable-source"),
-        creationBytecodeSha256: sha256("vulnerable-creation-bytecode"),
+        sourceSha256: sourceEvidence.vulnerable.sha256,
+        creationBytecodeSha256: sha256HexBytes(vulnerableCreationBytecode),
         runtimeBytecodeSha256: vulnerableRuntimeSha256,
       },
       safe: {
         identity: "canonical-safe" as const,
         contractName: "CanonicalSafeWeb2JsonConsumer",
-        sourceSha256: sha256("safe-source"),
-        creationBytecodeSha256: sha256("safe-creation-bytecode"),
+        sourceSha256: sourceEvidence.safe.sha256,
+        creationBytecodeSha256: sha256HexBytes(safeCreationBytecode),
         runtimeBytecodeSha256: safeRuntimeSha256,
       },
       invariantLibrary: {
         contractName: "ProoflineUrlInvariant",
-        sourceSha256: sha256("url-invariant-source"),
+        sourceSha256: sourceEvidence.invariantLibrary.sha256,
         hostMismatchSelector: HOST_MISMATCH_SELECTOR,
       },
     },
@@ -218,7 +286,7 @@ export function makeCanonicalUrlAttackRecordingContent() {
           runtimeBytecodeSha256: vulnerableRuntimeSha256,
           result: {
             status: "accepted" as const,
-            returnDataSha256: sha256("attack-return-data"),
+            returnDataSha256: sha256HexBytes(attackReturnData),
           },
         },
         {
@@ -231,7 +299,7 @@ export function makeCanonicalUrlAttackRecordingContent() {
             status: "reverted" as const,
             error: "HostMismatch()" as const,
             selector: HOST_MISMATCH_SELECTOR,
-            revertDataSha256: sha256(HOST_MISMATCH_SELECTOR),
+            revertDataSha256: sha256HexBytes(attackRevertData),
           },
         },
         {
@@ -242,8 +310,50 @@ export function makeCanonicalUrlAttackRecordingContent() {
           runtimeBytecodeSha256: safeRuntimeSha256,
           result: {
             status: "accepted" as const,
-            returnDataSha256: sha256("control-return-data"),
+            returnDataSha256: sha256HexBytes(controlReturnData),
           },
+        },
+      ],
+    },
+    reproduction: {
+      standardJson: {
+        input: compilerInput,
+        output: compilerOutput,
+      },
+      sources: sourceEvidence,
+      bytecode: {
+        vulnerable: {
+          creation: vulnerableCreationBytecode,
+          runtime: vulnerableRuntimeBytecode,
+        },
+        safe: {
+          creation: safeCreationBytecode,
+          runtime: safeRuntimeBytecode,
+        },
+        exactProofVerifier: {
+          runtime: exactProofVerifierRuntimeBytecode,
+          runtimeSha256: sha256HexBytes(exactProofVerifierRuntimeBytecode),
+        },
+      },
+      transformedResponseShapeCanonicalJson: RESPONSE_SHAPE_CANONICAL_JSON,
+      executions: [
+        {
+          scenario: "attack" as const,
+          consumer: "canonical-vulnerable" as const,
+          calldata: attackCalldata,
+          result: { status: "accepted" as const, returnData: attackReturnData },
+        },
+        {
+          scenario: "attack" as const,
+          consumer: "canonical-safe" as const,
+          calldata: attackCalldata,
+          result: { status: "reverted" as const, revertData: attackRevertData },
+        },
+        {
+          scenario: "control" as const,
+          consumer: "canonical-safe" as const,
+          calldata: controlCalldata,
+          result: { status: "accepted" as const, returnData: controlReturnData },
         },
       ],
     },

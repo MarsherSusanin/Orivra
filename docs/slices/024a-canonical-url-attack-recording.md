@@ -55,6 +55,9 @@ The content freezes:
 7. an ordered tuple in which vulnerable/attack is accepted,
    safe/attack reverts with `HostMismatch()` selector `0xb828610a`, and
    safe/control is accepted, with exact proof/calldata/runtime/result hashes.
+8. bounded raw reproduction evidence: canonical compiler input/output, exact
+   source paths and UTF-8 bytes, raw creation/runtime bytecodes, canonical
+   response-shape JSON, and raw calldata plus return/revert bytes.
 
 The bundles must be different persisted live wallet/relayer runs. Each embedded
 string must pass existing byte-canonical `replayProofBundle` semantic integrity
@@ -64,9 +67,21 @@ the intended host enforced by the canonical safe consumer.
 
 Unknown keys and any replay, synthetic, test-system, fixture or recorded-replay
 provenance fail closed. The validator checks every derivable identity and
-cross-link; exact compiler/source hashes that cannot be recomputed from hashes
-alone are protected by the outer checksum and must be produced by actual
-runtime compilation.
+cross-link and derives hashes from raw bytes. This pure boundary proves only
+canonical byte integrity and self-consistency. It is intentionally not allowed
+to claim that sources are checked in, compiler output is real or transcript
+results executed.
+
+The trusted `packages/fdc-coston2` runtime adapter is a separate acceptance
+authority. It decodes persisted proof response bytes with the official
+FdcVerification ABI, rereads the exact checked-in vulnerable/safe/invariant
+sources, generates an exact-proof-response-hash verifier shim, recompiles the
+canonical standard JSON with pinned `solc`, derives calldata, reruns the exact
+three calls in a fresh deterministic `@ethereumjs/vm`, independently derives
+the transformed response shape, and compares every raw byte and hash. Only its
+checksum-bound `runtime-verified` result authorizes CLI output or later 024B
+import. A canonical, rechecksummed, wholly fabricated self-consistent recording
+must pass pure replay but fail runtime verification.
 
 ## CLI contract
 
@@ -77,10 +92,15 @@ proofline demo record --attack-run <id> --control-run <id> \
   --commit <sha> --tree <sha> --out <path>
 ```
 
-All five options are required. Attack and control IDs must differ. The command
+All five options are required exactly once. Option order may vary. Unknown or
+duplicate flags, trailing positionals, flag-as-value, malformed/overlong run
+IDs, non-lowercase/non-40-hex commit/tree, and an empty, option-like, overlong,
+NUL/control, `.`/`..` or directory-only output path fail before any read,
+recorder, verifier or write. Attack and control IDs must differ. The command
 uses `client.exportBundle` once for each explicit ID, invokes
 `demoRecorder.recordCanonicalUrlAttack` once with only exact bundle bytes,
-run IDs and release identity, validates its canonical recording bytes, then
+run IDs and release identity, then requires the same adapter's actual runtime
+recompile/reexecution verification before validating canonical bytes and
 calls `files.writeTextAtomic`. It never calls ordinary `writeText` for this
 artifact. Any read, compile, EVM or validation failure leaves the destination
 unchanged.
@@ -91,6 +111,10 @@ keys or pass environment/Authorization data to the recorder. A later real
 invocation may use only the existing scoped project token inside the persisted
 API client to retrieve the two bundles. That invocation is not part of the
 credential-free RED or local MLP evidence.
+
+The packaged Node bin constructs and supplies the concrete runtime adapter; it
+cannot ship with an optional-unavailable default. Missing API configuration
+returns bounded exit `2` without stack trace, absolute path or secret output.
 
 ## Security and risk
 
@@ -117,16 +141,30 @@ forms and unknown/secret-key rejection.
 freezes deterministic create/serialize/replay, byte-identical replay, embedded
 bundle semantic validation, exact identity cross-links, attack/control
 equivalence and difference, transcript hash/result binding, outer mutation
-detection, pre-parse size rejection and redaction.
+detection, pre-parse size rejection, redaction, raw-material hash binding and
+canonical compiler/shape JSON.
+
+`packages/fdc-coston2/test/slice024a-runtime-recording-authority.corrective.contract.test.ts`
+freezes actual official-ABI decode, exact checked-in sources, standard-JSON
+recompile, exact-proof-hash shim, raw bytecode/calldata/result reproduction,
+three-call EVM replay, runtime-verified authority and rejection of a wholly
+fabricated but canonical/rechecksummed self-consistent recording. Its ABI-valid
+bundle pair is test-only and is forbidden as a production fallback or live
+claim.
 
 `packages/cli/test/slice024a-demo-record.contract.test.ts` freezes help,
 mandatory options, different run IDs, exact two-bundle reads, one recorder call,
 atomic-only output, failure cleanup, zero test network, no signing/secrets and
 no default/fallback evidence.
 
-The expected intentional RED reason is absent 024A schema/domain exports and an
-unsupported `demo record` command. Existing public contracts are not weakened
-to make the tests pass.
+`packages/cli/test/slice024a-bin-runtime-composition.corrective.contract.test.ts`
+freezes concrete production bin wiring and bounded exit `2` for missing config.
+
+The corrective expected RED reasons are missing raw reproduction schema/domain
+binding, missing concrete FDC runtime adapter and trusted verification call,
+optional-unavailable bin composition, permissive CLI option parsing and an
+uncaught packaged bootstrap configuration error. Existing public contracts are
+not weakened to make the tests pass.
 
 ## GREEN and verification gates
 
@@ -134,9 +172,12 @@ to make the tests pass.
    semantic boundaries. Run focused tests and the 100% statements/branches
    contracts/domain/codegen gate.
 2. GREEN runtime actually compiles exact checked-in sources with the recorded
-   standard-JSON toolchain and executes all three calls in the deterministic
-   local EVM. Returning a preconstructed transcript is not a pass.
-3. GREEN CLI wires existing persisted API bundle reads and an atomic filesystem
+   standard-JSON toolchain, generates the exact-proof-hash shim and executes all
+   three calls in the deterministic local EVM. Runtime verification repeats
+   those operations for acceptance. Returning or merely rehashing a
+   preconstructed transcript is not a pass.
+3. GREEN CLI uses a strict no-side-effect-before-validation parser, wires the
+   concrete runtime, existing persisted API bundle reads and an atomic filesystem
    adapter without adding wallet/relayer custody or a fixture fallback. Affected
    CLI coverage is at least 90% lines and 85% branches.
 4. Targeted core verification checks bundle immutability, checksum/size
@@ -149,4 +190,3 @@ to make the tests pass.
 No PostgreSQL, browser, Sites, Docker, live Coston2 or hosted gate is claimed by
 024A. The unified full matrix still runs once after all credential-free
 022–029A work, as required by the runbook.
-

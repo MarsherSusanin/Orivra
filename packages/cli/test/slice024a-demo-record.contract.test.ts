@@ -28,6 +28,10 @@ function createHarness() {
     recordCanonicalUrlAttack: vi.fn(async () =>
       canonicalSerializeTestRecording(),
     ),
+    verifyCanonicalUrlAttackRecording: vi.fn(async (serialized: string) => ({
+      status: "runtime-verified" as const,
+      recordingChecksum: JSON.parse(serialized).checksum,
+    })),
   };
   const wallet = {
     signAndBroadcast: vi.fn(async () => {
@@ -123,6 +127,12 @@ describe("Slice 024A explicit canonical URL attack recorder CLI", () => {
         treeSha: RELEASE_TREE_SHA,
       },
     });
+    expect(
+      harness.demoRecorder.verifyCanonicalUrlAttackRecording,
+    ).toHaveBeenCalledWith(canonicalSerializeTestRecording());
+    expect(
+      harness.demoRecorder.verifyCanonicalUrlAttackRecording.mock.invocationCallOrder[0],
+    ).toBeLessThan(harness.files.writeTextAtomic.mock.invocationCallOrder[0]);
     expect(harness.files.writeTextAtomic).toHaveBeenCalledOnce();
     expect(harness.files.writeTextAtomic).toHaveBeenCalledWith(
       OUTPUT_PATH,
@@ -182,6 +192,16 @@ describe("Slice 024A explicit canonical URL attack recorder CLI", () => {
     ).resolves.toBe(2);
     expect(harness.output.join("\n")).toMatch(/deterministic EVM transcript mismatch/i);
     expect(harness.files.writeTextAtomic).not.toHaveBeenCalled();
+
+    harness = createHarness();
+    harness.demoRecorder.verifyCanonicalUrlAttackRecording.mockRejectedValueOnce(
+      new Error("runtime reexecution rejected fabricated evidence"),
+    );
+    await expect(
+      runProoflineCli({ argv, ...harness.dependencies } as any),
+    ).resolves.toBe(2);
+    expect(harness.output.join("\n")).toMatch(/runtime reexecution rejected/i);
+    expect(harness.files.writeTextAtomic).not.toHaveBeenCalled();
   });
 
   it("uses only the scoped persisted API port and never reads, signs, logs or forwards wallet/relayer secrets", async () => {
@@ -192,6 +212,9 @@ describe("Slice 024A explicit canonical URL attack recorder CLI", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(harness.client.exportBundle).toHaveBeenCalledTimes(2);
     expect(harness.demoRecorder.recordCanonicalUrlAttack).toHaveBeenCalledOnce();
+    expect(
+      harness.demoRecorder.verifyCanonicalUrlAttackRecording,
+    ).toHaveBeenCalledOnce();
     expect(harness.wallet.signAndBroadcast).not.toHaveBeenCalled();
     const recorderCalls = JSON.stringify(
       harness.demoRecorder.recordCanonicalUrlAttack.mock.calls,
@@ -211,5 +234,85 @@ describe("Slice 024A explicit canonical URL attack recorder CLI", () => {
     expect(harness.files.readText).not.toHaveBeenCalled();
     expect(harness.files.writeTextAtomic).not.toHaveBeenCalled();
     expect(harness.output.join("\n")).toMatch(/persisted live evidence required/i);
+  });
+
+  it.each([
+    ["duplicate attack flag", [...argv, "--attack-run", "run_other"]],
+    ["duplicate control flag", [...argv, "--control-run", "run_other"]],
+    ["duplicate commit flag", [...argv, "--commit", "c".repeat(40)]],
+    ["duplicate tree flag", [...argv, "--tree", "d".repeat(40)]],
+    ["duplicate output flag", [...argv, "--out", "other.json"]],
+    ["unknown flag", [...argv, "--fixture", "demo.json"]],
+    ["trailing positional", [...argv, "unexpected"]],
+    [
+      "flag used as a value",
+      argv.map((value, index) =>
+        index === argv.indexOf("--attack-run") + 1 ? "--control-run" : value,
+      ),
+    ],
+  ])("rejects %s before every read, recorder or write", async (_name, invalidArgv) => {
+    await expect(
+      runProoflineCli({ argv: invalidArgv, ...harness.dependencies } as any),
+    ).resolves.toBe(2);
+    expect(harness.output.join("\n")).toMatch(/demo record.*invalid|duplicate|unknown|requires/i);
+    expect(harness.client.exportBundle).not.toHaveBeenCalled();
+    expect(harness.demoRecorder.recordCanonicalUrlAttack).not.toHaveBeenCalled();
+    expect(
+      harness.demoRecorder.verifyCanonicalUrlAttackRecording,
+    ).not.toHaveBeenCalled();
+    expect(harness.files.readText).not.toHaveBeenCalled();
+    expect(harness.files.writeText).not.toHaveBeenCalled();
+    expect(harness.files.writeTextAtomic).not.toHaveBeenCalled();
+    expect(harness.wallet.signAndBroadcast).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["run id punctuation", "--attack-run", "run/attack"],
+    ["run id length", "--control-run", `r${"x".repeat(128)}`],
+    ["uppercase commit", "--commit", "A".repeat(40)],
+    ["short commit", "--commit", "a".repeat(39)],
+    ["non-hex tree", "--tree", `b${"g".repeat(39)}`],
+    ["empty output", "--out", ""],
+    ["option-like output", "--out", "--attack-run"],
+    ["directory output", "--out", "evidence/"],
+    ["dot output", "--out", "."],
+    ["parent output", "--out", ".."],
+    ["NUL output", "--out", "evidence/demo\0.json"],
+    ["overlong output", "--out", `${"x".repeat(4_092)}.json`],
+  ])("rejects invalid %s before every side effect", async (_name, flag, invalidValue) => {
+    const invalidArgv = [...argv];
+    invalidArgv[invalidArgv.indexOf(flag) + 1] = invalidValue;
+    await expect(
+      runProoflineCli({ argv: invalidArgv, ...harness.dependencies } as any),
+    ).resolves.toBe(2);
+    expect(harness.output.join("\n")).toMatch(/demo record.*invalid|requires/i);
+    expect(harness.client.exportBundle).not.toHaveBeenCalled();
+    expect(harness.demoRecorder.recordCanonicalUrlAttack).not.toHaveBeenCalled();
+    expect(
+      harness.demoRecorder.verifyCanonicalUrlAttackRecording,
+    ).not.toHaveBeenCalled();
+    expect(harness.files.readText).not.toHaveBeenCalled();
+    expect(harness.files.writeTextAtomic).not.toHaveBeenCalled();
+  });
+
+  it("accepts the five exact flags once in a different order", async () => {
+    const reordered = [
+      "demo",
+      "record",
+      "--out",
+      OUTPUT_PATH,
+      "--tree",
+      RELEASE_TREE_SHA,
+      "--attack-run",
+      ATTACK_RUN_ID,
+      "--commit",
+      RELEASE_COMMIT_SHA,
+      "--control-run",
+      CONTROL_RUN_ID,
+    ];
+    await expect(
+      runProoflineCli({ argv: reordered, ...harness.dependencies } as any),
+    ).resolves.toBe(0);
+    expect(harness.files.writeTextAtomic).toHaveBeenCalledOnce();
   });
 });
