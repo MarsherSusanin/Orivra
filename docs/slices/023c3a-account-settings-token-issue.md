@@ -37,6 +37,7 @@ wallet adapter, Sites or infrastructure boundary.
 
 - `src/slice023c3a-settings-route.contract.test.tsx`;
 - `src/slice023c3a-account-settings.contract.test.tsx`;
+- `src/slice023c3a-wallet-session-context-account.contract.test.tsx`;
 - corrected Settings navigation expectations in the existing product-entry
   accessibility/state contracts.
 

@@ -42,3 +42,32 @@ queue or another browser persistence path. Product behavior is unchanged.
 After the correction, typecheck and diff-check remain PASS, the focused result
 remains 4 files / 21 tests with 9 controls PASS and the same 12 intentional RED,
 and the nearest accepted baseline remains 5 files / 29 tests PASS.
+
+## Affected-branch corrective RED
+
+The component contract adds only reachable decisions: clipboard rejection and
+absence, accessible invalid-field focus, synchronous/asynchronous issue
+failure followed by distinct deliberate idempotent attempts, and an issued
+secret resolving after unmount. A separate context contract freezes
+fail-closed anonymous/stale account operations plus authenticated create and
+refresh without wallet/network work. Client schema poisoning is already owned
+by 023C1 and is not duplicated; structurally impossible null branches are not
+added for coverage. Exact focused and include-only coverage evidence is
+recorded after this correction runs.
+
+Recorded on the clean RED parent:
+
+- typecheck and diff-check — PASS;
+- focused Settings/context/navigation contracts — 5 files / 27 tests: 9
+  unaffected controls PASS and 18 intentional RED;
+- RED reasons are missing `AccountSettings` (7), missing App route/authority/CSS
+  (6), missing context account methods (3), and disabled Settings links (2);
+- nearest accepted wallet auth/client/session/App baseline — 5 files / 29 tests
+  PASS.
+
+An include-only production percentage is intentionally not claimed on this
+clean RED tree because `AccountSettings` does not exist and the context has no
+account-operation branches yet. The frozen cases map every reported reachable
+decision; the production writer must run include-only coverage after GREEN and
+meet at least 85% lines / 80% branches for the new component and changed
+context before candidate freeze.

@@ -110,6 +110,19 @@ function installClipboardWriteText(
   return writeText;
 }
 
+function installUnavailableClipboard() {
+  const descriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    enumerable: descriptor?.enumerable ?? true,
+    value: undefined,
+  });
+  restoreClipboardDescriptor = () => {
+    if (descriptor) Object.defineProperty(navigator, "clipboard", descriptor);
+    else Reflect.deleteProperty(navigator, "clipboard");
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
@@ -220,6 +233,13 @@ describe("Slice 023C3A authenticated account Settings", () => {
     await user.click(screen.getByRole("button", { name: "Generate" }));
     expect(createAccountToken).not.toHaveBeenCalled();
     expect(screen.getAllByRole("alert")).toHaveLength(2);
+    const invalidLabel = screen.getByRole("textbox", { name: "Label" });
+    const invalidDays = screen.getByRole("spinbutton", { name: "Expires in days" });
+    expect(invalidLabel).toHaveFocus();
+    expect(invalidLabel).toHaveAttribute("aria-invalid", "true");
+    expect(invalidLabel).toHaveAccessibleDescription(/1.*128/i);
+    expect(invalidDays).toHaveAttribute("aria-invalid", "true");
+    expect(invalidDays).toHaveAccessibleDescription(/integer.*1.*90/i);
 
     await fillValidForm(user);
     await user.dblClick(screen.getByRole("button", { name: "Generate" }));
@@ -296,21 +316,119 @@ describe("Slice 023C3A authenticated account Settings", () => {
   });
 
   it("retains the form and renders only fixed safe copy when issuance fails", async () => {
-    const createAccountToken = vi.fn(async () => {
-      throw new Error(`upstream echoed ${RAW_TOKEN}`);
+    let attempt = 0;
+    const createAccountToken = vi.fn<WalletAccessServices["createAccountToken"]>(() => {
+      attempt += 1;
+      if (attempt === 1) throw new Error(`sync echo ${RAW_TOKEN}`);
+      if (attempt === 2) return Promise.reject(new Error(`async echo ${RAW_TOKEN}`));
+      return Promise.resolve(created);
     });
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const user = userEvent.setup();
     await renderSettings(services({ createAccountToken }));
     await fillValidForm(user);
-    await user.click(screen.getByRole("button", { name: "Generate" }));
-
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Token could not be generated. Retry safely.");
-    expect(alert).not.toHaveTextContent(RAW_TOKEN);
-    expect(screen.getByRole("textbox", { name: "Label" })).toHaveValue("  Release Bot  ");
-    expect(screen.getByRole("spinbutton", { name: "Expires in days" })).toHaveValue(45);
+    for (const expectedAttempt of [1, 2]) {
+      await user.click(screen.getByRole("button", { name: "Generate" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Token could not be generated. Retry safely.");
+      expect(alert).not.toHaveTextContent(RAW_TOKEN);
+      expect(createAccountToken).toHaveBeenCalledTimes(expectedAttempt);
+      expect(screen.getByRole("textbox", { name: "Label" })).toHaveValue("  Release Bot  ");
+      expect(screen.getByRole("spinbutton", { name: "Expires in days" })).toHaveValue(45);
+    }
+    const keys = createAccountToken.mock.calls.map(([input]) => input.idempotencyKey);
+    expect(keys).toHaveLength(2);
+    expect(keys.every((key) => /^token_issue_[a-f0-9]{64}$/.test(key))).toBe(true);
+    expect(new Set(keys).size).toBe(2);
     expect(document.body.textContent).not.toContain(RAW_TOKEN);
     expect(JSON.stringify(error.mock.calls)).not.toContain(RAW_TOKEN);
+
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+    expect(await screen.findByRole("dialog", { name: "Save this token now" })).toBeVisible();
+    const thirdKey = createAccountToken.mock.calls[2]![0].idempotencyKey;
+    expect(thirdKey).toMatch(/^token_issue_[a-f0-9]{64}$/);
+    expect(keys).not.toContain(thirdKey);
+  });
+
+  it("keeps a rejected clipboard copy safe, visible and explicitly confirmable", async () => {
+    const getAccount = vi.fn()
+      .mockResolvedValueOnce(account)
+      .mockResolvedValueOnce(refreshedAccount);
+    const stored = storage();
+    const user = userEvent.setup();
+    const writeText = installClipboardWriteText(
+      vi.fn(async () => { throw new DOMException(`denied ${RAW_TOKEN}`, "NotAllowedError"); }),
+    );
+    const browserStorageWrite = vi.spyOn(Storage.prototype, "setItem");
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await renderSettings(services({ getAccount }), stored);
+    await fillValidForm(user);
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    const reveal = await screen.findByRole("dialog", { name: "Save this token now" });
+    await user.click(within(reveal).getByRole("button", { name: "Copy" }));
+    expect(writeText).toHaveBeenCalledOnce();
+    expect(writeText).toHaveBeenCalledWith(RAW_TOKEN);
+    const alert = within(reveal).getByRole("alert");
+    expect(alert).toHaveTextContent("Token was not copied. Keep this dialog open and try again.");
+    expect(alert).not.toHaveTextContent(RAW_TOKEN);
+    expect(within(reveal).getByRole("textbox", { name: "Generated project token" })).toHaveTextContent(RAW_TOKEN);
+
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "Close without copying?" })).toBeVisible();
+    expect(stored.values()).not.toContain(RAW_TOKEN);
+    expect(Object.values(sessionStorage)).not.toContain(RAW_TOKEN);
+    expect(Object.values(localStorage)).not.toContain(RAW_TOKEN);
+    expect(window.location.href).not.toContain(RAW_TOKEN);
+    expect(JSON.stringify(browserStorageWrite.mock.calls)).not.toContain(RAW_TOKEN);
+    expect(JSON.stringify(error.mock.calls)).not.toContain(RAW_TOKEN);
+    for (const element of document.querySelectorAll("*")) {
+      for (const attribute of element.attributes) expect(attribute.value).not.toContain(RAW_TOKEN);
+    }
+  });
+
+  it("keeps manual one-time recovery available when the Clipboard API is absent", async () => {
+    const getAccount = vi.fn()
+      .mockResolvedValueOnce(account)
+      .mockResolvedValueOnce(refreshedAccount);
+    const user = userEvent.setup();
+    installUnavailableClipboard();
+    await renderSettings(services({ getAccount }));
+    await fillValidForm(user);
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    const reveal = await screen.findByRole("dialog", { name: "Save this token now" });
+    expect(within(reveal).getByRole("button", { name: "Copy unavailable" })).toBeDisabled();
+    expect(within(reveal).getByText("Clipboard access is unavailable. Copy the token manually.")).toBeVisible();
+    expect(within(reveal).getByRole("textbox", { name: "Generated project token" })).toHaveTextContent(RAW_TOKEN);
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "Close without copying?" })).toBeVisible();
+  });
+
+  it("ignores a late issued secret after Settings unmount without refresh or leakage", async () => {
+    const pending = deferred<AccountTokenCreatedV1>();
+    const getAccount = vi.fn(async () => account);
+    const createAccountToken = vi.fn(() => pending.promise);
+    const stored = storage();
+    const browserStorageWrite = vi.spyOn(Storage.prototype, "setItem");
+    const user = userEvent.setup();
+    const rendered = await renderSettings(
+      services({ getAccount, createAccountToken }),
+      stored,
+    );
+    await fillValidForm(user);
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+    expect(createAccountToken).toHaveBeenCalledOnce();
+
+    rendered.unmount();
+    await act(async () => pending.resolve(created));
+    await act(async () => { await Promise.resolve(); });
+    expect(getAccount).toHaveBeenCalledOnce();
+    expect(document.body.textContent).not.toContain(RAW_TOKEN);
+    expect(stored.values()).not.toContain(RAW_TOKEN);
+    expect(Object.values(sessionStorage)).not.toContain(RAW_TOKEN);
+    expect(Object.values(localStorage)).not.toContain(RAW_TOKEN);
+    expect(window.location.href).not.toContain(RAW_TOKEN);
+    expect(JSON.stringify(browserStorageWrite.mock.calls)).not.toContain(RAW_TOKEN);
   });
 });

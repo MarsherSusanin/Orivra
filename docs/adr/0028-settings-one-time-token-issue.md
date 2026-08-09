@@ -48,6 +48,14 @@ backdrop. Before the first successful copy, Escape or Close changes the same
 modal to an explicit `Close without copying?` confirmation. After copy, Escape
 or Close clears the raw token, closes the modal and restores focus to
 `Generate`. Failure retains the form and displays only fixed client-owned copy.
+Clipboard rejection keeps the reveal open and uncopied, so Escape/Close still
+requires the loss confirmation. When the Clipboard API is absent, the raw text
+remains manually selectable and Copy is honestly unavailable. A create result
+that resolves after Settings unmount or browser-authority loss is stale: it
+cannot open a reveal, refresh account state or write any storage/analytics
+path. Anonymous and stale context create/refresh calls fail closed before the
+service port. A new explicit retry is a new attempt with a new idempotency key;
+the form and safe error copy survive both synchronous and asynchronous failure.
 
 The raw token is never written to local/session storage, URL, history,
 analytics, logs, DOM attributes or serialized errors. Account summaries keep
