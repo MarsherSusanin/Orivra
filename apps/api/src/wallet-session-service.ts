@@ -4,7 +4,7 @@ import {
   WalletChallengeV1Schema,
   WalletSessionRequestV1Schema,
   WalletSessionV1Schema,
-} from "@proofline/contracts";
+} from "@proofline/contracts/wallet-auth";
 import type { Pool } from "pg";
 import { recoverMessageAddress, type Hex } from "viem";
 import { digestOpaqueToken } from "./postgres";

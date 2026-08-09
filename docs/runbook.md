@@ -104,7 +104,6 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/005_explicit_s
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/006_wallet_identity_sessions.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/007_account_token_management.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/008_persisted_admission_quotas.sql
-# После 024B1 GREEN:
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/009_canonical_url_attack_recordings.sql
 ```
 
@@ -180,9 +179,9 @@ API удаляет максимум 100 quota windows и 100 wallet challenges �
 только если их expiry/window end старше PostgreSQL clock минимум на 24 часа;
 cleanup failure не отменяет уже принятое admission.
 
-### Canonical URL attack demo (024B contract, pending GREEN)
+### Canonical URL attack demo (024B GREEN)
 
-024B1 adds immutable migration 009 and a separate one-shot importer. It is not
+Migration 009 and the separate one-shot importer are implemented. Import is not
 an API startup side effect and is never an HTTP route:
 
 ```bash
@@ -211,8 +210,8 @@ recording bytes only on a user request. Both use public zero-age revalidation
 and representation-correct ETags. Query selection is forbidden. Missing or
 corrupt selection returns the same no-store
 `503 CANONICAL_URL_ATTACK_RECORDING_UNAVAILABLE`; no fixture or latest-row
-fallback is permitted. Until 024B GREEN, these commands/routes are contracts,
-not claimed executable behavior.
+fallback is permitted. These are executable local surfaces; an absent selector
+or missing/corrupt selected row deliberately preserves the same honest 503.
 
 ## 5. Worker
 

@@ -1,5 +1,8 @@
 # Slice 024B — Persisted public canonical URL attack demo
 
+Status: Production-author GREEN candidate; independent Core and Product
+verification pending.
+
 ## Outcome
 
 Proofline can import one exact 024A recording only after full trusted runtime
@@ -96,11 +99,9 @@ unsupported methods never enter auth. Both unavailable paths return exactly
 
 ## RED and GREEN gates
 
-The RED wave changes tests and documentation only. It adds no public schema,
-domain function, migration, importer, API route/cache, Web component/style,
-dependency or package script.
-
-Implementation proceeds B1 then B2 then B3. Focused gates require:
+The frozen RED wave changed tests and documentation only. The production
+implementation then proceeded in order B1, B2 and B3 without weakening those
+contracts. Candidate gates require:
 
 - contracts/domain 100% statements and branches;
 - importer/API at least 90% lines and 85% branches;

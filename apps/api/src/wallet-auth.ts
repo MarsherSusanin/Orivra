@@ -1,4 +1,4 @@
-import { isCanonicalAuthTimestampV1 } from "@proofline/contracts";
+import { isCanonicalAuthTimestampV1 } from "@proofline/contracts/wallet-auth";
 
 const WALLET_ADDRESS = /^0x[0-9a-f]{40}$/i;
 const WALLET_SIGNATURE = /^0x[0-9a-f]{130}$/i;

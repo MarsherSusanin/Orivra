@@ -1,16 +1,23 @@
 import {
+  CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES,
+  CanonicalUrlAttackDemoSummaryV1Schema,
+  NetworkCapabilitiesV1Schema,
+  SubmissionRequestV1Schema,
+  Web2JsonManifestV1Schema,
+  type CanonicalUrlAttackDemoSummaryV1,
+} from "@proofline/contracts";
+import {
   AccountTokenCreateRequestV1Schema,
   AccountTokenCreatedV1Schema,
   AccountTokenRevokedV1Schema,
   AccountV1Schema,
-  NetworkCapabilitiesV1Schema,
-  SubmissionRequestV1Schema,
   WalletChallengeRequestV1Schema,
   WalletChallengeV1Schema,
   WalletSessionRequestV1Schema,
   WalletSessionV1Schema,
-  Web2JsonManifestV1Schema,
-} from "@proofline/contracts";
+} from "@proofline/contracts/wallet-auth";
+import { createHash } from "node:crypto";
+import { canonicalJson } from "@proofline/domain";
 import { z } from "zod";
 
 type AuthContext =
@@ -26,6 +33,18 @@ type AuthContext =
 interface ProoflineApiService {
   [method: string]: (...args: any[]) => Promise<any>;
 }
+
+export type CanonicalUrlAttackDemoCache =
+  | { status: "unavailable" }
+  | {
+      status: "available";
+      summary: CanonicalUrlAttackDemoSummaryV1;
+      summaryBytes: string;
+      summaryEtag: string;
+      recordingBytes: Uint8Array;
+      recordingSha256: string;
+      recordingEtag: string;
+    };
 
 const TOKEN_PATTERN = /^(?:project|share)_[a-f0-9]{64}$/i;
 const PUBLIC_AUTH_BODY_LIMIT_BYTES = 8 * 1_024;
@@ -125,12 +144,121 @@ function error(status: number, code: string, message: string): Response {
   return json({ version: "1", error: { code, message } }, status);
 }
 
-function privateError(status: number, code: string, message: string): Response {
+function privateError(
+  status: number,
+  code: string,
+  message: string,
+  headers?: HeadersInit,
+): Response {
   return json(
     { version: "1", error: { code, message } },
     status,
-    PRIVATE_RESPONSE_HEADERS,
+    {
+      ...PRIVATE_RESPONSE_HEADERS,
+      ...Object.fromEntries(new Headers(headers)),
+    },
   );
+}
+
+const CANONICAL_URL_ATTACK_DEMO_PATHS = new Set([
+  "/v1/demo/canonical-url",
+  "/v1/demo/canonical-url/recording",
+]);
+const PUBLIC_REVALIDATION_HEADERS = {
+  "cache-control": "public, max-age=0, must-revalidate",
+} as const;
+
+function canonicalUrlAttackDemoUnavailable(): Response {
+  return json(
+    {
+      version: "1",
+      error: {
+        code: "CANONICAL_URL_ATTACK_RECORDING_UNAVAILABLE",
+        message: "Canonical URL attack recording is unavailable",
+      },
+    },
+    503,
+    { "cache-control": "no-store" },
+  );
+}
+
+function sha256Envelope(value: string | Uint8Array): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function validatedCanonicalUrlAttackDemoCache(
+  value: CanonicalUrlAttackDemoCache | undefined,
+): Extract<CanonicalUrlAttackDemoCache, { status: "available" }> | null {
+  if (!value || value.status !== "available") return null;
+  const summary = CanonicalUrlAttackDemoSummaryV1Schema.safeParse(value.summary);
+  if (!summary.success || !(value.recordingBytes instanceof Uint8Array)) {
+    return null;
+  }
+  const canonicalSummary = canonicalJson(summary.data);
+  if (
+    canonicalSummary !== value.summaryBytes ||
+    value.summaryEtag !== `"${sha256Envelope(canonicalSummary)}"` ||
+    value.recordingSha256 !== summary.data.recording.sha256 ||
+    value.recordingEtag !== `"${value.recordingSha256}"` ||
+    value.recordingBytes.byteLength < 1 ||
+    value.recordingBytes.byteLength >
+      CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES ||
+    sha256Envelope(value.recordingBytes) !== value.recordingSha256
+  ) {
+    return null;
+  }
+  return value;
+}
+
+function canonicalUrlAttackDemoResponse(
+  request: Request,
+  url: URL,
+  cache: CanonicalUrlAttackDemoCache | undefined,
+): Response {
+  if (url.search !== "") {
+    return privateError(
+      400,
+      "INVALID_CANONICAL_URL_ATTACK_DEMO_QUERY",
+      "Canonical URL attack demo queries are not allowed",
+    );
+  }
+  if (request.method !== "GET") {
+    return privateError(405, "METHOD_NOT_ALLOWED", "Request rejected", {
+      allow: "GET",
+    });
+  }
+  const available = validatedCanonicalUrlAttackDemoCache(cache);
+  if (available === null) return canonicalUrlAttackDemoUnavailable();
+  const recording = url.pathname.endsWith("/recording");
+  const etag = recording ? available.recordingEtag : available.summaryEtag;
+  const responseHeaders = {
+    ...PUBLIC_REVALIDATION_HEADERS,
+    etag,
+  };
+  if (request.headers.get("if-none-match") === etag) {
+    return new Response(null, { status: 304, headers: responseHeaders });
+  }
+  if (!recording) {
+    return new Response(available.summaryBytes, {
+      status: 200,
+      headers: {
+        ...responseHeaders,
+        "content-type": "application/json; charset=utf-8",
+      },
+    });
+  }
+  return new Response(new Uint8Array(available.recordingBytes), {
+    status: 200,
+    headers: {
+      ...responseHeaders,
+      "content-type":
+        "application/vnd.proofline.canonical-url-attack-recording.v1+json; charset=utf-8",
+      "content-length": String(available.recordingBytes.byteLength),
+      "content-disposition":
+        `attachment; filename="canonical-url-attack-recording-${available.recordingSha256.slice("sha256:".length)}.json"`,
+      "x-content-type-options": "nosniff",
+    },
+  });
 }
 
 function isV1Path(pathname: string): boolean {
@@ -420,11 +548,24 @@ export function createProoflineApi(input: {
   service: ProoflineApiService;
   authenticate(rawToken: string): Promise<AuthContext | null>;
   publicWebOrigin?: string;
+  canonicalUrlAttackDemo?: CanonicalUrlAttackDemoCache;
 }) {
   const publicWebOrigin = normalizePublicWebOrigin(input.publicWebOrigin);
   return {
     async fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
+      if (CANONICAL_URL_ATTACK_DEMO_PATHS.has(url.pathname)) {
+        return decorateCorsResponse(
+          request,
+          url,
+          canonicalUrlAttackDemoResponse(
+            request,
+            url,
+            input.canonicalUrlAttackDemo,
+          ),
+          publicWebOrigin,
+        );
+      }
       const preflight = corsPreflightResponse(
         request,
         url,

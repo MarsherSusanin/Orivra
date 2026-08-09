@@ -12,7 +12,7 @@ import {
 import type {
   AccountTokenCreateRequestV1,
   AccountTokenSummaryV1,
-} from "@proofline/contracts";
+} from "@proofline/contracts/wallet-auth";
 import { useWalletSession } from "../wallet-session-context";
 
 const TOKEN_ISSUE_PREFIX = "token_issue_";

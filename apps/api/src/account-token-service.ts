@@ -5,7 +5,7 @@ import {
   AccountTokenRevokedV1Schema,
   AccountTokenSummaryV1Schema,
   AccountV1Schema,
-} from "@proofline/contracts";
+} from "@proofline/contracts/wallet-auth";
 import type { Pool } from "pg";
 import { digestOpaqueToken } from "./postgres";
 

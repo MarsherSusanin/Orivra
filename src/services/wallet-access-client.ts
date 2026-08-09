@@ -3,7 +3,6 @@ import {
   AccountTokenCreatedV1Schema,
   AccountTokenRevokedV1Schema,
   AccountV1Schema,
-  NetworkCapabilitiesV1Schema,
   WalletChallengeRequestV1Schema,
   WalletChallengeV1Schema,
   WalletSessionRequestV1Schema,
@@ -12,11 +11,14 @@ import {
   type AccountTokenCreatedV1,
   type AccountTokenRevokedV1,
   type AccountV1,
-  type NetworkCapabilitiesV1,
   type WalletChallengeRequestV1,
   type WalletChallengeV1,
   type WalletSessionRequestV1,
   type WalletSessionV1,
+} from "@proofline/contracts/wallet-auth";
+import {
+  NetworkCapabilitiesV1Schema,
+  type NetworkCapabilitiesV1,
 } from "@proofline/contracts";
 import type { z } from "zod";
 

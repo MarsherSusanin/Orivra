@@ -28,6 +28,10 @@ import { VerificationDialog } from "./components/VerificationDialog";
 import { WalletSignInDialog } from "./components/WalletSignInDialog";
 import { AccountSettings } from "./components/AccountSettings";
 import {
+  CanonicalUrlAttackDemo,
+  type CanonicalUrlAttackDemoRequestRef,
+} from "./components/CanonicalUrlAttackDemo";
+import {
   WalletSessionProvider,
   useWalletSession,
 } from "./wallet-session-context";
@@ -1309,11 +1313,19 @@ function ProductApp({
 }
 
 export function App(props: AppProps = {}) {
-  const [share] = useState(sessionShareAuthority);
+  const [pathname, setPathname] = useState(
+    () => globalThis.location?.pathname ?? "/",
+  );
+  const [share] = useState<ShareBootstrap>(() =>
+    pathname === "/demo/canonical-url"
+      ? { attempted: false, token: "" }
+      : sessionShareAuthority(),
+  );
   const [walletAccess] = useState(() => props.walletAccess ?? {
     services: createWalletAccessClient({ baseUrl: walletApiBaseUrl() }),
     storage: browserSessionStorage(),
   });
+  const canonicalDemoRequest = useRef<CanonicalUrlAttackDemoRequestRef["current"]>(null);
   const suppressWalletRestore = Boolean(
     share.attempted || share.token || props.projectToken,
   );
@@ -1322,6 +1334,18 @@ export function App(props: AppProps = {}) {
     clearShareBootstrapHandoff(share.handoffRevision);
     return () => clearShareBootstrapHandoff(share.handoffRevision);
   }, [share.handoffRevision]);
+
+  useEffect(() => {
+    const restorePathname = () => {
+      setPathname(globalThis.location?.pathname ?? "/");
+    };
+    globalThis.addEventListener("popstate", restorePathname);
+    return () => globalThis.removeEventListener("popstate", restorePathname);
+  }, []);
+
+  if (pathname === "/demo/canonical-url") {
+    return <CanonicalUrlAttackDemo requestRef={canonicalDemoRequest} />;
+  }
 
   return (
     <WalletSessionProvider

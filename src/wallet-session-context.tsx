@@ -12,16 +12,16 @@ import { flushSync } from "react-dom";
 import type {
   AccountTokenCreateRequestV1,
   AccountTokenCreatedV1,
-  NetworkCapabilitiesV1,
   WalletChallengeRequestV1,
   WalletChallengeV1,
   WalletSessionRequestV1,
-} from "@proofline/contracts";
+} from "@proofline/contracts/wallet-auth";
 import {
   AccountTokenCreatedV1Schema,
   AccountTokenRevokedV1Schema,
   AccountV1Schema,
-} from "@proofline/contracts";
+} from "@proofline/contracts/wallet-auth";
+import type { NetworkCapabilitiesV1 } from "@proofline/contracts";
 import {
   WalletAccessError,
   type WalletAccessServices,

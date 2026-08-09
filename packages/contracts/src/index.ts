@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { AuthTimestampV1Schema } from "./auth-timestamp";
+import { VersionV1Schema } from "./schema-primitives";
 
-const VersionV1Schema = z.literal("1");
 const NonEmptyIdSchema = z.string().trim().min(1);
 export const UINT256_MAX_DECIMAL =
   "115792089237316195423570985008687907853269984665640564039457584007913129639935";
@@ -343,206 +344,29 @@ export const NETWORK_CAPABILITIES_V1: NetworkCapabilitiesV1 =
     ],
   });
 
-const WalletAddressV1Schema = z
-  .string()
-  .regex(/^0x[0-9a-fA-F]{40}$/);
-const WalletChallengeIdV1Schema = z
-  .string()
-  .regex(/^challenge_[a-f0-9]{64}$/);
-const WalletSignatureV1Schema = z
-  .string()
-  .regex(/^0x[0-9a-fA-F]{130}$/);
-const BrowserProjectTokenV1Schema = z
-  .string()
-  .regex(/^project_[a-f0-9]{64}$/);
-const AccountTokenIdV1Schema = z
-  .string()
-  .regex(/^token_[a-f0-9]{32}$/);
-const ProjectIdV1Schema = z.string().uuid();
-const CanonicalAuthTimestampV1Pattern =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
-export function isCanonicalAuthTimestampV1(value: string): boolean {
-  if (!CanonicalAuthTimestampV1Pattern.test(value)) return false;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
-}
-
-const AuthTimestampV1Schema = z
-  .string()
-  .refine(
-    isCanonicalAuthTimestampV1,
-    "Expected a valid canonical millisecond-UTC timestamp.",
-  );
-const AccountTokenLabelV1Schema = z
-  .string()
-  .min(1)
-  .max(128)
-  .refine(
-    (label) => label === label.trim(),
-    "Token labels cannot have outer whitespace",
-  );
-
-function hasExactDuration(
-  issuedAt: string,
-  expiresAt: string,
-  durationMilliseconds: number,
-): boolean {
-  return Date.parse(expiresAt) - Date.parse(issuedAt) === durationMilliseconds;
-}
-
-const WalletIdentityV1Schema = z
-  .object({
-    kind: z.literal("eoa"),
-    address: WalletAddressV1Schema,
-  })
-  .strict();
-
-const DefaultProjectIdentityV1Schema = z
-  .object({
-    kind: z.literal("default"),
-    projectId: ProjectIdV1Schema,
-  })
-  .strict();
-
-export const WalletChallengeRequestV1Schema = z
-  .object({
-    version: VersionV1Schema,
-    address: WalletAddressV1Schema,
-  })
-  .strict();
-
-export type WalletChallengeRequestV1 = z.infer<
-  typeof WalletChallengeRequestV1Schema
->;
-
-export const WalletChallengeV1Schema = z
-  .object({
-    version: VersionV1Schema,
-    challengeId: WalletChallengeIdV1Schema,
-    address: WalletAddressV1Schema,
-    purpose: z.literal("browser-session"),
-    network: z.literal("coston2"),
-    chainId: z.literal(114),
-    message: z
-      .string()
-      .min(1)
-      .max(8_192)
-      .refine(
-        (message) => new TextEncoder().encode(message).byteLength <= 8_192,
-        "Wallet challenge message cannot exceed 8192 UTF-8 bytes.",
-      ),
-    issuedAt: AuthTimestampV1Schema,
-    expiresAt: AuthTimestampV1Schema,
-  })
-  .strict()
-  .refine(
-    (challenge) =>
-      hasExactDuration(challenge.issuedAt, challenge.expiresAt, 5 * 60_000),
-    {
-      path: ["expiresAt"],
-      message: "Wallet challenges must expire exactly five minutes after issue.",
-    },
-  );
-
-export type WalletChallengeV1 = z.infer<typeof WalletChallengeV1Schema>;
-
-export const WalletSessionRequestV1Schema = z
-  .object({
-    version: VersionV1Schema,
-    challengeId: WalletChallengeIdV1Schema,
-    signature: WalletSignatureV1Schema,
-  })
-  .strict();
-
-export type WalletSessionRequestV1 = z.infer<
-  typeof WalletSessionRequestV1Schema
->;
-
-export const WalletSessionV1Schema = z
-  .object({
-    version: VersionV1Schema,
-    wallet: WalletIdentityV1Schema,
-    project: DefaultProjectIdentityV1Schema,
-    projectToken: BrowserProjectTokenV1Schema,
-    issuedAt: AuthTimestampV1Schema,
-    expiresAt: AuthTimestampV1Schema,
-  })
-  .strict()
-  .refine(
-    (session) =>
-      hasExactDuration(session.issuedAt, session.expiresAt, 12 * 60 * 60_000),
-    {
-      path: ["expiresAt"],
-      message: "Browser sessions must expire exactly twelve hours after issue.",
-    },
-  );
-
-export type WalletSessionV1 = z.infer<typeof WalletSessionV1Schema>;
-
-export const AccountTokenCreateRequestV1Schema = z
-  .object({
-    version: VersionV1Schema,
-    kind: z.enum(["cli", "action"]),
-    label: AccountTokenLabelV1Schema,
-    expiresInDays: z.number().int().min(1).max(90),
-  })
-  .strict();
-
-export type AccountTokenCreateRequestV1 = z.infer<
-  typeof AccountTokenCreateRequestV1Schema
->;
-
-export const AccountTokenSummaryV1Schema = z
-  .object({
-    version: VersionV1Schema,
-    tokenId: AccountTokenIdV1Schema,
-    kind: z.enum(["cli", "action"]),
-    label: AccountTokenLabelV1Schema,
-    createdAt: AuthTimestampV1Schema,
-    expiresAt: AuthTimestampV1Schema,
-    revokedAt: AuthTimestampV1Schema.nullable(),
-  })
-  .strict();
-
-export type AccountTokenSummaryV1 = z.infer<
-  typeof AccountTokenSummaryV1Schema
->;
-
-export const AccountV1Schema = z
-  .object({
-    version: VersionV1Schema,
-    wallet: WalletIdentityV1Schema,
-    project: DefaultProjectIdentityV1Schema,
-    tokens: z.array(AccountTokenSummaryV1Schema),
-  })
-  .strict();
-
-export type AccountV1 = z.infer<typeof AccountV1Schema>;
-
-export const AccountTokenCreatedV1Schema = z
-  .object({
-    version: VersionV1Schema,
-    token: BrowserProjectTokenV1Schema,
-    item: AccountTokenSummaryV1Schema,
-  })
-  .strict();
-
-export type AccountTokenCreatedV1 = z.infer<
-  typeof AccountTokenCreatedV1Schema
->;
-
-export const AccountTokenRevokedV1Schema = z
-  .object({
-    version: VersionV1Schema,
-    tokenId: AccountTokenIdV1Schema,
-    revoked: z.literal(true),
-  })
-  .strict();
-
-export type AccountTokenRevokedV1 = z.infer<
-  typeof AccountTokenRevokedV1Schema
->;
+export {
+  AccountTokenCreateRequestV1Schema,
+  AccountTokenCreatedV1Schema,
+  AccountTokenRevokedV1Schema,
+  AccountTokenSummaryV1Schema,
+  AccountV1Schema,
+  WalletChallengeRequestV1Schema,
+  WalletChallengeV1Schema,
+  WalletSessionRequestV1Schema,
+  WalletSessionV1Schema,
+} from "./wallet-auth";
+export { isCanonicalAuthTimestampV1 } from "./auth-timestamp";
+export type {
+  AccountTokenCreateRequestV1,
+  AccountTokenCreatedV1,
+  AccountTokenRevokedV1,
+  AccountTokenSummaryV1,
+  AccountV1,
+  WalletChallengeRequestV1,
+  WalletChallengeV1,
+  WalletSessionRequestV1,
+  WalletSessionV1,
+} from "./wallet-auth";
 
 export const Web2JsonManifestV1Schema = z
   .object({
@@ -2064,6 +1888,104 @@ export const CanonicalUrlAttackRecordingV1Schema =
 
 export type CanonicalUrlAttackRecordingV1 = z.infer<
   typeof CanonicalUrlAttackRecordingV1Schema
+>;
+
+function canonicalUrlAttackDemoRunSchema() {
+  return z
+    .object({
+      runId: CanonicalUrlAttackRunIdV1Schema,
+      submissionMode: z.enum(["wallet", "relayer"]),
+      requestedUrl: z
+        .string()
+        .max(2_048)
+        .refine(
+          isSafePublicPreflightUrl,
+          "Expected a public canonical HTTPS URL",
+        ),
+      transactionHash: CanonicalUrlAttackTransactionHashV1Schema,
+      votingRound: z.number().int().nonnegative(),
+      proofSha256: Sha256EnvelopeSchema,
+    })
+    .strict();
+}
+
+export const CanonicalUrlAttackDemoSummaryV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    kind: z.literal("canonical-url-attack-demo-summary"),
+    status: z.literal("available"),
+    statement: z.literal("Valid proof ≠ trusted URL"),
+    recording: z
+      .object({
+        sha256: Sha256EnvelopeSchema,
+        checksum: Sha256EnvelopeSchema,
+        recordedAt: AuthTimestampV1Schema,
+        release: z
+          .object({
+            commitSha: CanonicalUrlAttackReleaseShaV1Schema,
+            treeSha: CanonicalUrlAttackReleaseShaV1Schema,
+          })
+          .strict(),
+      })
+      .strict(),
+    network: z
+      .object({
+        name: z.literal("coston2"),
+        chainId: z.literal(114),
+        evidenceSource: z.literal("persisted-api"),
+      })
+      .strict(),
+    runs: z
+      .object({
+        attack: canonicalUrlAttackDemoRunSchema(),
+        control: canonicalUrlAttackDemoRunSchema(),
+      })
+      .strict()
+      .refine(
+        ({ attack, control }) => attack.runId !== control.runId,
+        "Canonical URL attack demo requires distinct run identities",
+      ),
+    toolchain: z
+      .object({
+        compiler: z
+          .object({
+            name: z.literal("solc"),
+            version: CanonicalUrlAttackToolVersionV1Schema,
+            evmVersion: z.literal("cancun"),
+          })
+          .strict(),
+        runtime: z
+          .object({
+            name: z.literal("@ethereumjs/vm"),
+            version: CanonicalUrlAttackToolVersionV1Schema,
+            hardfork: z.literal("cancun"),
+          })
+          .strict(),
+      })
+      .strict(),
+    outcomes: z.tuple([
+      canonicalUrlAttackExecutionSchema(
+        "attack",
+        "canonical-vulnerable",
+        CanonicalUrlAttackAcceptedResultV1Schema,
+      ),
+      canonicalUrlAttackExecutionSchema(
+        "attack",
+        "canonical-safe",
+        CanonicalUrlAttackHostMismatchResultV1Schema,
+      ),
+      canonicalUrlAttackExecutionSchema(
+        "control",
+        "canonical-safe",
+        CanonicalUrlAttackAcceptedResultV1Schema,
+      ),
+    ]),
+    downloadPath: z.literal("/v1/demo/canonical-url/recording"),
+  })
+  .strict();
+
+export type CanonicalUrlAttackDemoSummaryV1 = z.infer<
+  typeof CanonicalUrlAttackDemoSummaryV1Schema
 >;
 
 const Sha256EnvelopeV1Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/);

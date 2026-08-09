@@ -6,6 +6,7 @@
   "main": "./dist/server.js",
   "scripts": {
     "build": "../../node_modules/.bin/esbuild src/server.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/server.js --external:pg",
+    "import:canonical-url-attack": "../../node_modules/.bin/esbuild src/import-canonical-url-attack-recording.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:solc --external:undici --external:@ethereumjs/common --external:@ethereumjs/util --external:@ethereumjs/vm --outfile=dist/import-canonical-url-attack-recording.js && node dist/import-canonical-url-attack-recording.js",
     "start": "node dist/server.js"
   },
   "engines": {
@@ -14,6 +15,7 @@
   "dependencies": {
     "@proofline/contracts": "0.1.0",
     "@proofline/domain": "0.1.0",
+    "@proofline/fdc-coston2": "0.0.0",
     "pg": "^8.22.0",
     "viem": "^2.55.10",
     "zod": "^4.3.5"

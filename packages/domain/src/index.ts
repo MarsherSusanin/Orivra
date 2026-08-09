@@ -13,6 +13,7 @@ export {
   replayCanonicalUrlAttackRecording,
   validateCanonicalUrlAttackRecording,
 } from "./canonical-url-attack-recording";
+export { deriveCanonicalUrlAttackDemoSummary } from "./canonical-url-attack-demo";
 export {
   canonicalSerializeEvidenceReceipt,
   createEvidenceReceipt,

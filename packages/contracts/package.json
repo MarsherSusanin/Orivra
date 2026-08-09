@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./wallet-auth": "./src/wallet-auth.ts"
+  },
+  "sideEffects": false,
   "dependencies": {
     "zod": "^4.3.5"
   }

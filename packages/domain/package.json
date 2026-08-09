@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
+  "sideEffects": false,
   "dependencies": {
     "@proofline/contracts": "0.1.0"
   }

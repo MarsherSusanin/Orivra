@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   createServer,
   type IncomingMessage,
@@ -5,12 +6,156 @@ import {
   type ServerResponse,
 } from "node:http";
 import { performance } from "node:perf_hooks";
+import {
+  CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES,
+  type CanonicalUrlAttackDemoSummaryV1,
+} from "@proofline/contracts";
+import {
+  canonicalJson,
+  deriveCanonicalUrlAttackDemoSummary,
+  replayCanonicalUrlAttackRecording,
+} from "@proofline/domain";
 import { Pool } from "pg";
-import { createProoflineApi } from "./app";
+import {
+  createProoflineApi,
+  type CanonicalUrlAttackDemoCache,
+} from "./app";
 import { digestOpaqueToken } from "./postgres";
 import { createProductionProoflineService } from "./production-service";
 
 type Environment = Record<string, string | undefined>;
+
+const CANONICAL_URL_ATTACK_RECORDING_SELECTOR =
+  "PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256";
+const SHA256_ENVELOPE_PATTERN = /^sha256:[a-f0-9]{64}$/;
+const canonicalRecordingUtf8Decoder = new TextDecoder("utf-8", {
+  fatal: true,
+});
+
+interface CanonicalUrlAttackDemoPool {
+  query(
+    text: string,
+    values?: readonly unknown[],
+  ): Promise<{ rowCount: number | null; rows: Array<Record<string, unknown>> }>;
+}
+
+function sha256Envelope(value: string | Uint8Array): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function exactBuffer(value: unknown, expected: Uint8Array): boolean {
+  return value instanceof Uint8Array &&
+    Buffer.from(value).equals(Buffer.from(expected));
+}
+
+function exactTimestamp(value: unknown, expected: string): boolean {
+  if (!(value instanceof Date) && typeof value !== "string") return false;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.valueOf()) && parsed.toISOString() === expected;
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+
+export function parseCanonicalUrlAttackRecordingSelector(
+  environment: Environment,
+): string | null {
+  const value = environment[CANONICAL_URL_ATTACK_RECORDING_SELECTOR];
+  if (value === undefined) return null;
+  if (!SHA256_ENVELOPE_PATTERN.test(value)) {
+    throw new Error(
+      `${CANONICAL_URL_ATTACK_RECORDING_SELECTOR} must be an exact lowercase sha256 envelope`,
+    );
+  }
+  return value;
+}
+
+export async function loadCanonicalUrlAttackDemoCache(input: {
+  pool: CanonicalUrlAttackDemoPool;
+  recordingSha256: string | null;
+}): Promise<CanonicalUrlAttackDemoCache> {
+  if (input.recordingSha256 === null) return { status: "unavailable" };
+  try {
+    if (!SHA256_ENVELOPE_PATTERN.test(input.recordingSha256)) {
+      return { status: "unavailable" };
+    }
+    const selectedDigest = Buffer.from(
+      input.recordingSha256.slice("sha256:".length),
+      "hex",
+    );
+    const result = await input.pool.query(
+      `SELECT recording_sha256, recording_checksum,
+              authority_recording_checksum, canonical_bytes,
+              canonical_utf8_bytes, recorded_at, release_commit_sha,
+              release_tree_sha, attack_run_id, control_run_id,
+              runtime_authority
+       FROM proofline_private.canonical_url_attack_recordings
+       WHERE recording_sha256 = $1`,
+      [selectedDigest],
+    );
+    if (result.rowCount !== 1 || !result.rows[0]) {
+      return { status: "unavailable" };
+    }
+    const row = result.rows[0];
+    if (!(row.canonical_bytes instanceof Uint8Array)) {
+      return { status: "unavailable" };
+    }
+    const recordingBytes = Buffer.from(row.canonical_bytes);
+    if (
+      recordingBytes.byteLength < 1 ||
+      recordingBytes.byteLength > CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES ||
+      Number(row.canonical_utf8_bytes) !== recordingBytes.byteLength ||
+      !exactBuffer(row.recording_sha256, selectedDigest) ||
+      sha256Envelope(recordingBytes) !== input.recordingSha256
+    ) {
+      return { status: "unavailable" };
+    }
+    const serialized = canonicalRecordingUtf8Decoder.decode(recordingBytes);
+    if (!Buffer.from(serialized, "utf8").equals(recordingBytes)) {
+      return { status: "unavailable" };
+    }
+    const recording = replayCanonicalUrlAttackRecording(serialized);
+    const checksumBytes = Buffer.from(
+      recording.checksum.slice("sha256:".length),
+      "hex",
+    );
+    if (
+      !exactBuffer(row.recording_checksum, checksumBytes) ||
+      !exactBuffer(row.authority_recording_checksum, checksumBytes) ||
+      row.runtime_authority !== "fdc-coston2-runtime-v1" ||
+      row.release_commit_sha !== recording.release.commitSha ||
+      row.release_tree_sha !== recording.release.treeSha ||
+      row.attack_run_id !== recording.bundles.attack.runId ||
+      row.control_run_id !== recording.bundles.control.runId ||
+      !exactTimestamp(row.recorded_at, recording.recordedAt)
+    ) {
+      return { status: "unavailable" };
+    }
+    const summary = deepFreeze<CanonicalUrlAttackDemoSummaryV1>(
+      deriveCanonicalUrlAttackDemoSummary({
+        recording,
+        recordingSha256: input.recordingSha256,
+      }),
+    );
+    const summaryBytes = canonicalJson(summary);
+    return {
+      status: "available",
+      summary,
+      summaryBytes,
+      summaryEtag: `"${sha256Envelope(summaryBytes)}"`,
+      recordingBytes,
+      recordingSha256: input.recordingSha256,
+      recordingEtag: `"${input.recordingSha256}"`,
+    };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
 
 export interface ApiQuotaPolicy {
   walletChallengeAddressPerMinute: number;
@@ -157,6 +302,7 @@ function parsePort(value: string | undefined): number {
 export function createProductionApi(input: {
   environment: Environment;
   pool?: Pool;
+  canonicalUrlAttackDemo?: CanonicalUrlAttackDemoCache;
 }) {
   const environment = input.environment;
   const pool =
@@ -178,6 +324,7 @@ export function createProductionApi(input: {
   const api = createProoflineApi({
     service,
     publicWebOrigin,
+    canonicalUrlAttackDemo: input.canonicalUrlAttackDemo,
     async authenticate(rawToken) {
       const digest = digestOpaqueToken(rawToken, tokenDigestKey);
       const result = await pool.query(
@@ -483,7 +630,17 @@ export function createProductionNodeServer(input: {
 export async function startProductionApi(
   environment: Environment = process.env,
 ): Promise<void> {
-  const production = createProductionApi({ environment });
+  const recordingSha256 = parseCanonicalUrlAttackRecordingSelector(environment);
+  const initial = createProductionApi({ environment });
+  const canonicalUrlAttackDemo = await loadCanonicalUrlAttackDemoCache({
+    pool: initial.pool,
+    recordingSha256,
+  });
+  const production = createProductionApi({
+    environment,
+    pool: initial.pool,
+    canonicalUrlAttackDemo,
+  });
   const server = createProductionNodeServer({
     api: production.api,
     port: production.port,

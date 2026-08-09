@@ -4,7 +4,7 @@ import {
   WalletSessionV1Schema,
   type AccountV1,
   type WalletSessionRequestV1,
-} from "@proofline/contracts";
+} from "@proofline/contracts/wallet-auth";
 import {
   WalletAccessError,
   isKnownWalletAccessHttpErrorCode,
