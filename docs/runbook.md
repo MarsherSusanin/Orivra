@@ -21,10 +21,11 @@ npm run dev
 
 По умолчанию Web обращается к `/api`. Для отдельного backend задайте `VITE_PROOFLINE_API_BASE_URL` в локальном окружении. Не коммитьте `.env` с credentials.
 
-Эта команда поднимает только Vite Web. В репозитории нет Docker Compose или
-одной команды для полного стека: persisted journey требует отдельно запущенных
-PostgreSQL, API и worker. Без API интерфейс обязан показывать честное
-configuration/network state, а не demo run.
+Эта команда поднимает только Vite Web. Slice 027A freezes the future Docker
+files and gates under [ADR 0035](adr/0035-credential-free-container-runtime-boundary.md),
+but its RED parent still has no Docker Compose or one full-stack command.
+Persisted journey требует отдельно запущенных PostgreSQL, API и worker. Без API
+интерфейс обязан показывать честное configuration/network state, а не demo run.
 
 ### Выбранная VDS topology, ещё не реализованная
 
@@ -76,6 +77,50 @@ verified schema version и worker heartbeat; stale heartbeat должен воз
 degraded readiness, даже если containers продолжают работать. Эти endpoints,
 Compose files и Docker images ещё не реализованы, поэтому этот раздел не
 является Docker, hosted или deployed PASS.
+
+### Slice 027A local container gate
+
+ADR 0035 splits the credential-free container boundary into image/secret,
+topology/routing and real-Docker waves. After GREEN the checked-in commands are:
+
+```bash
+npm run test:docker:static
+npm run docker:prefetch
+npm run test:docker
+```
+
+`docker:prefetch` validates only the exact checked-in Node 22.14.0, Caddy
+2.10.2 and PostgreSQL 17.6 official index/Linux-amd64 manifests. The build
+repeat uses BuildKit `--network=none`, npm offline cache and `pull_policy:
+never`. Production image variables accept only immutable
+`repository@sha256:<64 lowercase hex>` identities; QA accepts only local tags
+and also never pulls.
+
+The QA smoke uses a unique temporary Compose project, makes `public_edge`
+internal to disable Caddy ACME/egress, binds a random loopback HTTP port and
+creates temporary local secret files. It explicitly starts only Caddy, Web,
+PostgreSQL and API, then checks Web/deep routes plus the DB-free anonymous
+template endpoint through `/api`. It never starts worker, contacts Coston2,
+uses registry credentials or calls a routed response readiness. Exact `/api`
+and `/api/*` strip the prefix once and never SPA-fallback; missing asset-like
+paths remain 404. Only Caddy has a host binding. Cleanup is scoped to that
+temporary project and its secret directory.
+
+Compose mounts API `DATABASE_URL_FILE` and
+`PROOFLINE_TOKEN_DIGEST_KEY_FILE`; worker `DATABASE_URL_FILE`,
+`PROOFLINE_VERIFIER_API_KEY_FILE` and
+`PROOFLINE_COSTON2_PRIVATE_KEY_FILE`; the importer only
+`DATABASE_URL_FILE`. Direct values remain an XOR-compatible non-Compose input,
+but Compose never embeds them. PostgreSQL uses its native password-file input.
+Do not commit `.env`, `.env.*`, dummy relayer/verifier credentials or a
+production test adapter.
+
+The `runtime-after-027b` profile is an explicit block, not a feature flag for
+readiness. `pg_isready` is only PostgreSQL engine liveness. Until 027B provides
+the locked checksummed migration, login roles, `/healthz`, `/readyz` and a
+persisted deployment worker heartbeat, a full Compose runtime/readiness PASS is
+forbidden. The existing worker command-lease heartbeat is not deployment
+readiness.
 
 Database recovery contract использует continuous WAL archive и base backup для
 PITR в private S3-compatible DigitalOcean Spaces. До получения

@@ -56,6 +56,13 @@ every edit. The unified full matrix runs once after the credential-free modules
 022–029A are complete. Both independent release verifiers must PASS that same
 tree hash before credentials authorize 028B.
 
+For ADR 0035 container work, a static YAML or Dockerfile regex is not sufficient
+release evidence. The Surface & Adapter Implementer must record semantic
+Compose configuration, fresh image contents, the controlled no-network repeat,
+private network/port inspection and exact Caddy/Web black-box routing. Until
+027B, neither `pg_isready`, a DB-free API response nor a running container may
+be described as application readiness; 027A QA must not start the live worker.
+
 DNS, restricted SSH, DigitalOcean, GHCR pull, Spaces and live Coston2
 credentials remain unavailable during module development. They are requested
 only after the unified matrix and both independent PASS reports. A credentialed

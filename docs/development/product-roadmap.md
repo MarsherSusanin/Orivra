@@ -24,8 +24,10 @@ The product journey is delivered as independently frozen vertical slices:
 | 024B2 | Exact-digest API startup cache and anonymous summary/download | Complete; independently verified, credential-free |
 | 024B3 | Token-free canonical URL demo Web route and Sites deep route | Complete; independently verified, credential-free |
 | 025 | Template-led Composer | Complete; independently verified, credential-free |
-| 026 | Public product surface | Production-author GREEN candidate; independent verification pending, credential-free |
-| 027A | Local Docker runtime, Compose/Caddy routing and private service networks | Planned, credential-free |
+| 026 | Public product surface | Complete; independently verified, credential-free |
+| 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | RED frozen, credential-free |
+| 027A2 | Private Compose topology, exact Caddy `/api` routing and Web static runtime | RED frozen, credential-free |
+| 027A3 | Controlled offline-repeat image build and bounded local Docker smoke | RED frozen, credential-free |
 | 027B | One-shot migrations, health/readiness, worker heartbeat and retention | Planned, credential-free |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
@@ -67,10 +69,16 @@ Credential-free delivery covers 022–029A:
   no latest selection, fixture, synthetic fallback or browser compiler/RPC path
   is allowed. 026 reuses the same summary/client.
 
-- **027A** packages the local and VDS Docker runtime, Caddy/Web routing,
-  private Compose networks and a persistent PostgreSQL volume. Public exposure
-  is limited to 80/443; SSH is restricted, while 5432, API/worker host ports
-  and the Docker socket remain private.
+- **027A1→A2→A3** packages the local and VDS Docker runtime under
+  [ADR 0035](../adr/0035-credential-free-container-runtime-boundary.md).
+  A1 locks exact Linux/amd64 Node/Caddy/PostgreSQL bases, three application
+  image targets and a bounded Docker-secret file adapter. A2 freezes the
+  five-service private network graph, Caddy strip-once `/api` routing and the
+  dependency-free Web static server. A3 performs controlled prefetch, an
+  offline/no-network build repeat and a loopback-only smoke. Public exposure is
+  limited to Caddy 80/443; PostgreSQL 5432, API/worker host ports and the Docker
+  socket remain private. Worker runtime and application readiness stay blocked
+  until 027B; the 027A smoke starts no worker and makes no readiness claim.
 - **027B** adds a one-shot checksummed migration runner under a PostgreSQL
   advisory lock, exact schema verification, `/healthz`, `/readyz`, a worker
   heartbeat and retention behavior.

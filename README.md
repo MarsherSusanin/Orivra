@@ -62,6 +62,12 @@ blockchain-операций.
   выбран в [ADR 0029](docs/adr/0029-digitalocean-vds-deployment.md): один
   DigitalOcean Droplet/VDS с Docker Compose, Caddy, Web, API, worker и
   PostgreSQL. Он ещё не provisioned и не deployed.
+- Slice 027A is frozen under
+  [ADR 0035](docs/adr/0035-credential-free-container-runtime-boundary.md) as
+  three credential-free waves: pinned Linux/amd64 images and Docker-secret
+  files, private Compose/Caddy routing, then a controlled offline-repeat local
+  smoke. Its QA boundary starts no live worker and cannot claim migrations,
+  readiness, hosting or deployment; those authorities remain with 027B–029B.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

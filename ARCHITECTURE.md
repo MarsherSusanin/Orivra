@@ -247,6 +247,14 @@ independent Core and Product verification remain pending.
   получают public host ports, Docker socket никогда не монтируется в сервисы.
 - Sites остаётся compatibility-only package и routing test. Он не является
   выбранным production host.
+- [ADR 0035](docs/adr/0035-credential-free-container-runtime-boundary.md)
+  refines that target into pinned Linux/amd64 Web/API/worker/Caddy images,
+  strict file-mounted secrets and five exact networks. Only Caddy joins
+  `public_edge`; private `web_internal`, `app_internal` and `db_internal`
+  separate Web, API and PostgreSQL reachability, while worker alone joins
+  `worker_egress`. API/worker/PostgreSQL remain behind
+  `runtime-after-027b`; 027A local QA explicitly omits worker and proves routing,
+  not schema or application readiness.
 
 028A локально exports и verifies OCI archives. Frozen manifest раздельно хранит
 `archiveSha256` архивных bytes и `imageManifestDigest` registry identity, а его

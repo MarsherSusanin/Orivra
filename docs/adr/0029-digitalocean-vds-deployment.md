@@ -2,6 +2,10 @@
 
 Status: accepted
 
+Container packaging, secret files, private network membership and the bounded
+credential-free routing gate are refined by
+[ADR 0035](0035-credential-free-container-runtime-boundary.md).
+
 ## Context
 
 Proofline already has a Web build, a PostgreSQL API, a restart-safe worker and
