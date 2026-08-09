@@ -38,8 +38,9 @@ required. The existing Sites compatibility files and behavior remain intact.
 ## Public contract
 
 The recording envelope is strict and capped at exactly 6 MiB canonical UTF-8.
-Its outer checksum covers canonical content bytes and is distinct from both
-embedded bundle checksums and exact canonical bundle-byte hashes.
+Each embedded bundle is capped at 2,200,000 UTF-8 bytes and at 64 Bytes32
+Merkle nodes. Its outer checksum covers canonical content bytes and is distinct
+from both embedded bundle checksums and exact canonical bundle-byte hashes.
 
 The content freezes:
 
@@ -57,7 +58,9 @@ The content freezes:
    safe/control is accepted, with exact proof/calldata/runtime/result hashes.
 8. bounded raw reproduction evidence: canonical compiler input/output, exact
    source paths and UTF-8 bytes, raw creation/runtime bytecodes, canonical
-   response-shape JSON, and raw calldata plus return/revert bytes.
+   response-shape JSON. Raw calldata and return/revert bytes are not duplicated;
+   only their transcript hashes are recorded and the trusted runtime derives
+   them again from the embedded proof tuples and compiled consumers.
 
 The bundles must be different persisted live wallet/relayer runs. Each embedded
 string must pass existing byte-canonical `replayProofBundle` semantic integrity
@@ -67,10 +70,11 @@ the intended host enforced by the canonical safe consumer.
 
 Unknown keys and any replay, synthetic, test-system, fixture or recorded-replay
 provenance fail closed. The validator checks every derivable identity and
-cross-link and derives hashes from raw bytes. This pure boundary proves only
-canonical byte integrity and self-consistency. It is intentionally not allowed
-to claim that sources are checked in, compiler output is real or transcript
-results executed.
+cross-link and derives compiler/source/bytecode/shape hashes from raw bytes.
+Transcript calldata/result hashes remain non-authorizing claims. This pure
+boundary proves only canonical byte integrity and self-consistency. It is
+intentionally not allowed to claim that sources are checked in, compiler output
+is real or transcript results executed.
 
 The trusted `packages/fdc-coston2` runtime adapter is a separate acceptance
 authority. It decodes persisted proof response bytes with the official
@@ -78,10 +82,22 @@ FdcVerification ABI, rereads the exact checked-in vulnerable/safe/invariant
 sources, generates an exact-proof-response-hash verifier shim, recompiles the
 canonical standard JSON with pinned `solc`, derives calldata, reruns the exact
 three calls in a fresh deterministic `@ethereumjs/vm`, independently derives
-the transformed response shape, and compares every raw byte and hash. Only its
+the transformed response shape, and compares every independently derived hash.
+Only its
 checksum-bound `runtime-verified` result authorizes CLI output or later 024B
 import. A canonical, rechecksummed, wholly fabricated self-consistent recording
 must pass pure replay but fail runtime verification.
+
+The near-boundary contract encodes a 1,048,000-byte transformed `bytes` value
+with the official proof ABI. Its response is exactly 1,049,056 bytes and one-node
+consumer calldata is 1,049,188 bytes. The old duplicated representation needed
+10,491,362 hex characters for two responses plus three calldata values before
+any other evidence. The corrected representation stores the two responses only
+inside their canonical bundles. Two 2,200,000-byte bundle maxima leave
+1,891,456 bytes within the 6 MiB outer cap for the exact fixed
+compiler/source/bytecode envelope and framing. The real record → runtime verify
+→ canonical replay test must pass; exact outer boundary plus one fails before
+parse. This is not a claim that arbitrary `ProofBundleV1` metadata is bounded.
 
 ## CLI contract
 
@@ -113,8 +129,11 @@ API client to retrieve the two bundles. That invocation is not part of the
 credential-free RED or local MLP evidence.
 
 The packaged Node bin constructs and supplies the concrete runtime adapter; it
-cannot ship with an optional-unavailable default. Missing API configuration
-returns bounded exit `2` without stack trace, absolute path or secret output.
+cannot ship with an optional-unavailable default. Missing API configuration or
+an unreadable source returns bounded exit `2` without stack trace, OS error,
+absolute path, source filename or secret output. Source read failures use code
+`CANONICAL_SOURCE_READ_FAILED` and exact public message
+`Canonical URL attack source read failed`, and leave output untouched.
 
 ## Security and risk
 
@@ -142,12 +161,14 @@ freezes deterministic create/serialize/replay, byte-identical replay, embedded
 bundle semantic validation, exact identity cross-links, attack/control
 equivalence and difference, transcript hash/result binding, outer mutation
 detection, pre-parse size rejection, redaction, raw-material hash binding and
-canonical compiler/shape JSON.
+canonical compiler/shape JSON, 64-node Merkle boundary and explicitly
+non-authorizing transcript hashes.
 
 `packages/fdc-coston2/test/slice024a-runtime-recording-authority.corrective.contract.test.ts`
 freezes actual official-ABI decode, exact checked-in sources, standard-JSON
-recompile, exact-proof-hash shim, raw bytecode/calldata/result reproduction,
-three-call EVM replay, runtime-verified authority and rejection of a wholly
+recompile, exact-proof-hash shim, raw bytecode plus derived calldata/results,
+three-call EVM replay, near-maximum 6 MiB representation, normalized source-read
+failures, runtime-verified authority and rejection of a wholly
 fabricated but canonical/rechecksummed self-consistent recording. Its ABI-valid
 bundle pair is test-only and is forbidden as a production fallback or live
 claim.
@@ -158,7 +179,9 @@ atomic-only output, failure cleanup, zero test network, no signing/secrets and
 no default/fallback evidence.
 
 `packages/cli/test/slice024a-bin-runtime-composition.corrective.contract.test.ts`
-freezes concrete production bin wiring and bounded exit `2` for missing config.
+freezes concrete production bin wiring, bounded exit `2` for missing config and
+a copied-built-bin missing-source path with mocked bundle reads, no external
+network, no artifact write and no path disclosure.
 
 The corrective expected RED reasons are missing raw reproduction schema/domain
 binding, missing concrete FDC runtime adapter and trusted verification call,

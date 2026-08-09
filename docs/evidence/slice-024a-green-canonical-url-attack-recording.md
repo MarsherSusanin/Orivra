@@ -1,4 +1,18 @@
-# Slice 024A GREEN — canonical URL attack recording
+# Slice 024A rejected GREEN — canonical URL attack recording
+
+Status: Rejected by independent Core and Product verification on
+`bdaf75ce7d6c0eb59ab5262984c8467e9f17167a` /
+`4cbe765b057112727f6fd60356061460d92fd991`.
+
+This file is historical production-author evidence, not an independent PASS.
+Its 76-test PASS did not exercise an official-ABI near-maximum recording. The
+representation duplicated two proof responses into three raw calldata values
+and accepted results: a 1,048,000-byte transformed payload requires at least
+10,491,362 hex characters before compiler and JSON overhead, so the claimed
+6 MiB maximum-bound support was false. Source-read errors also exposed absolute
+repository paths and Solidity filenames through the packaged CLI. Corrective
+acceptance is defined by ADR 0031 and the later RED evidence; none of the PASS
+claims below approve the rejected tree.
 
 Date: 2026-08-10 (Asia/Vladivostok)
 

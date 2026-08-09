@@ -236,6 +236,35 @@ describe("Slice 024A explicit canonical URL attack recorder CLI", () => {
     expect(harness.output.join("\n")).toMatch(/persisted live evidence required/i);
   });
 
+  it.each(["ENOENT", "EACCES"])(
+    "normalizes source-read %s without path, filename, stack or output write",
+    async (sourceCode) => {
+      harness.demoRecorder.recordCanonicalUrlAttack.mockRejectedValueOnce(
+        Object.assign(
+          new Error(
+            `${sourceCode}: open '/Users/private/Proofline/contracts/CanonicalSafeWeb2JsonConsumer.sol'`,
+          ),
+          { code: "CANONICAL_SOURCE_READ_FAILED" },
+        ),
+      );
+      await expect(
+        runProoflineCli({ argv, ...harness.dependencies } as any),
+      ).resolves.toBe(2);
+
+      expect(harness.output).toEqual([
+        "ERR:Canonical URL attack source read failed",
+      ]);
+      expect(Buffer.byteLength(harness.output[0]!, "utf8")).toBeLessThanOrEqual(
+        96,
+      );
+      expect(harness.output[0]).not.toMatch(
+        /ENOENT|EACCES|\/Users\/|CanonicalSafe|\.sol|\bat\s+/i,
+      );
+      expect(harness.files.writeTextAtomic).not.toHaveBeenCalled();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     ["duplicate attack flag", [...argv, "--attack-run", "run_other"]],
     ["duplicate control flag", [...argv, "--control-run", "run_other"]],

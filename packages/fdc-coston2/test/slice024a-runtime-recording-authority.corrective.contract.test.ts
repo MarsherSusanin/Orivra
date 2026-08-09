@@ -4,33 +4,20 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import fdcVerificationAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFdcVerification.sol/IFdcVerification.json";
-import {
-  encodeAbiParameters,
-  padHex,
-  stringToHex,
-  type Abi,
-  type AbiParameter,
-  type Hex,
-} from "viem";
+import type { Hex } from "viem";
 import { describe, expect, it } from "vitest";
-import {
-  canonicalSerializeProofBundle,
-  canonicalizeManifestUrl,
-  createProofBundle,
-  replayCanonicalUrlAttackRecording,
-} from "../../domain/src/index";
-import {
-  RELEASE_COMMIT_SHA,
-  RELEASE_TREE_SHA,
-  sha256,
-} from "../../contracts/test/slice024a-canonical-url-attack.fixtures";
-import {
-  VALID_ABI_SIGNATURE,
-  makeBundleInput,
-  makeRunEvents,
-} from "../../contracts/test/fixtures";
+import { replayCanonicalUrlAttackRecording } from "../../domain/src/index";
+import { sha256 } from "../../contracts/test/slice024a-canonical-url-attack.fixtures";
 import * as FdcCoston2 from "../src/index";
+import {
+  NEAR_MAX_CALLDATA_BYTES,
+  NEAR_MAX_RESPONSE_BYTES,
+  NEAR_MAX_TRANSFORMED_PAYLOAD_BYTES,
+  encodePersistedConsumerCalldata,
+  makeAbiValidPersistedBundlePair,
+  makeRuntimeInput,
+  runtimeInputForPair,
+} from "./slice024a-runtime-recording.fixtures";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const fdc = FdcCoston2 as Record<string, any>;
@@ -54,107 +41,6 @@ function sha256Hex(value: Hex): string {
   return `sha256:${createHash("sha256")
     .update(Buffer.from(value.slice(2), "hex"))
     .digest("hex")}`;
-}
-
-function proofDataParameter(): AbiParameter {
-  const verifier = (fdcVerificationAbi as Abi).find(
-    (item) => item.type === "function" && item.name === "verifyWeb2Json",
-  ) as Extract<Abi[number], { type: "function" }>;
-  const proof = verifier.inputs[0];
-  if (proof.type !== "tuple" || !("components" in proof)) {
-    throw new Error("test requires the official Web2Json proof tuple");
-  }
-  const data = proof.components.find((component) => component.name === "data");
-  if (!data) throw new Error("test requires official Web2Json response data");
-  return data;
-}
-
-function makeAbiValidPersistedBundle(role: "attack" | "control") {
-  const base = makeBundleInput();
-  const runId = `run_024_runtime_${role}`;
-  const host = role === "attack" ? "attacker.example" : "api.example.com";
-  const mode = role === "attack" ? "wallet" : "relayer";
-  const votingRound = role === "attack" ? 61_024 : 61_025;
-  const transactionHash = `0x${role === "attack" ? "3" : "4"}${"0".repeat(63)}`;
-  const manifest = {
-    ...base.manifest,
-    request: {
-      ...base.manifest.request,
-      url: `https://${host}/prices/eth?source=primary`,
-      query: { currency: "USD", window: "1h" },
-      jq: ".price | {value: (. * 1000000 | floor)}",
-      abiSignature: VALID_ABI_SIGNATURE,
-    },
-    consumer: {
-      expectedScheme: "https" as const,
-      expectedHost: host,
-      expectedPathPrefix: "/prices/",
-      expectedQuery: { currency: "USD", source: "primary", window: "1h" },
-    },
-    submission: { ...base.manifest.submission, mode },
-  };
-  const canonicalUrl = canonicalizeManifestUrl(manifest);
-  const encodedValue = encodeAbiParameters(
-    [JSON.parse(VALID_ABI_SIGNATURE) as AbiParameter],
-    [{ value: role === "attack" ? 1_000_000n : 1_000_001n }],
-  );
-  const response = encodeAbiParameters(
-    [proofDataParameter()],
-    [{
-      attestationType: padHex(stringToHex("Web2Json"), { size: 32 }),
-      sourceId: padHex(stringToHex("WEB2"), { size: 32 }),
-      votingRound: BigInt(votingRound),
-      lowestUsedTimestamp: 1_786_255_200n,
-      requestBody: {
-        url: canonicalUrl,
-        httpMethod: "GET",
-        headers: "{}",
-        queryParams: "{}",
-        body: "",
-        postProcessJq: manifest.request.jq,
-        abiSignature: manifest.request.abiSignature,
-      },
-      responseBody: { abiEncodedData: encodedValue },
-    }],
-  );
-  const events = makeRunEvents().map((event) => {
-    const common = { ...event, runId };
-    switch (event.type) {
-      case "RUN_CREATED":
-        return { ...common, payload: { manifest } };
-      case "PREFLIGHT_ACCEPTED":
-        return { ...common, payload: { ...event.payload, canonicalUrl } };
-      case "REQUEST_SUBMITTED":
-        return { ...common, payload: { mode, transactionHash } };
-      case "ROUND_FINALIZED":
-        return { ...common, payload: { votingRound } };
-      default:
-        return common;
-    }
-  });
-  return createProofBundle({
-    ...base,
-    runId,
-    manifest,
-    events,
-    proof: {
-      votingRound,
-      merkleProof: [`0x${role === "attack" ? "5" : "6"}${"0".repeat(63)}`],
-      response,
-    },
-  } as any);
-}
-
-function runtimeInput() {
-  const attack = makeAbiValidPersistedBundle("attack");
-  const control = makeAbiValidPersistedBundle("control");
-  return {
-    attackRunId: attack.runId,
-    attackBundle: canonicalSerializeProofBundle(attack),
-    controlRunId: control.runId,
-    controlBundle: canonicalSerializeProofBundle(control),
-    release: { commitSha: RELEASE_COMMIT_SHA, treeSha: RELEASE_TREE_SHA },
-  };
 }
 
 function createRuntime() {
@@ -222,15 +108,9 @@ function forgeEveryRuntimeClaim(serialized: string): string {
   value.bundles.attack.transformedResponseShapeSha256 = shapeHash;
   value.bundles.control.transformedResponseShapeSha256 = shapeHash;
 
-  raw.executions[0].calldata = "0xaaaa";
-  raw.executions[1].calldata = "0xaaaa";
-  raw.executions[2].calldata = "0xbbbb";
   value.transcript.executions[0].calldataSha256 = sha256Hex("0xaaaa");
   value.transcript.executions[1].calldataSha256 = sha256Hex("0xaaaa");
   value.transcript.executions[2].calldataSha256 = sha256Hex("0xbbbb");
-  raw.executions[0].result.returnData = "0x1111";
-  raw.executions[1].result.revertData = "0xb828610a";
-  raw.executions[2].result.returnData = "0x2222";
   value.transcript.executions[0].result.returnDataSha256 = sha256Hex("0x1111");
   value.transcript.executions[1].result.revertDataSha256 =
     sha256Hex("0xb828610a");
@@ -243,9 +123,9 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
     expect(fdc.createProductionCanonicalUrlAttackRuntime).toBeTypeOf("function");
   });
 
-  it("records exact checked-in sources, compiler material, bytecodes, calldata and raw results", async () => {
+  it("records exact checked-in sources and compiler material without duplicated execution payloads", async () => {
     const runtime = createRuntime();
-    const serialized = await runtime.recordCanonicalUrlAttack(runtimeInput());
+    const serialized = await runtime.recordCanonicalUrlAttack(makeRuntimeInput());
     const recording = replayCanonicalUrlAttackRecording(serialized);
 
     for (const name of ["vulnerable", "safe", "invariantLibrary"] as const) {
@@ -260,12 +140,13 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
       .toBe(recording.reproduction.sources.safe.content);
     expect(recording.reproduction.bytecode.safe.creation).toMatch(/^0x[0-9a-f]+$/);
     expect(recording.reproduction.bytecode.safe.runtime).toMatch(/^0x[0-9a-f]+$/);
-    expect(recording.reproduction.executions).toHaveLength(3);
+    expect(recording.reproduction).not.toHaveProperty("executions");
+    expect(recording.transcript.executions).toHaveLength(3);
   });
 
   it("generates an exact-proof-hash verifier shim and executes the exact three calls", async () => {
     const runtime = createRuntime();
-    const serialized = await runtime.recordCanonicalUrlAttack(runtimeInput());
+    const serialized = await runtime.recordCanonicalUrlAttack(makeRuntimeInput());
     const recording = replayCanonicalUrlAttackRecording(serialized);
     const shim = recording.reproduction.sources.exactProofVerifier.content;
 
@@ -274,7 +155,7 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
     );
     expect(shim).toContain(recording.bundles.attack.proofSha256.slice(7));
     expect(shim).toContain(recording.bundles.control.proofSha256.slice(7));
-    expect(recording.reproduction.executions.map((execution: any) => ({
+    expect(recording.transcript.executions.map((execution: any) => ({
       scenario: execution.scenario,
       consumer: execution.consumer,
       status: execution.result.status,
@@ -283,14 +164,15 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
       { scenario: "attack", consumer: "canonical-safe", status: "reverted" },
       { scenario: "control", consumer: "canonical-safe", status: "accepted" },
     ]);
-    expect(recording.reproduction.executions[1].result.revertData).toBe(
-      "0xb828610a",
-    );
+    expect(recording.transcript.executions[1].result).toMatchObject({
+      status: "reverted",
+      selector: "0xb828610a",
+    });
   });
 
   it("recompiles and reexecutes before returning runtime-verified import authority", async () => {
     const runtime = createRuntime();
-    const serialized = await runtime.recordCanonicalUrlAttack(runtimeInput());
+    const serialized = await runtime.recordCanonicalUrlAttack(makeRuntimeInput());
     await expect(
       runtime.verifyCanonicalUrlAttackRecording(serialized),
     ).resolves.toMatchObject({
@@ -301,7 +183,7 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
 
   it("rejects a canonical and rechecksummed but wholly fabricated self-consistent transcript", async () => {
     const runtime = createRuntime();
-    const legitimate = await runtime.recordCanonicalUrlAttack(runtimeInput());
+    const legitimate = await runtime.recordCanonicalUrlAttack(makeRuntimeInput());
     const forged = forgeEveryRuntimeClaim(legitimate);
 
     expect(() => replayCanonicalUrlAttackRecording(forged)).not.toThrow();
@@ -320,7 +202,82 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
       now: () => "2026-08-09T12:00:00.000Z",
     });
     await expect(
-      runtime.recordCanonicalUrlAttack(runtimeInput()),
+      runtime.recordCanonicalUrlAttack(makeRuntimeInput()),
     ).rejects.toThrow(/source|compile|canonical/i);
   });
+
+  it.each(["ENOENT", "EACCES"])(
+    "normalizes %s source reads to one bounded public code and message",
+    async (sourceCode) => {
+      expect(fdc.createProductionCanonicalUrlAttackRuntime).toBeTypeOf("function");
+      const runtime = fdc.createProductionCanonicalUrlAttackRuntime({
+        readCheckedInSource: async (path: string) => {
+          throw Object.assign(
+            new Error(`${sourceCode}: open '/Users/private/Proofline/${path}'`),
+            { code: sourceCode },
+          );
+        },
+        now: () => "2026-08-09T12:00:00.000Z",
+      });
+      const error = await runtime
+        .recordCanonicalUrlAttack(makeRuntimeInput())
+        .catch((failure: unknown) => failure);
+
+      expect(error).toMatchObject({
+        code: "CANONICAL_SOURCE_READ_FAILED",
+        message: "Canonical URL attack source read failed",
+      });
+      expect(Buffer.byteLength((error as Error).message, "utf8")).toBeLessThanOrEqual(96);
+      expect((error as Error).message).not.toMatch(
+        /ENOENT|EACCES|\/Users\/|Canonical(?:Safe|Vulnerable)|ProoflineUrlInvariant|\.sol/i,
+      );
+    },
+  );
+
+  it(
+    "records, runtime-verifies and replays two near-1 MiB official-ABI bundles inside 6 MiB",
+    async () => {
+      const pair = makeAbiValidPersistedBundlePair({
+        payloadBytes: NEAR_MAX_TRANSFORMED_PAYLOAD_BYTES,
+        merkleProofEntries: 1,
+      });
+      const attackResponseBytes = (pair.attack.proof.response.length - 2) / 2;
+      const attackCalldata = encodePersistedConsumerCalldata(pair.attack);
+      const attackCalldataBytes = (attackCalldata.length - 2) / 2;
+      expect(attackResponseBytes).toBe(NEAR_MAX_RESPONSE_BYTES);
+      expect(pair.attack.proof.response).toHaveLength(
+        2 * NEAR_MAX_RESPONSE_BYTES + 2,
+      );
+      expect(attackCalldataBytes).toBe(NEAR_MAX_CALLDATA_BYTES);
+      expect(attackCalldata).toHaveLength(2 * NEAR_MAX_CALLDATA_BYTES + 2);
+      expect(attackResponseBytes - NEAR_MAX_TRANSFORMED_PAYLOAD_BYTES).toBe(
+        1_056,
+      );
+      expect(attackCalldataBytes - NEAR_MAX_TRANSFORMED_PAYLOAD_BYTES).toBe(
+        1_188,
+      );
+
+      const input = runtimeInputForPair(pair);
+      expect(Buffer.byteLength(input.attackBundle, "utf8")).toBeLessThanOrEqual(
+        2_200_000,
+      );
+      expect(Buffer.byteLength(input.controlBundle, "utf8")).toBeLessThanOrEqual(
+        2_200_000,
+      );
+      const runtime = createRuntime();
+      const serialized = await runtime.recordCanonicalUrlAttack(input);
+      expect(Buffer.byteLength(serialized, "utf8")).toBeGreaterThan(4_200_000);
+      expect(Buffer.byteLength(serialized, "utf8")).toBeLessThanOrEqual(
+        6 * 1_024 * 1_024,
+      );
+      expect(JSON.parse(serialized).reproduction).not.toHaveProperty(
+        "executions",
+      );
+      await expect(
+        runtime.verifyCanonicalUrlAttackRecording(serialized),
+      ).resolves.toMatchObject({ status: "runtime-verified" });
+      expect(() => replayCanonicalUrlAttackRecording(serialized)).not.toThrow();
+    },
+    30_000,
+  );
 });

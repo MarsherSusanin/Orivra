@@ -34,6 +34,27 @@ function expectReplayBoundaries(): void {
   expect(domain.replayCanonicalUrlAttackRecording).toBeTypeOf("function");
 }
 
+function replaceMerkleProof(
+  content: any,
+  role: "attack" | "control",
+  merkleProof: string[],
+): void {
+  const evidence = content.bundles[role];
+  const bundle = Domain.replayProofBundle(evidence.canonicalBundle);
+  const { checksum: _checksum, ...bundleContent } = bundle;
+  const rebuilt = Domain.createProofBundle({
+    ...bundleContent,
+    proof: { ...bundle.proof, merkleProof },
+  });
+  const canonicalBundle = Domain.canonicalSerializeProofBundle(rebuilt);
+  evidence.canonicalBundle = canonicalBundle;
+  evidence.canonicalBundleUtf8Bytes = new TextEncoder().encode(
+    canonicalBundle,
+  ).byteLength;
+  evidence.canonicalBundleSha256 = sha256(canonicalBundle);
+  evidence.bundleChecksum = rebuilt.checksum;
+}
+
 describe("Slice 024A canonical URL attack recording integrity", () => {
   it("exports pure create, validate, canonical serialize and replay boundaries", () => {
     expect(domain.createCanonicalUrlAttackRecording).toBeTypeOf("function");
@@ -205,12 +226,12 @@ describe("Slice 024A canonical URL attack recording integrity", () => {
     expect(() => replayRecording(truncated)).toThrow(/JSON|recording/i);
   });
 
-  it("rejects oversized input before parsing and never serializes credentials or raw secrets", () => {
+  it("rejects exact outer boundary plus one before parsing and never serializes credentials or raw secrets", () => {
     expectCreateBoundary();
     expectReplayBoundaries();
     const maximum = 6 * 1_024 * 1_024;
-    const oversized = `{"padding":"${"x".repeat(maximum)}"}`;
-    expect(new TextEncoder().encode(oversized).byteLength).toBeGreaterThan(maximum);
+    const oversized = "x".repeat(maximum + 1);
+    expect(new TextEncoder().encode(oversized).byteLength).toBe(maximum + 1);
     expect(() => replayRecording(oversized)).toThrow(/6291456|6 MiB|size/i);
 
     const content: any = structuredClone(makeCanonicalUrlAttackRecordingContent());
@@ -221,7 +242,7 @@ describe("Slice 024A canonical URL attack recording integrity", () => {
     expect(serialized).not.toMatch(/Bearer|project_[A-Za-z0-9_-]{16,}|private.?key|secret|authorization/i);
   });
 
-  it("derives every transcript hash from bounded raw reproduction bytes", () => {
+  it("derives compiler, source, bytecode and shape hashes from bounded raw reproduction bytes", () => {
     const valid = makeCanonicalUrlAttackRecordingContent();
     expect(() => createRecording(valid)).not.toThrow();
 
@@ -237,12 +258,6 @@ describe("Slice 024A canonical URL attack recording integrity", () => {
       ["safe runtime", (value) => { value.reproduction.bytecode.safe.runtime = "0x6000"; }],
       ["verifier runtime", (value) => { value.reproduction.bytecode.exactProofVerifier.runtime = "0x6000"; }],
       ["shape", (value) => { value.reproduction.transformedResponseShapeCanonicalJson = "{}"; }],
-      ["attack calldata", (value) => { value.reproduction.executions[0].calldata = "0x0102"; }],
-      ["safe attack calldata", (value) => { value.reproduction.executions[1].calldata = "0x0102"; }],
-      ["control calldata", (value) => { value.reproduction.executions[2].calldata = "0x0102"; }],
-      ["attack return", (value) => { value.reproduction.executions[0].result.returnData = "0x0102"; }],
-      ["attack revert", (value) => { value.reproduction.executions[1].result.revertData = "0xb828610a00"; }],
-      ["control return", (value) => { value.reproduction.executions[2].result.returnData = "0x0102"; }],
     ];
 
     for (const [name, mutate] of mutations) {
@@ -252,6 +267,44 @@ describe("Slice 024A canonical URL attack recording integrity", () => {
         /recording|checksum|canonical|schema|invalid/i,
       );
     }
+  });
+
+  it("keeps transcript hashes non-authorizing until trusted runtime rederivation", () => {
+    const content: any = structuredClone(
+      makeCanonicalUrlAttackRecordingContent(),
+    );
+    const attackCalldataSha256 = sha256("fabricated attack calldata");
+    content.transcript.executions[0].calldataSha256 = attackCalldataSha256;
+    content.transcript.executions[1].calldataSha256 = attackCalldataSha256;
+    content.transcript.executions[2].calldataSha256 = sha256(
+      "fabricated control calldata",
+    );
+    content.transcript.executions[0].result.returnDataSha256 = sha256(
+      "fabricated attack result",
+    );
+    content.transcript.executions[1].result.revertDataSha256 = sha256(
+      "fabricated revert result",
+    );
+    content.transcript.executions[2].result.returnDataSha256 = sha256(
+      "fabricated control result",
+    );
+
+    expect(() => createRecording(content)).not.toThrow();
+  });
+
+  it("accepts at most 64 recording Merkle nodes and rejects boundary plus one", () => {
+    const node = `0x${"5".repeat(64)}`;
+    const atBoundary: any = structuredClone(
+      makeCanonicalUrlAttackRecordingContent(),
+    );
+    replaceMerkleProof(atBoundary, "attack", Array(64).fill(node));
+    expect(() => createRecording(atBoundary)).not.toThrow();
+
+    const beyondBoundary: any = structuredClone(
+      makeCanonicalUrlAttackRecordingContent(),
+    );
+    replaceMerkleProof(beyondBoundary, "attack", Array(65).fill(node));
+    expect(() => createRecording(beyondBoundary)).toThrow(/merkle|64|2048/i);
   });
 
   it("requires canonical standard JSON and canonical transformed-shape bytes", () => {

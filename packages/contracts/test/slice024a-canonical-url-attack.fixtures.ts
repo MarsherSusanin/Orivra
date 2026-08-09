@@ -336,26 +336,6 @@ export function makeCanonicalUrlAttackRecordingContent() {
         },
       },
       transformedResponseShapeCanonicalJson: RESPONSE_SHAPE_CANONICAL_JSON,
-      executions: [
-        {
-          scenario: "attack" as const,
-          consumer: "canonical-vulnerable" as const,
-          calldata: attackCalldata,
-          result: { status: "accepted" as const, returnData: attackReturnData },
-        },
-        {
-          scenario: "attack" as const,
-          consumer: "canonical-safe" as const,
-          calldata: attackCalldata,
-          result: { status: "reverted" as const, revertData: attackRevertData },
-        },
-        {
-          scenario: "control" as const,
-          consumer: "canonical-safe" as const,
-          calldata: controlCalldata,
-          result: { status: "accepted" as const, returnData: controlReturnData },
-        },
-      ],
     },
   };
 }

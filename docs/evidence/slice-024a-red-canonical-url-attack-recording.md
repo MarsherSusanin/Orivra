@@ -212,3 +212,91 @@ arguments (23); and the packaged bin lacks concrete FDC composition plus safe
 bootstrap failure handling (2). The 31 passing cases are existing invariants or
 behavior already fail-closed by the rejected candidate; they are not treated as
 acceptance of the missing corrective behavior.
+
+## Size and source-path corrective RED
+
+Independent Core and Product verification rejected the next clean GREEN
+candidate:
+
+```text
+commit bdaf75ce7d6c0eb59ab5262984c8467e9f17167a
+tree   4cbe765b057112727f6fd60356061460d92fd991
+```
+
+The final verifier reports were delivered as independent agent messages rather
+than repository files. Core proved that the representation could not satisfy
+its documented size boundary and reproduced an absolute checked-in-source path
+leak. Product independently encoded the official FDC tuple, confirmed the same
+size defect and found no additional unresolved P0/P1 issue from the preceding
+corrective wave.
+
+Before this RED wave, typecheck and the existing focused matrix were PASS: 5
+files, 76 tests. That PASS is not acceptance evidence because it used only a
+small transformed payload.
+
+For a 1,048,000-byte transformed `bytes` payload, the test-only official ABI
+encoder measures:
+
+```text
+proof.response = 1,049,056 bytes = 2,098,114 hex characters including 0x
+consumer calldata = 1,049,188 bytes = 2,098,378 hex characters including 0x
+2 responses + 3 calldata = 10,491,362 hex characters
+```
+
+The rejected schema capped each raw hex value at 2,097,154 characters, so one
+valid near-maximum calldata already failed that field. Even blindly increasing
+that cap could not fit the three duplicated calldata values in a 6,291,456-byte
+outer envelope. The corrected contract therefore removes
+`reproduction.executions`: official-ABI calldata and EVM return/revert bytes are
+derived by trusted verification and only their existing transcript hashes are
+persisted. Pure domain validation still accepts rechecksummed transcript claims
+and remains non-authorizing.
+
+The 6 MiB preparse boundary is preserved. Each recording bundle is capped at
+2,200,000 UTF-8 bytes and 64 Merkle nodes (2,048 raw bytes). Two bundle maxima
+leave 1,891,456 bytes for the exact fixed compiler/source/bytecode evidence,
+hashes and JSON framing. This is a combined-bound representation contract, not
+a promise that arbitrary unbounded `ProofBundleV1` metadata or every independent
+schema maximum fits. The positive contract records two official-ABI bundles
+with the near-maximum payload, runtime-verifies the rebuilt compiler/EVM
+transcript and canonical-replays the resulting bytes within 6 MiB. Exact outer
+boundary plus one and Merkle boundary plus one reject.
+
+The source-read correction freezes code `CANONICAL_SOURCE_READ_FAILED` and exact
+message `Canonical URL attack source read failed` for both missing and
+permission failures. FDC, injected CLI and copied built-CLI tests require a
+bounded exit `2` surface with no OS code, stack, absolute path, Solidity
+filename, external network or output artifact.
+
+This wave changes tests, test fixtures and documentation only. The prior GREEN
+evidence is explicitly marked rejected. No production source, dependency,
+Solidity contract, API, PostgreSQL, Worker, Action or Web behavior is changed.
+
+Final local results:
+
+```text
+npm run typecheck
+PASS
+
+npx vitest run \
+  packages/contracts/test/slice024a-canonical-url-attack-recording.contract.test.ts \
+  packages/domain/test/slice024a-canonical-url-attack-recording.contract.test.ts \
+  packages/fdc-coston2/test/slice024a-runtime-recording-authority.corrective.contract.test.ts \
+  packages/cli/test/slice024a-demo-record.contract.test.ts \
+  packages/cli/test/slice024a-bin-runtime-composition.corrective.contract.test.ts
+EXPECTED RED — 5 files failed; 29 failed, 56 passed, 85 total
+
+npx vitest run \
+  packages/contracts/test/public-contracts.test.ts \
+  packages/domain/test/bundle-replay.test.ts \
+  packages/domain/test/codegen.test.ts \
+  packages/cli/test/cli-contract.test.ts \
+  packages/cli/test/slice008-offline-help.contract.test.ts
+PASS — 5 files, 74 tests
+```
+
+The 29 intentional failures partition as contracts 8, domain 10, FDC runtime
+5, injected CLI 5 and copied built bin 1. The near-maximum case reaches the old
+raw-calldata cap after independently confirming both exact ABI sizes; it does
+not fail from timeout or memory pressure. Passing cases are unchanged
+invariants or controls and do not authorize the rejected representation.

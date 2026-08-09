@@ -19,10 +19,14 @@ release fields. The demo therefore needs a separate, checksummed evidence
 envelope which can be absent honestly until real evidence exists.
 
 The source Web2Json response is capped at 1 MiB, but `proof.response` is hex in
-canonical JSON and can approach twice the source byte count. Two bundle strings
-plus the deterministic execution transcript can consequently exceed 3 MiB.
-The outer limit must reject abusive input without excluding a valid maximum
-recording.
+canonical JSON and can approach twice the source byte count. The rejected
+implementation then duplicated the same proof tuple three more times as raw
+consumer calldata and duplicated both accepted results. For a 1,048,000-byte
+transformed payload, the official ABI response is 1,049,056 bytes and consumer
+calldata is 1,049,188 bytes. Their hex strings are respectively 2,098,114 and
+2,098,378 characters. Two response strings plus three calldata strings alone
+therefore require 10,491,362 characters before compiler, source, bytecode,
+result or JSON framing evidence. No 6 MiB envelope can represent that design.
 
 ## Decision
 
@@ -58,16 +62,25 @@ recording.
   input and output bytes, the raw UTF-8 source plus path and SHA-256 for both
   consumers, the invariant library, bounded compiler stubs and the generated
   exact-proof verifier, raw creation/runtime bytecodes, canonical transformed
-  response-shape JSON, and raw calldata plus return/revert bytes for all three
-  executions.
+  response-shape JSON. It deliberately contains no execution tuple: consumer
+  calldata and return/revert bytes are deterministically derived from the two
+  embedded bundles, compiled runtime and official ABI, so duplicating them is
+  forbidden.
 
 All objects are strict. Arbitrary metadata, headers, URLs for runtime services,
 raw source, credentials and private fields are not extensibility points. The
 outer checksum is `sha256:` plus SHA-256 of canonical JSON content without the
 checksum. `CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES` is exactly 6 MiB
 (`6 * 1024 * 1024`), enforced before JSON parsing and after canonical
-serialization. This accommodates two maximum-bound hex proof bundles and the
-bounded transcript while preserving a deterministic memory boundary.
+serialization. Each embedded canonical bundle is additionally capped at
+2,200,000 UTF-8 bytes, and a recording bundle may contain at most 64 Merkle
+proof nodes (2,048 raw proof bytes). Two bundle maxima consume 4,400,000 bytes,
+leaving 1,891,456 bytes under the outer cap for the exact checked-in
+compiler/source/bytecode evidence, hashes and JSON framing. The positive
+near-maximum test uses the real fixed sources and toolchain to prove that this
+remaining budget is sufficient. The outer cap remains the final combined
+boundary; individual schema maxima are not a promise that arbitrary unbounded
+`ProofBundleV1` metadata or every independent field maximum can coexist.
 
 `ProofBundleV1` is not extended or rewritten. Its internal checksum is distinct
 from each exact canonical bundle-byte SHA-256 and from the recording's outer
@@ -98,16 +111,20 @@ byte-canonical `replayProofBundle` path and rejects unless:
 5. the only results are vulnerable/attack accepted, safe/attack reverted with
    the exact `HostMismatch()` selector, and safe/control accepted;
 6. no `replay`, synthetic, test-system or fixture provenance is accepted;
-7. the canonical outer bytes, size and checksum match exactly.
+7. each embedded bundle respects the recording-only 2,200,000-byte and
+   64-node Merkle bounds, and the canonical outer bytes, size and checksum
+   match exactly.
 
-Pure validation binds every declared hash to its raw `reproduction` bytes,
-requires canonical standard JSON and response-shape JSON, and preserves outer
-byte integrity. It deliberately does **not** establish that source bytes equal
-the checked-in contracts, that standard-JSON output came from `solc`, that
-bytecode came from that output, or that claimed return/revert bytes came from
-an EVM. Canonical parse, checksum and self-consistency are non-authorizing
-evidence: a caller can fabricate all raw material, recompute every hash and the
-outer checksum, and still satisfy the pure boundary.
+Pure validation binds compiler, source, bytecode and shape hashes to their raw
+`reproduction` bytes, requires canonical standard JSON and response-shape JSON,
+and preserves outer byte integrity. Transcript calldata and result hashes have
+no duplicated raw counterpart and remain claims at this layer. Pure validation
+deliberately does **not** establish that source bytes equal the checked-in
+contracts, that standard-JSON output came from `solc`, that bytecode came from
+that output, or that claimed transcript hashes came from an EVM. Canonical
+parse, checksum and self-consistency are non-authorizing evidence: a caller can
+fabricate all claims, recompute the outer checksum, and still satisfy the pure
+boundary.
 
 ### Trusted runtime verification authority
 
@@ -130,8 +147,8 @@ material. For each verification it:
    creation/runtime bytecodes with the recording;
 5. derives exact consumer calldata from the decoded proof tuple, executes
    vulnerable/attack, safe/attack and safe/control in a fresh deterministic
-   `@ethereumjs/vm`, and compares all raw calldata, return/revert bytes and
-   their hashes. Safe/attack must return exactly the four-byte
+   `@ethereumjs/vm`, and compares the independently derived calldata and
+   return/revert hashes with the transcript. Safe/attack must return exactly the four-byte
    `HostMismatch()` selector `0xb828610a`;
 6. derives the transformed response shape independently from the official ABI
    descriptor and decoded response data, then compares its canonical bytes and
@@ -145,6 +162,12 @@ discover or fall back to those fixtures. `packages/cli` depends one-way on this
 adapter and the packaged bin constructs it with the real checked-in-source file
 reader and clock. An optional missing recorder is not a production
 configuration.
+
+Checked-in source reads are a public error boundary. Missing and permission
+failures are normalized to code `CANONICAL_SOURCE_READ_FAILED` and the exact
+message `Canonical URL attack source read failed`. The public error is bounded
+and contains no OS code, stack, absolute path or Solidity filename; the raw
+filesystem error is never serialized or logged.
 
 ### Explicit CLI recorder ports
 
@@ -186,8 +209,9 @@ logs or evidence. Unit and credential-free 022–029A gates inject ports, disabl
 external network and do not use that token against a service.
 
 The packaged bin always wires the concrete compiler/EVM recorder. Missing API
-configuration produces a bounded safe error, exit code `2`, no stack and no
-absolute source path. There is no default fixture path, checked-in synthetic recording, replay
+configuration or an unreadable checked-in source produces a bounded safe error,
+exit code `2`, no stack, absolute source path or source filename, and no output
+write. There is no default fixture path, checked-in synthetic recording, replay
 fallback, test-system fallback or embedded “demo” object. If the two real live
 bundles or an actual deterministic execution are unavailable, recording fails
 closed and product surfaces must say that the canonical attack recording is
@@ -220,8 +244,10 @@ I/O.
   as the canonical demo.
 - The recording is reproducible and mutation-evident across release identity,
   bundle bytes, compiler output and EVM behavior.
-- The 6 MiB parse boundary is larger than ordinary API payloads but justified
-  by two hex-encoded maximum-bound proofs and remains explicit and testable.
+- The 6 MiB parse boundary remains a preparse memory-safety boundary. Its
+  positive claim is limited to two 2,200,000-byte recording bundles with the
+  exact fixed compiler/runtime evidence, not arbitrary unbounded bundle
+  metadata.
 - 024A introduces no API endpoint, PostgreSQL migration, Web behavior,
   credential request, external network access or hosted/deployed evidence.
 - Contracts/domain/codegen remain pure and target 100% statements and branches;

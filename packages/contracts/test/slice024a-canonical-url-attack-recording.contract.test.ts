@@ -28,6 +28,12 @@ describe("Slice 024A canonical URL attack recording public contract", () => {
     expect(contracts.CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES).toBe(
       6 * 1_024 * 1_024,
     );
+    expect(
+      contracts.CANONICAL_URL_ATTACK_RECORDING_MAX_BUNDLE_UTF8_BYTES,
+    ).toBe(2_200_000);
+    expect(
+      contracts.CANONICAL_URL_ATTACK_RECORDING_MAX_MERKLE_PROOF_ENTRIES,
+    ).toBe(64);
   });
 
   it("accepts exactly two independently persisted live Coston2 bundles without changing ProofBundleV1", () => {
@@ -189,7 +195,7 @@ describe("Slice 024A canonical URL attack recording public contract", () => {
     expect(envelopeSchema().safeParse(missing).success).toBe(false);
   });
 
-  it("freezes exact source paths and raw creation/runtime bytecode plus calldata/result anatomy", () => {
+  it("freezes exact source paths and raw bytecode without duplicating derived calldata or EVM results", () => {
     const value = makeCanonicalUrlAttackRecording();
     expect(value.reproduction.sources.vulnerable.path).toBe(
       "contracts/CanonicalVulnerableWeb2JsonConsumer.sol",
@@ -207,15 +213,7 @@ describe("Slice 024A canonical URL attack recording public contract", () => {
       creation: expect.stringMatching(/^0x(?:[a-f0-9]{2})+$/),
       runtime: expect.stringMatching(/^0x(?:[a-f0-9]{2})+$/),
     });
-    expect(value.reproduction.executions.map((execution) => ({
-      scenario: execution.scenario,
-      consumer: execution.consumer,
-      status: execution.result.status,
-    }))).toEqual([
-      { scenario: "attack", consumer: "canonical-vulnerable", status: "accepted" },
-      { scenario: "attack", consumer: "canonical-safe", status: "reverted" },
-      { scenario: "control", consumer: "canonical-safe", status: "accepted" },
-    ]);
+    expect(value.reproduction).not.toHaveProperty("executions");
     expect(envelopeSchema().safeParse(value).success).toBe(true);
   });
 
@@ -230,8 +228,7 @@ describe("Slice 024A canonical URL attack recording public contract", () => {
       ["wrong checked-in path", (value) => { value.reproduction.sources.safe.path = "contracts/Fake.sol"; }],
       ["non-hex bytecode", (value) => { value.reproduction.bytecode.safe.runtime = "6000"; }],
       ["odd bytecode", (value) => { value.reproduction.bytecode.safe.creation = "0x123"; }],
-      ["empty calldata", (value) => { value.reproduction.executions[0].calldata = "0x"; }],
-      ["wrong raw revert", (value) => { value.reproduction.executions[1].result.revertData = "0xdeadbeef"; }],
+      ["duplicated executions", (value) => { value.reproduction.executions = []; }],
       ["oversized standard JSON", (value) => { value.reproduction.standardJson.input = "x".repeat(1_048_577); }],
     ];
 
@@ -248,5 +245,13 @@ describe("Slice 024A canonical URL attack recording public contract", () => {
       expect(source.sha256).toBe(sha256(source.content));
     }
     expect(envelopeSchema().safeParse(value).success).toBe(true);
+  });
+
+  it("caps each embedded recording bundle independently at 2,200,000 UTF-8 bytes", () => {
+    const value: any = structuredClone(makeCanonicalUrlAttackRecording());
+    expect(envelopeSchema().safeParse(value).success).toBe(true);
+    value.bundles.attack.canonicalBundle = "x".repeat(2_200_001);
+    value.bundles.attack.canonicalBundleUtf8Bytes = 2_200_001;
+    expect(envelopeSchema().safeParse(value).success).toBe(false);
   });
 });
