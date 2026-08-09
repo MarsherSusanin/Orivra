@@ -63,6 +63,23 @@ The failures map to the absent implementation:
    retry evidence and fixed quota copy;
 6. migration 008 and `quota_windows` do not exist.
 
+The existing aggregate real-PostgreSQL migration inventory is also frozen to
+the exact ordered filename `008_persisted_admission_quotas.sql`, versions
+`1..8` on an empty schema and `0..8` after previous-schema upgrade. Its rerun
+expectation remains two identical executions of the complete ordered list.
+With Testcontainers enabled it is intentionally RED only because migration 008
+is absent; the inventory check runs before container discovery, so no Docker
+runtime or earlier migration/PostgreSQL behavior can mask that RED reason.
+
+```sh
+PROOFLINE_TESTCONTAINERS=1 npx vitest run \
+  apps/api/test/postgres/testcontainers.test.ts --maxWorkers=1
+```
+
+Result: 1 file RED, 1 intentional failure and zero skipped cases. The exact
+failure is the ordered inventory missing only
+`008_persisted_admission_quotas.sql` after accepted migrations 001–007.
+
 No failure is caused by a TypeScript compile error, missing fixture, changed
 success contract or production regression.
 

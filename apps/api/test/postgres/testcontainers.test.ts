@@ -26,6 +26,7 @@ async function loadMigrations() {
     "005_explicit_submission_authority.sql",
     expect.stringMatching(/^006_.+\.sql$/),
     "007_account_token_management.sql",
+    "008_persisted_admission_quotas.sql",
   ]);
   return Promise.all(
     names.map(async (name) => ({
@@ -37,8 +38,9 @@ async function loadMigrations() {
 
 describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
   it(
-    "runs 001 through 007 on empty and previous schemas repeatedly",
+    "runs 001 through 008 on empty and previous schemas repeatedly",
     async () => {
+      const migrations = await loadMigrations();
       const container = await new GenericContainer("postgres:16-alpine")
         .withEnvironment({
           POSTGRES_PASSWORD: "proofline",
@@ -64,7 +66,6 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
 
       try {
         await client.connect();
-        const migrations = await loadMigrations();
         const executed: string[] = [];
         const applyAll = async () => {
           for (const migration of migrations) {
@@ -82,7 +83,7 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
         );
         expect(emptyVersions.rows.map(({ version }) => version)).toEqual([
-          1, 2, 3, 4, 5, 6, 7,
+          1, 2, 3, 4, 5, 6, 7, 8,
         ]);
 
         const tables = await client.query<{ table_name: string }>(
@@ -182,7 +183,7 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
         );
         expect(previousVersions.rows.map(({ version }) => version)).toEqual([
-          0, 1, 2, 3, 4, 5, 6, 7,
+          0, 1, 2, 3, 4, 5, 6, 7, 8,
         ]);
         const upgradedTables = await client.query<{ table_name: string }>(
           "SELECT table_name FROM information_schema.tables WHERE table_schema = 'proofline_private'",
