@@ -3,10 +3,17 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": "./src/index.ts",
   "dependencies": {
+    "@ethereumjs/common": "10.1.2",
+    "@ethereumjs/util": "10.1.2",
+    "@ethereumjs/vm": "10.1.2",
+    "@flarenetwork/flare-periphery-contract-artifacts": "^0.1.52",
     "@proofline/contracts": "0.1.0",
     "@proofline/domain": "0.1.0",
-    "undici": "^7.29.0"
+    "solc": "^0.8.36",
+    "undici": "^7.29.0",
+    "viem": "^2.55.10"
   }
 }

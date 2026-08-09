@@ -1,4 +1,5 @@
 export { canonicalizeManifestUrl, diagnoseConsumerRequest } from "./diagnostics";
+export { canonicalJson } from "./canonical-json";
 export { appendRunEvents, projectRun } from "./run-lifecycle";
 export {
   canonicalSerializeProofBundle,

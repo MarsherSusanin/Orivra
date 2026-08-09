@@ -232,7 +232,7 @@ proofline demo record --attack-run <persisted-live-run-id> \
   --tree <40-hex-tree> --out <recording-path>
 ```
 
-Все пять опций обязательны, run ID должны различаться. Команда читает ровно два persisted bundle через API port, вызывает injected deterministic compiler/EVM recorder, перепроверяет его canonical recording и записывает только atomic rename. Без этого recorder port команда fail-closed с `Canonical URL attack recorder is unavailable`; она не читает fixture и не запускает wallet/relayer effect.
+Все пять опций обязательны ровно один раз, run ID должны различаться, а run/release/output значения проходят bounded грамматику до любого I/O. Packaged CLI всегда подключает concrete `packages/fdc-coston2` runtime: команда читает ровно два persisted bundle через API port, перекомпилирует exact checked-in Solidity через pinned canonical standard JSON, выполняет три вызова в fresh Cancun `@ethereumjs/vm`, затем независимо повторяет runtime verification до atomic rename. Ошибка read/compile/EVM/verify оставляет destination неизменённым; fixture/replay fallback и wallet/relayer effect отсутствуют.
 
 ### Локальный Product QA report
 

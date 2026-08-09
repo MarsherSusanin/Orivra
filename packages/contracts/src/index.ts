@@ -1830,6 +1830,127 @@ const CanonicalUrlAttackHostMismatchResultV1Schema = z
   })
   .strict();
 
+const CanonicalUrlAttackRawHexV1Schema = z
+  .string()
+  .min(4)
+  .max(2 * 1_024 * 1_024 + 2)
+  .regex(/^0x(?:[a-f0-9]{2})+$/);
+
+function canonicalUrlAttackSourceSchema<TPath extends string>(path: TPath) {
+  return z
+    .object({
+      path: z.literal(path),
+      content: z.string().min(1).max(262_144),
+      sha256: Sha256EnvelopeSchema,
+    })
+    .strict();
+}
+
+const CanonicalUrlAttackRawAcceptedResultV1Schema = z
+  .object({
+    status: z.literal("accepted"),
+    returnData: CanonicalUrlAttackRawHexV1Schema,
+  })
+  .strict();
+
+const CanonicalUrlAttackRawHostMismatchResultV1Schema = z
+  .object({
+    status: z.literal("reverted"),
+    revertData: z.literal("0xb828610a"),
+  })
+  .strict();
+
+function canonicalUrlAttackRawExecutionSchema<
+  TScenario extends "attack" | "control",
+  TConsumer extends "canonical-vulnerable" | "canonical-safe",
+  TResult extends z.ZodType,
+>(scenario: TScenario, consumer: TConsumer, result: TResult) {
+  return z
+    .object({
+      scenario: z.literal(scenario),
+      consumer: z.literal(consumer),
+      calldata: CanonicalUrlAttackRawHexV1Schema,
+      result,
+    })
+    .strict();
+}
+
+const CanonicalUrlAttackReproductionV1Schema = z
+  .object({
+    standardJson: z
+      .object({
+        input: z.string().min(1).max(1_048_576),
+        output: z.string().min(1).max(1_048_576),
+      })
+      .strict(),
+    sources: z
+      .object({
+        vulnerable: canonicalUrlAttackSourceSchema(
+          "contracts/CanonicalVulnerableWeb2JsonConsumer.sol",
+        ),
+        safe: canonicalUrlAttackSourceSchema(
+          "contracts/CanonicalSafeWeb2JsonConsumer.sol",
+        ),
+        invariantLibrary: canonicalUrlAttackSourceSchema(
+          "contracts/ProoflineUrlInvariant.sol",
+        ),
+        web2JsonInterface: canonicalUrlAttackSourceSchema(
+          "@flarenetwork/flare-periphery-contracts/coston2/IWeb2Json.sol",
+        ),
+        contractRegistry: canonicalUrlAttackSourceSchema(
+          "@flarenetwork/flare-periphery-contracts/coston2/ContractRegistry.sol",
+        ),
+        exactProofVerifier: canonicalUrlAttackSourceSchema(
+          "contracts/ProoflineExactProofVerifier.sol",
+        ),
+      })
+      .strict(),
+    bytecode: z
+      .object({
+        vulnerable: z
+          .object({
+            creation: CanonicalUrlAttackRawHexV1Schema,
+            runtime: CanonicalUrlAttackRawHexV1Schema,
+          })
+          .strict(),
+        safe: z
+          .object({
+            creation: CanonicalUrlAttackRawHexV1Schema,
+            runtime: CanonicalUrlAttackRawHexV1Schema,
+          })
+          .strict(),
+        exactProofVerifier: z
+          .object({
+            runtime: CanonicalUrlAttackRawHexV1Schema,
+            runtimeSha256: Sha256EnvelopeSchema,
+          })
+          .strict(),
+      })
+      .strict(),
+    transformedResponseShapeCanonicalJson: z
+      .string()
+      .min(1)
+      .max(65_536),
+    executions: z.tuple([
+      canonicalUrlAttackRawExecutionSchema(
+        "attack",
+        "canonical-vulnerable",
+        CanonicalUrlAttackRawAcceptedResultV1Schema,
+      ),
+      canonicalUrlAttackRawExecutionSchema(
+        "attack",
+        "canonical-safe",
+        CanonicalUrlAttackRawHostMismatchResultV1Schema,
+      ),
+      canonicalUrlAttackRawExecutionSchema(
+        "control",
+        "canonical-safe",
+        CanonicalUrlAttackRawAcceptedResultV1Schema,
+      ),
+    ]),
+  })
+  .strict();
+
 function canonicalUrlAttackExecutionSchema<
   TScenario extends "attack" | "control",
   TConsumer extends "canonical-vulnerable" | "canonical-safe",
@@ -1964,6 +2085,7 @@ export const CanonicalUrlAttackRecordingContentV1Schema = z
         ]),
       })
       .strict(),
+    reproduction: CanonicalUrlAttackReproductionV1Schema,
   })
   .strict();
 

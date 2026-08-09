@@ -1,12 +1,12 @@
 # Slice 024A GREEN — canonical URL attack recording
 
-Date: 2026-08-09 (Asia/Vladivostok)
+Date: 2026-08-10 (Asia/Vladivostok)
 
 Role: Production implementer
 
-RED commit: `71e1c53ab881ec84878518d7ef34c8d04a6688d3`
+Corrected RED commit: `546d2f1141d4fc6b813892ab29093dce7a3d9fc2`
 
-RED tree: `9d41bbf5687a577ea7c7b98a1f613c2a45878c6b`
+Corrected RED tree: `fc5bc70b620f08db27e8dfe3f10edb8581916dae`
 
 Architecture decision: [ADR 0031](../adr/0031-canonical-url-attack-recording.md)
 
@@ -14,28 +14,42 @@ Slice contract: [024A](../slices/024a-canonical-url-attack-recording.md)
 
 ## Implementation
 
-`packages/contracts` now owns the strict recording content and envelope types
-and the exact 6 MiB UTF-8 limit. `ProofBundleV1` remains unchanged. The pure
-domain boundary creates, validates, canonical-serializes and replays the outer
-recording while reparsing both embedded bundle strings through the existing
-byte-canonical `replayProofBundle` path. It binds every persisted identity,
-the different live runs and source hosts, shared request, compiler/runtime
-identities and the ordered vulnerable-attack, safe-attack and safe-control
-transcript.
+`packages/contracts` now owns the strict recording content and envelope types,
+the exact 6 MiB UTF-8 limit and bounded raw reproduction material: canonical
+compiler input/output, six exact sources, raw bytecodes, canonical response
+shape and the ordered calldata/return/revert tuple. `ProofBundleV1` remains
+unchanged. The pure domain boundary creates, validates, canonical-serializes
+and replays the outer recording while reparsing both embedded bundle strings
+through the existing byte-canonical `replayProofBundle` path. It derives every
+source, bytecode, shape, calldata and result hash from raw bytes. This pure
+boundary explicitly establishes byte integrity only and is not runtime
+authority.
+
+`packages/fdc-coston2` now provides the concrete trusted recorder and verifier.
+It decodes both persisted proof responses with the official verification ABI,
+rereads the three exact checked-in consumer/invariant sources, generates an
+exact-proof-hash verifier shim, compiles canonical pinned `solc` standard JSON,
+and executes vulnerable/attack, safe/attack and safe/control in a fresh Cancun
+`@ethereumjs/vm`. Verification independently rebuilds and byte-compares the
+entire recording before returning a checksum-bound `runtime-verified` result.
+The adapter has no network or signing behavior.
 
 The explicit `proofline demo record` command reads only the two requested
-persisted bundles, calls the injected deterministic compiler/EVM recorder once,
-replays and reserializes its result through the domain boundary, verifies that
-the returned release, run IDs and exact bundle bytes match the request, and
-then calls the injected atomic-write port. The Node entry point implements the
-atomic file port with a same-directory exclusive temporary file, file sync,
-rename and error cleanup. There is no default fixture, replay fallback, wallet
-or relayer signing path, environment forwarding or network call outside the
+persisted bundles after strict grammar validation, calls the deterministic
+compiler/EVM recorder once, requires a separate runtime verification before
+pure replay, verifies the checksum, release, run IDs and exact bundle bytes,
+and then calls the injected atomic-write port. The packaged Node entry point
+always wires the concrete runtime and implements the atomic file port with a
+same-directory exclusive temporary file, file sync, rename and error cleanup.
+Missing API configuration returns bounded exit `2` without a stack or absolute
+path. There is no default fixture, replay fallback, wallet or relayer signing
+path, environment forwarding to the recorder or network call outside the
 persisted API port.
 
-`@proofline/cli` now declares its one-way workspace dependency on
-`@proofline/domain`; there is no package cycle and no duplicated integrity
-implementation.
+The ADR-authorized dependencies are explicit: the FDC package owns official
+artifacts, pinned compiler/EVM and ABI tooling, while CLI has a one-way
+workspace dependency on FDC. There is no package cycle or duplicated runtime
+integrity implementation.
 
 ## Focused and nearest evidence
 
@@ -44,14 +58,18 @@ npm run typecheck
 npx vitest run \
   packages/contracts/test/slice024a-canonical-url-attack-recording.contract.test.ts \
   packages/domain/test/slice024a-canonical-url-attack-recording.contract.test.ts \
-  packages/cli/test/slice024a-demo-record.contract.test.ts
+  packages/fdc-coston2/test/slice024a-runtime-recording-authority.corrective.contract.test.ts \
+  packages/cli/test/slice024a-demo-record.contract.test.ts \
+  packages/cli/test/slice024a-bin-runtime-composition.corrective.contract.test.ts
 ```
 
-Typecheck is PASS. The exact frozen 024A matrix is PASS: 3 files, 41 tests.
+Typecheck is PASS. The exact corrected frozen 024A matrix is PASS: 5 files, 76
+tests. Contracts/domain are 36/36, the concrete runtime is 6/6, strict CLI is
+32/32 and packaged composition is 2/2.
 
-The focused matrix plus unchanged public contracts, domain replay/codegen and
-CLI help/adapter baselines is PASS: 7 files, 69 tests. All CLI tests are also
-PASS: 9 files, 63 tests.
+The unchanged public contracts, domain replay/codegen and CLI help baselines
+are PASS: 5 files, 74 tests. All FDC and CLI tests are PASS together: 24 files,
+285 tests (FDC 199; CLI 86).
 
 ## Coverage, build and safety evidence
 
@@ -61,21 +79,28 @@ npx vitest run packages/cli/test --coverage \
   --coverage.include='packages/cli/src/index.ts' \
   --coverage.thresholds.lines=90 \
   --coverage.thresholds.branches=85
+npx vitest run packages/fdc-coston2/test --coverage \
+  --coverage.include='packages/fdc-coston2/src/canonical-url-attack-runtime.ts' \
+  --coverage.thresholds.lines=90 \
+  --coverage.thresholds.branches=85
+npm --workspace @proofline/worker run build
 npm --workspace @proofline/cli run build
 node packages/cli/dist/index.js --help
 node packages/cli/dist/index.js demo record --help
 git diff --check
 ```
 
-Contracts/domain coverage is PASS: 40 files and 449 tests, with 100% statements,
-branches, functions and lines. CLI coverage is PASS: 93.93% lines and 94.77%
-branches (93.49% statements and 92.85% functions). The CLI build and both help
-paths are PASS. A targeted generated/source scan contains none of the frozen
-project-token, wallet-secret, relayer-secret or Bearer values.
+Contracts/domain coverage is PASS: 40 files and 455 tests, with 100% statements,
+branches, functions and lines. CLI affected coverage is PASS: 93.10% lines and
+93.92% branches. The new FDC runtime is PASS at 100% lines and 91.30% branches.
+The FDC consumer worker build, CLI build, both help paths and missing-config
+black-box exit `2` are PASS. A targeted generated/source scan contains none of
+the frozen project-token, wallet-secret, relayer-secret or Bearer values.
 
 No checked-in canonical demo is produced by this slice. These credential-free
-tests exercise injected ports and are not live compiler/EVM, Coston2, hosted,
-PostgreSQL, Web, Sites or Docker evidence. A real recording remains unavailable
-until the recorder port is backed by actual deterministic compilation/execution
-and two independently persisted live bundles. The unified credential-free
-022–029A matrix remains the candidate-freeze gate.
+tests execute the real local compiler/EVM runtime over test-only ABI-valid
+bundles, but are not live Coston2, hosted, PostgreSQL, Web, Sites or Docker
+evidence. A real recording remains unavailable until two independently
+persisted live bundles are supplied through the scoped API path. The unified
+credential-free 022–029A matrix remains the candidate-freeze gate, and this
+production author is not either independent verifier.

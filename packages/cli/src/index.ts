@@ -29,6 +29,10 @@ interface CliDependencies {
       controlBundle: string;
       release: { commitSha: string; treeSha: string };
     }): Promise<string>;
+    verifyCanonicalUrlAttackRecording(serialized: string): Promise<{
+      status: "runtime-verified";
+      recordingChecksum: string;
+    }>;
   };
   env: Record<string, string | undefined>;
   io: {
@@ -47,9 +51,9 @@ function option(argv: readonly string[], name: string): string | undefined {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-function safeMessage(error: unknown): string {
+export function safeCliErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "Command failed";
-  return message
+  const sanitized = message
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
     .replace(/(?:project|share)_[A-Za-z0-9_-]{16,}/gi, "[REDACTED]")
     .replace(
@@ -57,6 +61,91 @@ function safeMessage(error: unknown): string {
       "$1[REDACTED]\"",
     )
     .replace(/0x[a-f0-9]{16,}/gi, "[REDACTED]");
+  const bytes = new TextEncoder().encode(sanitized);
+  if (bytes.byteLength <= 480) return sanitized;
+  let bounded = sanitized;
+  while (
+    bounded.length > 0 &&
+    new TextEncoder().encode(`${bounded}…`).byteLength > 480
+  ) {
+    bounded = bounded.slice(0, -1);
+  }
+  return `${bounded}…`;
+}
+
+const DEMO_RECORD_FLAGS = [
+  "--attack-run",
+  "--control-run",
+  "--commit",
+  "--tree",
+  "--out",
+] as const;
+
+type DemoRecordFlag = (typeof DEMO_RECORD_FLAGS)[number];
+
+function parseDemoRecordArguments(argv: readonly string[]): {
+  attackRunId: string;
+  controlRunId: string;
+  commitSha: string;
+  treeSha: string;
+  outputPath: string;
+} {
+  const allowed = new Set<string>(DEMO_RECORD_FLAGS);
+  const values = new Map<DemoRecordFlag, string>();
+  for (let index = 2; index < argv.length; index += 2) {
+    const flag = argv[index];
+    if (!flag?.startsWith("--")) {
+      throw new Error("demo record has invalid trailing positional arguments");
+    }
+    if (!allowed.has(flag)) {
+      throw new Error(`demo record has unknown flag ${flag}`);
+    }
+    if (values.has(flag as DemoRecordFlag)) {
+      throw new Error(`demo record has duplicate flag ${flag}`);
+    }
+    const value = argv[index + 1];
+    if (value === undefined || value.startsWith("--")) {
+      throw new Error(`demo record has invalid value for ${flag}`);
+    }
+    values.set(flag as DemoRecordFlag, value);
+  }
+  const missing = DEMO_RECORD_FLAGS.filter((flag) => !values.has(flag));
+  if (missing.length > 0) {
+    throw new Error(`demo record requires ${missing.join(", ")}`);
+  }
+
+  const attackRunId = values.get("--attack-run")!;
+  const controlRunId = values.get("--control-run")!;
+  const commitSha = values.get("--commit")!;
+  const treeSha = values.get("--tree")!;
+  const outputPath = values.get("--out")!;
+  const runIdPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+  const shaPattern = /^[a-f0-9]{40}$/;
+  if (!runIdPattern.test(attackRunId)) {
+    throw new Error("demo record has invalid --attack-run");
+  }
+  if (!runIdPattern.test(controlRunId)) {
+    throw new Error("demo record has invalid --control-run");
+  }
+  if (!shaPattern.test(commitSha)) {
+    throw new Error("demo record has invalid --commit");
+  }
+  if (!shaPattern.test(treeSha)) {
+    throw new Error("demo record has invalid --tree");
+  }
+  const outputName = outputPath.split(/[\\/]/).at(-1);
+  if (
+    outputPath.length === 0 ||
+    outputPath.startsWith("-") ||
+    new TextEncoder().encode(outputPath).byteLength > 4_096 ||
+    /[\0-\x1f\x7f]/.test(outputPath) ||
+    /[\\/]$/.test(outputPath) ||
+    outputName === "." ||
+    outputName === ".."
+  ) {
+    throw new Error("demo record has invalid --out");
+  }
+  return { attackRunId, controlRunId, commitSha, treeSha, outputPath };
 }
 
 type SubmissionMode = SubmissionResponseV1["mode"];
@@ -225,29 +314,15 @@ export async function runProoflineCli(input: CliDependencies): Promise<number> {
       return 0;
     }
     if (group === "demo" && command === "record") {
-      const attackRunId = option(input.argv, "--attack-run");
-      const controlRunId = option(input.argv, "--control-run");
-      const commitSha = option(input.argv, "--commit");
-      const treeSha = option(input.argv, "--tree");
-      const outputPath = option(input.argv, "--out");
-      if (
-        !attackRunId ||
-        !controlRunId ||
-        !commitSha ||
-        !treeSha ||
-        !outputPath
-      ) {
-        throw new Error(
-          "demo record requires --attack-run, --control-run, --commit, --tree and --out",
-        );
-      }
+      const { attackRunId, controlRunId, commitSha, treeSha, outputPath } =
+        parseDemoRecordArguments(input.argv);
       if (attackRunId === controlRunId) {
         throw new Error(
           "Canonical URL attack and control must be different persisted live runs",
         );
       }
       if (!input.demoRecorder || !input.files.writeTextAtomic) {
-        throw new Error("Canonical URL attack recorder is unavailable");
+        throw new Error("Canonical URL attack production authority is required");
       }
 
       const attackBundle = String(
@@ -263,8 +338,14 @@ export async function runProoflineCli(input: CliDependencies): Promise<number> {
         controlBundle,
         release: { commitSha, treeSha },
       });
+      const runtimeVerification =
+        await input.demoRecorder.verifyCanonicalUrlAttackRecording(
+          recordedBytes,
+        );
       const recording = replayCanonicalUrlAttackRecording(recordedBytes);
       if (
+        runtimeVerification.status !== "runtime-verified" ||
+        runtimeVerification.recordingChecksum !== recording.checksum ||
         recording.release.commitSha !== commitSha ||
         recording.release.treeSha !== treeSha ||
         recording.bundles.attack.runId !== attackRunId ||
@@ -285,7 +366,7 @@ export async function runProoflineCli(input: CliDependencies): Promise<number> {
     input.io.stderr("Unsupported Proofline command");
     return 2;
   } catch (error) {
-    input.io.stderr(safeMessage(error));
+    input.io.stderr(safeCliErrorMessage(error));
     return 2;
   }
 }

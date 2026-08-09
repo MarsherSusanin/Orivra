@@ -26,6 +26,17 @@ function proofSha256(response: string): string {
   return sha256(bytes);
 }
 
+function rawHexSha256(value: string): string {
+  const bytes = new Uint8Array((value.length - 2) / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(
+      value.slice(2 + index * 2, 4 + index * 2),
+      16,
+    );
+  }
+  return sha256(bytes);
+}
+
 function utf8Bytes(value: string): number {
   return textEncoder.encode(value).byteLength;
 }
@@ -156,6 +167,123 @@ function validateSemanticIntegrity(
   assertRecording(
     safeControl.calldataSha256 !== safeAttack.calldataSha256,
     "control calldata must be distinct from attack calldata",
+  );
+
+  validateReproductionIntegrity(content);
+}
+
+function assertCanonicalJson(value: string, label: string): void {
+  const decoded = JSON.parse(value);
+  assertRecording(
+    canonicalJson(decoded) === value,
+    `${label} must be canonical JSON`,
+  );
+}
+
+function validateReproductionIntegrity(
+  content: CanonicalUrlAttackRecordingContentV1,
+): void {
+  const reproduction = content.reproduction;
+  assertCanonicalJson(reproduction.standardJson.input, "compiler input");
+  assertCanonicalJson(reproduction.standardJson.output, "compiler output");
+  assertCanonicalJson(
+    reproduction.transformedResponseShapeCanonicalJson,
+    "transformed response shape",
+  );
+  assertRecording(
+    sha256(reproduction.standardJson.input) ===
+      content.toolchain.compiler.inputSha256,
+    "compiler input checksum mismatch",
+  );
+  assertRecording(
+    sha256(reproduction.standardJson.output) ===
+      content.toolchain.compiler.outputSha256,
+    "compiler output checksum mismatch",
+  );
+
+  for (const source of Object.values(reproduction.sources)) {
+    assertRecording(
+      sha256(source.content) === source.sha256,
+      "source checksum mismatch",
+    );
+  }
+  assertRecording(
+    content.consumers.vulnerable.sourceSha256 ===
+      reproduction.sources.vulnerable.sha256 &&
+      content.consumers.safe.sourceSha256 ===
+        reproduction.sources.safe.sha256 &&
+      content.consumers.invariantLibrary.sourceSha256 ===
+        reproduction.sources.invariantLibrary.sha256,
+    "consumer source checksum mismatch",
+  );
+
+  assertRecording(
+    rawHexSha256(reproduction.bytecode.vulnerable.creation) ===
+      content.consumers.vulnerable.creationBytecodeSha256,
+    "vulnerable creation bytecode checksum mismatch",
+  );
+  assertRecording(
+    rawHexSha256(reproduction.bytecode.vulnerable.runtime) ===
+      content.consumers.vulnerable.runtimeBytecodeSha256,
+    "vulnerable runtime bytecode checksum mismatch",
+  );
+  assertRecording(
+    rawHexSha256(reproduction.bytecode.safe.creation) ===
+      content.consumers.safe.creationBytecodeSha256,
+    "safe creation bytecode checksum mismatch",
+  );
+  assertRecording(
+    rawHexSha256(reproduction.bytecode.safe.runtime) ===
+      content.consumers.safe.runtimeBytecodeSha256,
+    "safe runtime bytecode checksum mismatch",
+  );
+  assertRecording(
+    rawHexSha256(reproduction.bytecode.exactProofVerifier.runtime) ===
+      reproduction.bytecode.exactProofVerifier.runtimeSha256,
+    "exact proof verifier runtime checksum mismatch",
+  );
+
+  const shapeSha256 = sha256(
+    reproduction.transformedResponseShapeCanonicalJson,
+  );
+  assertRecording(
+    content.sharedRequest.transformedResponseShapeSha256 === shapeSha256 &&
+      content.bundles.attack.transformedResponseShapeSha256 === shapeSha256 &&
+      content.bundles.control.transformedResponseShapeSha256 === shapeSha256,
+    "transformed response shape checksum mismatch",
+  );
+
+  const [vulnerableAttack, safeAttack, safeControl] =
+    reproduction.executions;
+  assertRecording(
+    rawHexSha256(vulnerableAttack.calldata) ===
+      content.transcript.executions[0].calldataSha256,
+    "vulnerable attack calldata checksum mismatch",
+  );
+  assertRecording(
+    rawHexSha256(safeAttack.calldata) ===
+      content.transcript.executions[1].calldataSha256,
+    "safe attack calldata checksum mismatch",
+  );
+  assertRecording(
+    rawHexSha256(safeControl.calldata) ===
+      content.transcript.executions[2].calldataSha256,
+    "safe control calldata checksum mismatch",
+  );
+  assertRecording(
+    rawHexSha256(vulnerableAttack.result.returnData) ===
+      content.transcript.executions[0].result.returnDataSha256,
+    "vulnerable attack return checksum mismatch",
+  );
+  assertRecording(
+    rawHexSha256(safeAttack.result.revertData) ===
+      content.transcript.executions[1].result.revertDataSha256,
+    "safe attack revert checksum mismatch",
+  );
+  assertRecording(
+    rawHexSha256(safeControl.result.returnData) ===
+      content.transcript.executions[2].result.returnDataSha256,
+    "safe control return checksum mismatch",
   );
 }
 
