@@ -60,7 +60,17 @@ selection or query selector. The detail itself identifies immutable revision
   `1`, without changing its exact template manifest;
 - a valid restored draft wins. Replacement happens only after an explicit
   destructive confirmation and receives a fresh create idempotency key;
+- an applied or edited template is thereafter an authoritative persisted draft;
+  click/direct/history selection of another template becomes pending and never
+  auto-applies over it when an asynchronous response settles;
 - cancel preserves the saved draft byte-for-byte;
+- confirmation atomically clears the old pending create intent plus validation,
+  trust and submission errors, so later authentication cannot submit replaced
+  bytes or their idempotency key;
+- replacement review is disabled while authenticated create is in flight and
+  becomes available only after a non-navigating settlement;
+- the replacement dialog owns and traps focus, Escape preserves the draft and
+  pending choice, and focus returns to `Review replacement`;
 - invalid ID/revision/detail becomes unavailable and never falls back to the
   default, ETH/USD, a sample or a partially trusted manifest;
 - on unedited submit, the exact resolved manifest reaches the existing run

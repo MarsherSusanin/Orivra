@@ -117,6 +117,27 @@ exact resolved manifest; after edits, the existing finalizer and
 `Web2JsonManifestV1Schema` remain the sole authority. Public provenance is
 bounded display metadata and is never copied into the run request.
 
+An applied template becomes the authoritative current and persisted draft as
+soon as it is created; later edits strengthen rather than weaken that authority.
+A later template selection through click, direct URL, back or forward is always
+a pending replacement and cannot overwrite those bytes without confirmation.
+An asynchronous detail response may auto-apply only if its selection is still
+current and no authoritative current or persisted draft exists when the response
+settles.
+
+Confirmed replacement is one state transition: it installs the newly resolved
+draft and fresh idempotency key while clearing the old pending create intent,
+submission error, validation errors, trust-dirty/validation state and pending
+focus. Later authentication therefore cannot submit the replaced manifest or
+key. While an authenticated `createRun` call is in flight, Review replacement
+remains visible but disabled and cannot open the dialog or change draft bytes;
+it becomes available only if that call settles without navigation to a run.
+
+The replacement confirmation is a real modal focus boundary. Opening it focuses
+`Keep saved draft`; Tab and Shift+Tab wrap between its controls. Escape closes
+without changing the draft or pending URL selection and restores focus to
+`Review replacement`.
+
 The compatibility export `createEthUsdComposerDraft` is a thin adapter over
 canonical `eth-usd` catalog resolution. It contains no second Coinbase URL,
 JQ, ABI or manifest literal. It preserves the exact draft behavior and copies

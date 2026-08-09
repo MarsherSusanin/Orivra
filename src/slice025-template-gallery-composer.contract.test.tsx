@@ -94,8 +94,12 @@ function expectOnlyTemplateApiRequests(fetch: ReturnType<typeof fetchRouter>): v
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
-  return { promise, resolve };
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, reject, resolve };
 }
 
 afterEach(() => {
@@ -228,6 +232,201 @@ describe("Slice 025C template gallery, detail and Composer authority", () => {
     expect(await screen.findByLabelText(/source url/i)).toHaveValue(openMeteoManifest.request.url);
     const persisted = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null");
     expect(persisted.createIdempotencyKey).not.toBe(validComposerDraft.createIdempotencyKey);
+    expectOnlyTemplateApiRequests(fixture.fetch);
+  });
+
+  it("keeps an edited applied template authoritative when history selects another template", async () => {
+    const user = userEvent.setup();
+    const fixture = renderPath(
+      "/runs/new?template=open-meteo-current-weather&revision=1&step=source",
+    );
+    const source = await screen.findByLabelText(/source url/i);
+    await user.clear(source);
+    await user.type(source, "https://edited.example.com/public");
+    await waitFor(() => {
+      expect(JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null").fields.sourceUrl)
+        .toBe("https://edited.example.com/public");
+    });
+    const authoritativeBytes = localStorage.getItem(DRAFT_KEY);
+
+    window.history.pushState(
+      {},
+      "",
+      "/runs/new?template=eth-usd&revision=1&step=source",
+    );
+    await act(async () => window.dispatchEvent(new PopStateEvent("popstate")));
+
+    expect(await screen.findByText(
+      "A saved draft was restored. Review the requested template before replacing it.",
+    )).toBeVisible();
+    expect(screen.getByLabelText(/source url/i)).toHaveValue(
+      "https://edited.example.com/public",
+    );
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(authoritativeBytes);
+    expect(screen.getByRole("button", { name: "Review replacement" })).toBeEnabled();
+    expectOnlyTemplateApiRequests(fixture.fetch);
+  });
+
+  it("clears the old signed-out intent and every error when replacement is confirmed", async () => {
+    const oldDraft = { ...structuredClone(validComposerDraft), step: "submit" as const };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(oldDraft));
+    const createRun = vi.fn().mockRejectedValueOnce(new Error("offline"));
+    const runServices = services({ createRun });
+    const user = userEvent.setup();
+    const fixture = renderPath("/runs/new?step=submit", {
+      services: runServices,
+    });
+    const rerenderWithToken = (projectToken?: string) => fixture.rerender(
+      <App
+        projectToken={projectToken}
+        services={runServices}
+        walletAccess={{ services: fixture.wallet, storage: sessionStorage }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /sign in with wallet/i }));
+    const walletDialog = await screen.findByRole("dialog", {
+      name: "Sign in with wallet",
+    });
+    await user.click(within(walletDialog).getByRole("button", {
+      name: /close wallet sign in/i,
+    }));
+
+    rerenderWithToken(PROJECT_TOKEN);
+    expect(await screen.findByText(
+      "Run could not be created. Retry uses the same saved request identity.",
+    )).toBeVisible();
+    expect(createRun).toHaveBeenCalledOnce();
+    expect(createRun.mock.calls[0][0]).toMatchObject({
+      idempotencyKey: oldDraft.createIdempotencyKey,
+      manifest: { request: { url: oldDraft.fields.sourceUrl } },
+    });
+    rerenderWithToken(undefined);
+
+    const navigation = screen.getByRole("navigation", { name: /composer steps/i });
+    await user.click(within(navigation).getByRole("link", { name: /^trust/i }));
+    const oldHost = screen.getByLabelText(/expected host/i);
+    await user.clear(oldHost);
+    await user.type(oldHost, "bad host");
+    await user.click(screen.getByRole("button", { name: /continue to submit/i }));
+    expect(oldHost).toHaveAttribute("aria-invalid", "true");
+
+    window.history.pushState(
+      {},
+      "",
+      "/runs/new?template=open-meteo-current-weather&revision=1&step=source",
+    );
+    await act(async () => window.dispatchEvent(new PopStateEvent("popstate")));
+    await user.click(await screen.findByRole("button", {
+      name: "Review replacement",
+    }));
+    await user.click(within(screen.getByRole("dialog", {
+      name: "Replace saved draft?",
+    })).getByRole("button", { name: "Replace with template" }));
+
+    expect(await screen.findByLabelText(/source url/i)).toHaveValue(
+      openMeteoManifest.request.url,
+    );
+    const replacement = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null");
+    expect(replacement.createIdempotencyKey).not.toBe(
+      oldDraft.createIdempotencyKey,
+    );
+    await user.click(within(screen.getByRole("navigation", {
+      name: /composer steps/i,
+    })).getByRole("link", { name: /^trust/i }));
+    expect(screen.getByLabelText(/expected host/i)).toHaveValue(
+      openMeteoManifest.consumer.expectedHost,
+    );
+    expect(screen.getByLabelText(/expected host/i)).not.toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.queryByText(/enter a valid hostname/i)).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole("navigation", {
+      name: /composer steps/i,
+    })).getByRole("link", { name: /^submit/i }));
+    expect(screen.queryByText(/run could not be created/i)).not.toBeInTheDocument();
+
+    rerenderWithToken(PROJECT_TOKEN);
+    await act(async () => await Promise.resolve());
+    expect(createRun).toHaveBeenCalledOnce();
+    expectOnlyTemplateApiRequests(fixture.fetch);
+  });
+
+  it("refuses template replacement while authenticated creation is in flight", async () => {
+    const oldDraft = { ...structuredClone(validComposerDraft), step: "submit" as const };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(oldDraft));
+    const pending = deferred<never>();
+    const createRun = vi.fn(() => pending.promise);
+    const user = userEvent.setup();
+    const fixture = renderPath("/runs/new?step=submit", {
+      projectToken: PROJECT_TOKEN,
+      services: services({ createRun }),
+    });
+
+    await user.click(screen.getByRole("button", { name: "Create preflight run" }));
+    await waitFor(() => expect(createRun).toHaveBeenCalledOnce());
+    const authoritativeBytes = localStorage.getItem(DRAFT_KEY);
+    window.history.pushState(
+      {},
+      "",
+      "/runs/new?template=open-meteo-current-weather&revision=1&step=source",
+    );
+    await act(async () => window.dispatchEvent(new PopStateEvent("popstate")));
+
+    const review = await screen.findByRole("button", {
+      name: "Review replacement",
+    });
+    expect(review).toBeDisabled();
+    await user.click(review);
+    expect(screen.queryByRole("dialog", {
+      name: "Replace saved draft?",
+    })).not.toBeInTheDocument();
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(authoritativeBytes);
+    expect(createRun).toHaveBeenCalledOnce();
+
+    await act(async () => pending.reject(new Error("offline")));
+    expect(await screen.findByText(/run could not be created/i)).toBeVisible();
+    expect(review).toBeEnabled();
+    expectOnlyTemplateApiRequests(fixture.fetch);
+  });
+
+  it("traps replacement focus and Escape preserves the draft and restores Review replacement", async () => {
+    const before = JSON.stringify(validComposerDraft);
+    localStorage.setItem(DRAFT_KEY, before);
+    const user = userEvent.setup();
+    const fixture = renderPath(
+      "/runs/new?template=open-meteo-current-weather&revision=1&step=source",
+    );
+    const review = await screen.findByRole("button", {
+      name: "Review replacement",
+    });
+    await user.click(review);
+    const dialog = screen.getByRole("dialog", { name: "Replace saved draft?" });
+    const keep = within(dialog).getByRole("button", { name: "Keep saved draft" });
+    const replace = within(dialog).getByRole("button", {
+      name: "Replace with template",
+    });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(keep).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(replace).toHaveFocus();
+    await user.tab();
+    expect(keep).toHaveFocus();
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog", {
+      name: "Replace saved draft?",
+    })).not.toBeInTheDocument();
+    expect(review).toHaveFocus();
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(before);
+    expect(screen.getByLabelText(/source url/i)).toHaveValue(
+      validComposerDraft.fields.sourceUrl,
+    );
+    expect(new URLSearchParams(window.location.search).get("template")).toBe(
+      "open-meteo-current-weather",
+    );
     expectOnlyTemplateApiRequests(fixture.fetch);
   });
 

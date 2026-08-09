@@ -173,3 +173,63 @@ PASS — 6 files, 99 tests
 No production, package metadata, dependency or generated artifact is changed
 by this corrective RED wave. No broad/full, coverage, build, Docker, provider,
 hosted or live matrix is claimed.
+
+## Corrective Composer-authority RED
+
+A second review examined uncommitted GREEN work based on accepted corrective
+RED commit `5291467b28510c1ec9120ad5714818ae40eda715`, tree
+`b36b7e30870b20c341b13eacc1879f53e6c053c1`. The rejected pre-candidate WIP was
+stashed as `6a7f8855efa5121811daa364cc67d02196280644`, tree
+`6562ce85b835d690bdb8529d038cfa9c921bb03b`. It was not a frozen candidate,
+accepted GREEN commit or verification PASS.
+
+The review found three P1 authority/accessibility gaps and froze four component
+cases:
+
+- once template A has been applied, edited and persisted, a later valid
+  popstate selection of B preserves A byte-for-byte and enters pending
+  replacement; a stale response may auto-apply only while no authoritative
+  current or persisted draft exists;
+- confirmed replacement clears a signed-out pending create intent, old manifest
+  and idempotency key, submission error and validation/trust state before later
+  authentication can resume creation;
+- Review replacement is disabled and cannot mutate/open the dialog while an
+  authenticated create is in flight, then is available after a failed request
+  settles;
+- the modal initially focuses the safe keep action, traps Tab and Shift+Tab,
+  Escape preserves draft and pending selection, and focus returns to its Review
+  replacement opener.
+
+```text
+npm run typecheck
+PASS
+
+npx vitest run \
+  src/slice025-template-gallery-composer.contract.test.tsx
+
+EXPECTED RED — 1 file failed; 18 failed, 18 total
+```
+
+The count is the original 14 absent 025C surface contracts plus four new
+corrective authority/focus cases. The new cases compile and reach the same
+absent frozen surface on the clean RED base; there is no new harness exception,
+unexpected PASS or production fallback.
+
+The nearest unchanged Composer, pending-authentication and dialog controls are
+PASS:
+
+```text
+npx vitest run \
+  src/composer-journey.contract.test.tsx \
+  src/slice023c2b2-wallet-product-journey.contract.test.tsx \
+  src/App.surface-contract.test.tsx \
+  src/product-entry-accessibility.contract.test.tsx
+
+PASS — 4 files, 15 tests
+```
+
+One accepted accessibility control emits its pre-existing non-fatal React
+`act` warning. It does not change the PASS or constitute new product evidence.
+No production, dependency, package metadata, style or generated artifact is
+changed; no broad/full, coverage, build, browser, Docker, provider, hosted or
+live matrix is claimed.
