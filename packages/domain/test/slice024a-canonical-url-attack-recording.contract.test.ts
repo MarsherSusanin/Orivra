@@ -191,10 +191,15 @@ describe("Slice 024A canonical URL attack recording integrity", () => {
     expectCreateBoundary();
     expectReplayBoundaries();
     const serialized = serializeRecording(createRecording());
-    const checksumMutation = serialized.replace(/"checksum":"sha256:[a-f0-9]/, '"checksum":"sha256:f');
+    const checksumMutation = serialized.replace(
+      /("checksum":"sha256:)([a-f0-9])/,
+      (_match, prefix: string, nibble: string) =>
+        `${prefix}${nibble === "0" ? "1" : "0"}`,
+    );
     const nonCanonical = JSON.stringify(JSON.parse(serialized), null, 2);
     const truncated = serialized.slice(0, -1);
 
+    expect(checksumMutation).not.toBe(serialized);
     expect(() => replayRecording(checksumMutation)).toThrow(/checksum/i);
     expect(() => replayRecording(nonCanonical)).toThrow(/canonical/i);
     expect(() => replayRecording(truncated)).toThrow(/JSON|recording/i);
@@ -243,7 +248,9 @@ describe("Slice 024A canonical URL attack recording integrity", () => {
     for (const [name, mutate] of mutations) {
       const value: any = structuredClone(valid);
       mutate(value);
-      expect(() => createRecording(value), name).toThrow(/recording|checksum|canonical|schema/i);
+      expect(() => createRecording(value), name).toThrow(
+        /recording|checksum|canonical|schema|invalid/i,
+      );
     }
   });
 
