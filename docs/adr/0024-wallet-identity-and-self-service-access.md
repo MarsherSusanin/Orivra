@@ -36,6 +36,44 @@ most 8 KiB at the Fetch `Request` boundary, and return `Cache-Control: no-store`
 the only other unauthenticated V1 route; all remaining routes keep their bearer
 boundary.
 
+Slice 023D2 moves the same 8192-byte ceiling in front of Node buffering for
+exact `POST /v1/auth/wallet/challenges` and
+`POST /v1/auth/wallet/sessions`. Query text does not escape either exact
+pathname; another method, a trailing slash and every other pathname remain on
+the existing general bridge and are not silently given a new transport cap.
+The bridge constructs Fetch URLs against its fixed local
+`http://127.0.0.1:<configured listen port>` base. Neither the untrusted `Host`
+header nor proxy-style authority becomes route or security identity.
+
+The Node auth boundary validates headers before consuming a body. Missing or
+wrong Origin returns private `403 AUTH_ORIGIN_FORBIDDEN`; any
+`Content-Encoding` returns private `415 UNSUPPORTED_CONTENT_ENCODING`; and a
+declared `Content-Length` above 8192 returns private
+`413 REQUEST_BODY_TOO_LARGE` without waiting for bytes. Accepted body framing
+is no transfer coding or one exact `chunked` coding. Duplicate or comma-joined
+Content-Length, Content-Length plus Transfer-Encoding and other llhttp framing
+conflicts remain Node's single bare `400` and never acquire application JSON or
+CORS authority. A parseable non-exact transfer-coding list returns private
+`400 INVALID_REQUEST_BODY` before dispatch.
+
+An admitted auth body has one absolute 10-second read deadline starting at
+handler entry; data does not extend it. The implementation may inject a shorter
+deadline only in tests. Decoded bytes are counted while streaming: 8192 is
+accepted and byte 8193 returns private `413 REQUEST_BODY_TOO_LARGE` before a
+Fetch `Request` or service call. Deadline expiry returns private
+`408 REQUEST_BODY_TIMEOUT`. A stream error returns private
+`400 INVALID_REQUEST_BODY` when the response is still writable; premature EOF
+and malformed framing may already have received Node's bare `400`. Client
+abort, rejection, timeout and oversize paths cancel timers, stop iteration,
+close the connection and never leave a rejected request-listener promise.
+
+Direct Node JSON rejections use the existing ErrorV1 envelope, fixed safe copy,
+`Cache-Control: no-store`, `Referrer-Policy: no-referrer` and
+`Connection: close`. They add exact-origin non-credentialed CORS only when the
+request Origin itself is the configured authority. `Expect: 100-continue` is
+handled by the guarded listener: invalid headers receive only the final error,
+while valid headers receive exactly one interim `100` before body reading.
+
 Because Sites and the API are separate origins, API composition provides one
 exact-origin CORS policy for the current `/v1/*` browser surface. A valid
 preflight is handled before bearer and idempotency checks, permits only
@@ -151,6 +189,11 @@ secret-shaped or status-incompatible codes become exactly `HTTP_<status>`.
 Future quota codes are not pre-authorized here; 023D must extend this allowlist
 through its own RED and ADR decision.
 
+The direct 023D2 Node codes `408 REQUEST_BODY_TIMEOUT` and
+`415 UNSUPPORTED_CONTENT_ENCODING` deliberately do not expand this browser
+allowlist: this transport-only slice keeps the Web client on its sanitized
+`HTTP_408` or `HTTP_415` fallback and does not add a second surface contract.
+
 A pure Web session controller owns the browser token lifecycle independently of
 React and EIP-1193. It accepts only `project_<64 lowercase hex>` in the exact
 `proofline:project-token` `sessionStorage` key, keeps the token out of public
@@ -197,8 +240,11 @@ subscriber surface, so no observer contract is introduced by this correction.
   routes, preserve embed/share paths and resume one Composer create intent.
 - **023C3 — Settings surface:** account inspection plus one-time CLI/Action
   token issue, copy and revoke UX.
-- **023D — quotas and hardening:** challenge/run limits, active-live-run cap,
-  cleanup, concurrency, leakage and a pre-buffer Node stream 413 boundary.
+- **023D1 — persisted quotas:** challenge/run limits, active-live-run cap,
+  cleanup, concurrency and leakage.
+- **023D2 — Node auth stream boundary:** fixed-base routing, header-first
+  admission, a pre-buffer 8192-byte cap, absolute deadline, framing/abort
+  cleanup and guarded `100-continue`.
 
 Each later wave receives its own RED freeze. 023A must not speculate about SQL,
 wallet UI or quota implementation.

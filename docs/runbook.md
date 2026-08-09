@@ -146,6 +146,30 @@ npm run start --workspace apps/api
 
 API должен завершаться с ошибкой до начала обслуживания запросов, если обязательная конфигурация отсутствует или quota limit не является canonical bounded integer. PostgreSQL clock выбирает quota windows; первый row фиксирует limit до конца своего окна. Active-live cap также фиксируется persisted `active_live` project policy row на UTC сутки с `used_count = 0`, поэтому rolling API processes читают один limit; новое UTC-окно может принять новый bounded config. Quota responses используют только нормализованные `429 WALLET_CHALLENGE_RATE_LIMITED`, `429 PROJECT_RUN_QUOTA_EXHAUSTED` или `409 ACTIVE_LIVE_RUN_LIMIT_REACHED`; только 429 содержит bounded integer `Retry-After`.
 
+Node bridge не использует `Host` как URL/proxy authority: внутренний Fetch URL
+строится от fixed loopback base и configured listen port. Только два exact
+public wallet-auth POST pathnames, также с query, получают pre-buffer transport
+boundary. До body read bridge требует exact `PROOFLINE_WEB_ORIGIN`, отсутствие
+`Content-Encoding`, допустимое Content-Length/Transfer-Encoding framing и
+отклоняет declared length больше 8192. Streaming read принимает максимум 8192
+decoded bytes и имеет один absolute deadline 10000 ms; production deadline не
+настраивается environment variable и более короткое значение разрешено только
+test harness. Rejection/timeout/abort закрывают connection и не вызывают Fetch
+API/service. Guarded `checkContinue` выдаёт `100 Continue` только после
+header admission. Остальные routes сохраняют текущую bridge semantics; 023D2
+не является общим upload-limit slice.
+
+Focused credential-free 023D2 gate после GREEN:
+
+```bash
+npx vitest run \
+  apps/api/test/slice023d2-node-auth-stream-boundary.contract.test.ts
+```
+
+Команда использует только temporary loopback listener и raw local sockets. Она
+не обращается к external network и не является Docker, hosted или deployed
+evidence.
+
 Migration 008 выдаёт `proofline_api` только `SELECT`, `INSERT`, `DELETE` и
 column-level `UPDATE (used_count)` для quota windows плюс bounded stale
 challenge cleanup. `proofline_worker` не получает quota/challenge authority.

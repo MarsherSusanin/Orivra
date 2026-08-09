@@ -61,10 +61,12 @@ quotas or Web session UI.
 ## Deferred RED waves
 
 023B2 freezes account read plus CLI/Action token issue/revoke persistence and
-routes. 023C freezes browser wallet/session/Settings acceptance. 023D freezes
-rate, daily quota, active-live-run, cleanup, leakage and pre-buffer Node stream
-body-limit hardening. The 023A Request-level 413 is not full transport DoS
-evidence.
+routes. 023C freezes browser wallet/session/Settings acceptance. 023D1 freezes
+persisted rate, daily quota, active-live-run, cleanup and leakage. 023D2 freezes
+the fixed-base Node bridge, header-first Origin/encoding/framing rejection,
+pre-buffer byte/deadline enforcement, abort cleanup and guarded
+`Expect: 100-continue`. The 023A Request-level 413 is not full transport DoS
+evidence; see the [023D2 Slice Contract](023d2-node-auth-stream-boundary.md).
 
 ## Validation cadence
 

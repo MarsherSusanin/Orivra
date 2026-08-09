@@ -97,6 +97,15 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
   удаляется из browser history URL.
 - Wallet-auth boundary принимает только strict challenge/session requests с
   exact `PROOFLINE_WEB_ORIGIN`, 8 KiB Request limit и private response headers.
+  Node composition enforces тот же exact 8192-byte предел до buffering только
+  для двух exact public auth POST pathnames, включая их query variants. Он
+  строит Fetch URL от fixed local base, а не от `Host`, проверяет Origin,
+  отсутствие Content-Encoding и допустимое framing до body read, считает
+  decoded stream bytes и применяет один absolute 10-second deadline.
+  Oversize, timeout, failed stream и invalid `Expect: 100-continue` paths не
+  создают Fetch Request, закрывают connection и не оставляют rejected listener
+  work; malformed llhttp framing остаётся bare `400` без application/CORS
+  authority.
   Challenge хранится как exact server-authored EIP-4361 evidence и атомарно
   потребляется до локального EOA recovery. После durable consume API заново
   строит canonical message из configured origin и persisted address, nonce и
