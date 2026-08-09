@@ -6,17 +6,8 @@ import {
 export const EIP6963_DISCOVERY_WINDOW_MS = 50 as const;
 
 const COSTON2_CHAIN_ID = "0x72" as const;
-const COSTON2_ADD_CHAIN_PARAMETERS = {
-  chainId: COSTON2_CHAIN_ID,
-  chainName: "Coston2",
-  nativeCurrency: {
-    name: "Coston2 Flare",
-    symbol: "C2FLR",
-    decimals: 18,
-  },
-  rpcUrls: ["https://coston2-api.flare.network/ext/C/rpc"],
-  blockExplorerUrls: ["https://coston2-explorer.flare.network"],
-} as const;
+const COSTON2_RPC_URL = "https://coston2-api.flare.network/ext/C/rpc";
+const COSTON2_EXPLORER_URL = "https://coston2-explorer.flare.network";
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const HEX_QUANTITY = /^0x(?:0|[1-9a-f][0-9a-f]*)$/;
 const BYTECODE = /^0x(?:[0-9a-fA-F]{2})+$/;
@@ -70,6 +61,14 @@ export type WalletProviderErrorKind =
   | "rejected"
   | "cancelled";
 
+type WalletProviderErrorEvidence = {
+  kind: WalletProviderErrorKind;
+  code: string;
+  retryable: boolean;
+};
+
+const INTERNAL_FAILURES = new WeakMap<object, WalletProviderErrorEvidence>();
+
 export class WalletProviderError extends Error {
   readonly kind: WalletProviderErrorKind;
   readonly code: string;
@@ -99,24 +98,54 @@ export type WalletProviderAdapter = {
   close(): void;
 };
 
-function adapterError(
+function internalFailure(
   kind: WalletProviderErrorKind,
   code: string,
   retryable: boolean,
-): WalletProviderError {
-  return new WalletProviderError({ kind, code, retryable });
+): Error {
+  const failure = new Error("Internal wallet provider failure.");
+  INTERNAL_FAILURES.set(failure, { kind, code, retryable });
+  return failure;
 }
 
-function cancelled(): WalletProviderError {
-  return adapterError("cancelled", "WALLET_OPERATION_CANCELLED", true);
+function internalEvidence(value: unknown): WalletProviderErrorEvidence | null {
+  if (
+    (typeof value !== "object" || value === null) &&
+    typeof value !== "function"
+  ) {
+    return null;
+  }
+  return INTERNAL_FAILURES.get(value) ?? null;
 }
 
-function providerCode(value: unknown): number | null {
+function publicFailure(value: unknown): WalletProviderError {
+  const evidence = internalEvidence(value) ?? {
+    kind: "provider" as const,
+    code: "WALLET_PROVIDER_UNAVAILABLE",
+    retryable: true,
+  };
+  return new WalletProviderError(evidence);
+}
+
+function rejectFailure<T>(failure: Error): Promise<T> {
+  return Promise.reject(publicFailure(failure));
+}
+
+function cancelled(): Error {
+  return internalFailure("cancelled", "WALLET_OPERATION_CANCELLED", true);
+}
+
+function operationInProgress(): Error {
+  return internalFailure("cancelled", "WALLET_OPERATION_IN_PROGRESS", true);
+}
+
+function ownNumericProviderCode(value: unknown): number | null {
   try {
-    if (value && typeof value === "object" && "code" in value) {
-      const code = (value as { code?: unknown }).code;
-      return typeof code === "number" && Number.isInteger(code) ? code : null;
-    }
+    if (!value || typeof value !== "object") return null;
+    const descriptor = Object.getOwnPropertyDescriptor(value, "code");
+    if (!descriptor || !("value" in descriptor)) return null;
+    const code = descriptor.value;
+    return typeof code === "number" && Number.isInteger(code) ? code : null;
   } catch {
     return null;
   }
@@ -178,14 +207,43 @@ function announcedProvider(value: unknown): ProviderOption | null {
 }
 
 function parseCapability(value: unknown): NetworkCapabilityV1 {
-  const parsed = NetworkCapabilityV1Schema.safeParse(value);
-  if (!parsed.success) {
-    throw adapterError("validation", "NETWORK_CAPABILITY_INVALID", false);
+  try {
+    const parsed = NetworkCapabilityV1Schema.safeParse(value);
+    if (parsed.success) return parsed.data;
+  } catch {
+    // Capability evidence is untrusted and schema exceptions stay private.
   }
-  if (parsed.data.network !== "coston2") {
-    throw adapterError("unsupported", "NETWORK_CAPABILITY_DISABLED", false);
+  throw internalFailure("validation", "NETWORK_CAPABILITY_INVALID", false);
+}
+
+function requireEnabledCoston2(
+  capability: NetworkCapabilityV1,
+): Extract<NetworkCapabilityV1, { network: "coston2" }> {
+  if (capability.network !== "coston2") {
+    throw internalFailure(
+      "unsupported",
+      "NETWORK_CAPABILITY_DISABLED",
+      false,
+    );
   }
-  return parsed.data;
+  return capability;
+}
+
+function createCoston2AddChainParameters() {
+  const nativeCurrency = Object.freeze({
+    name: "Coston2 Flare" as const,
+    symbol: "C2FLR" as const,
+    decimals: 18 as const,
+  });
+  const rpcUrls = Object.freeze([COSTON2_RPC_URL]);
+  const blockExplorerUrls = Object.freeze([COSTON2_EXPLORER_URL]);
+  return Object.freeze({
+    chainId: COSTON2_CHAIN_ID,
+    chainName: "Coston2" as const,
+    nativeCurrency,
+    rpcUrls,
+    blockExplorerUrls,
+  });
 }
 
 function validMessage(value: unknown): value is string {
@@ -203,8 +261,16 @@ export function createWalletProviderAdapter(input: {
   let closed = false;
   let generation = 0;
   let discoveryFlight: Promise<readonly ProviderOption[]> | null = null;
-  let connectionFlight: Promise<WalletConnection> | null = null;
-  let signatureFlight: Promise<WalletSignature> | null = null;
+  let connectionFlight: {
+    promise: Promise<WalletConnection>;
+    provider: Eip1193Provider;
+    capability: "coston2";
+  } | null = null;
+  let signatureFlight: {
+    promise: Promise<WalletSignature>;
+    connection: { provider: Eip1193Provider; address: string };
+    message: string;
+  } | null = null;
   let connection: {
     provider: Eip1193Provider;
     address: string;
@@ -237,16 +303,15 @@ export function createWalletProviderAdapter(input: {
       return result;
     } catch (cause) {
       if (!current(attempt)) throw cancelled();
-      if (cause instanceof WalletProviderError) throw cause;
-      if (providerCode(cause) === 4001) {
-        throw adapterError("rejected", "WALLET_REQUEST_REJECTED", true);
+      if (ownNumericProviderCode(cause) === 4001) {
+        throw internalFailure("rejected", "WALLET_REQUEST_REJECTED", true);
       }
-      throw adapterError("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
+      throw internalFailure("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
     }
   }
 
   function discoverProviders(): Promise<readonly ProviderOption[]> {
-    if (closed) return Promise.reject(cancelled());
+    if (closed) return rejectFailure(cancelled());
     if (discoveryFlight) return discoveryFlight;
 
     const attempt = beginAttempt();
@@ -277,8 +342,7 @@ export function createWalletProviderAdapter(input: {
         requireCurrent(attempt);
       } catch (cause) {
         if (!current(attempt)) throw cancelled();
-        if (cause instanceof WalletProviderError) throw cause;
-        throw adapterError("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
+        throw internalFailure("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
       } finally {
         if (listenerAdded) {
           try {
@@ -298,7 +362,7 @@ export function createWalletProviderAdapter(input: {
       try {
         legacy = input.browser.ethereum;
       } catch {
-        throw adapterError("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
+        throw internalFailure("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
       }
       requireCurrent(attempt);
       return validProvider(legacy)
@@ -313,7 +377,9 @@ export function createWalletProviderAdapter(input: {
             },
           ]
         : [];
-    })().finally(() => {
+    })().catch((cause: unknown) => {
+      throw publicFailure(cause);
+    }).finally(() => {
       if (discoveryFlight === flight) discoveryFlight = null;
     });
     discoveryFlight = flight;
@@ -324,33 +390,63 @@ export function createWalletProviderAdapter(input: {
     provider: Eip1193Provider;
     networkCapability: NetworkCapabilityV1;
   }): Promise<WalletConnection> {
-    if (closed) return Promise.reject(cancelled());
-    if (connectionFlight) return connectionFlight;
+    if (closed) return rejectFailure(cancelled());
 
     let capabilityInput: unknown;
     try {
       capabilityInput = rawInput?.networkCapability;
     } catch {
-      return Promise.reject(
-        adapterError("validation", "NETWORK_CAPABILITY_INVALID", false),
+      return rejectFailure(
+        internalFailure("validation", "NETWORK_CAPABILITY_INVALID", false),
       );
     }
+    let capability: NetworkCapabilityV1;
     try {
-      parseCapability(capabilityInput);
+      capability = parseCapability(capabilityInput);
     } catch (cause) {
-      return Promise.reject(cause);
+      return rejectFailure(
+        internalEvidence(cause)
+          ? (cause as Error)
+          : internalFailure(
+              "validation",
+              "NETWORK_CAPABILITY_INVALID",
+              false,
+            ),
+      );
     }
     let selectedProvider: unknown;
     try {
       selectedProvider = rawInput?.provider;
     } catch {
-      return Promise.reject(
-        adapterError("provider", "WALLET_PROVIDER_UNAVAILABLE", true),
+      return rejectFailure(
+        internalFailure("provider", "WALLET_PROVIDER_UNAVAILABLE", true),
+      );
+    }
+    if (connectionFlight) {
+      if (
+        selectedProvider === connectionFlight.provider &&
+        capability.network === connectionFlight.capability
+      ) {
+        return connectionFlight.promise;
+      }
+      return rejectFailure(operationInProgress());
+    }
+    try {
+      requireEnabledCoston2(capability);
+    } catch (cause) {
+      return rejectFailure(
+        internalEvidence(cause)
+          ? (cause as Error)
+          : internalFailure(
+              "validation",
+              "NETWORK_CAPABILITY_INVALID",
+              false,
+            ),
       );
     }
     if (!validProvider(selectedProvider)) {
-      return Promise.reject(
-        adapterError("provider", "WALLET_PROVIDER_UNAVAILABLE", true),
+      return rejectFailure(
+        internalFailure("provider", "WALLET_PROVIDER_UNAVAILABLE", true),
       );
     }
 
@@ -369,7 +465,7 @@ export function createWalletProviderAdapter(input: {
         typeof accounts[0] !== "string" ||
         !ADDRESS.test(accounts[0])
       ) {
-        throw adapterError("validation", "WALLET_ACCOUNT_INVALID", false);
+        throw internalFailure("validation", "WALLET_ACCOUNT_INVALID", false);
       }
       const address = accounts[0].toLowerCase();
 
@@ -379,7 +475,7 @@ export function createWalletProviderAdapter(input: {
         attempt,
       );
       if (typeof initialChain !== "string" || !HEX_QUANTITY.test(initialChain)) {
-        throw adapterError("provider", "WALLET_CHAIN_INVALID", true);
+        throw internalFailure("provider", "WALLET_CHAIN_INVALID", true);
       }
 
       if (initialChain !== COSTON2_CHAIN_ID) {
@@ -391,18 +487,22 @@ export function createWalletProviderAdapter(input: {
           requireCurrent(attempt);
         } catch (cause) {
           if (!current(attempt)) throw cancelled();
-          const code = providerCode(cause);
+          const code = ownNumericProviderCode(cause);
           if (code === 4001) {
-            throw adapterError("rejected", "WALLET_REQUEST_REJECTED", true);
+            throw internalFailure("rejected", "WALLET_REQUEST_REJECTED", true);
           }
           if (code !== 4902) {
-            throw adapterError("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
+            throw internalFailure(
+              "provider",
+              "WALLET_PROVIDER_UNAVAILABLE",
+              true,
+            );
           }
           await rpc(
             provider,
             {
               method: "wallet_addEthereumChain",
-              params: [COSTON2_ADD_CHAIN_PARAMETERS],
+              params: Object.freeze([createCoston2AddChainParameters()]),
             },
             attempt,
           );
@@ -414,7 +514,7 @@ export function createWalletProviderAdapter(input: {
           attempt,
         );
         if (resultingChain !== COSTON2_CHAIN_ID) {
-          throw adapterError("provider", "WALLET_CHAIN_UNAVAILABLE", true);
+          throw internalFailure("provider", "WALLET_CHAIN_UNAVAILABLE", true);
         }
       }
 
@@ -425,49 +525,59 @@ export function createWalletProviderAdapter(input: {
       );
       if (code !== "0x") {
         if (typeof code === "string" && BYTECODE.test(code)) {
-          throw adapterError(
+          throw internalFailure(
             "unsupported",
             "CONTRACT_WALLET_UNSUPPORTED",
             false,
           );
         }
-        throw adapterError("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
+        throw internalFailure("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
       }
 
       requireCurrent(attempt);
       connection = { provider, address };
       return { address, chainId: COSTON2_CHAIN_ID };
-    })().catch((cause) => {
+    })().catch((cause: unknown) => {
       if (!current(attempt)) throw cancelled();
-      if (cause instanceof WalletProviderError) throw cause;
-      throw adapterError("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
+      if (internalEvidence(cause)) throw cause;
+      throw internalFailure("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
+    }).catch((cause: unknown) => {
+      throw publicFailure(cause);
     }).finally(() => {
-      if (connectionFlight === flight) connectionFlight = null;
+      if (connectionFlight?.promise === flight) connectionFlight = null;
     });
-    connectionFlight = flight;
+    connectionFlight = { promise: flight, provider, capability: "coston2" };
     return flight;
   }
 
   function signMessage(rawInput: { message: string }): Promise<WalletSignature> {
-    if (closed) return Promise.reject(cancelled());
-    if (signatureFlight) return signatureFlight;
+    if (closed) return rejectFailure(cancelled());
     if (!connection) {
-      return Promise.reject(
-        adapterError("validation", "WALLET_CONNECTION_REQUIRED", false),
+      return rejectFailure(
+        internalFailure("validation", "WALLET_CONNECTION_REQUIRED", false),
       );
     }
     let message: unknown;
     try {
       message = rawInput?.message;
     } catch {
-      return Promise.reject(
-        adapterError("validation", "WALLET_SIGNATURE_INVALID", false),
+      return rejectFailure(
+        internalFailure("validation", "WALLET_SIGNATURE_INVALID", false),
       );
     }
     if (!validMessage(message)) {
-      return Promise.reject(
-        adapterError("validation", "WALLET_SIGNATURE_INVALID", false),
+      return rejectFailure(
+        internalFailure("validation", "WALLET_SIGNATURE_INVALID", false),
       );
+    }
+    if (signatureFlight) {
+      if (
+        signatureFlight.connection === connection &&
+        signatureFlight.message === message
+      ) {
+        return signatureFlight.promise;
+      }
+      return rejectFailure(operationInProgress());
     }
 
     const attempt = beginAttempt();
@@ -483,18 +593,20 @@ export function createWalletProviderAdapter(input: {
         attempt,
       );
       if (typeof signature !== "string" || !SIGNATURE.test(signature)) {
-        throw adapterError("provider", "WALLET_SIGNATURE_INVALID", true);
+        throw internalFailure("provider", "WALLET_SIGNATURE_INVALID", true);
       }
       requireCurrent(attempt);
       return { address: verified.address, signature };
-    })().catch((cause) => {
+    })().catch((cause: unknown) => {
       if (!current(attempt)) throw cancelled();
-      if (cause instanceof WalletProviderError) throw cause;
-      throw adapterError("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
+      if (internalEvidence(cause)) throw cause;
+      throw internalFailure("provider", "WALLET_PROVIDER_UNAVAILABLE", true);
+    }).catch((cause: unknown) => {
+      throw publicFailure(cause);
     }).finally(() => {
-      if (signatureFlight === flight) signatureFlight = null;
+      if (signatureFlight?.promise === flight) signatureFlight = null;
     });
-    signatureFlight = flight;
+    signatureFlight = { promise: flight, connection: verified, message };
     return flight;
   }
 
