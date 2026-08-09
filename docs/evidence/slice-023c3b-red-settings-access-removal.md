@@ -1,0 +1,55 @@
+# Slice 023C3B RED — Settings access removal
+
+## Expected RED
+
+The accepted parent exposes strict revoke and current-session DELETE ports, but
+the Web session context has no generation-bound revoke transition or shared
+issue/revoke mutation lane. Settings intentionally has no Revoke or Sign out
+surface. The frozen tests therefore fail on only those missing C3B Web
+behaviors; no production, dependency, public contract, API or SQL file changes
+in this RED.
+
+Recorded on parent `28a459abd362563fa2375aa68568576929e8a017` /
+tree `f71d703c8f930d5280035852c566c0abe69a5621`:
+
+- `npm run typecheck` — PASS;
+- focused C3B contracts — 2 files / 28 tests, exactly 28 intentional RED;
+- the 14 context RED cases are the absent `revokeAccountToken`, shared
+  issue↔revoke mutation lane, strict response/persisted revoked-evidence gate,
+  current invalid-authority clear and same-bearer A→B settlement rules;
+- the 14 Settings RED cases are absent non-revoked revoke controls,
+  confirmations/focus/pending/retry, direct persisted status, sign-out
+  204/401/invalid-authority-403 clear, offline/origin-403/5xx recovery,
+  explicit local forget, one-time reveal collision, axe and 390 px layout;
+- nearest unchanged C1 controller, C2B2 authority and C3A Settings/context
+  baseline — 4 files / 42 tests PASS;
+- that baseline still emits its accepted C3A anonymous-restore React `act(...)`
+  harness warning; the new C3B anonymous harness was flushed and emits no new
+  warning.
+
+The focused failures arise before any new service effect can be made: current
+production lacks the context method and rendered controls/classes. Fixtures
+use only local ports and strict recorded values. No network, wallet provider,
+PostgreSQL, Docker, hosted or live Coston2 operation is reached.
+
+## Frozen corrective details
+
+- One authority generation serializes account mutations. Identical issue or
+  same-target revoke calls coalesce; any other issue/revoke pairing receives a
+  fixed local 409 without a second service call.
+- A revoke resolves only after its strict returned target and refreshed
+  non-null `revokedAt` agree. Mismatch, missing target or still-active evidence
+  is fixed 502 contract failure and never closes the confirmation.
+- Current revoke 401/`ACCOUNT_SESSION_REQUIRED` clears only current authority;
+  late A maps to stale 403 and cannot clear B. Sign-out applies the same bearer
+  invalidity rule while retaining origin/unknown 403, transport and 5xx for
+  Retry or explicit Forget.
+- Both pending and already visible one-time raw results become permanently
+  stale when sign-out starts, including when remote sign-out later fails.
+- Open revoke, sign-out and recovery states own labelled/described focus and
+  axe checks; mobile evidence prevents a squeezed four-column token row and
+  requires bounded, stacked 44 px actions.
+
+Coverage, browser screenshots, build, Sites and full Web are GREEN gates, not
+RED evidence. The unified repository matrix remains deferred until all
+credential-free 022–029A modules are complete.

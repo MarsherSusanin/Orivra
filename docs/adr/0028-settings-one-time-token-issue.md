@@ -1,6 +1,6 @@
 # ADR 0028 — Settings one-time token issue boundary
 
-Status: accepted for Slice 023C3A RED
+Status: accepted for Slice 023C3A; 023C3B extension frozen in RED
 
 ## Context
 
@@ -102,10 +102,75 @@ clear its flight; only current-generation evidence may replace the snapshot.
 An already visible reveal is generation-owned UI state: losing authority clears
 it immediately, and a later session cannot make those raw bytes visible again.
 
+### 023C3B revocation and current-browser sign-out
+
+023C3B remains inside the accepted Web boundary. It composes the strict B2
+`DELETE /account/tokens/:tokenId` and
+`DELETE /auth/wallet/sessions/current` services already present in the wallet
+access client. It adds no route, schema, SQL, bearer prop, wallet-provider
+operation or new persistence mechanism.
+
+The session context exposes
+`revokeAccountToken(tokenId): Promise<void>`. The transition
+captures the current opaque authority generation and private browser bearer,
+validates the strict token id through the existing service, and fails closed
+with fixed `403 ACCOUNT_SESSION_REQUIRED` outside an authenticated browser
+session. One generation owns one shared account-mutation lane. The same issue
+intent or same revoke target receives the same Promise; a different issue,
+revoke target or issue↔revoke intent fails locally with fixed
+`409 IDEMPOTENCY_CONFLICT` and does not call the second service.
+
+A successful service result is not sufficient UI evidence. Revocation is one
+context transaction: `DELETE → strict response/target check → coalesced strict
+account refresh → revoked-evidence check → generation recheck`. It resolves
+only when the response target equals the captured target and refreshed
+`AccountV1` still contains that target with non-null `revokedAt`. Mismatched,
+missing or still-active evidence fails fixed `502 AUTH_RESPONSE_INVALID`; a
+refresh failure rejects the
+surface attempt without inventing local revoked evidence; retry may repeat the
+idempotent DELETE and refresh. If authority changes before or during the
+refresh, the old operation rejects with fixed `403 ACCOUNT_SESSION_REQUIRED`.
+It cannot update the next account, clear its flight or become current even if
+the later session receives byte-identical bearer bytes.
+
+Every non-revoked token has a Revoke action, including expired credentials so
+the audit summary can record an explicit revocation marker. Already revoked
+summaries remain direct evidence without a mutation control. Revoke uses an
+explicit modal named for the credential. Initial focus is Cancel; Escape and
+Cancel restore the originating action before mutation. The backdrop does not
+dismiss it. Once pending, duplicate confirmation and Escape are blocked. A
+failure keeps the confirmation open with fixed safe copy and an explicit
+idempotent Retry. Success closes only after refreshed revoked evidence is
+visible. No upstream error bytes are rendered, stored, logged or added to a
+URL or DOM attribute.
+
+For a current-generation token revoke, normalized `401 UNAUTHORIZED` or
+`403 ACCOUNT_SESSION_REQUIRED` clears that invalid browser authority after the
+generation check. A late A invalid-authority response maps to fixed stale
+`403 ACCOUNT_SESSION_REQUIRED` and cannot clear B. Origin-forbidden or unknown
+403 responses do not prove an invalid bearer.
+
+Current-browser sign-out uses the accepted controller and never calls the
+wallet provider. It has a separate explicit confirmation with safe initial
+focus and focus return. Exact `204`, normalized `401` and
+`403 ACCOUNT_SESSION_REQUIRED` clear local browser authority. Transport,
+origin-forbidden or unknown `403`, and `5xx` results retain the bearer and expose
+fixed recovery copy, `Retry sign-out` and `Forget this browser`. Retry repeats
+the same controller transition; Forget clears locally without claiming remote
+revocation. Starting sign-out advances authority immediately, so an in-flight
+issue, refresh or revoke is stale. A one-time reveal clears at transition start
+and cannot reappear if remote sign-out later fails and leaves recovery access.
+
+The destructive and recovery action groups stack at the accepted 390 px
+mobile width. Both confirmations trap focus and preserve the existing safe
+dialog density. Explicit AppProps, CLI, Action, legacy and share capabilities
+remain unable to render or invoke these controls.
+
 ## Consequences
 
 The browser can bootstrap CLI and Action usage without teaching users manual
 project-token provisioning. Losing the first response remains intentionally
 irrecoverable: the secret is not replayed or reconstructed. The user retains
-the visible summary and 023C3B will provide revocation/replacement. Settings
-adds no authority beyond the already authenticated browser session.
+the visible summary; 023C3B provides revocation and current-browser sign-out
+without adding authority beyond the already authenticated browser session.
+Run retention and deletion remain Slice 027.
