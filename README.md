@@ -156,6 +156,10 @@ Web2JsonManifestV1
 
 - API никогда не получает пользовательский private key.
 - Project/share tokens хранятся только как keyed digest; share token даёт только read access.
+- API admission хранит PostgreSQL-clock quota windows: wallet challenges
+  ограничены по normalized address и глобально на UTC minute, новые runs — по
+  project на UTC day, а nonterminal wallet/relayer runs — persisted active-live
+  policy. Exact idempotent create replay возвращается до quota consumption.
 - Relayer допускает только Coston2 chain `114` и `FdcHub.requestAttestation`, проверяет calldata, fee caps, quota, balance floor и idempotency.
 - FDC-адреса разрешаются через registry; runtime-код не подменяет live flow симуляцией.
 - Допустимое имя сети не означает доступный adapter: Flare manifest сохраняется

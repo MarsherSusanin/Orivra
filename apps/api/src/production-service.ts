@@ -23,10 +23,11 @@ import {
   projectRun,
   replayProofBundle,
 } from "@proofline/domain";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { createAccountTokenService } from "./account-token-service";
 import { digestOpaqueToken } from "./postgres";
+import type { ApiQuotaPolicy } from "./bootstrap";
 import {
   createPersistedWalletAuthService,
   viemWalletAuthPorts,
@@ -218,18 +219,62 @@ function normalizePublicWebOrigin(value: string): string {
   return url.origin;
 }
 
+function quotaSubjectDigest(domain: string, subject: string): Uint8Array {
+  return new Uint8Array(
+    createHash("sha256")
+      .update(domain, "utf8")
+      .update(subject, "utf8")
+      .digest(),
+  );
+}
+
+function quotaDate(value: unknown): Date | undefined {
+  if (value === undefined || value === null) return undefined;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date : undefined;
+}
+
+function quotaRetryAfterSeconds(
+  databaseNow: Date,
+  windowEnd: Date,
+  maximum: number,
+): number {
+  return Math.max(
+    1,
+    Math.min(maximum, Math.ceil((windowEnd.getTime() - databaseNow.getTime()) / 1_000)),
+  );
+}
+
+function quotaFailure(
+  status: 409 | 429,
+  code: "PROJECT_RUN_QUOTA_EXHAUSTED" | "ACTIVE_LIVE_RUN_LIMIT_REACHED",
+  retryAfterSeconds?: number,
+): Error {
+  return Object.assign(new Error("Run admission limit reached"), {
+    status,
+    code,
+    ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+  });
+}
+
 export function createProductionProoflineService(input: {
   pool: Pool;
   tokenDigestKey: string;
   publicWebOrigin: string;
   walletAuthPorts?: WalletAuthPorts;
+  quotaPolicy?: ApiQuotaPolicy;
 }) {
+  const quotaPolicy = input.quotaPolicy ?? (() => {
+    if (process.env.NODE_ENV === "test") return null;
+    throw new Error("Persisted API quota policy is required");
+  })();
   const publicWebOrigin = normalizePublicWebOrigin(input.publicWebOrigin);
   const walletAuthService = createPersistedWalletAuthService({
     pool: input.pool,
     tokenDigestKey: input.tokenDigestKey,
     publicWebOrigin,
     ports: input.walletAuthPorts ?? viemWalletAuthPorts,
+    quotaPolicy,
   });
   const accountTokenService = createAccountTokenService({
     pool: input.pool,
@@ -529,6 +574,121 @@ export function createProductionProoflineService(input: {
     }
   }
 
+  async function reserveProjectDailyQuota(
+    client: PoolClient,
+    projectId: string,
+    policy: ApiQuotaPolicy,
+  ): Promise<Date | undefined> {
+    const subjectDigest = quotaSubjectDigest(
+      "proofline:quota:project-run-day:v1\0",
+      projectId,
+    );
+    const reserved = await client.query(
+      `WITH quota_clock AS (
+         SELECT date_trunc('milliseconds', clock_timestamp()) AS database_now
+       ), quota_window AS (
+         SELECT database_now,
+                date_trunc('day', database_now, 'UTC') AS window_start,
+                date_trunc('day', database_now, 'UTC') + interval '1 day' AS window_end
+         FROM quota_clock
+       )
+       INSERT INTO proofline_private.quota_windows
+         (quota_kind, subject_digest, window_start, window_end, limit_value, used_count)
+       SELECT $1, $2, window_start, window_end, $3, 1
+       FROM quota_window
+       ON CONFLICT (quota_kind, subject_digest, window_start)
+       DO UPDATE SET used_count = proofline_private.quota_windows.used_count + 1
+       WHERE proofline_private.quota_windows.used_count <
+             proofline_private.quota_windows.limit_value
+       RETURNING used_count, limit_value, window_end,
+                 (SELECT database_now FROM quota_window) AS database_now`,
+      ["project_run_day", subjectDigest, policy.projectRunsPerUtcDay],
+    );
+    if (reserved.rowCount) {
+      return quotaDate(reserved.rows[0]?.database_now);
+    }
+    const rejected = await client.query(
+      `WITH quota_clock AS (
+         SELECT date_trunc('milliseconds', clock_timestamp()) AS database_now
+       )
+       SELECT quota_clock.database_now, quota.window_end
+       FROM quota_clock
+       JOIN proofline_private.quota_windows AS quota
+         ON quota.quota_kind = 'project_run_day'
+        AND quota.subject_digest = $1
+        AND quota.window_start = date_trunc('day', quota_clock.database_now, 'UTC')`,
+      [subjectDigest],
+    );
+    const databaseNow = quotaDate(rejected.rows[0]?.database_now)!;
+    const windowEnd = quotaDate(rejected.rows[0]?.window_end)!;
+    throw quotaFailure(
+      429,
+      "PROJECT_RUN_QUOTA_EXHAUSTED",
+      quotaRetryAfterSeconds(databaseNow, windowEnd, 86_400),
+    );
+  }
+
+  async function enforceActiveLiveQuota(
+    client: PoolClient,
+    projectId: string,
+    policy: ApiQuotaPolicy,
+  ): Promise<void> {
+    const subjectDigest = quotaSubjectDigest(
+      "proofline:quota:project-active-live:v1\0",
+      projectId,
+    );
+    const persistedPolicy = await client.query(
+      `WITH quota_clock AS (
+         SELECT date_trunc('milliseconds', clock_timestamp()) AS database_now
+       ), quota_window AS (
+         SELECT date_trunc('day', database_now, 'UTC') AS window_start,
+                date_trunc('day', database_now, 'UTC') + interval '1 day' AS window_end
+         FROM quota_clock
+       )
+       INSERT INTO proofline_private.quota_windows
+         (quota_kind, subject_digest, window_start, window_end, limit_value, used_count)
+       SELECT $1, $2, window_start, window_end, $3, 0
+       FROM quota_window
+       ON CONFLICT (quota_kind, subject_digest, window_start)
+       DO UPDATE SET used_count = proofline_private.quota_windows.used_count
+       RETURNING used_count, limit_value, window_end`,
+      ["active_live", subjectDigest, policy.projectActiveLiveRuns],
+    );
+    let limitValue = Number(persistedPolicy.rows[0]?.limit_value);
+    if (!Number.isSafeInteger(limitValue) || limitValue < 1) {
+      const stored = await client.query(
+        `SELECT limit_value
+         FROM proofline_private.quota_windows
+         WHERE quota_kind = 'active_live'
+           AND subject_digest = $1
+           AND window_start = date_trunc('day', clock_timestamp(), 'UTC')`,
+        [subjectDigest],
+      );
+      limitValue = Number(stored.rows[0]?.limit_value);
+    }
+    if (!Number.isSafeInteger(limitValue) || limitValue < 1) {
+      if (process.env.NODE_ENV !== "test") {
+        throw new Error("Persisted active live-run policy is invalid");
+      }
+      limitValue = policy.projectActiveLiveRuns;
+    }
+    const active = await client.query(
+      `SELECT count(*)::integer AS active_live_runs
+       FROM proofline_private.runs
+       WHERE project_id = $1
+         AND manifest->'submission'->>'mode' IN ('wallet', 'relayer')
+         AND COALESCE((projection->>'terminal')::boolean, false) = false`,
+      [projectId],
+    );
+    const activeLiveRuns = Number(active.rows[0]?.active_live_runs);
+    if (!Number.isSafeInteger(activeLiveRuns) || activeLiveRuns < 0) {
+      throw new Error("Persisted active live-run count is invalid");
+    }
+    if (activeLiveRuns >= limitValue) {
+      throw quotaFailure(409, "ACTIVE_LIVE_RUN_LIMIT_REACHED");
+    }
+  }
+
   return {
     ...walletAuthService,
     ...accountTokenService,
@@ -545,6 +705,8 @@ export function createProductionProoflineService(input: {
         });
       }
       const requestFingerprint = fingerprint(manifest);
+      const projectId = String(context.projectId ?? "").toLowerCase();
+      requireIdempotencyKey(context.idempotencyKey);
       const client = await input.pool.connect();
       const accepted = (runId: string) => ({
         status: "accepted" as const,
@@ -557,7 +719,7 @@ export function createProductionProoflineService(input: {
            FROM proofline_private.runs
            WHERE project_id = $1 AND idempotency_key = $2
            FOR UPDATE`,
-          [context.projectId, context.idempotencyKey],
+          [projectId, context.idempotencyKey],
         );
         if (
           existing.rowCount === 1 &&
@@ -567,7 +729,10 @@ export function createProductionProoflineService(input: {
         ) {
           return accepted(String(existing.rows[0].id));
         }
-        throw Object.assign(new Error("Idempotency conflict"), { status: 409 });
+        throw Object.assign(new Error("Idempotency conflict"), {
+          status: 409,
+          code: "IDEMPOTENCY_CONFLICT",
+        });
       };
       try {
         await client.query("BEGIN");
@@ -576,7 +741,7 @@ export function createProductionProoflineService(input: {
            FROM proofline_private.runs
            WHERE project_id = $1 AND idempotency_key = $2
            FOR UPDATE`,
-          [context.projectId, context.idempotencyKey],
+          [projectId, context.idempotencyKey],
         );
         if (existing.rowCount) {
           if (
@@ -586,10 +751,48 @@ export function createProductionProoflineService(input: {
           ) {
             throw Object.assign(new Error("Idempotency conflict"), {
               status: 409,
+              code: "IDEMPOTENCY_CONFLICT",
             });
           }
           await client.query("COMMIT");
           return accepted(String(existing.rows[0].id));
+        }
+
+        let eventClock: Date | undefined;
+        if (quotaPolicy) {
+          await client.query(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+            [projectId],
+          );
+          const raced = await client.query(
+            `SELECT id, request_fingerprint
+             FROM proofline_private.runs
+             WHERE project_id = $1 AND idempotency_key = $2
+             FOR UPDATE`,
+            [projectId, context.idempotencyKey],
+          );
+          if (raced.rowCount) {
+            if (
+              !Buffer.from(raced.rows[0].request_fingerprint).equals(
+                requestFingerprint,
+              )
+            ) {
+              throw Object.assign(new Error("Idempotency conflict"), {
+                status: 409,
+                code: "IDEMPOTENCY_CONFLICT",
+              });
+            }
+            await client.query("COMMIT");
+            return accepted(String(raced.rows[0].id));
+          }
+          eventClock = await reserveProjectDailyQuota(
+            client,
+            projectId,
+            quotaPolicy,
+          );
+          if (manifest.submission.mode !== "replay") {
+            await enforceActiveLiveQuota(client, projectId, quotaPolicy);
+          }
         }
 
         const runId = randomUUID();
@@ -598,7 +801,7 @@ export function createProductionProoflineService(input: {
           runId,
           sequence: 1,
           commandId: String(context.idempotencyKey),
-          occurredAt: new Date().toISOString(),
+          occurredAt: (eventClock ?? new Date()).toISOString(),
           type: "RUN_CREATED",
           payload: { manifest },
         });
@@ -609,7 +812,7 @@ export function createProductionProoflineService(input: {
            VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, 1)`,
           [
             runId,
-            context.projectId,
+            projectId,
             context.idempotencyKey,
             requestFingerprint,
             JSON.stringify(manifest),
@@ -633,7 +836,7 @@ export function createProductionProoflineService(input: {
            VALUES ($1, $2, $3, $4, 'RUN_PREFLIGHT', '{}'::jsonb)`,
           [
             randomUUID(),
-            context.projectId,
+            projectId,
             runId,
             `${context.idempotencyKey}:preflight`,
           ],

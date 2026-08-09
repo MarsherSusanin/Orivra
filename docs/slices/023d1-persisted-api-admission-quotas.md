@@ -68,3 +68,12 @@ Core verification reviews SQL atomics, database clock use, digest separation,
 idempotency, rollback, concurrency, privilege and leakage. Product integration
 verification reviews HTTP/CORS, wallet/run client retry evidence and unchanged
 ordinary create/sign-in behavior on the same recorded tree.
+
+## Implementation status
+
+Production GREEN is implemented by migration 008, fail-fast quota composition,
+transactional wallet/run admission, bounded cleanup, exact HTTP/CORS mapping and
+sanitized Web clients. Author evidence is recorded in
+[`../evidence/slice-023d1-green-persisted-api-admission-quotas.md`](../evidence/slice-023d1-green-persisted-api-admission-quotas.md).
+This status is module evidence only; two independent verifiers must still PASS
+the exact committed tree before the module is accepted.

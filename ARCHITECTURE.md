@@ -125,6 +125,27 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
   analytics, logs, DOM attributes или serialized errors. Explicit embed,
   CLI/Action/legacy и share authority не открывают Settings management.
 
+### API admission quotas
+
+- Migration 008 хранит `proofline_private.quota_windows`; PostgreSQL является
+  единственным clock authority для UTC-minute challenge windows и UTC-day run
+  windows. Первый committed row фиксирует limit до конца окна.
+- Challenge admission резервирует address и global units, затем вставляет
+  challenge в одной transaction. Любое превышение откатывает обе reservations
+  и не создаёт challenge.
+- Create-run сначала возвращает exact same-fingerprint idempotent replay. Новый
+  intent сериализуется project advisory lock, повторно проверяет idempotency,
+  резервирует daily unit и для wallet/relayer сверяет persisted active-live
+  policy с nonterminal run projections. Replay mode потребляет daily unit, но
+  не active slot.
+- Quota rejections нормализованы в bounded `429` с integer `Retry-After` или
+  active-live `409` без fake timing. Browser clients принимают только
+  status-compatible allowlisted codes и никогда не отражают server message или
+  hostile retry header.
+- API выполняет best-effort cleanup максимум 100 quota/challenge rows старше
+  24 часов за attempt. Runs, append-only events, commands, artifacts, identities
+  и tokens не входят в cleanup authority; worker не имеет quota privileges.
+
 ### Keys
 
 - Browser подписывает через EIP-1193.

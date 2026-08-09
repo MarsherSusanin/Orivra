@@ -45,6 +45,7 @@ const HTTP_ERROR_CODES = new Map<number, ReadonlySet<string>>([
     ]),
   ],
   [413, new Set(["REQUEST_BODY_TOO_LARGE"])],
+  [429, new Set(["WALLET_CHALLENGE_RATE_LIMITED"])],
   [500, new Set(["REQUEST_FAILED"])],
 ]);
 
@@ -66,12 +67,14 @@ export class WalletAccessError extends Error {
   readonly status: number;
   readonly code: string;
   readonly retryable: boolean;
+  readonly retryAfterSeconds?: number;
 
   constructor(input: {
     kind: WalletAccessErrorKind;
     status: number;
     code: string;
     retryable: boolean;
+    retryAfterSeconds?: number;
   }) {
     super(ERROR_MESSAGES[input.kind]);
     this.name = "WalletAccessError";
@@ -79,6 +82,9 @@ export class WalletAccessError extends Error {
     this.status = input.status;
     this.code = input.code;
     this.retryable = input.retryable;
+    if (input.retryAfterSeconds !== undefined) {
+      this.retryAfterSeconds = input.retryAfterSeconds;
+    }
   }
 }
 
@@ -191,12 +197,22 @@ async function httpError(response: Response): Promise<WalletAccessError> {
   } catch {
     // The public error uses only status-derived evidence when JSON is invalid.
   }
+  const rawRetryAfter = response.headers.get("retry-after");
+  const retryAfterSeconds =
+    code === "WALLET_CHALLENGE_RATE_LIMITED" &&
+    rawRetryAfter !== null &&
+    /^[1-9]\d*$/.test(rawRetryAfter) &&
+    rawRetryAfter.length <= 2 &&
+    Number(rawRetryAfter) <= 60
+      ? Number(rawRetryAfter)
+      : undefined;
   return new WalletAccessError({
     kind: "http",
     status: response.status,
     code,
     retryable:
       response.status >= 500 || response.status === 408 || response.status === 429,
+    ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
   });
 }
 

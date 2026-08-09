@@ -1,6 +1,6 @@
 # ADR 0030 — Persisted API admission quotas
 
-Status: accepted for Slice 023D1 RED
+Status: accepted; implemented by Slice 023D1
 
 ## Context
 

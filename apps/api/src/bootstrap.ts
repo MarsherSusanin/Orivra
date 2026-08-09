@@ -6,6 +6,94 @@ import { createProductionProoflineService } from "./production-service";
 
 type Environment = Record<string, string | undefined>;
 
+export interface ApiQuotaPolicy {
+  walletChallengeAddressPerMinute: number;
+  walletChallengeGlobalPerMinute: number;
+  projectRunsPerUtcDay: number;
+  projectActiveLiveRuns: number;
+}
+
+const DEFAULT_API_QUOTA_POLICY: Readonly<ApiQuotaPolicy> = Object.freeze({
+  walletChallengeAddressPerMinute: 5,
+  walletChallengeGlobalPerMinute: 300,
+  projectRunsPerUtcDay: 100,
+  projectActiveLiveRuns: 3,
+});
+
+const QUOTA_ENVIRONMENT = {
+  walletChallengeAddressPerMinute: {
+    name: "PROOFLINE_WALLET_CHALLENGE_ADDRESS_MINUTE_LIMIT",
+    maximum: 60,
+  },
+  walletChallengeGlobalPerMinute: {
+    name: "PROOFLINE_WALLET_CHALLENGE_GLOBAL_MINUTE_LIMIT",
+    maximum: 10_000,
+  },
+  projectRunsPerUtcDay: {
+    name: "PROOFLINE_PROJECT_RUN_DAILY_LIMIT",
+    maximum: 10_000,
+  },
+  projectActiveLiveRuns: {
+    name: "PROOFLINE_PROJECT_ACTIVE_LIVE_RUN_LIMIT",
+    maximum: 100,
+  },
+} as const;
+
+function boundedCanonicalLimit(
+  value: string | undefined,
+  fallback: number,
+  name: string,
+  maximum: number,
+): number {
+  if (value === undefined) return fallback;
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new Error(`${name} quota limit must be a canonical positive integer`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed > maximum) {
+    throw new Error(`${name} quota limit must be between 1 and ${maximum}`);
+  }
+  return parsed;
+}
+
+export function parseApiQuotaPolicy(environment: Environment): ApiQuotaPolicy {
+  const policy: ApiQuotaPolicy = {
+    walletChallengeAddressPerMinute: boundedCanonicalLimit(
+      environment[QUOTA_ENVIRONMENT.walletChallengeAddressPerMinute.name],
+      DEFAULT_API_QUOTA_POLICY.walletChallengeAddressPerMinute,
+      QUOTA_ENVIRONMENT.walletChallengeAddressPerMinute.name,
+      QUOTA_ENVIRONMENT.walletChallengeAddressPerMinute.maximum,
+    ),
+    walletChallengeGlobalPerMinute: boundedCanonicalLimit(
+      environment[QUOTA_ENVIRONMENT.walletChallengeGlobalPerMinute.name],
+      DEFAULT_API_QUOTA_POLICY.walletChallengeGlobalPerMinute,
+      QUOTA_ENVIRONMENT.walletChallengeGlobalPerMinute.name,
+      QUOTA_ENVIRONMENT.walletChallengeGlobalPerMinute.maximum,
+    ),
+    projectRunsPerUtcDay: boundedCanonicalLimit(
+      environment[QUOTA_ENVIRONMENT.projectRunsPerUtcDay.name],
+      DEFAULT_API_QUOTA_POLICY.projectRunsPerUtcDay,
+      QUOTA_ENVIRONMENT.projectRunsPerUtcDay.name,
+      QUOTA_ENVIRONMENT.projectRunsPerUtcDay.maximum,
+    ),
+    projectActiveLiveRuns: boundedCanonicalLimit(
+      environment[QUOTA_ENVIRONMENT.projectActiveLiveRuns.name],
+      DEFAULT_API_QUOTA_POLICY.projectActiveLiveRuns,
+      QUOTA_ENVIRONMENT.projectActiveLiveRuns.name,
+      QUOTA_ENVIRONMENT.projectActiveLiveRuns.maximum,
+    ),
+  };
+  if (
+    policy.walletChallengeGlobalPerMinute <
+    policy.walletChallengeAddressPerMinute
+  ) {
+    throw new Error(
+      "Global wallet challenge quota limit must be at least the address limit",
+    );
+  }
+  return policy;
+}
+
 function required(environment: Environment, name: string): string {
   const value = environment[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
@@ -34,10 +122,12 @@ export function createProductionApi(input: {
     });
   const tokenDigestKey = required(environment, "PROOFLINE_TOKEN_DIGEST_KEY");
   const publicWebOrigin = required(environment, "PROOFLINE_WEB_ORIGIN");
+  const quotaPolicy = parseApiQuotaPolicy(environment);
   const service = createProductionProoflineService({
     pool,
     tokenDigestKey,
     publicWebOrigin,
+    quotaPolicy,
   });
   const api = createProoflineApi({
     service,

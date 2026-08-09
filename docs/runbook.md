@@ -103,6 +103,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/004_preflight_
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/005_explicit_submission_authority.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/006_wallet_identity_sessions.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/007_account_token_management.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/008_persisted_admission_quotas.sql
 ```
 
 Автоматизированного production migration runner и down migrations в репозитории
@@ -144,6 +145,13 @@ npm run start --workspace apps/api
 | `PROOFLINE_PROJECT_ACTIVE_LIVE_RUN_LIMIT` | optional, default `3`, range `1..100` | Nonterminal wallet/relayer runs per project; replay is excluded |
 
 API должен завершаться с ошибкой до начала обслуживания запросов, если обязательная конфигурация отсутствует или quota limit не является canonical bounded integer. PostgreSQL clock выбирает quota windows; первый row фиксирует limit до конца своего окна. Active-live cap также фиксируется persisted `active_live` project policy row на UTC сутки с `used_count = 0`, поэтому rolling API processes читают один limit; новое UTC-окно может принять новый bounded config. Quota responses используют только нормализованные `429 WALLET_CHALLENGE_RATE_LIMITED`, `429 PROJECT_RUN_QUOTA_EXHAUSTED` или `409 ACTIVE_LIVE_RUN_LIMIT_REACHED`; только 429 содержит bounded integer `Retry-After`.
+
+Migration 008 выдаёт `proofline_api` только `SELECT`, `INSERT`, `DELETE` и
+column-level `UPDATE (used_count)` для quota windows плюс bounded stale
+challenge cleanup. `proofline_worker` не получает quota/challenge authority.
+API удаляет максимум 100 quota windows и 100 wallet challenges за attempt и
+только если их expiry/window end старше PostgreSQL clock минимум на 24 часа;
+cleanup failure не отменяет уже принятое admission.
 
 ## 5. Worker
 

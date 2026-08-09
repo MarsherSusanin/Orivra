@@ -137,10 +137,12 @@ function isV1Path(pathname: string): boolean {
   return pathname === "/v1" || pathname.startsWith("/v1/");
 }
 
-function corsAuthorityHeaders(origin: string): Headers {
+function corsAuthorityHeaders(origin: string, exposeRetryAfter = false): Headers {
   return new Headers({
     "access-control-allow-origin": origin,
-    "access-control-expose-headers": "Location",
+    "access-control-expose-headers": exposeRetryAfter
+      ? "Location, Retry-After"
+      : "Location",
     vary: "Origin",
   });
 }
@@ -202,7 +204,10 @@ function decorateCorsResponse(
     return response;
   }
   const headers = new Headers(response.headers);
-  for (const [name, value] of corsAuthorityHeaders(publicWebOrigin)) {
+  for (const [name, value] of corsAuthorityHeaders(
+    publicWebOrigin,
+    response.headers.has("retry-after"),
+  )) {
     if (name === "vary" && headers.has("vary")) {
       const existing = headers
         .get("vary")!
@@ -246,9 +251,34 @@ function responseError(
   const message = safeStatus === 500
     ? "Request could not be completed"
     : "Request rejected";
-  return privateResponse
+  const response = privateResponse
     ? privateError(safeStatus, safeCode, message)
     : error(safeStatus, safeCode, message);
+  const retryBounds =
+    safeStatus === 429 && safeCode === "WALLET_CHALLENGE_RATE_LIMITED"
+      ? 60
+      : safeStatus === 429 && safeCode === "PROJECT_RUN_QUOTA_EXHAUSTED"
+        ? 86_400
+        : null;
+  const retryAfterSeconds =
+    cause && typeof cause === "object" && "retryAfterSeconds" in cause
+      ? (cause as { retryAfterSeconds?: unknown }).retryAfterSeconds
+      : undefined;
+  if (
+    retryBounds === null ||
+    !Number.isInteger(retryAfterSeconds) ||
+    Number(retryAfterSeconds) < 1 ||
+    Number(retryAfterSeconds) > retryBounds
+  ) {
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  headers.set("retry-after", String(retryAfterSeconds));
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 function containsPrivateKey(value: unknown): boolean {

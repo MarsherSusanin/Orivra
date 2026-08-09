@@ -48,12 +48,20 @@ export type RunClient = ReturnType<typeof createRunClient>;
 export class ProoflineClientError extends Error {
   readonly status: number;
   readonly code: string;
+  readonly retryAfterSeconds?: number;
 
-  constructor(message: string, input: { status: number; code: string }) {
+  constructor(message: string, input: {
+    status: number;
+    code: string;
+    retryAfterSeconds?: number;
+  }) {
     super(message);
     this.name = "ProoflineClientError";
     this.status = input.status;
     this.code = input.code;
+    if (input.retryAfterSeconds !== undefined) {
+      this.retryAfterSeconds = input.retryAfterSeconds;
+    }
   }
 }
 
@@ -195,6 +203,7 @@ function safeErrorCode(value: unknown, status: number): string {
 async function responseError(
   response: Response,
   projectToken: string,
+  surface?: "create-run",
 ): Promise<ProoflineClientError> {
   let detail = response.statusText || "Request failed";
   let code: unknown;
@@ -213,6 +222,41 @@ async function responseError(
     }
   } catch {
     // Do not obscure the HTTP status when an upstream returns a non-JSON body.
+  }
+  if (surface === "create-run") {
+    const dailyQuota =
+      response.status === 429 && code === "PROJECT_RUN_QUOTA_EXHAUSTED";
+    const activeLive =
+      response.status === 409 && code === "ACTIVE_LIVE_RUN_LIMIT_REACHED";
+    const rawRetryAfter = response.headers.get("retry-after");
+    const retryAfterSeconds =
+      dailyQuota &&
+      rawRetryAfter !== null &&
+      /^[1-9]\d*$/.test(rawRetryAfter) &&
+      rawRetryAfter.length <= 5 &&
+      Number(rawRetryAfter) <= 86_400
+        ? Number(rawRetryAfter)
+        : undefined;
+    if (dailyQuota) {
+      return new ProoflineClientError(
+        "Proofline run creation is rate limited. Retry safely.",
+        {
+          status: response.status,
+          code: "PROJECT_RUN_QUOTA_EXHAUSTED",
+          ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+        },
+      );
+    }
+    if (activeLive) {
+      return new ProoflineClientError(
+        "Proofline has reached the active live-run limit.",
+        { status: response.status, code: "ACTIVE_LIVE_RUN_LIMIT_REACHED" },
+      );
+    }
+    return new ProoflineClientError(
+      "Proofline run creation failed.",
+      { status: response.status, code: `HTTP_${response.status}` },
+    );
   }
   return new ProoflineClientError(
     redact(`Proofline API ${response.status}: ${detail}`, projectToken),
@@ -250,6 +294,7 @@ export function createRunClient(input: {
       body?: unknown;
       idempotencyKey?: string;
       raw?: boolean;
+      errorSurface?: "create-run";
     } = {},
   ): Promise<T> {
     const headers = new Headers({
@@ -273,7 +318,13 @@ export function createRunClient(input: {
         { status: 503, code: "TRANSPORT_UNAVAILABLE" },
       );
     }
-    if (!response.ok) throw await responseError(response, input.projectToken);
+    if (!response.ok) {
+      throw await responseError(
+        response,
+        input.projectToken,
+        options.errorSurface,
+      );
+    }
     if (options.raw) return (await response.text()) as T;
     return (await response.json()) as T;
   }
@@ -320,6 +371,7 @@ export function createRunClient(input: {
         method: "POST",
         body: { manifest },
         idempotencyKey,
+        errorSurface: "create-run",
       });
       const parsed = CreateRunResultV1Schema.safeParse(result);
       if (!parsed.success) {
