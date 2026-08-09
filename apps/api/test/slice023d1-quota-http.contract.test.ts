@@ -95,7 +95,31 @@ describe("Slice 023D1 quota HTTP and CORS boundary", () => {
       version: "1",
       error: { code: "WALLET_CHALLENGE_RATE_LIMITED", message: "Request rejected" },
     });
-    expect(JSON.stringify(body)).not.toMatch(/address|limit|digest|window|private|project_/i);
+    const errorWithoutRequiredCode = {
+      ...(body as { error: Record<string, unknown> }).error,
+    };
+    delete errorWithoutRequiredCode.code;
+    const sanitizedBodyWithoutCode = JSON.stringify({
+      ...(body as Record<string, unknown>),
+      error: errorWithoutRequiredCode,
+    });
+    for (const forbiddenValue of [ADDRESS, PROJECT_TOKEN, "private stack"]) {
+      expect(sanitizedBodyWithoutCode).not.toContain(forbiddenValue);
+    }
+    for (const forbiddenField of [
+      "address",
+      "digest",
+      "windowStart",
+      "windowEnd",
+      "limit",
+      "limit_value",
+      "limitValue",
+      "stack",
+      "secret",
+    ]) {
+      expect(body).not.toHaveProperty(forbiddenField);
+      expect(body).not.toHaveProperty(`error.${forbiddenField}`);
+    }
   });
 
   it("returns daily run 429 with a day-bounded Retry-After", async () => {

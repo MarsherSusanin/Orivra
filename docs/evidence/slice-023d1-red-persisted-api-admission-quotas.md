@@ -30,6 +30,11 @@ The existing ErrorV1 JSON shape remains unchanged. Raw addresses, quota
 subjects, limits, windows, stack bytes and bearer material are not added to an
 error response or client failure.
 
+The corrective leak assertion inspects forbidden fields and values separately
+from the required normalized `error.code`. It therefore rejects `address`,
+digest, window, limit, stack, secret and bearer evidence without treating the
+literal `LIMIT` inside `WALLET_CHALLENGE_RATE_LIMITED` as leaked quota state.
+
 ## Intentional RED
 
 Command:
