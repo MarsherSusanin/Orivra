@@ -238,6 +238,11 @@ function AccessConfirmationDialog({
       return;
     }
     if (event.key !== "Tab") return;
+    if (pending) {
+      event.preventDefault();
+      dialogRef.current?.focus();
+      return;
+    }
     const controls = Array.from(
       dialogRef.current?.querySelectorAll<HTMLElement>(
         'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -261,6 +266,10 @@ function AccessConfirmationDialog({
     return () => previousFocusRef.current?.focus();
   }, []);
 
+  useLayoutEffect(() => {
+    if (pending) dialogRef.current?.focus();
+  }, [pending]);
+
   return (
     <div className="dialog-backdrop settings-confirm-backdrop" role="presentation">
       <section
@@ -270,6 +279,9 @@ function AccessConfirmationDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
+        aria-busy={pending ? "true" : undefined}
+        aria-disabled={pending ? "true" : undefined}
+        tabIndex={pending ? 0 : -1}
         onKeyDown={trapFocus}
       >
         <header className="dialog-header">
@@ -291,6 +303,7 @@ function AccessConfirmationDialog({
               className="entry-secondary"
               type="button"
               disabled={pending}
+              aria-disabled={pending ? "true" : undefined}
               onClick={onCancel}
             >
               Cancel
@@ -299,6 +312,7 @@ function AccessConfirmationDialog({
               className="dialog-primary"
               type="button"
               disabled={pending}
+              aria-disabled={pending ? "true" : undefined}
               onClick={onConfirm}
             >
               {pending ? pendingLabel : failed && retryLabel ? retryLabel : confirmLabel}
@@ -339,6 +353,7 @@ export function AccountSettings({
   const [revokeFailed, setRevokeFailed] = useState(false);
   const [signOutConfirming, setSignOutConfirming] = useState(false);
   const [signOutPending, setSignOutPending] = useState(false);
+  const [signOutRetrying, setSignOutRetrying] = useState(false);
   const issueFlight = useRef<Promise<void> | null>(null);
   const labelRef = useRef<HTMLInputElement>(null);
   const expiresRef = useRef<HTMLInputElement>(null);
@@ -366,8 +381,9 @@ export function AccountSettings({
     }
   }, [browserSessionActive, snapshot.status]);
 
-  const signOutRecovery = snapshot.status === "unavailable" &&
-    snapshot.operation === "sign-out";
+  const signOutRecovery = signOutRetrying || (
+    snapshot.status === "unavailable" && snapshot.operation === "sign-out"
+  );
   useLayoutEffect(() => {
     if (signOutRecovery) retrySignOutRef.current?.focus();
   }, [signOutRecovery]);
@@ -474,8 +490,12 @@ export function AccountSettings({
   const retrySignOut = useCallback(() => {
     if (signOutPending) return;
     setSignOutPending(true);
+    setSignOutRetrying(true);
     void retry().finally(() => {
-      if (mounted.current) setSignOutPending(false);
+      if (mounted.current) {
+        setSignOutPending(false);
+        setSignOutRetrying(false);
+      }
     });
   }, [retry, signOutPending]);
 

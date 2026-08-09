@@ -3518,6 +3518,12 @@ a {
   overflow-y: auto;
 }
 
+.settings-access-confirm:focus {
+  border-color: rgba(45, 200, 243, 0.58);
+  outline: 2px solid rgba(45, 200, 243, 0.22);
+  outline-offset: -2px;
+}
+
 .settings-confirm-body,
 .settings-signout-recovery,
 .settings-signout-recovery > div:first-child {
