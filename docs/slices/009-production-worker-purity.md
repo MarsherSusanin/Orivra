@@ -13,6 +13,15 @@ private-key, and synthetic live-handler logic.
   pipeline. It has no injectable legacy runtime and no synthetic live command.
 - The built worker artifact contains no project-token custody path, private-key
   execution field, legacy credential error, or synthetic live handler marker.
+- Contracts expose wallet/account auth through
+  `@proofline/contracts/wallet-auth` while preserving identical root exports;
+  contracts and domain declare `sideEffects: false` and pass the module-load
+  purity source gate.
+- Artifact evidence comes from a fresh temporary production-equivalent esbuild
+  plus its metafile, not from a possibly stale `dist/worker.js`. Wallet-auth and
+  canonical-URL demo inputs contribute zero output bytes, while the worker
+  entry/bootstrap/runtime, API PostgreSQL, contracts, domain and FDC runtime
+  inputs contribute non-zero bytes.
 - Test-only live-gate utilities remain in a separate module that is not reachable
   from `src/entry.ts` or `src/bootstrap.ts`.
 - Production still reads its own low-balance relayer key from the worker
