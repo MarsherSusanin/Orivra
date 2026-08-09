@@ -1,5 +1,5 @@
 import { ArrowClockwise, ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   createLocalProductAnalytics,
   createProductEventEmitter,
@@ -87,7 +87,15 @@ function browserLocalStorage() {
 
 function browserSessionStorage() {
   try {
-    return globalThis.sessionStorage ?? UNAVAILABLE_STORAGE;
+    const storage = globalThis.sessionStorage;
+    const prototype = globalThis.Storage?.prototype;
+    if (!storage) return UNAVAILABLE_STORAGE;
+    if (!prototype) return storage;
+    return {
+      getItem: (key: string) => prototype.getItem.call(storage, key),
+      setItem: (key: string, value: string) => prototype.setItem.call(storage, key, value),
+      removeItem: (key: string) => prototype.removeItem.call(storage, key),
+    };
   } catch {
     return UNAVAILABLE_STORAGE;
   }
@@ -144,7 +152,58 @@ function scrubShareLocation(url: URL): void {
   globalThis.history.replaceState({}, "", `${url.pathname}${url.search}`);
 }
 
-function sessionShareToken(): string {
+type ShareBootstrap = {
+  attempted: boolean;
+  handoffRevision?: number;
+  token: string;
+};
+
+let shareBootstrapHandoff: {
+  href: string;
+  revision: number;
+  result: ShareBootstrap;
+  runId: string;
+} | null = null;
+let shareBootstrapRevision = 0;
+
+function stageShareBootstrapHandoff(
+  runId: string,
+  href: string,
+  result: Omit<ShareBootstrap, "handoffRevision">,
+): ShareBootstrap {
+  const revision = ++shareBootstrapRevision;
+  const staged = { ...result, handoffRevision: revision };
+  shareBootstrapHandoff = { href, revision, result: staged, runId };
+  globalThis.queueMicrotask(() => {
+    clearShareBootstrapHandoff(revision);
+  });
+  return staged;
+}
+
+function takeShareBootstrapHandoff(runId: string, href: string): ShareBootstrap | null {
+  const pending = shareBootstrapHandoff;
+  if (!pending) return null;
+  shareBootstrapHandoff = null;
+  if (pending.runId !== runId || pending.href !== href) return null;
+  return pending.result;
+}
+
+function clearShareBootstrapHandoff(revision: number | undefined): void {
+  if (revision !== undefined && shareBootstrapHandoff?.revision === revision) {
+    shareBootstrapHandoff = null;
+  }
+}
+
+function storedShareToken(runId: string): string {
+  try {
+    const shared = browserSessionStorage().getItem(shareSessionKey(runId));
+    return shared && SHARE_TOKEN_PATTERN.test(shared) ? shared : "";
+  } catch {
+    return "";
+  }
+}
+
+function sessionShareAuthority(): ShareBootstrap {
   const runId = deepRouteRunId();
   if (runId && globalThis.location) {
     const url = new URL(globalThis.location.href);
@@ -152,25 +211,32 @@ function sessionShareToken(): string {
     if (queryShare) url.searchParams.delete("share");
     const fragmentAttempt = url.hash.startsWith("#share=");
     const fragmentValue = fragmentAttempt ? url.hash.slice("#share=".length) : "";
+    if (!queryShare && !fragmentAttempt) {
+      const handoff = takeShareBootstrapHandoff(runId, url.href);
+      if (handoff) return handoff;
+    }
     if (queryShare || fragmentAttempt) {
       url.hash = "";
       scrubShareLocation(url);
-      if (queryShare || !SHARE_TOKEN_PATTERN.test(fragmentValue)) return "";
+      if (queryShare || !SHARE_TOKEN_PATTERN.test(fragmentValue)) {
+        return stageShareBootstrapHandoff(runId, url.href, {
+          attempted: true,
+          token: storedShareToken(runId),
+        });
+      }
       try {
         browserSessionStorage().setItem(shareSessionKey(runId), fragmentValue);
       } catch {
-        return "";
+        // Current valid authority remains usable in memory when persistence is denied.
       }
-      return fragmentValue;
+      return stageShareBootstrapHandoff(runId, url.href, {
+        attempted: true,
+        token: fragmentValue,
+      });
     }
-    try {
-      const shared = browserSessionStorage().getItem(shareSessionKey(runId));
-      if (shared && SHARE_TOKEN_PATTERN.test(shared)) return shared;
-    } catch {
-      return "";
-    }
+    return { attempted: false, token: storedShareToken(runId) };
   }
-  return "";
+  return { attempted: false, token: "" };
 }
 
 function walletApiBaseUrl(): string {
@@ -641,7 +707,11 @@ function RunCockpit({
       }
     };
 
-    void load(hydrationRevision === 0 ? 0 : (hydratedRun?.sequence ?? 0));
+    globalThis.queueMicrotask(() => {
+      if (!cancelled) {
+        void load(hydrationRevision === 0 ? 0 : (hydratedRun?.sequence ?? 0));
+      }
+    });
     return () => {
       cancelled = true;
       if (timer !== undefined) globalThis.clearTimeout(timer);
@@ -1227,19 +1297,26 @@ function ProductApp({
 }
 
 export function App(props: AppProps = {}) {
-  const [shareToken] = useState(sessionShareToken);
+  const [share] = useState(sessionShareAuthority);
   const [walletAccess] = useState(() => props.walletAccess ?? {
     services: createWalletAccessClient({ baseUrl: walletApiBaseUrl() }),
     storage: browserSessionStorage(),
   });
-  const suppressWalletRestore = Boolean(shareToken || props.projectToken);
+  const suppressWalletRestore = Boolean(
+    share.attempted || share.token || props.projectToken,
+  );
+
+  useLayoutEffect(() => {
+    clearShareBootstrapHandoff(share.handoffRevision);
+    return () => clearShareBootstrapHandoff(share.handoffRevision);
+  }, [share.handoffRevision]);
 
   return (
     <WalletSessionProvider
       services={walletAccess.services}
       storage={suppressWalletRestore ? UNAVAILABLE_STORAGE : walletAccess.storage}
     >
-      <ProductApp {...props} walletAccess={walletAccess} shareToken={shareToken} />
+      <ProductApp {...props} walletAccess={walletAccess} shareToken={share.token} />
     </WalletSessionProvider>
   );
 }
