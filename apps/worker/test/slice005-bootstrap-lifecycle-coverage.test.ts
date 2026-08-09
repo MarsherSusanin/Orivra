@@ -199,26 +199,73 @@ describe("Slice 005 production worker configuration", () => {
 });
 
 describe("Slice 005 production worker process lifecycle", () => {
+  async function expectRedactedDeploymentConfigurationError(
+    operation: () => Promise<void>,
+    forbidden: readonly string[],
+  ) {
+    let thrown: unknown;
+    try {
+      await operation();
+    } catch (cause) {
+      thrown = cause;
+    }
+    expect(thrown).toMatchObject({
+      code: "DEPLOYMENT_SECRET_CONFIGURATION_INVALID",
+      message: "Deployment secret configuration is invalid",
+    });
+    const publicError = `${JSON.stringify(thrown)}\n${String((thrown as Error).message)}`;
+    for (const marker of forbidden) expect(publicError).not.toContain(marker);
+  }
+
+  function expectNoStartupEffects() {
+    expect(mocks.Pool).not.toHaveBeenCalled();
+    expect(mocks.createVerifier).not.toHaveBeenCalled();
+    expect(mocks.createPipelinePorts).not.toHaveBeenCalled();
+    expect(mocks.createRepository).not.toHaveBeenCalled();
+    expect(mocks.createHandlers).not.toHaveBeenCalled();
+    expect(mocks.createRunWorker).not.toHaveBeenCalled();
+    expect(mocks.worker.processOne).not.toHaveBeenCalled();
+  }
+
   it("fails before side effects when the default process environment lacks DATABASE_URL", async () => {
     vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("PROOFLINE_VERIFIER_API_KEY", "never-echo-verifier");
+    vi.stubEnv("PROOFLINE_COSTON2_PRIVATE_KEY", "never-echo-private");
 
-    await expect(startProductionWorker()).rejects.toThrow(/DATABASE_URL.*required/i);
-    expect(mocks.Pool).not.toHaveBeenCalled();
+    await expectRedactedDeploymentConfigurationError(
+      () => startProductionWorker(),
+      ["DATABASE_URL", "never-echo-verifier", "never-echo-private"],
+    );
+    expectNoStartupEffects();
   });
 
-  it("uses pool defaults but still fails fast when verifier configuration is absent", async () => {
-    await expect(
-      startProductionWorker({ DATABASE_URL: "postgres://proofline.invalid/db" }),
-    ).rejects.toThrow(/PROOFLINE_VERIFIER_API_KEY.*required/i);
-    expect(mocks.poolOptions).toEqual([
-      {
-        connectionString: "postgres://proofline.invalid/db",
-        max: 4,
-        idleTimeoutMillis: 30_000,
-      },
-    ]);
-    expect(mocks.createVerifier).not.toHaveBeenCalled();
-  });
+  it.each([
+    ["verifier API key", {
+      PROOFLINE_VERIFIER_API_KEY: "",
+      PROOFLINE_COSTON2_PRIVATE_KEY: "never-echo-private",
+    }, ["PROOFLINE_VERIFIER_API_KEY", "never-echo-private"]],
+    ["Coston2 private key", {
+      PROOFLINE_VERIFIER_API_KEY: "never-echo-verifier",
+      PROOFLINE_COSTON2_PRIVATE_KEY: "",
+    }, ["PROOFLINE_COSTON2_PRIVATE_KEY", "never-echo-verifier"]],
+  ] as const)(
+    "resolves all deployment secrets before startup when the %s is absent",
+    async (_label, overrides, forbidden) => {
+      if (_label === "Coston2 private key") {
+        mocks.createPipelinePorts.mockImplementationOnce(() => {
+          throw new Error("Live ports reached before deployment secret resolution");
+        });
+      }
+      await expectRedactedDeploymentConfigurationError(
+        () => startProductionWorker(environment({
+          DATABASE_URL: "postgres://never-echo-database.invalid/db",
+          ...overrides,
+        })),
+        ["never-echo-database", ...forbidden],
+      );
+      expectNoStartupEffects();
+    },
+  );
 
   it("registers shutdown signals, processes once, and closes the production pool", async () => {
     const signals = new Map<string, () => void>();

@@ -119,6 +119,28 @@ npm run test:sites
 Result: build PASS with `dist/client/index.html`, `dist/server/index.js` and
 `dist/.openai/hosting.json`; Sites 36/36 PASS with zero skips.
 
+### Legacy worker compatibility correction
+
+After the initial RED freeze and the Unicode-safe file-URL harness correction
+at `8bd77ee15b6c8494c692b54e8593f00ae0b808a1`, the accepted Slice 005 worker
+lifecycle expectations were reconciled with ADR 0035. Missing database,
+verifier or private-key deployment authority now requires the same fixed
+redacted configuration error and zero Pool, verifier, live-port or loop effect.
+The private-key case uses a test-only live-port tripwire so the absent 027A
+implementation fails promptly instead of timing out; GREEN must never reach
+that tripwire. The existing direct-environment start, signal, loop and pool
+close happy path remains a separate control.
+
+```sh
+npx vitest run \
+  apps/worker/test/slice005-bootstrap-lifecycle-coverage.test.ts \
+  --reporter=dot --maxWorkers=1
+```
+
+Result: 14 tests; 3 intentional RED and 11 compatibility controls PASS. The
+three failures are only the missing redacted/pre-effect deployment-secret
+boundary; there is no timeout or lifecycle fixture failure.
+
 ## RED interpretation
 
 Only absent 027A production surfaces are accepted failures. A TypeScript
