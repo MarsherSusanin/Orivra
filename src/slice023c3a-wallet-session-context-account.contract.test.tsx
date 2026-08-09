@@ -195,8 +195,12 @@ function expectIssueBusy(operation: () => Promise<unknown>) {
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
-  return { promise, resolve };
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, reject, resolve };
 }
 
 afterEach(() => {
@@ -220,35 +224,39 @@ describe("Slice 023C3A account operations in the wallet session context", () => 
     expect(stored.read()).toBeNull();
   });
 
-  it("uses only the private browser bearer for create and refreshes strict account evidence", async () => {
+  it("refreshes strict account evidence before resolving the raw token to its caller", async () => {
+    const refreshedResult = deferred<AccountV1>();
     const getAccount = vi.fn()
       .mockResolvedValueOnce(account)
-      .mockResolvedValueOnce(refreshed);
+      .mockReturnValueOnce(refreshedResult.promise);
     const createAccountToken = vi.fn(async () => created);
     const access = services({ getAccount, createAccountToken });
     const stored = memory(PROJECT_TOKEN);
     const rendered = await renderCapture(access, stored.port);
     await waitFor(() => expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS}:`));
 
-    let result!: AccountTokenCreatedV1;
-    await act(async () => {
-      result = await rendered.current().createAccountToken({
-        idempotencyKey: IDEMPOTENCY_KEY,
-        request,
-      });
+    let settled = false;
+    const issuance = rendered.current().createAccountToken({
+      idempotencyKey: IDEMPOTENCY_KEY,
+      request,
     });
-    expect(result).toEqual(created);
+    void issuance.finally(() => { settled = true; });
     expect(createAccountToken).toHaveBeenCalledWith({
       projectToken: PROJECT_TOKEN,
       idempotencyKey: IDEMPOTENCY_KEY,
       request,
     });
+    await waitFor(() => expect(getAccount).toHaveBeenCalledTimes(2));
+    expect(getAccount).toHaveBeenLastCalledWith({ projectToken: PROJECT_TOKEN });
+    expect(settled).toBe(false);
     expect(JSON.stringify(rendered.current().snapshot)).not.toContain(RAW_TOKEN);
 
-    await act(async () => { await rendered.current().refreshAccount(); });
-    await waitFor(() => expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS}:Local CLI`));
+    await act(async () => refreshedResult.resolve(refreshed));
+    const result = await issuance;
+    expect(result).toEqual(created);
+    expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS}:Local CLI`);
+    expect(JSON.stringify(rendered.current().snapshot)).not.toContain(RAW_TOKEN);
     expect(getAccount).toHaveBeenCalledTimes(2);
-    expect(getAccount).toHaveBeenLastCalledWith({ projectToken: PROJECT_TOKEN });
     expect(access.listNetworks).not.toHaveBeenCalled();
     expect(access.createWalletChallenge).not.toHaveBeenCalled();
     expect(access.createWalletSession).not.toHaveBeenCalled();
@@ -405,5 +413,109 @@ describe("Slice 023C3A account operations in the wallet session context", () => 
     await expect(first).resolves.toEqual(created);
     await expect(same).resolves.toEqual(created);
     expect(JSON.stringify(rendered.current().snapshot)).not.toContain(RAW_TOKEN);
+  });
+
+  it.each(["resolve", "reject"] as const)(
+    "rejects stale A raw after its internal refresh %s settles under same-bearer B",
+    async (settlement) => {
+      const refreshA = deferred<AccountV1>();
+      const getAccount = vi.fn()
+        .mockResolvedValueOnce(account)
+        .mockReturnValueOnce(refreshA.promise);
+      const access = services({
+        getAccount,
+        createAccountToken: vi.fn(async () => created),
+        createWalletSession: vi.fn(async () => sessionB(PROJECT_TOKEN)),
+      });
+      const stored = memory(PROJECT_TOKEN);
+      const storageWrite = vi.spyOn(Storage.prototype, "setItem");
+      const rendered = await renderCapture(access, stored.port);
+      await waitFor(() => expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS}:`));
+
+      const issueA = rendered.current().createAccountToken({
+        idempotencyKey: IDEMPOTENCY_KEY,
+        request,
+      });
+      const outcomePromise = issueA.then(
+        (value) => ({ status: "resolved" as const, value }),
+        (failure: unknown) => ({ status: "rejected" as const, failure }),
+      );
+      await waitFor(() => expect(getAccount).toHaveBeenCalledTimes(2));
+      act(() => rendered.current().forgetBrowser());
+      await act(async () => { await rendered.current().createSession(SESSION_REQUEST); });
+      expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS_B}:`);
+
+      if (settlement === "resolve") {
+        await act(async () => refreshA.resolve(lateAccountA));
+      } else {
+        await act(async () => refreshA.reject(new Error(`refresh echo ${RAW_TOKEN}`)));
+      }
+      const outcome = await outcomePromise;
+      expect(outcome).toMatchObject({
+        status: "rejected",
+        failure: {
+          name: "WalletAccessError",
+          status: 403,
+          code: "ACCOUNT_SESSION_REQUIRED",
+          message: "Proofline request failed.",
+        },
+      });
+      expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS_B}:`);
+      expect(screen.getByLabelText("session state")).not.toHaveTextContent("Late A account");
+      expect(JSON.stringify(outcome)).not.toContain(RAW_TOKEN);
+      expect(JSON.stringify(rendered.current().snapshot)).not.toContain(RAW_TOKEN);
+      expect(JSON.stringify(storageWrite.mock.calls)).not.toContain(RAW_TOKEN);
+    },
+  );
+
+  it("coalesces an issue's internal account refresh with the current generation flight", async () => {
+    const currentRefresh = deferred<AccountV1>();
+    const getAccount = vi.fn()
+      .mockResolvedValueOnce(account)
+      .mockReturnValueOnce(currentRefresh.promise);
+    const rendered = await renderCapture(
+      services({ getAccount, createAccountToken: vi.fn(async () => created) }),
+      memory(PROJECT_TOKEN).port,
+    );
+    await waitFor(() => expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS}:`));
+
+    const refresh = rendered.current().refreshAccount();
+    const issue = rendered.current().createAccountToken({
+      idempotencyKey: IDEMPOTENCY_KEY,
+      request,
+    });
+    let issueSettled = false;
+    void issue.finally(() => { issueSettled = true; });
+    expect(getAccount).toHaveBeenCalledTimes(2);
+    await act(async () => { await Promise.resolve(); });
+    expect(issueSettled).toBe(false);
+
+    await act(async () => currentRefresh.resolve(refreshed));
+    await expect(refresh).resolves.toBeUndefined();
+    await expect(issue).resolves.toEqual(created);
+    expect(getAccount).toHaveBeenCalledTimes(2);
+    expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS}:Local CLI`);
+  });
+
+  it("returns the raw token once and preserves prior account evidence when current-generation refresh fails", async () => {
+    const refreshFailure = new Error(`refresh failed ${RAW_TOKEN}`);
+    const getAccount = vi.fn()
+      .mockResolvedValueOnce(account)
+      .mockRejectedValueOnce(refreshFailure);
+    const rendered = await renderCapture(
+      services({ getAccount, createAccountToken: vi.fn(async () => created) }),
+      memory(PROJECT_TOKEN).port,
+    );
+    await waitFor(() => expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS}:`));
+
+    const result = await rendered.current().createAccountToken({
+      idempotencyKey: IDEMPOTENCY_KEY,
+      request,
+    });
+    expect(result).toEqual(created);
+    expect(getAccount).toHaveBeenCalledTimes(2);
+    expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS}:`);
+    expect(JSON.stringify(rendered.current().snapshot)).not.toContain(RAW_TOKEN);
+    expect(document.body.textContent).not.toContain(RAW_TOKEN);
   });
 });

@@ -100,3 +100,38 @@ The tests use the real provider/controller transitions rather than a token-only
 mock. They require the opaque generation to stay absent from runtime context
 keys, serializable snapshot, DOM, public context type and analytics imports.
 No production, public schema, API or persistence change is part of this RED.
+
+## Atomic issue-refresh corrective RED
+
+Rejected candidate `b705b2336cb8143f3f6da66e5ec0b76bec554fc7` /
+tree `d6c7c5b1ad3f02261640f94a6104e068ae671b7c` rejects stale issue service
+responses, but returns a current raw result before summary refresh and leaves
+the component to refresh afterward. That creates a generation-change gap.
+
+The corrective contracts freeze:
+
+- successful same-generation refresh updates strict account evidence before
+  the raw Promise resolves;
+- issue coalesces an existing same-generation refresh and stays unsettled until
+  it completes;
+- refresh resolve or reject after A→loss→same-bearer B produces fixed safe
+  stale rejection, never raw A;
+- current-generation refresh failure preserves prior account evidence and
+  returns the one-time raw result once without inventing a public warning
+  contract;
+- `AccountSettings` never performs a post-create refresh;
+- authority loss clears an already visible reveal before B surfaces and it
+  cannot reappear under B.
+
+Recorded evidence:
+
+- typecheck and diff-check — PASS;
+- focused context/Settings contracts — 2 files / 21 tests: 14 PASS and exactly
+  7 intentional RED, one for each missing atomic decision above (the stale
+  settlement case is separately frozen for resolve and reject);
+- nearest unmodified Settings route/navigation/provider baseline — 4 files /
+  20 tests PASS.
+
+The focused command emits no new React `act(...)` warning, so no unrelated
+harness rewrite is included. No production, dependency, public contract, API
+or database file changes in this corrective RED.

@@ -34,6 +34,12 @@ once without another wallet prompt.
 - Same-generation refresh and identical issue intents coalesce. A different
   concurrent issue intent fails safe/busy without a second request; a new
   generation owns distinct flights.
+- Context owns `issue → coalesced refresh → generation recheck → raw return` as
+  one boundary. The component performs no second refresh. A current-generation
+  refresh failure preserves prior account evidence and still reveals the
+  one-time raw result; a stale settlement never returns it.
+- Authority loss clears an already visible reveal before another session can
+  surface, including when the new session receives identical bearer bytes.
 
 Revocation and current-session sign-out are deferred to 023C3B. Run retention
 and deletion remain Slice 027. This slice changes no contract, API, migration,

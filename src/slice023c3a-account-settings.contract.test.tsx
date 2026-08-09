@@ -12,6 +12,7 @@ import type {
 } from "@proofline/contracts";
 import type { WalletAccessServices } from "./services/wallet-access-client";
 import type { StorageLike } from "./services/wallet-session-controller";
+import accountSettingsSource from "./components/AccountSettings.tsx?raw";
 
 const SETTINGS_PATH = "./components/AccountSettings";
 const CONTEXT_PATH = "./wallet-session-context";
@@ -506,6 +507,67 @@ describe("Slice 023C3A authenticated account Settings", () => {
     expect(Object.values(sessionStorage)).not.toContain(RAW_TOKEN);
     expect(Object.values(localStorage)).not.toContain(RAW_TOKEN);
     expect(window.location.href).not.toContain(RAW_TOKEN);
+    expect(JSON.stringify(browserStorageWrite.mock.calls)).not.toContain(RAW_TOKEN);
+    expect(JSON.stringify([...log.mock.calls, ...error.mock.calls])).not.toContain(RAW_TOKEN);
+  });
+
+  it("delegates issue refresh atomically to context and still reveals raw once when that refresh fails", async () => {
+    const submitSource = accountSettingsSource.match(
+      /const submit = useCallback[\s\S]*?\n  if \(browserSessionBlocked\)/,
+    )?.[0] ?? "";
+    expect(submitSource).toContain("createAccountToken");
+    expect(submitSource).not.toMatch(/await\s+refreshAccount|refreshAccount\(\)/);
+
+    const getAccount = vi.fn()
+      .mockResolvedValueOnce(account)
+      .mockRejectedValueOnce(new Error(`refresh echo ${RAW_TOKEN}`));
+    const user = userEvent.setup();
+    const rendered = await renderSettings(
+      services({ getAccount, createAccountToken: vi.fn(async () => created) }),
+    );
+    await fillValidForm(user);
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    const reveal = await screen.findByRole("dialog", { name: "Save this token now" });
+    expect(within(reveal).getByRole("textbox", { name: "Generated project token" })).toHaveTextContent(RAW_TOKEN);
+    expect(getAccount).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(ADDRESS)).toBeVisible();
+    expect(rendered.access.listNetworks).not.toHaveBeenCalled();
+    expect(screen.queryByText(/refresh echo/i)).not.toBeInTheDocument();
+  });
+
+  it("clears an already visible raw reveal when A authority is lost before B surfaces", async () => {
+    const getAccount = vi.fn()
+      .mockResolvedValueOnce(account)
+      .mockResolvedValueOnce(refreshedAccount)
+      .mockResolvedValueOnce(accountB);
+    const stored = storage();
+    const browserStorageWrite = vi.spyOn(Storage.prototype, "setItem");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    const rendered = await renderSettings(
+      services({
+        getAccount,
+        createAccountToken: vi.fn(async () => created),
+        createWalletSession: vi.fn(async () => sameBearerSessionB),
+      }),
+      stored,
+    );
+    await fillValidForm(user);
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+    expect(await screen.findByRole("dialog", { name: "Save this token now" })).toHaveTextContent(RAW_TOKEN);
+
+    act(() => rendered.session().forgetBrowser());
+    expect(screen.queryByRole("dialog", { name: "Save this token now" })).not.toBeInTheDocument();
+    await act(async () => { await rendered.session().createSession(SESSION_REQUEST); });
+    expect(await screen.findByText(ADDRESS_B)).toBeVisible();
+    await waitFor(() => expect(getAccount).toHaveBeenCalledTimes(3));
+    expect(screen.queryByRole("dialog", { name: "Save this token now" })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(RAW_TOKEN);
+    expect(stored.values()).not.toContain(RAW_TOKEN);
+    expect(Object.values(sessionStorage)).not.toContain(RAW_TOKEN);
+    expect(Object.values(localStorage)).not.toContain(RAW_TOKEN);
     expect(JSON.stringify(browserStorageWrite.mock.calls)).not.toContain(RAW_TOKEN);
     expect(JSON.stringify([...log.mock.calls, ...error.mock.calls])).not.toContain(RAW_TOKEN);
   });

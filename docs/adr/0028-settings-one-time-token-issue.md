@@ -74,17 +74,33 @@ calling a service.
 A token issue is single-flight within one generation. The frozen intent is the
 exact idempotency key plus the strict request tuple. A concurrent identical
 intent receives the same Promise and performs one service call; a different
-intent fails locally with fixed safe `409 IDEMPOTENCY_CONFLICT` evidence and
-does not call the service. If authority generation changes before the response,
-a success containing the raw token is discarded and the caller receives fixed
-safe `403 ACCOUNT_SESSION_REQUIRED`; the secret is absent from the returned
-value, serialized failure, UI, refresh, storage, logs and analytics. Reissuing
-the same bearer bytes in a later session does not make the old result current.
+  intent fails locally with fixed safe `409 IDEMPOTENCY_CONFLICT` evidence and
+  does not call the service.
+
+Issue and summary refresh form one context-owned authority transaction. After
+the issue service returns, `createAccountToken` performs or coalesces the
+current generation's account refresh and rechecks generation after that refresh
+settles. Only then may it resolve the raw token to the surface. `AccountSettings`
+does not perform a second refresh or use a post-return authenticated boolean.
+If authority changes at any point before this boundary—including after the raw
+service response while refresh is pending—the raw result is discarded and the
+caller receives fixed safe `403 ACCOUNT_SESSION_REQUIRED`; the secret is absent
+from the returned value, serialized failure, UI, stale refresh, storage, logs
+and analytics. Reissuing the same bearer bytes in a later session does not make
+the old result current.
+
+If the generation is still current but its summary refresh fails, the one-time
+secret must not be irretrievably lost. The method resolves the raw result once,
+keeps the previously parsed account evidence and exposes no upstream error
+bytes. 023C3A introduces no new public warning field or callback; the reveal
+remains the recovery surface. Any later refresh uses the existing operation.
 
 Account refresh is also single-flight per generation. Concurrent refreshes in
 one generation coalesce. A new generation may start its own refresh while an
 old one is unresolved. An old completion cannot update the new account or
 clear its flight; only current-generation evidence may replace the snapshot.
+An already visible reveal is generation-owned UI state: losing authority clears
+it immediately, and a later session cannot make those raw bytes visible again.
 
 ## Consequences
 
