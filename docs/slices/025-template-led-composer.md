@@ -1,6 +1,7 @@
 # Slice 025 — Template-led Composer
 
-Status: RED contract freeze; credential-free.
+Status: GREEN production-author candidate; credential-free; independent Core
+and Product verification pending.
 
 ## Outcome
 

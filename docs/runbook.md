@@ -297,6 +297,8 @@ confirms replacement, and cancellation must preserve its exact local bytes.
 Focused GREEN verification starts with typecheck and the Slice 025 contract
 matrix recorded in `docs/evidence/slice-025-red-template-led-composer.md`, then
 the contracts/domain, API/client and Web coverage thresholds from AGENTS.md.
+The production-author result and its bounded Browser limitation are recorded in
+`docs/evidence/slice-025-green-template-led-composer.md`.
 Before Sites handoff run `npm run build` and `npm run test:sites`; the generic
 SPA fallback must serve `/templates` and detail routes while `/api` stays fail
 closed. These are local credential-free gates, not Open-Meteo/Coinbase, live

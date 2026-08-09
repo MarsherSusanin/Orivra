@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted for the Slice 025 RED contract freeze.
+Accepted and implemented by the Slice 025 production-author candidate.
+Independent Core and Product verification is pending.
 
 ## Context
 

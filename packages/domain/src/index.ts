@@ -15,6 +15,11 @@ export {
 } from "./canonical-url-attack-recording";
 export { deriveCanonicalUrlAttackDemoSummary } from "./canonical-url-attack-demo";
 export {
+  getWeb2JsonTemplateCatalog,
+  getWeb2JsonTemplateDetail,
+  resolveWeb2JsonTemplate,
+} from "./web2json-template-catalog";
+export {
   canonicalSerializeEvidenceReceipt,
   createEvidenceReceipt,
 } from "./evidence-receipt";

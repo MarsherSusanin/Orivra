@@ -18,6 +18,10 @@ import {
 } from "@proofline/contracts/wallet-auth";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@proofline/domain";
+import {
+  getWeb2JsonTemplateCatalog,
+  getWeb2JsonTemplateDetail,
+} from "@proofline/domain/templates";
 import { z } from "zod";
 
 type AuthContext =
@@ -196,6 +200,85 @@ function canonicalUrlAttackDemoUnavailable(): Response {
 
 function sha256Envelope(value: string | Uint8Array): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+interface Web2JsonTemplateRepresentation {
+  bytes: string;
+  etag: string;
+}
+
+interface Web2JsonTemplateRepresentations {
+  catalog: Web2JsonTemplateRepresentation;
+  details: ReadonlyMap<string, Web2JsonTemplateRepresentation>;
+}
+
+const TEMPLATE_REVALIDATION_HEADERS = {
+  "cache-control": "public, max-age=300, must-revalidate",
+} as const;
+
+function templateRepresentation(value: unknown): Web2JsonTemplateRepresentation {
+  const bytes = canonicalJson(value);
+  return Object.freeze({
+    bytes,
+    etag: `"${sha256Envelope(bytes)}"`,
+  });
+}
+
+function prepareWeb2JsonTemplateRepresentations(): Web2JsonTemplateRepresentations {
+  const catalog = getWeb2JsonTemplateCatalog();
+  const details = new Map<string, Web2JsonTemplateRepresentation>();
+  for (const template of catalog.templates) {
+    const detail = getWeb2JsonTemplateDetail(template.id);
+    if (!detail) throw new Error("Static template detail is missing");
+    details.set(template.detailPath, templateRepresentation(detail));
+  }
+  return Object.freeze({
+    catalog: templateRepresentation(catalog),
+    details,
+  });
+}
+
+function isWeb2JsonTemplatePath(pathname: string): boolean {
+  return pathname === "/v1/templates" || pathname.startsWith("/v1/templates/");
+}
+
+function web2JsonTemplateResponse(
+  request: Request,
+  url: URL,
+  representations: Web2JsonTemplateRepresentations,
+): Response {
+  if (url.search !== "") {
+    return privateError(
+      400,
+      "INVALID_TEMPLATE_QUERY",
+      "Template queries are not allowed",
+    );
+  }
+  if (request.method !== "GET") {
+    return privateError(405, "METHOD_NOT_ALLOWED", "Request rejected", {
+      allow: "GET",
+    });
+  }
+  const representation = url.pathname === "/v1/templates"
+    ? representations.catalog
+    : representations.details.get(url.pathname);
+  if (!representation) {
+    return privateError(404, "TEMPLATE_NOT_FOUND", "Template not found");
+  }
+  const headers = {
+    ...TEMPLATE_REVALIDATION_HEADERS,
+    etag: representation.etag,
+  };
+  if (request.headers.get("if-none-match") === representation.etag) {
+    return new Response(null, { status: 304, headers });
+  }
+  return new Response(representation.bytes, {
+    status: 200,
+    headers: {
+      ...headers,
+      "content-type": "application/json; charset=utf-8",
+    },
+  });
 }
 
 function deepFreezeCanonicalUrlAttackDemoValue<T>(value: T): T {
@@ -607,6 +690,7 @@ export function createProoflineApi(input: {
   } catch {
     // A hostile input getter is equivalent to any other invalid cache.
   }
+  const templateRepresentations = prepareWeb2JsonTemplateRepresentations();
   return {
     async fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
@@ -628,6 +712,14 @@ export function createProoflineApi(input: {
         publicWebOrigin,
       );
       if (preflight) return preflight;
+      if (isWeb2JsonTemplatePath(url.pathname)) {
+        return decorateCorsResponse(
+          request,
+          url,
+          web2JsonTemplateResponse(request, url, templateRepresentations),
+          publicWebOrigin,
+        );
+      }
 
       const response = await (async (): Promise<Response> => {
 

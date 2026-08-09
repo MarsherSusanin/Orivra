@@ -204,7 +204,7 @@ export function RunsIndex({
           </p>
           <div className="entry-state-actions">
             {!projectToken ? <button className="entry-secondary" type="button" onClick={onConnect}>Sign in with wallet</button> : null}
-            <a className="entry-text-link" href="/runs/new?template=eth-usd" onClick={onStart}>Open example setup <ArrowRight size={16} /></a>
+            <a className="entry-text-link" href="/templates">Browse templates <ArrowRight size={16} /></a>
           </div>
         </section>
       ) : null}

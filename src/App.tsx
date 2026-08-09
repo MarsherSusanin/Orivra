@@ -28,6 +28,10 @@ import { VerificationDialog } from "./components/VerificationDialog";
 import { WalletSignInDialog } from "./components/WalletSignInDialog";
 import { AccountSettings } from "./components/AccountSettings";
 import {
+  TemplateDetail,
+  TemplateGallery,
+} from "./components/TemplateCatalogSurface";
+import {
   CanonicalUrlAttackDemo,
   type CanonicalUrlAttackDemoRequestRef,
 } from "./components/CanonicalUrlAttackDemo";
@@ -1345,6 +1349,13 @@ export function App(props: AppProps = {}) {
 
   if (pathname === "/demo/canonical-url") {
     return <CanonicalUrlAttackDemo requestRef={canonicalDemoRequest} />;
+  }
+  if (pathname === "/templates") {
+    return <TemplateGallery />;
+  }
+  const templateDetailRoute = /^\/templates\/([^/]+)\/?$/.exec(pathname);
+  if (templateDetailRoute) {
+    return <TemplateDetail id={templateDetailRoute[1]} />;
   }
 
   return (

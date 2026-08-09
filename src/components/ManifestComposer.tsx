@@ -1,6 +1,7 @@
 import { ArrowLeft } from "@phosphor-icons/react";
-import type { ChangeEvent, MouseEvent } from "react";
+import type { ChangeEvent, KeyboardEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Web2JsonTemplateDetailV1 } from "@proofline/contracts/templates";
 import {
   CreateRunResultV1Schema,
   type ComposerStepV1,
@@ -9,7 +10,6 @@ import {
   type Web2JsonManifestV1,
 } from "../../packages/contracts/src";
 import {
-  createEthUsdComposerDraft,
   deriveTrustFromSourceUrl,
   finalizeWeb2JsonManifestDraft,
   importWeb2JsonManifestDraft,
@@ -22,6 +22,7 @@ import {
   consumeReplacementComposerDraft,
   createComposerDraftStore,
 } from "../services/composer-draft-store";
+import { createTemplateCatalogClient } from "../services/template-catalog-client";
 import type { RunSurfaceServices } from "../services/run-surface";
 import {
   COMPOSER_STEPS,
@@ -44,6 +45,24 @@ type PendingCreateIntent = {
   manifest: Web2JsonManifestV1;
   idempotencyKey: string;
 };
+
+type RequestedTemplate =
+  | { state: "absent" }
+  | { state: "invalid" }
+  | { state: "valid"; id: string; revision: number };
+
+type TemplateSelectionIdentity = {
+  id: string;
+  revision: number;
+};
+
+type TemplateSelectionState =
+  | { state: "idle" | "loading" | "unavailable" }
+  | {
+    state: "available";
+    detail: Web2JsonTemplateDetailV1;
+    pendingReplacement: boolean;
+  };
 
 const CLEAN_TRUST: TrustDirtyState = { host: false, path: false, query: false };
 const UNAVAILABLE_DRAFT_STORAGE = {
@@ -111,6 +130,52 @@ function stepHref(step: ComposerStepV1): string {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+function requestedTemplateFromLocation(): RequestedTemplate {
+  const url = new URL(globalThis.location.href);
+  const id = url.searchParams.get("template");
+  if (id === null) return { state: "absent" };
+  let revision = url.searchParams.get("revision");
+  if (revision === null && id === "eth-usd") {
+    revision = "1";
+  }
+  if (revision === null || !/^[1-9]\d*$/.test(revision)) {
+    return { state: "invalid" };
+  }
+  const parsedRevision = Number(revision);
+  if (!Number.isSafeInteger(parsedRevision)) return { state: "invalid" };
+  return { state: "valid", id, revision: parsedRevision };
+}
+
+function isSameTemplateSelection(
+  left: TemplateSelectionIdentity | null,
+  right: TemplateSelectionIdentity,
+): boolean {
+  return left?.id === right.id && left.revision === right.revision;
+}
+
+function canonicalizeComposerLocation(step: ComposerStepV1): void {
+  const url = new URL(globalThis.location.href);
+  const current = `${url.pathname}${url.search}${url.hash}`;
+  url.searchParams.set("step", step);
+  if (
+    url.searchParams.get("template") === "eth-usd" &&
+    !url.searchParams.has("revision")
+  ) {
+    url.searchParams.set("revision", "1");
+  }
+  const canonical = `${url.pathname}${url.search}${url.hash}`;
+  if (canonical !== current) {
+    globalThis.history.replaceState({}, "", canonical);
+  }
+}
+
+function removeRequestedTemplateFromLocation(): void {
+  const url = new URL(globalThis.location.href);
+  url.searchParams.delete("template");
+  url.searchParams.delete("revision");
+  globalThis.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 function randomUuid(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") {
     return globalThis.crypto.randomUUID();
@@ -151,15 +216,7 @@ function blankDraft(step: ComposerStepV1 = "source"): Web2JsonManifestDraftV1 {
 }
 
 function newDraft(step = stepFromLocation()): Web2JsonManifestDraftV1 {
-  const base = {
-    updatedAt: new Date().toISOString(),
-    createIdempotencyKey: `composer_${randomUuid()}`,
-  };
-  const template = new URLSearchParams(globalThis.location?.search ?? "").get("template");
-  const created = template === "eth-usd"
-    ? createEthUsdComposerDraft(base)
-    : blankDraft(step);
-  return { ...created, step };
+  return blankDraft(step);
 }
 
 function updateRow(
@@ -204,6 +261,10 @@ export function ManifestComposer({
     () => createComposerDraftStore(browserDraftStorage()),
     [],
   );
+  const templateClient = useMemo(
+    () => createTemplateCatalogClient({ fetch: globalThis.fetch }),
+    [],
+  );
   const [startup] = useState(() => {
     const sourceRunId = new URLSearchParams(globalThis.location?.search ?? "").get("from");
     const replacement = sourceRunId
@@ -217,6 +278,13 @@ export function ManifestComposer({
     const requestedStep = requested.state === "valid"
       ? requested.step
       : "source";
+    const requestedTemplate = requestedTemplateFromLocation();
+    const initialTemplateState: TemplateSelectionState =
+      requestedTemplate.state === "absent"
+        ? { state: "idle" }
+        : requestedTemplate.state === "invalid"
+          ? { state: "unavailable" }
+          : { state: "loading" };
     if (loaded.state === "restored") {
       const restoredStep = requested.state === "absent"
         ? loaded.draft.step
@@ -229,6 +297,7 @@ export function ManifestComposer({
         step: restoredStep,
         restoreState: "restored" as const,
         storageUnavailable: false,
+        templateState: initialTemplateState,
       };
     }
     if (loaded.state === "rejected") {
@@ -237,13 +306,17 @@ export function ManifestComposer({
         step: requestedStep,
         restoreState: "rejected" as const,
         storageUnavailable: false,
+        templateState: initialTemplateState,
       };
     }
     return {
-      draft: newDraft(requestedStep) as Web2JsonManifestDraftV1 | null,
+      draft: requestedTemplate.state === "absent"
+        ? newDraft(requestedStep)
+        : null,
       step: requestedStep,
       restoreState: "fresh" as const,
       storageUnavailable: loaded.state === "unavailable",
+      templateState: initialTemplateState,
     };
   });
   const [step, setStep] = useState<ComposerStepV1>(startup.step);
@@ -252,6 +325,10 @@ export function ManifestComposer({
   const [storageUnavailable, setStorageUnavailable] = useState(
     startup.storageUnavailable,
   );
+  const [templateState, setTemplateState] = useState<TemplateSelectionState>(
+    startup.templateState,
+  );
+  const [replacementDialogOpen, setReplacementDialogOpen] = useState(false);
   const [sourceError, setSourceError] = useState("");
   const [jqError, setJqError] = useState("");
   const [abiError, setAbiError] = useState("");
@@ -267,10 +344,16 @@ export function ManifestComposer({
   const startRecorded = useRef(false);
   const submissionPending = useRef(false);
   const pendingCreateIntent = useRef<PendingCreateIntent | null>(null);
+  const authoritativeDraft = useRef(startup.draft !== null);
+  const appliedTemplateSelection = useRef<TemplateSelectionIdentity | null>(null);
+  const templateRequestRevision = useRef(0);
+  const restoreReviewFocus = useRef(false);
   const sourceRef = useRef<HTMLInputElement>(null);
   const jqRef = useRef<HTMLTextAreaElement>(null);
   const abiRef = useRef<HTMLTextAreaElement>(null);
-  const hasTemplate = new URLSearchParams(globalThis.location?.search ?? "").get("template") === "eth-usd";
+  const reviewReplacementRef = useRef<HTMLButtonElement>(null);
+  const keepSavedDraftRef = useRef<HTMLButtonElement>(null);
+  const replaceSavedDraftRef = useRef<HTMLButtonElement>(null);
 
   const recordStartOnce = () => {
     if (startRecorded.current) return;
@@ -279,13 +362,11 @@ export function ManifestComposer({
   };
 
   useEffect(() => {
-    const requested = locationStep();
-    if (requested.state !== "valid" || requested.step !== startup.step) {
-      globalThis.history.replaceState({}, "", stepHref(startup.step));
-    }
+    canonicalizeComposerLocation(startup.step);
 
     const restoreStep = () => {
       const next = stepFromLocation();
+      canonicalizeComposerLocation(next);
       setStep(next);
       setDraft((current) => current && current.step !== next
         ? { ...current, step: next }
@@ -294,6 +375,78 @@ export function ManifestComposer({
     globalThis.addEventListener("popstate", restoreStep);
     return () => globalThis.removeEventListener("popstate", restoreStep);
   }, [startup.step]);
+
+  useEffect(() => {
+    const loadRequestedTemplate = () => {
+      const requestRevision = ++templateRequestRevision.current;
+      const requested = requestedTemplateFromLocation();
+      setReplacementDialogOpen(false);
+
+      if (requested.state === "absent") {
+        setTemplateState({ state: "idle" });
+        return;
+      }
+      if (requested.state === "invalid") {
+        setTemplateState({ state: "unavailable" });
+        if (!authoritativeDraft.current) setDraft(null);
+        return;
+      }
+
+      if (isSameTemplateSelection(appliedTemplateSelection.current, requested)) {
+        setTemplateState({ state: "idle" });
+        return;
+      }
+
+      setTemplateState({ state: "loading" });
+      void templateClient.getTemplate(requested).then(
+        (detail) => {
+          if (templateRequestRevision.current !== requestRevision) return;
+          if (authoritativeDraft.current) {
+            setTemplateState({
+              state: "available",
+              detail,
+              pendingReplacement: true,
+            });
+            return;
+          }
+          const next = {
+            ...importWeb2JsonManifestDraft({
+              manifest: detail.manifest,
+              updatedAt: new Date().toISOString(),
+              createIdempotencyKey: `composer_${randomUuid()}`,
+            }),
+            step: stepFromLocation(),
+          } satisfies Web2JsonManifestDraftV1;
+          const stored = draftStore.save(next);
+          authoritativeDraft.current = true;
+          appliedTemplateSelection.current = {
+            id: requested.id,
+            revision: requested.revision,
+          };
+          setStorageUnavailable(stored.state !== "stored");
+          setRestoreState("fresh");
+          setDraft(next);
+          setTemplateState({
+            state: "available",
+            detail,
+            pendingReplacement: false,
+          });
+        },
+        () => {
+          if (templateRequestRevision.current !== requestRevision) return;
+          setTemplateState({ state: "unavailable" });
+          if (!authoritativeDraft.current) setDraft(null);
+        },
+      );
+    };
+
+    loadRequestedTemplate();
+    globalThis.addEventListener("popstate", loadRequestedTemplate);
+    return () => {
+      ++templateRequestRevision.current;
+      globalThis.removeEventListener("popstate", loadRequestedTemplate);
+    };
+  }, [draftStore, templateClient]);
 
   useEffect(() => {
     if (!focusField) return;
@@ -306,12 +459,23 @@ export function ManifestComposer({
     setFocusField(null);
   }, [focusField, step]);
 
+  useEffect(() => {
+    if (replacementDialogOpen) {
+      keepSavedDraftRef.current?.focus();
+      return;
+    }
+    if (!restoreReviewFocus.current) return;
+    restoreReviewFocus.current = false;
+    reviewReplacementRef.current?.focus();
+  }, [replacementDialogOpen]);
+
   const persistDraft = (next: Web2JsonManifestDraftV1) => {
     const result = draftStore.save(next);
     setStorageUnavailable(result.state !== "stored");
   };
 
   const replaceDraft = (next: Web2JsonManifestDraftV1) => {
+    authoritativeDraft.current = true;
     setDraft(next);
     persistDraft(next);
   };
@@ -615,32 +779,115 @@ export function ManifestComposer({
   const startFresh = () => {
     draftStore.clear();
     const fresh = blankDraft("source");
+    authoritativeDraft.current = true;
+    appliedTemplateSelection.current = null;
     setRestoreState("fresh");
     setStep("source");
     globalThis.history.replaceState({}, "", stepHref("source"));
     replaceDraft(fresh);
   };
 
-  const discardAndStartTemplate = () => {
-    draftStore.clear();
+  const keepSavedDraft = () => {
+    restoreReviewFocus.current = true;
+    setReplacementDialogOpen(false);
+    setTemplateState({ state: "idle" });
+    removeRequestedTemplateFromLocation();
+  };
+
+  const closeReplacementReview = () => {
+    restoreReviewFocus.current = true;
+    setReplacementDialogOpen(false);
+  };
+
+  const openReplacementReview = () => {
+    if (submitting || submissionPending.current) return;
+    setReplacementDialogOpen(true);
+  };
+
+  const handleReplacementDialogKeyDown = (
+    event: KeyboardEvent<HTMLElement>,
+  ) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeReplacementReview();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const first = keepSavedDraftRef.current;
+    const last = replaceSavedDraftRef.current;
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  const replaceSavedDraft = () => {
+    if (
+      templateState.state !== "available" ||
+      submitting ||
+      submissionPending.current
+    ) return;
     const template = {
-      ...createEthUsdComposerDraft({
+      ...importWeb2JsonManifestDraft({
+        manifest: templateState.detail.manifest,
         updatedAt: new Date().toISOString(),
         createIdempotencyKey: `composer_${randomUuid()}`,
       }),
-      step: "source" as const,
+      step: stepFromLocation(),
+    } satisfies Web2JsonManifestDraftV1;
+    pendingCreateIntent.current = null;
+    submissionPending.current = false;
+    trustDirty.current = { ...CLEAN_TRUST };
+    trustValidationAttempted.current = false;
+    authoritativeDraft.current = true;
+    appliedTemplateSelection.current = {
+      id: templateState.detail.template.id,
+      revision: templateState.detail.template.revision,
     };
+    setSubmitting(false);
+    setSourceError("");
+    setJqError("");
+    setAbiError("");
+    setHostError("");
+    setPathError("");
+    setQueryKeyErrors({});
+    setImportError("");
+    setSubmitError("");
+    setFocusField(null);
+    setReplacementDialogOpen(false);
     setRestoreState("fresh");
-    setStep("source");
-    globalThis.history.replaceState({}, "", stepHref("source"));
+    setStep(template.step);
+    setTemplateState({
+      ...templateState,
+      pendingReplacement: false,
+    });
     replaceDraft(template);
   };
 
   const preview = draft ? finalizeWeb2JsonManifestDraft(draft) : null;
 
+  if (!draft && templateState.state === "unavailable") {
+    return (
+      <main className="entry-layout new-run-entry">
+        <section className="entry-state is-error">
+          <h1>Template unavailable</h1>
+          <p>The requested template could not be verified. No draft was created.</p>
+          <a className="entry-secondary" href="/templates">Browse templates</a>
+        </section>
+      </main>
+    );
+  }
+
   return (
+    <>
     <main
       className="entry-layout new-run-entry"
+      inert={replacementDialogOpen}
+      aria-hidden={replacementDialogOpen ? "true" : undefined}
       onChangeCapture={recordStartOnce}
       onClickCapture={recordStartOnce}
     >
@@ -659,6 +906,14 @@ export function ManifestComposer({
         onNavigate={navigateStep}
       />
 
+      {draft && templateState.state === "unavailable" ? (
+        <div className="composer-alert" role="alert">
+          <strong>Template unavailable</strong>
+          <span>The saved draft remains unchanged.</span>
+          <a className="entry-secondary" href="/templates">Browse templates</a>
+        </div>
+      ) : null}
+
       {restoreState === "rejected" ? (
         <section className="composer-panel composer-recovery" aria-label="Draft recovery">
           <div className="composer-alert" role="alert">
@@ -671,15 +926,33 @@ export function ManifestComposer({
         </section>
       ) : null}
 
-      {draft && restoreState === "restored" ? (
+      {draft && (
+        restoreState === "restored" ||
+        (templateState.state === "available" && templateState.pendingReplacement)
+      ) ? (
         <div className="composer-draft-notice" role="status">
           <div>
-            <strong>Draft restored.</strong>
-            <span>Your last local Composer step and edits are ready.</span>
+            {templateState.state === "available" && templateState.pendingReplacement ? (
+              <>
+                <strong>A saved draft was restored. Review the requested template before replacing it.</strong>
+                <span>Your saved fields remain authoritative until you confirm replacement.</span>
+              </>
+            ) : (
+              <>
+                <strong>Draft restored.</strong>
+                <span>Your last local Composer step and edits are ready.</span>
+              </>
+            )}
           </div>
-          {hasTemplate ? (
-            <button className="entry-secondary" type="button" onClick={discardAndStartTemplate}>
-              Discard restored draft and start ETH/USD
+          {templateState.state === "available" && templateState.pendingReplacement ? (
+            <button
+              className="entry-secondary"
+              type="button"
+              ref={reviewReplacementRef}
+              disabled={submitting}
+              onClick={openReplacementReview}
+            >
+              Review replacement
             </button>
           ) : null}
         </div>
@@ -689,6 +962,10 @@ export function ManifestComposer({
         <p className="composer-storage-note" role="status">
           Storage unavailable. Edits stay local to this tab and won&apos;t survive reload.
         </p>
+      ) : null}
+
+      {draft && submitError && step !== "submit" ? (
+        <p className="composer-alert" role="alert">{submitError}</p>
       ) : null}
 
       {draft && step === "source" ? (
@@ -799,5 +1076,38 @@ export function ManifestComposer({
         />
       ) : null}
     </main>
+    {replacementDialogOpen && templateState.state === "available" ? (
+      <div className="dialog-backdrop" role="presentation">
+        <section
+          className="dialog-card template-replacement-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="template-replacement-title"
+          onKeyDown={handleReplacementDialogKeyDown}
+        >
+          <h2 id="template-replacement-title">Replace saved draft?</h2>
+          <p>This replaces the local draft with {templateState.detail.template.title} and creates a fresh request identity.</p>
+          <div className="entry-state-actions">
+            <button
+              className="entry-secondary"
+              type="button"
+              ref={keepSavedDraftRef}
+              onClick={keepSavedDraft}
+            >
+              Keep saved draft
+            </button>
+            <button
+              className="entry-primary"
+              type="button"
+              ref={replaceSavedDraftRef}
+              onClick={replaceSavedDraft}
+            >
+              Replace with template
+            </button>
+          </div>
+        </section>
+      </div>
+    ) : null}
+    </>
   );
 }

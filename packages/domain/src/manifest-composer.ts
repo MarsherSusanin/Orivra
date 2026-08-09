@@ -7,6 +7,10 @@ import {
   type Web2JsonManifestV1,
 } from "@proofline/contracts";
 import { canonicalJson } from "./canonical-json";
+import {
+  getWeb2JsonTemplateDetail,
+  resolveWeb2JsonTemplate,
+} from "./web2json-template-catalog";
 
 export type ComposerSourceIssueCode =
   | "SOURCE_URL_INVALID"
@@ -309,32 +313,12 @@ export function importWeb2JsonManifestDraft(
 export function createEthUsdComposerDraft(
   input: CreateComposerDraftInput,
 ): Web2JsonManifestDraftV1 {
-  return draftFromManifest(
-    {
-      version: "1",
-      attestationType: "Web2Json",
-      network: "coston2",
-      request: {
-        method: "GET",
-        url: "https://api.coinbase.com/v2/prices/ETH-USD/spot",
-        query: {},
-        jq: ".data | {amount: .amount, currency: .currency}",
-        abiSignature:
-          '{"components":[{"internalType":"string","name":"amount","type":"string"},{"internalType":"string","name":"currency","type":"string"}],"name":"data","type":"tuple"}',
-      },
-      consumer: {
-        expectedScheme: "https",
-        expectedHost: "api.coinbase.com",
-        expectedPathPrefix: "/v2/prices/ETH-USD/spot",
-        expectedQuery: {},
-      },
-      submission: {
-        mode: "replay",
-        feeCapWei: "20000000000000000",
-      },
-    },
-    input,
-  );
+  const resolvedDetail = resolveWeb2JsonTemplate({
+    detail: getWeb2JsonTemplateDetail("eth-usd"),
+    expectedId: "eth-usd",
+    expectedRevision: 1,
+  });
+  return importWeb2JsonManifestDraft({ ...input, manifest: resolvedDetail.manifest });
 }
 
 export function validateComposerTransformFields(fields: {
