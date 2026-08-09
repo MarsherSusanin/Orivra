@@ -33,5 +33,6 @@ ADR фиксирует архитектурное решение, которое
 | [0028](0028-settings-one-time-token-issue.md) | Settings выдаёт CLI/Action token только из browser session и удерживает raw secret в one-time reveal |
 | [0029](0029-digitalocean-vds-deployment.md) | DigitalOcean VDS запускает same-origin Docker Compose stack за Caddy с credential-gated release |
 | [0030](0030-persisted-api-admission-quotas.md) | PostgreSQL-clock quota windows ограничивают wallet challenges, daily runs и active live runs без нарушения idempotent replay |
+| [0031](0031-canonical-url-attack-recording.md) | Два независимых persisted live bundle и детерминированный EVM transcript доказывают URL attack без synthetic fallback |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

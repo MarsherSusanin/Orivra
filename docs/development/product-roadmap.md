@@ -19,7 +19,8 @@ The product journey is delivered as independently frozen vertical slices:
 | 021B | Deterministic local product QA report | Complete; independently verified |
 | 022 | Network capability boundary | Complete; independently verified |
 | 023 | Wallet identity and self-service access | In progress through small focused waves |
-| 024 | Canonical URL attack demo | Planned, credential-free |
+| 024A | Honest canonical URL attack recording contracts and recorder | RED frozen; GREEN pending, credential-free |
+| 024B | Persisted/public canonical URL attack presentation | Planned, credential-free; must remain unavailable without real evidence |
 | 025 | Template-led Composer | Planned, credential-free |
 | 026 | Public product surface | Planned, credential-free |
 | 027A | Local Docker runtime, Compose/Caddy routing and private service networks | Planned, credential-free |
