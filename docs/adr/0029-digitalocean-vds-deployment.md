@@ -45,17 +45,30 @@ VDS image consumes only the static Web output and does not run the Sites worker.
 
 ### Immutable release and database start order
 
-028A is the local release composition. 028A builds and exports OCI archives and
-must verify every archive and its SHA-256 digest, then freezes a
-release/digest manifest. 028A runs without registry or GHCR credentials and with
-no registry access, external network or push.
+028A is the local release composition. It builds and exports OCI archives, then
+must verify them. The frozen release manifest stores per-image `archiveSha256`,
+`imageManifestDigest`, `platform` and `repository`/`reference` fields.
+`archiveSha256` covers the exact OCI archive bytes and is distinct from
+`imageManifestDigest`, which identifies the OCI image manifest or index. The
+frozen release manifest binds commit and tree; its canonical JSON has its own
+SHA-256 checksum, `frozenReleaseManifestSha256`. 028A runs without registry or
+GHCR credentials and with no registry access, external network or push.
 
 028B is credentialed and starts only after the unified matrix and two PASS
-reports. It performs a byte-preserving load/copy/push of the exact frozen OCI
-image archives to GHCR with no rebuild. It verifies the remote image digest
-equals the frozen release manifest before staging pull; digest mismatch aborts.
-The VDS GHCR pull credential is read-only. Publication evidence is included in
-the frozen release manifest.
+reports. It performs byte-preserving load/copy/push of exact OCI archive bytes.
+It verifies `archiveSha256` before load/copy/push publication; an
+`archiveSha256` mismatch aborts. It copies and pushes with no rebuild. The GHCR remote image digest only
+matches `imageManifestDigest`; never compare the remote digest with
+`archiveSha256`. Digest mismatch aborts; an `imageManifestDigest` mismatch
+aborts before staging pull.
+
+Publication/deployment evidence is a separate external record, immutable and
+append-only. Publication/deployment evidence contains
+`frozenReleaseManifestSha256`, commit, tree, remote repositories and remote
+digests, timestamp, operator and run ID. Publication evidence does not mutate frozen release manifest,
+does not mutate candidate tree and does not mutate image bytes. The VDS pulls only a verified remote digest
+that publication evidence binds through
+`frozenReleaseManifestSha256`; its GHCR pull credential is read-only.
 
 Staging and production select those immutable image digests (`@sha256`), never
 a mutable tag or a server-side rebuild. The release manifest also binds commit

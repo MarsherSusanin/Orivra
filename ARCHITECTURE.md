@@ -165,11 +165,14 @@ third-party SDK or user analytics dashboard.
 - Sites остаётся compatibility-only package и routing test. Он не является
   выбранным production host.
 
-028A локально builds, exports и verifies OCI image archives и их SHA-256 digest
-manifest без registry credentials или external network. После candidate freeze
-028B byte-preserving публикует exact frozen OCI bytes в GHCR без rebuild и
-сверяет remote digest с manifest до staging pull; mismatch aborts. Production
-composition должна выбирать этот immutable GHCR image digest, запускать one-shot
+028A локально exports и verifies OCI archives. Frozen manifest раздельно хранит
+`archiveSha256` архивных bytes и `imageManifestDigest` registry identity, а его
+canonical checksum связывает commit/tree. После candidate freeze 028B
+публикует exact frozen OCI bytes в GHCR без rebuild, проверяет remote digest
+только против `imageManifestDigest` и создаёт отдельное immutable append-only
+publication evidence. Оно не изменяет manifest/tree/images и является
+единственным authority для verified digest pull на VDS. Production composition
+должна выбирать этот immutable GHCR image digest, запускать one-shot
 checksummed migration под PostgreSQL advisory lock до старта API и
 worker и проверять schema version. PostgreSQL использует persistent named
 volume. `/healthz` отделяет process liveness от `/readyz`, который проверяет

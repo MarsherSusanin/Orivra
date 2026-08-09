@@ -40,17 +40,30 @@ DigitalOcean Cloud Firewall и host firewall разрешают public inbound �
 Web, API, worker, migration или backup containers. PostgreSQL хранит данные в
 persistent named volume, отдельном для production и temporary staging.
 
-028A — local release composition. 028A builds and exports OCI archives and must
-verify every archive and its SHA-256 digest, then freezes a
-release/digest manifest. 028A runs without registry or GHCR credentials and
-with no registry access, external network or push.
+028A — local release composition. It builds and exports OCI archives, then must
+verify them. The frozen release manifest stores per-image `archiveSha256`,
+`imageManifestDigest`, `platform` and `repository`/`reference` fields.
+`archiveSha256` covers exact OCI archive bytes and is distinct from
+`imageManifestDigest`, which identifies the OCI image manifest or index. The
+frozen release manifest binds commit and tree; its canonical JSON has its own
+SHA-256 checksum, `frozenReleaseManifestSha256`. 028A runs without registry or
+GHCR credentials and with no registry access, external network or push.
 
 028B is credentialed and starts only after the unified matrix and two PASS
-reports. It performs a byte-preserving load/copy/push of the exact frozen OCI
-image archives to GHCR with no rebuild. The remote image digest must equal the
-frozen release manifest before staging pull; digest mismatch aborts. The VDS
-GHCR pull credential is read-only. Publication evidence is included in the
-frozen release manifest.
+reports. It performs byte-preserving load/copy/push of exact OCI archive bytes.
+It verifies `archiveSha256` before load/copy/push publication; an
+`archiveSha256` mismatch aborts. It copies and pushes with no rebuild. The GHCR remote image digest only
+matches `imageManifestDigest`; never compare the remote digest with
+`archiveSha256`. Digest mismatch aborts; an `imageManifestDigest` mismatch
+aborts before staging pull.
+
+Publication/deployment evidence is a separate external record, immutable and
+append-only. Publication/deployment evidence contains
+`frozenReleaseManifestSha256`, commit, tree, remote repositories and remote
+digests, timestamp, operator and run ID. Publication evidence does not mutate frozen release manifest,
+does not mutate candidate tree and does not mutate image bytes. The VDS pulls only a verified remote digest
+that publication evidence binds through
+`frozenReleaseManifestSha256`; its GHCR pull credential is read-only.
 
 Release composition получает Web/API/worker по immutable image digest
 (`@sha256`). One-shot migration job из exact release image проверяет
@@ -362,8 +375,9 @@ Upstream Coston2 outage блокирует release. Override возможен т
 
 - Target provider выбран в ADR 0029, но VDS promotion/rollback automation ещё
   не реализована и hosting is not currently deployed.
-- Staging и production выбирают один exact immutable GHCR digest из frozen
-  release manifest; server-side
+- Staging и production выбирают verified remote digest из отдельного
+  publication evidence, связанного с frozen release manifest checksum;
+  server-side
   rebuild запрещён. Application rollback возвращает предыдущий
   schema-compatible digest из release manifest.
 - Не откатывайте journal или migration destructive SQL вручную. При ошибке

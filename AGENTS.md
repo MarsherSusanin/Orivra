@@ -49,9 +49,10 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
 - Sites is a compatibility package, not the selected production host. Keep its
   accepted artifacts and tests until a separate deprecation slice, and add the
   Docker/Caddy routing gate rather than weakening Sites routing contracts.
-- 028A locally builds and exports verified OCI image archives and freezes their
-  SHA-256 values in a release manifest without registry credentials, registry
-  access, external network or push. Migration is a one-shot
+- 028A locally builds and exports verified OCI archives. Its frozen manifest
+  stores distinct per-image `archiveSha256`, `imageManifestDigest`, platform and
+  repository/reference fields without registry credentials, registry access,
+  external network or push. Migration is a one-shot
   checksummed job under a PostgreSQL advisory lock before app startup;
   `/healthz`, `/readyz`, schema verification, worker heartbeat and the
   persistent PostgreSQL volume remain separate acceptance evidence.
@@ -67,11 +68,16 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
   with no credentials and no external network; all 022–029A remains
   credential-free.
 - 028B is credentialed and starts only after the unified matrix and two PASS
-  reports. It performs a byte-preserving load/copy/push of the exact frozen OCI
-  archives to GHCR with no rebuild. The remote image digest must equal the
-  frozen release manifest before staging pull; digest mismatch aborts. The VDS
-  GHCR pull credential is read-only. Publication evidence: release manifest
-  entry. 029B is the credentialed production promotion and canary, only
+  reports. It verifies exact frozen OCI archive bytes against `archiveSha256`
+  before publication, then performs byte-preserving load/copy/push to GHCR with
+  no rebuild. The remote image digest matches only
+  `imageManifestDigest`; never compare the remote digest with `archiveSha256`.
+  An archive or manifest-digest mismatch aborts before staging pull.
+- Publication/deployment evidence is separate, immutable and append-only. It
+  contains `frozenReleaseManifestSha256`; it does not mutate frozen release manifest,
+  candidate tree or image bytes. The VDS pulls only a verified remote digest
+  bound by that publication evidence, using a read-only GHCR pull
+  credential. 029B is the credentialed production promotion and canary, only
   after 028B.
 
 ## Visual contract

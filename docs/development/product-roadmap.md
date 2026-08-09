@@ -67,10 +67,14 @@ Credential-free delivery covers 022–029A:
 - **027C** adds off-host WAL archiving plus base backup for PITR and proves a
   credential-free MinIO restore drill. A Droplet backup is secondary host
   recovery, not database/PITR evidence.
-- **028A local release truth** builds and exports OCI archives and must verify
-  every archive and its SHA-256 digest, then freezes a release/digest
-  manifest. 028A runs without registry or GHCR credentials and with no registry
-  access, external network or push.
+- **028A local release truth** builds and exports OCI archives, then must verify them.
+  The frozen release manifest stores per-image `archiveSha256`,
+  `imageManifestDigest`, `platform` and `repository`/`reference` fields.
+  `archiveSha256` covers exact OCI archive bytes and is distinct from
+  `imageManifestDigest`, which identifies the OCI image manifest or index. The
+  frozen release manifest binds commit and tree; its canonical JSON has its own
+  SHA-256 checksum, `frozenReleaseManifestSha256`. 028A runs without registry
+  or GHCR credentials and with no registry access, external network or push.
 
 **029A is the credential-free local MLP validation and freeze.** Product gates
 and user testing use recorded fixtures through local Docker Compose. 029A runs
@@ -85,13 +89,22 @@ Credentials for DNS, SSH and Spaces are issued strictly only after 022–029A;
 the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
 
 - **028B credential gate** is credentialed and starts only after the unified
-  matrix and two PASS reports. It performs a byte-preserving load/copy/push of
-  the exact frozen OCI image archives to GHCR with no rebuild. It verifies the
-  remote image digest equals the frozen release manifest before staging pull;
-  digest mismatch aborts. The VDS GHCR pull credential is read-only.
-  Publication evidence is included in the frozen release manifest. It may then
-  provision isolated staging, run migrations, hosted browser smoke, restore
-  drill and the persisted live Coston2 gate.
+  matrix and two PASS reports. It performs byte-preserving load/copy/push of
+  exact OCI archive bytes. It verifies `archiveSha256` before load/copy/push
+  publication; an `archiveSha256` mismatch aborts. It copies and pushes with no rebuild.
+  The GHCR remote image digest only matches `imageManifestDigest`;
+  never compare the remote digest with `archiveSha256`. An
+  `imageManifestDigest` mismatch aborts before staging pull. Digest mismatch aborts.
+
+  Publication/deployment evidence is a separate external record, immutable and
+  append-only. Publication/deployment evidence contains
+  `frozenReleaseManifestSha256`, commit, tree, remote repositories and remote
+  digests, timestamp, operator and run ID. Publication evidence does not mutate frozen release manifest,
+  does not mutate candidate tree and does not mutate image bytes. The VDS pulls only a verified remote digest
+  that publication evidence binds through
+  `frozenReleaseManifestSha256`; its GHCR pull credential is read-only. It may
+  then provision isolated staging, run migrations, hosted browser smoke,
+  restore drill and the persisted live Coston2 gate.
 - **029B is the credentialed production promotion and canary.** 029B starts
   only after 028B has published and staged the exact frozen candidate. It
   records schema/backup/readiness evidence and runs the seven-day canary. A code
