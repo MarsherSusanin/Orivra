@@ -72,7 +72,7 @@ describe("disabled primary navigation", () => {
   it("keeps every future destination focusable and explains why it is unavailable", () => {
     render(<Sidebar />);
 
-    for (const label of ["Requests", "Consumers", "CI", "Settings"]) {
+    for (const label of ["Requests", "Consumers", "CI"]) {
       const item = screen.getByRole("button", { name: label });
       const descriptionId = item.getAttribute("aria-describedby");
       expect(item).toHaveAttribute("aria-disabled", "true");
@@ -83,6 +83,7 @@ describe("disabled primary navigation", () => {
       );
       expect(item).toHaveAccessibleDescription(`${label} is not available in this build`);
     }
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
   });
 
   it("is keyboard and touch discoverable without navigating", async () => {

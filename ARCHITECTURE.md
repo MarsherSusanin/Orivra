@@ -118,6 +118,12 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
   отдельное digest evidence idempotency intent; повтор никогда не возвращает
   секрет. CLI, Action и legacy credentials сохраняют обычный project API, но не
   получают account-management authority.
+  Web Settings не принимает bearer как component prop: account refresh и
+  issuance проходят через accepted session controller, который удерживает
+  bearer закрытым. Raw issued token существует только в one-time component
+  reveal до copy/explicit close и не попадает в storage, URL/history,
+  analytics, logs, DOM attributes или serialized errors. Explicit embed,
+  CLI/Action/legacy и share authority не открывают Settings management.
 
 ### Keys
 

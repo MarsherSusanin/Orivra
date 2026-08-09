@@ -69,12 +69,13 @@ describe("run discovery states", () => {
       "href",
       "/runs/new?template=eth-usd",
     );
-    for (const label of ["Requests", "Consumers", "CI", "Settings"]) {
+    for (const label of ["Requests", "Consumers", "CI"]) {
       const item = screen.getByRole("button", { name: label });
       expect(item).toHaveAttribute("aria-disabled", "true");
       expect(item).not.toBeDisabled();
       expect(item).not.toHaveAttribute("href");
     }
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
   });
 
   it("keeps an unavailable list actionable without leaking its credential", async () => {

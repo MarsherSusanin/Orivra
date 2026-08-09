@@ -43,8 +43,9 @@ blockchain-операций.
   EIP-4361 challenge создаёт стабильный default project и возвращает случайный
   12-часовой browser project token, сохраняя в PostgreSQL только keyed digest.
   Browser-сессия может просматривать account, однократно выпускать и отзывать
-  1–90-дневные CLI/Action tokens и завершать текущую сессию. Browser session UI
-  остаётся следующим срезом 023C.
+  1–90-дневные CLI/Action tokens и завершать текущую сессию. Runs, deep routes
+  и Composer уже используют общий wallet sign-in; следующий Web-срез 023C3A
+  подключает `/settings` account view и безопасный one-time token reveal.
 - Реализованы, но не размещены Web, PostgreSQL API, restart-safe worker, CLI,
   GitHub Action package и Sites package.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
