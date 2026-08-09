@@ -304,6 +304,29 @@ SPA fallback must serve `/templates` and detail routes while `/api` stays fail
 closed. These are local credential-free gates, not Open-Meteo/Coinbase, live
 Coston2, Docker, hosted or deployed evidence.
 
+### Public landing (Slice 026)
+
+Exact `/` is the only landing path. It normalizes away root query/fragment and
+performs only two independent same-origin anonymous reads:
+
+```text
+GET /api/v1/templates
+GET /api/v1/demo/canonical-url
+```
+
+Do not configure a wallet token, template source, recording download or
+provider/RPC/compiler endpoint for landing. Missing or invalid data is expected
+to render the corresponding neutral unavailable region. With
+`PROOFLINE_WEB_ORIGIN` configured, verify `Vary: Origin` on catalog and detail
+200/304 responses for absent, exact and hostile Origin; ACAO remains exact-only.
+
+The frozen RED commands and first-run counts are recorded in
+`docs/evidence/slice-026-red-public-product-surface.md`. GREEN additionally
+requires affected API/Web coverage, build/Sites artifacts and built-browser
+desktop/mobile, keyboard, axe, console/network and reload/back-forward evidence.
+This is credential-free local evidence; Caddy and deployment remain later
+slices.
+
 ### Локальный Product QA report
 
 Web хранит не более 500 валидированных `ProductEventV1` под versioned key

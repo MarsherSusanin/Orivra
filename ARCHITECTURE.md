@@ -213,6 +213,22 @@ Corrupt storage becomes `recovered`, denied storage becomes `unavailable`, and
 analytics failure cannot block the main journey. There is no network transport,
 third-party SDK or user analytics dashboard.
 
+## Public landing boundary
+
+[ADR 0034](docs/adr/0034-public-landing-and-onboarding-boundary.md) reserves
+exact `/` for a credential-free product explanation. The Slice 026 RED
+contract permits exactly two independent same-origin anonymous reads through
+the existing static template catalog and persisted canonical URL demo clients.
+Root does not mount wallet/session authority, load template detail or recording
+bytes, fetch a provider/source host, or emit a new product event. Search/hash
+input is discarded before reads or storage, and unknown paths fail honestly
+instead of falling through to Runs.
+
+When exact-origin Web CORS is configured, cacheable template catalog/detail
+200 and 304 variants must always merge `Vary: Origin`, including absent and
+hostile Origin requests; only the exact configured origin receives ACAO. This
+changes no public schema, persistence, worker or source-fetch boundary.
+
 ## Release architecture and current operational status
 
 - PR contract: caller-supplied canonical replay bundle, без network и secrets.

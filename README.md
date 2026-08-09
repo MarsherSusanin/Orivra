@@ -43,6 +43,11 @@ blockchain-операций.
   Open-Meteo Berlin current temperature и совместимый `eth-usd` выбираются
   через anonymous same-origin API, а manifest повторно canonicalize/hash
   проверяется до Composer без browser/API source-host fetch.
+- Slice 026 RED contract фиксирует `/` как token-free public landing: он
+  независимо читает только static catalog summary и bounded persisted demo
+  summary, не восстанавливает wallet, не подменяет недоступные данные fixture и
+  не добавляет analytics event. Production landing implementation ещё не
+  выполнен.
 - API реализует self-service EOA wallet auth: одноразовый пятиминутный
   EIP-4361 challenge создаёт стабильный default project и возвращает случайный
   12-часовой browser project token, сохраняя в PostgreSQL только keyed digest.
@@ -69,8 +74,8 @@ blockchain-операций.
 - В репозитории пока нет `.github/workflows`, production deployment или
   настроенного merge queue. Поэтому deployed live Coston2 PASS ещё не получен и
   не заменяется симулятором.
-- Последний независимо проверенный product candidate: commit `b91b4da`, tree
-  `13384b721308a1e1a04319c0391679741fb01760`.
+- Последний независимо проверенный product candidate: commit `71ac541`, tree
+  `176c6248c8992bbce1a0a31c3db880d7e506d8ed`.
 
 ## Быстрый старт
 
