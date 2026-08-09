@@ -7,6 +7,7 @@ import {
 } from "@proofline/contracts";
 import {
   WalletAccessError,
+  isKnownWalletAccessHttpErrorCode,
   type WalletAccessErrorKind,
   type WalletAccessServices,
 } from "./wallet-access-client";
@@ -14,7 +15,6 @@ import {
 export const PROJECT_TOKEN_SESSION_KEY = "proofline:project-token" as const;
 
 const PROJECT_TOKEN = /^project_[a-f0-9]{64}$/;
-const SAFE_ERROR_CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/;
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -83,10 +83,37 @@ function normalizedFailure(cause: unknown): WalletAccessError {
       typeof status === "number" &&
       Number.isInteger(status) &&
       typeof code === "string" &&
-      SAFE_ERROR_CODE.test(code) &&
       typeof retryable === "boolean"
     ) {
-      return new WalletAccessError({ kind, status, code, retryable });
+      const valid =
+        (kind === "http" &&
+          status >= 400 &&
+          status <= 599 &&
+          (isKnownWalletAccessHttpErrorCode(status, code) ||
+            code === `HTTP_${status}`)) ||
+        (kind === "transport" &&
+          status === 0 &&
+          code === "TRANSPORT_UNAVAILABLE" &&
+          retryable) ||
+        (kind === "contract" &&
+          status === 502 &&
+          code === "AUTH_RESPONSE_INVALID" &&
+          !retryable) ||
+        (kind === "input" &&
+          status === 0 &&
+          code === "AUTH_INPUT_INVALID" &&
+          !retryable);
+      if (valid) {
+        return new WalletAccessError({
+          kind,
+          status,
+          code,
+          retryable:
+            kind === "http"
+              ? status >= 500 || status === 408 || status === 429
+              : retryable,
+        });
+      }
     }
   }
   return new WalletAccessError({
@@ -337,16 +364,19 @@ export function createWalletSessionController(input: {
     },
 
     forgetBrowser() {
+      if (closed) return;
       invalidateFlights();
       clearAuthority();
     },
 
     cancelPending() {
+      if (closed) return;
       invalidateFlights();
       state = authenticated ?? { status: "anonymous" };
     },
 
     close() {
+      if (closed) return;
       invalidateFlights();
       closed = true;
       projectToken = null;

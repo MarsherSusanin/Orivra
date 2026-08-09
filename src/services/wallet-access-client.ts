@@ -23,7 +23,30 @@ import type { z } from "zod";
 const PROJECT_TOKEN = /^project_[a-f0-9]{64}$/;
 const ACCOUNT_TOKEN_ID = /^token_[a-f0-9]{32}$/;
 const TOKEN_ISSUANCE_KEY = /^token_issue_[a-f0-9]{64}$/;
-const SAFE_ERROR_CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/;
+const HTTP_ERROR_CODES = new Map<number, ReadonlySet<string>>([
+  [
+    400,
+    new Set([
+      "INVALID_JSON",
+      "INVALID_REQUEST_BODY",
+      "IDEMPOTENCY_KEY_REQUIRED",
+      "INVALID_IDEMPOTENCY_KEY",
+    ]),
+  ],
+  [401, new Set(["UNAUTHORIZED", "WALLET_SIGNATURE_INVALID"])],
+  [403, new Set(["AUTH_ORIGIN_FORBIDDEN", "ACCOUNT_SESSION_REQUIRED"])],
+  [404, new Set(["ACCOUNT_NOT_FOUND", "ACCOUNT_TOKEN_NOT_FOUND"])],
+  [
+    409,
+    new Set([
+      "CHALLENGE_UNAVAILABLE",
+      "ACCOUNT_TOKEN_SECRET_ALREADY_ISSUED",
+      "IDEMPOTENCY_CONFLICT",
+    ]),
+  ],
+  [413, new Set(["REQUEST_BODY_TOO_LARGE"])],
+  [500, new Set(["REQUEST_FAILED"])],
+]);
 
 export type WalletAccessErrorKind =
   | "http"
@@ -137,19 +160,34 @@ function requireSchema<T>(schema: z.ZodType<T>, value: unknown): T {
   return result.data;
 }
 
+export function isKnownWalletAccessHttpErrorCode(
+  status: number,
+  code: unknown,
+): code is string {
+  return typeof code === "string" && HTTP_ERROR_CODES.get(status)?.has(code) === true;
+}
+
+function allowlistedHttpErrorCode(value: unknown, status: number): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const envelope = value as Record<string, unknown>;
+  if (
+    !envelope.error ||
+    typeof envelope.error !== "object" ||
+    Array.isArray(envelope.error)
+  ) {
+    return null;
+  }
+  const error = envelope.error as Record<string, unknown>;
+  return isKnownWalletAccessHttpErrorCode(status, error.code)
+    ? error.code
+    : null;
+}
+
 async function httpError(response: Response): Promise<WalletAccessError> {
   let code = `HTTP_${response.status}`;
   try {
     const value: unknown = await response.json();
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      const error = (value as Record<string, unknown>).error;
-      if (error && typeof error === "object" && !Array.isArray(error)) {
-        const candidate = (error as Record<string, unknown>).code;
-        if (typeof candidate === "string" && SAFE_ERROR_CODE.test(candidate)) {
-          code = candidate;
-        }
-      }
-    }
+    code = allowlistedHttpErrorCode(value, response.status) ?? code;
   } catch {
     // The public error uses only status-derived evidence when JSON is invalid.
   }
