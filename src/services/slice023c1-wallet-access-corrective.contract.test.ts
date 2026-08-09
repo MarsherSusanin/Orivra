@@ -13,6 +13,8 @@ const TOKEN_ID = `token_${"b".repeat(32)}`;
 const ADDRESS = "0x1111111111111111111111111111111111111111";
 const CHALLENGE_ID = `challenge_${"c".repeat(64)}`;
 const SIGNATURE = `0x${"11".repeat(65)}`;
+const ATTACKER_MESSAGE = `attacker-message-${PROJECT_TOKEN}`;
+const ATTACKER_STACK = `attacker-stack-${PROJECT_TOKEN}`;
 
 function json(body: unknown, status: number, statusText = "") {
   return new Response(JSON.stringify(body), {
@@ -29,13 +31,17 @@ function privateError(status: number, code: string, extra: Record<string, unknow
   }, status);
 }
 
-async function accountFailure(response: Response) {
+async function accountFailure(response: Response): Promise<WalletAccessError> {
   const client = createWalletAccessClient({
     baseUrl: API_BASE_URL,
     fetch: vi.fn(async () => response),
   });
-  return client.getAccount({ projectToken: PROJECT_TOKEN })
-    .catch((cause: unknown) => cause as WalletAccessError);
+  try {
+    await client.getAccount({ projectToken: PROJECT_TOKEN });
+    throw new Error("Expected the wallet access request to fail");
+  } catch (cause) {
+    return cause as WalletAccessError;
+  }
 }
 
 afterEach(() => {
@@ -129,9 +135,6 @@ describe("Slice 023C1 corrective wallet access boundary", () => {
     ["secret-shaped", 500, { version: "1", error: { code: `PROJECT_${"A".repeat(64)}`, message: "private" } }],
     ["lowercase", 500, { version: "1", error: { code: "request_failed", message: "private" } }],
     ["status-mismatch", 500, { version: "1", error: { code: "UNAUTHORIZED", message: "private" } }],
-    ["nested-extra", 500, { version: "1", error: { code: "REQUEST_FAILED", message: "private", secret: PROJECT_TOKEN } }],
-    ["top-level-extra", 500, { version: "1", error: { code: "REQUEST_FAILED", message: "private" }, secret: PROJECT_TOKEN }],
-    ["missing-version", 500, { error: { code: "REQUEST_FAILED", message: "private" } }],
     ["array-error", 500, { version: "1", error: ["REQUEST_FAILED"] }],
     ["array-body", 500, ["REQUEST_FAILED"]],
     ["null-body", 500, null],
@@ -154,6 +157,54 @@ describe("Slice 023C1 corrective wallet access boundary", () => {
       if (attackerBytes.includes("UNKNOWN_SERVER_CODE")) {
         expect(publicFailure).not.toContain("UNKNOWN_SERVER_CODE");
       }
+    },
+  );
+
+  it.each([
+    ["nested extras", {
+      version: "1",
+      error: {
+        code: "REQUEST_FAILED",
+        message: ATTACKER_MESSAGE,
+        stack: ATTACKER_STACK,
+        secret: PROJECT_TOKEN,
+      },
+    }],
+    ["root extras", {
+      version: "1",
+      error: { code: "REQUEST_FAILED", message: ATTACKER_MESSAGE },
+      stack: ATTACKER_STACK,
+      secret: PROJECT_TOKEN,
+    }],
+    ["missing version", {
+      error: {
+        code: "REQUEST_FAILED",
+        message: ATTACKER_MESSAGE,
+        stack: ATTACKER_STACK,
+      },
+    }],
+  ] as const)(
+    "preserves a safe allowlisted code while discarding %s",
+    async (_name, body) => {
+      const failure = await accountFailure(json(body, 500));
+      expect(failure).toMatchObject({
+        name: "WalletAccessError",
+        kind: "http",
+        status: 500,
+        code: "REQUEST_FAILED",
+        retryable: true,
+      });
+      expect(String(failure)).toBe("WalletAccessError: Proofline request failed.");
+      const exposed = [
+        failure.message,
+        failure.code,
+        failure.stack ?? "",
+        JSON.stringify(failure),
+      ].join("\n");
+      expect(exposed).not.toContain(ATTACKER_MESSAGE);
+      expect(exposed).not.toContain(ATTACKER_STACK);
+      expect(exposed).not.toContain(PROJECT_TOKEN);
+      expect((failure as unknown as Record<string, unknown>).secret).toBeUndefined();
     },
   );
 

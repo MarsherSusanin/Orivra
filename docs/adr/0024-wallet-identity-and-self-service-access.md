@@ -138,12 +138,14 @@ only this status-compatible server allowlist:
 - `413`: `REQUEST_BODY_TOO_LARGE`;
 - `500`: `REQUEST_FAILED`.
 
-The response must be the strict V1 error envelope with no extra top-level or
-error fields. Its message is never copied into the client error. Unknown,
-overlong, lowercase, secret-shaped, status-incompatible or structurally
-poisoned codes become exactly `HTTP_<status>`. Future quota codes are not
-pre-authorized here; 023D must extend this allowlist through its own RED and ADR
-decision.
+The error envelope is untrusted. The client reads only `error.code`, preserves
+it only when it is in the status-compatible allowlist, and ignores every other
+root or nested field. Message, stack, secret and extra fields never become
+client error properties or serialized output; their presence does not
+invalidate an otherwise safe code. Unknown, overlong, lowercase,
+secret-shaped or status-incompatible codes become exactly `HTTP_<status>`.
+Future quota codes are not pre-authorized here; 023D must extend this allowlist
+through its own RED and ADR decision.
 
 A pure Web session controller owns the browser token lifecycle independently of
 React and EIP-1193. It accepts only `project_<64 lowercase hex>` in the exact

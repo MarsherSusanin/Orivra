@@ -19,9 +19,11 @@ confirmed trust-boundary decisions:
 
 1. `close()` remains terminal after every later existing public action, with no
    storage or service effect.
-2. HTTP codes come from the explicit status-compatible ADR allowlist and a
-   strict V1 envelope. Unknown, overlong, lowercase, secret-shaped, mismatched
-   and extra-field poison falls back to `HTTP_<status>` without attacker bytes.
+2. HTTP codes come from the explicit status-compatible ADR allowlist. The
+   untrusted envelope contributes only `error.code`; every other field is
+   discarded. Unknown, overlong, lowercase, secret-shaped and mismatched codes
+   fall back to `HTTP_<status>` without attacker bytes, while extras do not
+   invalidate an otherwise safe code.
 3. Decision-useful client/controller branches cover base and request input,
    response parsing, malformed HTTP, retry evidence, storage denial,
    invalid-authority recovery, stale success/failure, single-flight,
@@ -43,13 +45,15 @@ Observed on the rejected production candidate:
 
 ```text
 Test Files  2 failed (2)
-Tests       8 failed | 44 passed (52)
+Tests       5 failed | 47 passed (52)
 ```
 
-Seven failures are the bounded error-code poison table. One failure proves that
+Four failures are the bounded error-code poison table. One failure proves that
 post-close `forgetBrowser` still removes storage and `cancelPending` replaces
-the closed state. All other new cases are green against the existing candidate;
-there are no incidental failures.
+the closed state. Safe `REQUEST_FAILED` survives untrusted extra fields while
+their message, stack and secrets remain absent from the thrown error. All other
+new cases are green against the existing candidate; there are no incidental
+failures.
 
 ## Coverage evidence
 
@@ -67,7 +71,7 @@ green. Running the original tests plus every currently green corrective case
 
 ```text
 Test Files  4 passed (4)
-Tests       54 passed | 13 intentionally filtered cases
+Tests       57 passed | 10 intentionally filtered cases
 All new modules       100% lines / 93.66% branches
 ```
 

@@ -39,9 +39,11 @@ closed. `WalletAccessError` exposes only stable `kind`, `status`, `code` and
 tokens, transport messages or stacks.
 
 Server error codes use the exact status-compatible allowlist in ADR 0024, not a
-regular expression. A strict V1 envelope may preserve one enumerated code; all
-unknown, mismatched or poisoned shapes fall back to `HTTP_<status>`. The
-controller may therefore branch only on bounded client-owned evidence.
+regular expression. The untrusted envelope contributes only a safe
+`error.code`; message, stack, secret and extra fields are discarded rather than
+invalidating that code. Unknown or mismatched codes fall back to
+`HTTP_<status>`. The controller may therefore branch only on bounded
+client-owned evidence.
 
 ## Session controller contract
 
