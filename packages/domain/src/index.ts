@@ -7,6 +7,12 @@ export {
   verifyProofBundleChecksum,
 } from "./proof-bundle";
 export {
+  canonicalSerializeCanonicalUrlAttackRecording,
+  createCanonicalUrlAttackRecording,
+  replayCanonicalUrlAttackRecording,
+  validateCanonicalUrlAttackRecording,
+} from "./canonical-url-attack-recording";
+export {
   canonicalSerializeEvidenceReceipt,
   createEvidenceReceipt,
 } from "./evidence-receipt";

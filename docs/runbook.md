@@ -222,7 +222,17 @@ npm run build --workspace packages/cli
 node packages/cli/dist/index.js --help
 ```
 
-Production API commands требуют `PROOFLINE_API_URL` и `PROOFLINE_PROJECT_TOKEN`. Wallet signing использует локальный `PROOFLINE_COSTON2_PRIVATE_KEY`; private key не отправляется API. Доступные команды: `run create`, `run watch`, `run verify`, `bundle export`, `replay`.
+Production API commands требуют `PROOFLINE_API_URL` и `PROOFLINE_PROJECT_TOKEN`. Wallet signing использует локальный `PROOFLINE_COSTON2_PRIVATE_KEY`; private key не отправляется API. Доступные команды: `run create`, `run watch`, `run verify`, `bundle export`, `replay`, `demo record`.
+
+Canonical URL attack recording не имеет default fixture или replay fallback:
+
+```bash
+proofline demo record --attack-run <persisted-live-run-id> \
+  --control-run <persisted-live-run-id> --commit <40-hex-commit> \
+  --tree <40-hex-tree> --out <recording-path>
+```
+
+Все пять опций обязательны, run ID должны различаться. Команда читает ровно два persisted bundle через API port, вызывает injected deterministic compiler/EVM recorder, перепроверяет его canonical recording и записывает только atomic rename. Без этого recorder port команда fail-closed с `Canonical URL attack recorder is unavailable`; она не читает fixture и не запускает wallet/relayer effect.
 
 ### Локальный Product QA report
 

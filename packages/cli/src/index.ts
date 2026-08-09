@@ -4,6 +4,10 @@ import {
   type SubmissionResponseV1,
 } from "@proofline/contracts";
 import {
+  canonicalSerializeCanonicalUrlAttackRecording,
+  replayCanonicalUrlAttackRecording,
+} from "@proofline/domain";
+import {
   createWalletClient,
   http,
   type Address,
@@ -17,6 +21,15 @@ interface CliDependencies {
   wallet: {
     signAndBroadcast(transaction: unknown, privateKey: string): Promise<string>;
   };
+  demoRecorder?: {
+    recordCanonicalUrlAttack(input: {
+      attackRunId: string;
+      attackBundle: string;
+      controlRunId: string;
+      controlBundle: string;
+      release: { commitSha: string; treeSha: string };
+    }): Promise<string>;
+  };
   env: Record<string, string | undefined>;
   io: {
     stdout(line: string): void;
@@ -25,6 +38,7 @@ interface CliDependencies {
   files: {
     readText(path: string): Promise<string>;
     writeText(path: string, value: string): Promise<void>;
+    writeTextAtomic?(path: string, value: string): Promise<void>;
   };
 }
 
@@ -37,6 +51,11 @@ function safeMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "Command failed";
   return message
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
+    .replace(/(?:project|share)_[A-Za-z0-9_-]{16,}/gi, "[REDACTED]")
+    .replace(
+      /("(?:authorization|private[_ -]?key|secret|token)"\s*:\s*")[^"]*"/gi,
+      "$1[REDACTED]\"",
+    )
     .replace(/0x[a-f0-9]{16,}/gi, "[REDACTED]");
 }
 
@@ -103,6 +122,7 @@ const rootHelp = [
   "  run verify       Verify the canonical safe consumer",
   "  bundle export    Export a ProofBundleV1",
   "  replay           Replay a bundle",
+  "  demo record      Record the canonical URL attack from two persisted live runs",
   "",
   "Run proofline <command> --help for command options.",
 ].join("\n");
@@ -129,6 +149,12 @@ export function prooflineHelp(argv: readonly string[]): string | null {
   }
   if (argv[0] === "replay") {
     return "Usage: proofline replay <bundle-path>";
+  }
+  if (argv[0] === "demo" && argv[1] === "record") {
+    return [
+      "Usage: proofline demo record --attack-run <id> --control-run <id> --commit <sha> --tree <sha> --out <path>",
+      "Records two explicit persisted live Coston2 bundles through the deterministic local EVM recorder.",
+    ].join("\n");
   }
   return rootHelp;
 }
@@ -198,6 +224,64 @@ export async function runProoflineCli(input: CliDependencies): Promise<number> {
       input.io.stdout(`Replay complete: ${result.runId}`);
       return 0;
     }
+    if (group === "demo" && command === "record") {
+      const attackRunId = option(input.argv, "--attack-run");
+      const controlRunId = option(input.argv, "--control-run");
+      const commitSha = option(input.argv, "--commit");
+      const treeSha = option(input.argv, "--tree");
+      const outputPath = option(input.argv, "--out");
+      if (
+        !attackRunId ||
+        !controlRunId ||
+        !commitSha ||
+        !treeSha ||
+        !outputPath
+      ) {
+        throw new Error(
+          "demo record requires --attack-run, --control-run, --commit, --tree and --out",
+        );
+      }
+      if (attackRunId === controlRunId) {
+        throw new Error(
+          "Canonical URL attack and control must be different persisted live runs",
+        );
+      }
+      if (!input.demoRecorder || !input.files.writeTextAtomic) {
+        throw new Error("Canonical URL attack recorder is unavailable");
+      }
+
+      const attackBundle = String(
+        await input.client.exportBundle({ runId: attackRunId }),
+      );
+      const controlBundle = String(
+        await input.client.exportBundle({ runId: controlRunId }),
+      );
+      const recordedBytes = await input.demoRecorder.recordCanonicalUrlAttack({
+        attackRunId,
+        attackBundle,
+        controlRunId,
+        controlBundle,
+        release: { commitSha, treeSha },
+      });
+      const recording = replayCanonicalUrlAttackRecording(recordedBytes);
+      if (
+        recording.release.commitSha !== commitSha ||
+        recording.release.treeSha !== treeSha ||
+        recording.bundles.attack.runId !== attackRunId ||
+        recording.bundles.attack.canonicalBundle !== attackBundle ||
+        recording.bundles.control.runId !== controlRunId ||
+        recording.bundles.control.canonicalBundle !== controlBundle
+      ) {
+        throw new Error(
+          "Canonical URL attack recording does not match the requested persisted evidence",
+        );
+      }
+      const canonicalBytes =
+        canonicalSerializeCanonicalUrlAttackRecording(recording);
+      await input.files.writeTextAtomic(outputPath, canonicalBytes);
+      input.io.stdout(`Recorded canonical URL attack: ${outputPath}`);
+      return 0;
+    }
     input.io.stderr("Unsupported Proofline command");
     return 2;
   } catch (error) {
@@ -222,6 +306,7 @@ export function createProductionCliDependencies(input: {
   clock: { now(): number; sleep(ms: number): Promise<void> };
   files: CliDependencies["files"];
   io: CliDependencies["io"];
+  demoRecorder?: CliDependencies["demoRecorder"];
 }): Omit<CliDependencies, "argv"> {
   const environment = input.environment;
   const apiOrigin = environment.PROOFLINE_API_URL?.replace(/\/+$/, "");
@@ -390,6 +475,7 @@ export function createProductionCliDependencies(input: {
   };
   return {
     client,
+    demoRecorder: input.demoRecorder,
     wallet: {
       async signAndBroadcast(transaction, privateKey) {
         const request = transaction as {

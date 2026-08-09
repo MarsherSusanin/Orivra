@@ -1765,6 +1765,221 @@ export const ProofBundleV1Schema = ProofBundleContentV1Schema.extend({
 
 export type ProofBundleV1 = z.infer<typeof ProofBundleV1Schema>;
 
+export const CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES =
+  6 * 1_024 * 1_024;
+
+const CanonicalUrlAttackReleaseShaV1Schema = z
+  .string()
+  .regex(/^[a-f0-9]{40}$/);
+const CanonicalUrlAttackToolVersionV1Schema = z
+  .string()
+  .regex(/^\d+\.\d+\.\d+(?:\+[0-9A-Za-z.-]+)?$/);
+const CanonicalUrlAttackTransactionHashV1Schema = z
+  .string()
+  .regex(/^0x[a-f0-9]{64}$/);
+const CanonicalUrlAttackRunIdV1Schema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/);
+
+function canonicalUrlAttackBundleSchema(role: "attack" | "control") {
+  return z
+    .object({
+      role: z.literal(role),
+      provenance: z.literal("persisted-live-coston2"),
+      runId: CanonicalUrlAttackRunIdV1Schema,
+      submissionMode: z.enum(["wallet", "relayer"]),
+      requestedUrl: z
+        .string()
+        .max(2_048)
+        .refine(isSafePublicPreflightUrl, "Expected a public canonical HTTPS URL"),
+      canonicalBundle: z
+        .string()
+        .min(1)
+        .max(CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES),
+      canonicalBundleUtf8Bytes: z
+        .number()
+        .int()
+        .positive()
+        .max(CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES),
+      canonicalBundleSha256: Sha256EnvelopeSchema,
+      bundleChecksum: Sha256EnvelopeSchema,
+      lastSequence: z.number().int().positive(),
+      transactionHash: CanonicalUrlAttackTransactionHashV1Schema,
+      votingRound: z.number().int().nonnegative(),
+      proofSha256: Sha256EnvelopeSchema,
+      transformedResponseShapeSha256: Sha256EnvelopeSchema,
+    })
+    .strict();
+}
+
+const CanonicalUrlAttackAcceptedResultV1Schema = z
+  .object({
+    status: z.literal("accepted"),
+    returnDataSha256: Sha256EnvelopeSchema,
+  })
+  .strict();
+
+const CanonicalUrlAttackHostMismatchResultV1Schema = z
+  .object({
+    status: z.literal("reverted"),
+    error: z.literal("HostMismatch()"),
+    selector: z.literal("0xb828610a"),
+    revertDataSha256: Sha256EnvelopeSchema,
+  })
+  .strict();
+
+function canonicalUrlAttackExecutionSchema<
+  TScenario extends "attack" | "control",
+  TConsumer extends "canonical-vulnerable" | "canonical-safe",
+  TResult extends z.ZodType,
+>(scenario: TScenario, consumer: TConsumer, result: TResult) {
+  return z
+    .object({
+      scenario: z.literal(scenario),
+      consumer: z.literal(consumer),
+      proofSha256: Sha256EnvelopeSchema,
+      calldataSha256: Sha256EnvelopeSchema,
+      runtimeBytecodeSha256: Sha256EnvelopeSchema,
+      result,
+    })
+    .strict();
+}
+
+export const CanonicalUrlAttackRecordingContentV1Schema = z
+  .object({
+    version: VersionV1Schema,
+    kind: z.literal("canonical-url-attack-recording"),
+    recordedAt: AuthTimestampV1Schema,
+    release: z
+      .object({
+        commitSha: CanonicalUrlAttackReleaseShaV1Schema,
+        treeSha: CanonicalUrlAttackReleaseShaV1Schema,
+      })
+      .strict(),
+    network: z
+      .object({
+        name: z.literal("coston2"),
+        chainId: z.literal(114),
+        evidenceSource: z.literal("persisted-api"),
+      })
+      .strict(),
+    statement: z.literal("Valid proof ≠ trusted URL"),
+    sharedRequest: z
+      .object({
+        method: z.literal("GET"),
+        query: StringMapSchema,
+        jq: z.string().min(1).max(16_384),
+        abiSignature: z
+          .string()
+          .min(1)
+          .max(ABI_SIGNATURE_MAX_CHARACTERS)
+          .refine(
+            isValidWeb2JsonAbiSignature,
+            "Expected a bounded JSON ABI-parameter descriptor",
+          ),
+        transformedResponseShapeSha256: Sha256EnvelopeSchema,
+      })
+      .strict(),
+    bundles: z
+      .object({
+        attack: canonicalUrlAttackBundleSchema("attack"),
+        control: canonicalUrlAttackBundleSchema("control"),
+      })
+      .strict(),
+    toolchain: z
+      .object({
+        compiler: z
+          .object({
+            name: z.literal("solc"),
+            version: CanonicalUrlAttackToolVersionV1Schema,
+            inputSha256: Sha256EnvelopeSchema,
+            outputSha256: Sha256EnvelopeSchema,
+            optimizer: z
+              .object({
+                enabled: z.literal(true),
+                runs: z.number().int().positive(),
+              })
+              .strict(),
+            evmVersion: z.literal("cancun"),
+          })
+          .strict(),
+        runtime: z
+          .object({
+            name: z.literal("@ethereumjs/vm"),
+            version: CanonicalUrlAttackToolVersionV1Schema,
+            hardfork: z.literal("cancun"),
+          })
+          .strict(),
+      })
+      .strict(),
+    consumers: z
+      .object({
+        vulnerable: z
+          .object({
+            identity: z.literal("canonical-vulnerable"),
+            contractName: z.literal("CanonicalVulnerableWeb2JsonConsumer"),
+            sourceSha256: Sha256EnvelopeSchema,
+            creationBytecodeSha256: Sha256EnvelopeSchema,
+            runtimeBytecodeSha256: Sha256EnvelopeSchema,
+          })
+          .strict(),
+        safe: z
+          .object({
+            identity: z.literal("canonical-safe"),
+            contractName: z.literal("CanonicalSafeWeb2JsonConsumer"),
+            sourceSha256: Sha256EnvelopeSchema,
+            creationBytecodeSha256: Sha256EnvelopeSchema,
+            runtimeBytecodeSha256: Sha256EnvelopeSchema,
+          })
+          .strict(),
+        invariantLibrary: z
+          .object({
+            contractName: z.literal("ProoflineUrlInvariant"),
+            sourceSha256: Sha256EnvelopeSchema,
+            hostMismatchSelector: z.literal("0xb828610a"),
+          })
+          .strict(),
+      })
+      .strict(),
+    transcript: z
+      .object({
+        executions: z.tuple([
+          canonicalUrlAttackExecutionSchema(
+            "attack",
+            "canonical-vulnerable",
+            CanonicalUrlAttackAcceptedResultV1Schema,
+          ),
+          canonicalUrlAttackExecutionSchema(
+            "attack",
+            "canonical-safe",
+            CanonicalUrlAttackHostMismatchResultV1Schema,
+          ),
+          canonicalUrlAttackExecutionSchema(
+            "control",
+            "canonical-safe",
+            CanonicalUrlAttackAcceptedResultV1Schema,
+          ),
+        ]),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type CanonicalUrlAttackRecordingContentV1 = z.infer<
+  typeof CanonicalUrlAttackRecordingContentV1Schema
+>;
+
+export const CanonicalUrlAttackRecordingV1Schema =
+  CanonicalUrlAttackRecordingContentV1Schema.extend({
+    checksum: Sha256EnvelopeSchema,
+  }).strict();
+
+export type CanonicalUrlAttackRecordingV1 = z.infer<
+  typeof CanonicalUrlAttackRecordingV1Schema
+>;
+
 const Sha256EnvelopeV1Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 
 export const EvidenceReceiptV1Schema = z
