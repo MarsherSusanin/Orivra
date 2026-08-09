@@ -104,6 +104,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/005_explicit_s
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/006_wallet_identity_sessions.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/007_account_token_management.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/008_persisted_admission_quotas.sql
+# После 024B1 GREEN:
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/009_canonical_url_attack_recordings.sql
 ```
 
 Автоматизированного production migration runner и down migrations в репозитории
@@ -143,6 +145,7 @@ npm run start --workspace apps/api
 | `PROOFLINE_WALLET_CHALLENGE_GLOBAL_MINUTE_LIMIT` | optional, default `300`, range `1..10000` | Persisted global wallet challenges per UTC minute; must be at least the address limit |
 | `PROOFLINE_PROJECT_RUN_DAILY_LIMIT` | optional, default `100`, range `1..10000` | New persisted runs per project per UTC day; idempotent replay does not consume again |
 | `PROOFLINE_PROJECT_ACTIVE_LIVE_RUN_LIMIT` | optional, default `3`, range `1..100` | Nonterminal wallet/relayer runs per project; replay is excluded |
+| `PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256` | optional, no default | Exact `sha256:<64 lowercase hex>` immutable 024B recording selector; absence deliberately keeps the public demo unavailable without querying for a latest row |
 
 API должен завершаться с ошибкой до начала обслуживания запросов, если обязательная конфигурация отсутствует или quota limit не является canonical bounded integer. PostgreSQL clock выбирает quota windows; первый row фиксирует limit до конца своего окна. Active-live cap также фиксируется persisted `active_live` project policy row на UTC сутки с `used_count = 0`, поэтому rolling API processes читают один limit; новое UTC-окно может принять новый bounded config. Quota responses используют только нормализованные `429 WALLET_CHALLENGE_RATE_LIMITED`, `429 PROJECT_RUN_QUOTA_EXHAUSTED` или `409 ACTIVE_LIVE_RUN_LIMIT_REACHED`; только 429 содержит bounded integer `Retry-After`.
 
@@ -176,6 +179,40 @@ challenge cleanup. `proofline_worker` не получает quota/challenge auth
 API удаляет максимум 100 quota windows и 100 wallet challenges за attempt и
 только если их expiry/window end старше PostgreSQL clock минимум на 24 часа;
 cleanup failure не отменяет уже принятое admission.
+
+### Canonical URL attack demo (024B contract, pending GREEN)
+
+024B1 adds immutable migration 009 and a separate one-shot importer. It is not
+an API startup side effect and is never an HTTP route:
+
+```bash
+npm --workspace @proofline/api run import:canonical-url-attack -- \
+  --recording <canonical-recording-path>
+```
+
+Run it with `DATABASE_URL` authorized as the dedicated
+`proofline_recording_importer` role. The command has no default path and no
+project token, wallet/relayer key, RPC or external network behavior. It reads
+one explicit file up to 6 MiB, runs the concrete checked-in-source compile and
+three-call local EVM verifier before its PostgreSQL transaction, then inserts
+the exact same Buffer under the fixed import advisory lock. Re-import succeeds
+only for byte- and metadata-identical evidence.
+
+After API startup selects one exact configured digest, these routes are public
+and bearer-independent:
+
+```text
+GET /v1/demo/canonical-url
+GET /v1/demo/canonical-url/recording
+```
+
+The first returns a bounded strict summary. The second returns exact stored
+recording bytes only on a user request. Both use public zero-age revalidation
+and representation-correct ETags. Query selection is forbidden. Missing or
+corrupt selection returns the same no-store
+`503 CANONICAL_URL_ATTACK_RECORDING_UNAVAILABLE`; no fixture or latest-row
+fallback is permitted. Until 024B GREEN, these commands/routes are contracts,
+not claimed executable behavior.
 
 ## 5. Worker
 

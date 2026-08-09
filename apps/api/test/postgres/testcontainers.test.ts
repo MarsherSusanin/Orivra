@@ -27,6 +27,7 @@ async function loadMigrations() {
     expect.stringMatching(/^006_.+\.sql$/),
     "007_account_token_management.sql",
     "008_persisted_admission_quotas.sql",
+    "009_canonical_url_attack_recordings.sql",
   ]);
   return Promise.all(
     names.map(async (name) => ({
@@ -83,7 +84,7 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
         );
         expect(emptyVersions.rows.map(({ version }) => version)).toEqual([
-          1, 2, 3, 4, 5, 6, 7, 8,
+          1, 2, 3, 4, 5, 6, 7, 8, 9,
         ]);
 
         const tables = await client.query<{ table_name: string }>(
@@ -183,7 +184,7 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
         );
         expect(previousVersions.rows.map(({ version }) => version)).toEqual([
-          0, 1, 2, 3, 4, 5, 6, 7, 8,
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
         ]);
         const upgradedTables = await client.query<{ table_name: string }>(
           "SELECT table_name FROM information_schema.tables WHERE table_schema = 'proofline_private'",

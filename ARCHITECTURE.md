@@ -87,6 +87,24 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
 
 ## Trust boundaries
 
+### Canonical URL attack demo evidence
+
+The canonical attack demo crosses two deliberately different authorities.
+Pure contracts/domain replay can validate canonical 024A bytes and derive a
+bounded public summary, but cannot authorize persistence. A separate one-shot
+API-workspace importer must rerun the concrete `packages/fdc-coston2` exact
+source compile and three-call local EVM verification before opening a
+PostgreSQL transaction. Migration 009 stores the same exact Buffer immutably;
+the ordinary API has read-only access and the worker has none.
+
+The API optionally selects exactly one row by
+`PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256`, validates canonical bytes,
+digest, authority checksum and redundant metadata once at startup, and caches
+only a public summary plus private exact download bytes. Anonymous demo reads
+never load compiler/EVM runtime. Browser `/demo/canonical-url` makes one
+same-origin summary read, performs no wallet or source/RPC/compiler work and
+never constructs fallback evidence. Full boundary: [ADR 0032](docs/adr/0032-persisted-public-canonical-url-attack-demo.md).
+
 ### Tokens
 
 - Project и share tokens должны иметь 256 бит энтропии.

@@ -53,6 +53,10 @@ blockchain-операций.
   PostgreSQL. Он ещё не provisioned и не deployed.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
+- Canonical URL attack recording contract and trusted local compiler/EVM
+  recorder are complete. Slice 024B now freezes immutable PostgreSQL import,
+  exact-digest anonymous API and `/demo/canonical-url`; until its GREEN and an
+  actual selected recording, the honest public state remains unavailable.
 - Privacy-safe product events сводятся локально в детерминированный
   aggregate-only QA report; внешний analytics provider не используется.
 - Persisted live Coston2 gate реализован в коде, работает только через

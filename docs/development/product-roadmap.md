@@ -19,8 +19,10 @@ The product journey is delivered as independently frozen vertical slices:
 | 021B | Deterministic local product QA report | Complete; independently verified |
 | 022 | Network capability boundary | Complete; independently verified |
 | 023 | Wallet identity and self-service access | In progress through small focused waves |
-| 024A | Honest canonical URL attack recording contracts and recorder | Second corrective GREEN candidate; independent verification pending, credential-free |
-| 024B | Persisted/public canonical URL attack presentation | Planned, credential-free; must remain unavailable without real evidence |
+| 024A | Honest canonical URL attack recording contracts and recorder | Complete; independently verified, credential-free |
+| 024B1 | Public summary, immutable migration 009 and runtime-authorized one-shot import | RED frozen; credential-free |
+| 024B2 | Exact-digest API startup cache and anonymous summary/download | RED frozen; credential-free |
+| 024B3 | Token-free canonical URL demo Web route and Sites deep route | RED frozen; credential-free |
 | 025 | Template-led Composer | Planned, credential-free |
 | 026 | Public product surface | Planned, credential-free |
 | 027A | Local Docker runtime, Compose/Caddy routing and private service networks | Planned, credential-free |
@@ -57,6 +59,13 @@ Compose to run Web, API, worker and PostgreSQL behind Caddy with same-origin
 the repository has no current hosted or deployed PASS.
 
 Credential-free delivery covers 022–029A:
+
+- **024B1→B2→B3** first derives a bounded public summary, admits exact
+  024A bytes only after concrete compiler/EVM runtime verification, persists
+  them under immutable migration 009, selects one exact environment digest and
+  presents an honest anonymous Web demo. Missing evidence stays unavailable;
+  no latest selection, fixture, synthetic fallback or browser compiler/RPC path
+  is allowed. 026 reuses the same summary/client.
 
 - **027A** packages the local and VDS Docker runtime, Caddy/Web routing,
   private Compose networks and a persistent PostgreSQL volume. Public exposure
