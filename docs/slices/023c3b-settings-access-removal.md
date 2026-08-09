@@ -76,6 +76,16 @@ focus/Escape/backdrop/pending behavior, retry and status evidence, 204/401/403
 clear, transport/403/5xx retention, explicit local forget, provider silence,
 one-time reveal collision, leakage, axe and mobile action layout.
 
+The corrective verifier-finding freeze also requires normal Tab and Shift+Tab
+cycling in both confirmations. Once a mutation is pending, the disabled
+actions do not create a focus escape: focus remains inside the labelled
+`aria-modal`, Tab and Shift+Tab remain contained, and duplicate submit and
+Escape are inert. A deferred sign-out retry keeps the recovery surface visible,
+labels the disabled action `Retrying sign-out…`, disables local Forget and sends
+one retry request. Unmounting a pending revoke resolve/reject, sign-out or retry
+must make every late settlement inert. Expiry-only validation focuses expiry,
+and a CSPRNG failure stays fixed, redacted and service-silent.
+
 ## Targeted GREEN gates
 
 Run typecheck, the two frozen contracts, accepted C3A Settings/context plus C1

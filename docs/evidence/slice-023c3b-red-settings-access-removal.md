@@ -74,3 +74,44 @@ is invented; those behaviors remain owned exclusively by the frozen C3B tests.
 Coverage, browser screenshots, build, Sites and full Web are GREEN gates, not
 RED evidence. The unified repository matrix remains deferred until all
 credential-free 022–029A modules are complete.
+
+## Corrective verifier-finding RED
+
+The first GREEN candidate was rejected on exact commit
+`de6c01bd994564c4a1972ff5e102ad003466af67` / tree
+`1134a30a9d75014fde61dc590ea5150206fff2e6`. Independent review found
+`AccountSettings.tsx` at 91.03% lines but 75.82% branches and demonstrated an
+actual keyboard escape: while a confirmation is pending, both actions are
+disabled, leaving no tabbable element in the `aria-modal`. Review also found
+unreached pending/unmount, retry-label, expiry-only and CSPRNG-failure paths.
+
+The corrective tests/docs-only wave freezes the smallest reachable contracts:
+
+- revoke and sign-out confirmations cycle Tab and Shift+Tab in their normal
+  state;
+- pending confirmations keep focus inside the modal and contain Tab and
+  Shift+Tab while duplicate submit and Escape remain blocked;
+- deferred retry remains in recovery, exposes disabled
+  `Retrying sign-out…`, disables Forget and sends one retry request;
+- pending revoke resolve/reject, sign-out and retry settlements after unmount
+  are inert and do not emit raw data or React unmount/`act` warnings;
+- expiry-only invalid input focuses expiry, and CSPRNG failure renders only
+  fixed safe copy without calling the service or exposing an error echo.
+
+Four context warnings were corrected only by awaiting the existing state work
+inside the test harness `act`; no production behavior or contract changed.
+Against the rejected candidate, the Settings contract is 1 file / 22 tests:
+19 PASS and exactly 3 intentional RED. Those failures are the two pending-modal
+focus escapes and the retry recovery/pending-label transition. The context
+contract is 1 file / 14 tests PASS with no `act` warning. Combined focused C3B
+is therefore 2 files / 36 tests, 33 PASS and exactly 3 intentional RED.
+
+Failure-reporting design coverage over the corrected C3A and C3B Settings
+contracts records `AccountSettings.tsx` at 95.75% lines and 85.16% branches
+(97.77% functions, 92.05% statements). This exceeds the React design target
+but is not GREEN evidence because the three frozen behaviors still fail.
+
+Typecheck passes. The nearest unchanged C1 controller, C2B2 authority and C3A
+context baseline is 3 files / 32 tests PASS; it retains the already accepted
+C3A anonymous-restore harness warning. No broad or full matrix was run for this
+corrective RED wave.

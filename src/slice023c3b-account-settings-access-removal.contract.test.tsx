@@ -169,8 +169,12 @@ async function renderSettings(access = services(), stored = storage()) {
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
-  return { promise, resolve };
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, reject, resolve };
 }
 
 function failure(input: {
@@ -225,7 +229,13 @@ describe("Slice 023C3B Settings access removal", () => {
     let dialog = screen.getByRole("dialog", { name: "Revoke Release gate?" });
     expect(within(dialog).getByText(/cannot be used again/i)).toBeVisible();
     expect(dialog).toHaveAccessibleDescription(/cannot be used again/i);
-    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    const confirm = within(dialog).getByRole("button", { name: "Revoke token" });
+    expect(cancel).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(confirm).toHaveFocus();
+    await user.tab();
+    expect(cancel).toHaveFocus();
     const openResult = await axe.run(dialog, {
       rules: { "color-contrast": { enabled: false } },
     });
@@ -271,6 +281,43 @@ describe("Slice 023C3B Settings access removal", () => {
     expect(screen.getByRole("heading", { name: "Issued credentials" })).toHaveFocus();
     expect(getAccount).toHaveBeenCalledTimes(2);
     expect(rendered.access.createWalletChallenge).not.toHaveBeenCalled();
+  });
+
+  it("keeps pending revoke focus inside the modal while blocking Escape and duplicate submit", async () => {
+    const revoked = deferred<AccountTokenRevokedV1>();
+    const revokeAccountToken = vi.fn(() => revoked.promise);
+    const getAccount = vi.fn()
+      .mockResolvedValueOnce(account)
+      .mockResolvedValueOnce(revokedAccount);
+    const user = userEvent.setup();
+    await renderSettings(services({ getAccount, revokeAccountToken }));
+    await user.click(screen.getByRole("button", { name: "Revoke Release gate" }));
+    const dialog = screen.getByRole("dialog", { name: "Revoke Release gate?" });
+    const confirm = within(dialog).getByRole("button", { name: "Revoke token" });
+    await user.click(confirm);
+
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    const pending = within(dialog).getByRole("button", { name: "Revoking…" });
+    expect(cancel).toBeDisabled();
+    expect(pending).toBeDisabled();
+    await user.dblClick(pending);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(revokeAccountToken).toHaveBeenCalledOnce();
+    expect(dialog).toBeVisible();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    try {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+      await user.tab({ shift: true });
+      expect(dialog.contains(document.activeElement)).toBe(true);
+      const result = await axe.run(dialog, {
+        rules: { "color-contrast": { enabled: false } },
+      });
+      expect(result.violations.filter(({ impact }) => impact === "serious" || impact === "critical")).toEqual([]);
+    } finally {
+      await act(async () => revoked.resolve(revokedResult));
+    }
   });
 
   it("keeps a failed revoke confirmation retryable with fixed copy and no secret leakage", async () => {
@@ -346,7 +393,13 @@ describe("Slice 023C3B Settings access removal", () => {
     const user = userEvent.setup();
     const rendered = await renderSettings();
     let opened = await openSignOut(user);
-    expect(within(opened.dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    const cancel = within(opened.dialog).getByRole("button", { name: "Cancel" });
+    const confirm = within(opened.dialog).getByRole("button", { name: "Sign out browser" });
+    expect(cancel).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(confirm).toHaveFocus();
+    await user.tab();
+    expect(cancel).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Sign out this browser?" })).not.toBeInTheDocument();
     expect(opened.trigger).toHaveFocus();
@@ -358,6 +411,38 @@ describe("Slice 023C3B Settings access removal", () => {
     fireEvent.click(backdrop!);
     expect(opened.dialog).toBeVisible();
     expect(rendered.access.revokeCurrentSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps pending sign-out focus inside the modal while blocking Escape and duplicate submit", async () => {
+    const signedOut = deferred<void>();
+    const revokeCurrentSession = vi.fn(() => signedOut.promise);
+    const user = userEvent.setup();
+    await renderSettings(services({ revokeCurrentSession }));
+    const { dialog } = await openSignOut(user);
+    await user.click(within(dialog).getByRole("button", { name: "Sign out browser" }));
+
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    const pending = within(dialog).getByRole("button", { name: "Signing out…" });
+    expect(cancel).toBeDisabled();
+    expect(pending).toBeDisabled();
+    await user.dblClick(pending);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(revokeCurrentSession).toHaveBeenCalledOnce();
+    expect(dialog).toBeVisible();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    try {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+      await user.tab({ shift: true });
+      expect(dialog.contains(document.activeElement)).toBe(true);
+      const result = await axe.run(dialog, {
+        rules: { "color-contrast": { enabled: false } },
+      });
+      expect(result.violations.filter(({ impact }) => impact === "serious" || impact === "critical")).toEqual([]);
+    } finally {
+      await act(async () => signedOut.resolve(undefined));
+    }
   });
 
   it("retains authority after transport failure and retries the same sign-out without a wallet prompt", async () => {
@@ -465,6 +550,105 @@ describe("Slice 023C3B Settings access removal", () => {
     expect(window.location.href).not.toContain(RAW_TOKEN);
     expect(JSON.stringify(browserStorageWrite.mock.calls)).not.toContain(RAW_TOKEN);
     expect(JSON.stringify([...log.mock.calls, ...error.mock.calls])).not.toContain(RAW_TOKEN);
+  });
+
+  it("focuses an expiry-only validation error without issuing a token", async () => {
+    const user = userEvent.setup();
+    const rendered = await renderSettings();
+    await user.type(screen.getByRole("textbox", { name: "Label" }), "Valid label");
+    const expiry = screen.getByRole("spinbutton", { name: "Expires in days" });
+    await user.clear(expiry);
+    await user.type(expiry, "0");
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    expect(expiry).toHaveFocus();
+    expect(expiry).toHaveAttribute("aria-invalid", "true");
+    expect(expiry).toHaveAccessibleDescription(/integer.*1.*90/i);
+    expect(screen.getByRole("textbox", { name: "Label" })).not.toHaveAttribute("aria-invalid");
+    expect(rendered.access.createAccountToken).not.toHaveBeenCalled();
+  });
+
+  it("fails safely when the idempotency-key CSPRNG is unavailable", async () => {
+    const getRandomValues = vi.spyOn(globalThis.crypto, "getRandomValues")
+      .mockImplementation(() => { throw new Error(`rng echo ${RAW_TOKEN}`); });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    const rendered = await renderSettings();
+    await user.type(screen.getByRole("textbox", { name: "Label" }), "Local CLI");
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    expect(getRandomValues).toHaveBeenCalledOnce();
+    expect(screen.getByRole("alert")).toHaveTextContent("Token could not be generated. Retry safely.");
+    expect(screen.getByRole("textbox", { name: "Label" })).toHaveValue("Local CLI");
+    expect(rendered.access.createAccountToken).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain(RAW_TOKEN);
+    expect(JSON.stringify([...log.mock.calls, ...error.mock.calls])).not.toContain(RAW_TOKEN);
+  });
+
+  it.each(["resolve", "reject"] as const)(
+    "ignores a pending revoke %s after Settings unmount",
+    async (settlement) => {
+      const revoked = deferred<AccountTokenRevokedV1>();
+      const revokeAccountToken = vi.fn(() => revoked.promise);
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const user = userEvent.setup();
+      const rendered = await renderSettings(services({ revokeAccountToken }));
+      await user.click(screen.getByRole("button", { name: "Revoke Release gate" }));
+      await user.click(screen.getByRole("button", { name: "Revoke token" }));
+      expect(revokeAccountToken).toHaveBeenCalledOnce();
+
+      rendered.unmount();
+      await act(async () => {
+        if (settlement === "resolve") revoked.resolve(revokedResult);
+        else revoked.reject(new Error(`late revoke echo ${RAW_TOKEN}`));
+      });
+      await act(async () => { await Promise.resolve(); });
+      expect(document.body.textContent).not.toContain(RAW_TOKEN);
+      expect(JSON.stringify(error.mock.calls)).not.toContain(RAW_TOKEN);
+      expect(JSON.stringify(error.mock.calls)).not.toMatch(/not wrapped in act|unmounted component/i);
+    },
+  );
+
+  it("ignores a pending sign-out settlement after Settings unmount", async () => {
+    const signedOut = deferred<void>();
+    const revokeCurrentSession = vi.fn(() => signedOut.promise);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    const rendered = await renderSettings(services({ revokeCurrentSession }));
+    const { dialog } = await openSignOut(user);
+    await user.click(within(dialog).getByRole("button", { name: "Sign out browser" }));
+    expect(revokeCurrentSession).toHaveBeenCalledOnce();
+
+    rendered.unmount();
+    await act(async () => signedOut.resolve(undefined));
+    await act(async () => { await Promise.resolve(); });
+    expect(JSON.stringify(error.mock.calls)).not.toMatch(/not wrapped in act|unmounted component/i);
+  });
+
+  it("shows one deferred retry state and ignores its settlement after Settings unmount", async () => {
+    const retried = deferred<void>();
+    const revokeCurrentSession = vi.fn()
+      .mockRejectedValueOnce(failure())
+      .mockImplementationOnce(() => retried.promise);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    const rendered = await renderSettings(services({ revokeCurrentSession }));
+    const { dialog } = await openSignOut(user);
+    await user.click(within(dialog).getByRole("button", { name: "Sign out browser" }));
+    const retry = await screen.findByRole("button", { name: "Retry sign-out" });
+    await user.dblClick(retry);
+
+    try {
+      expect(screen.getByRole("button", { name: "Retrying sign-out…" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Forget this browser" })).toBeDisabled();
+      expect(revokeCurrentSession).toHaveBeenCalledTimes(2);
+    } finally {
+      rendered.unmount();
+      await act(async () => retried.resolve(undefined));
+      await act(async () => { await Promise.resolve(); });
+    }
+    expect(JSON.stringify(error.mock.calls)).not.toMatch(/not wrapped in act|unmounted component/i);
   });
 
   it("clears an already visible raw reveal permanently when sign-out starts and then fails", async () => {

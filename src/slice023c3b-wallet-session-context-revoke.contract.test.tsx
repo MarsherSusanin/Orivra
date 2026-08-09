@@ -397,7 +397,9 @@ describe("Slice 023C3B generation-bound account token revocation", () => {
     );
     await waitFor(() => expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS_A}`));
 
-    await expectContractFailure(() => rendered.current().revokeAccountToken(TOKEN_A));
+    await act(async () => {
+      await expectContractFailure(() => rendered.current().revokeAccountToken(TOKEN_A));
+    });
     expect(getAccount).toHaveBeenCalledTimes(expectedGets);
     expect(screen.getByLabelText("session state")).not.toHaveTextContent("Local CLI:revoked");
   });
@@ -414,10 +416,12 @@ describe("Slice 023C3B generation-bound account token revocation", () => {
       );
       await waitFor(() => expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS_A}`));
 
-      await expect(rendered.current().revokeAccountToken(TOKEN_A)).rejects.toMatchObject({
-        name: "WalletAccessError",
-        status,
-        code: status === 401 ? "UNAUTHORIZED" : "ACCOUNT_SESSION_REQUIRED",
+      await act(async () => {
+        await expect(rendered.current().revokeAccountToken(TOKEN_A)).rejects.toMatchObject({
+          name: "WalletAccessError",
+          status,
+          code: status === 401 ? "UNAUTHORIZED" : "ACCOUNT_SESSION_REQUIRED",
+        });
       });
       expect(screen.getByLabelText("session state")).toHaveTextContent("anonymous::");
       expect(stored.read()).toBeNull();
