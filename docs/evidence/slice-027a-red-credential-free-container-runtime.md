@@ -126,10 +126,11 @@ at `8bd77ee15b6c8494c692b54e8593f00ae0b808a1`, the accepted Slice 005 worker
 lifecycle expectations were reconciled with ADR 0035. Missing database,
 verifier or private-key deployment authority now requires the same fixed
 redacted configuration error and zero Pool, verifier, live-port or loop effect.
-The private-key case uses a test-only live-port tripwire so the absent 027A
-implementation fails promptly instead of timing out; GREEN must never reach
-that tripwire. The existing direct-environment start, signal, loop and pool
-close happy path remains a separate control.
+The private-key case uses a locally restored test signal listener to stop the
+loop if the absent 027A implementation improperly reaches signal registration;
+GREEN must reject before that point. This avoids a timeout without queuing a
+mock implementation into the following case. The existing direct-environment
+start, signal, loop and pool-close happy path remains a separate control.
 
 ```sh
 npx vitest run \

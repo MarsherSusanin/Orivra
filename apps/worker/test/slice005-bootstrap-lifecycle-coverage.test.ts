@@ -252,9 +252,12 @@ describe("Slice 005 production worker process lifecycle", () => {
     "resolves all deployment secrets before startup when the %s is absent",
     async (_label, overrides, forbidden) => {
       if (_label === "Coston2 private key") {
-        mocks.createPipelinePorts.mockImplementationOnce(() => {
-          throw new Error("Live ports reached before deployment secret resolution");
-        });
+        vi.spyOn(process, "on").mockImplementation(
+          ((signal: string, listener: () => void) => {
+            if (signal === "SIGTERM") listener();
+            return process;
+          }) as any,
+        );
       }
       await expectRedactedDeploymentConfigurationError(
         () => startProductionWorker(environment({
