@@ -9,12 +9,21 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  AccountTokenCreateRequestV1,
+  AccountTokenCreatedV1,
   NetworkCapabilitiesV1,
   WalletChallengeRequestV1,
   WalletChallengeV1,
   WalletSessionRequestV1,
 } from "@proofline/contracts";
-import type { WalletAccessServices } from "./services/wallet-access-client";
+import {
+  AccountTokenCreatedV1Schema,
+  AccountV1Schema,
+} from "@proofline/contracts";
+import {
+  WalletAccessError,
+  type WalletAccessServices,
+} from "./services/wallet-access-client";
 import {
   createWalletSessionController,
   type StorageLike,
@@ -29,6 +38,11 @@ export type WalletSessionContextValue = {
     request: WalletChallengeRequestV1,
   ): Promise<WalletChallengeV1>;
   createSession(request: WalletSessionRequestV1): Promise<void>;
+  createAccountToken(input: {
+    idempotencyKey: string,
+    request: AccountTokenCreateRequestV1,
+  }): Promise<AccountTokenCreatedV1>;
+  refreshAccount(): Promise<void>;
   restore(): Promise<void>;
   signOut(): Promise<void>;
   retry(): Promise<void>;
@@ -58,6 +72,7 @@ export function WalletSessionProvider({
     controller.snapshot(),
   );
   const lifecycleRevision = useRef(0);
+  const accountRefreshFlight = useRef<Promise<void> | null>(null);
 
   const refreshSnapshot = useCallback(() => {
     setSnapshot(controller.snapshot());
@@ -121,6 +136,56 @@ export function WalletSessionProvider({
     [runtime],
   );
 
+  const browserSessionRequired = useCallback(() => new WalletAccessError({
+    kind: "http",
+    status: 403,
+    code: "ACCOUNT_SESSION_REQUIRED",
+    retryable: false,
+  }), []);
+
+  const refreshAccount = useCallback((): Promise<void> => {
+    const existing = accountRefreshFlight.current;
+    if (existing) return existing;
+    const projectToken = controller.accessToken();
+    const controllerSnapshot = controller.snapshot();
+    if (projectToken === null || controllerSnapshot.status !== "authenticated") {
+      return Promise.reject(browserSessionRequired());
+    }
+
+    let flight!: Promise<void>;
+    flight = (async () => {
+      const account = AccountV1Schema.parse(
+        await runtime.services.getAccount({ projectToken }),
+      );
+      if (controller.accessToken() !== projectToken) return;
+      const current = controller.snapshot();
+      if (current.status !== "authenticated") return;
+      setSnapshot({ ...current, account });
+    })().finally(() => {
+      accountRefreshFlight.current = null;
+    });
+    accountRefreshFlight.current = flight;
+    return flight;
+  }, [browserSessionRequired, controller, runtime]);
+
+  const createAccountToken = useCallback(async (input: {
+    idempotencyKey: string;
+    request: AccountTokenCreateRequestV1;
+  }): Promise<AccountTokenCreatedV1> => {
+    const projectToken = controller.accessToken();
+    const controllerSnapshot = controller.snapshot();
+    if (projectToken === null || controllerSnapshot.status !== "authenticated") {
+      throw browserSessionRequired();
+    }
+    return AccountTokenCreatedV1Schema.parse(
+      await runtime.services.createAccountToken({
+        projectToken,
+        idempotencyKey: input.idempotencyKey,
+        request: input.request,
+      }),
+    );
+  }, [browserSessionRequired, controller, runtime]);
+
   useEffect(() => {
     let active = true;
     const effectRevision = ++lifecycleRevision.current;
@@ -145,6 +210,8 @@ export function WalletSessionProvider({
       listNetworks,
       createWalletChallenge,
       createSession,
+      createAccountToken,
+      refreshAccount,
       restore,
       signOut,
       retry,
@@ -155,9 +222,11 @@ export function WalletSessionProvider({
       accessToken,
       cancelPending,
       createSession,
+      createAccountToken,
       createWalletChallenge,
       forgetBrowser,
       listNetworks,
+      refreshAccount,
       restore,
       retry,
       signOut,

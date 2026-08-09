@@ -26,6 +26,7 @@ import { SubmissionDecision } from "./components/SubmissionDecision";
 import { Topbar } from "./components/Topbar";
 import { VerificationDialog } from "./components/VerificationDialog";
 import { WalletSignInDialog } from "./components/WalletSignInDialog";
+import { AccountSettings } from "./components/AccountSettings";
 import {
   WalletSessionProvider,
   useWalletSession,
@@ -1264,7 +1265,18 @@ function ProductApp({
 
   const pathname = globalThis.location?.pathname ?? "/";
   const routedRun = deepRouteRunId();
-  const route = props.runId || routedRun ? (
+  const route = pathname === "/settings" ? (
+    <div className="app-shell">
+      <Sidebar active="Settings" />
+      <div className="shell-main entry-shell-main">
+        <Topbar title="Settings" attestationType="Account" mode="new" />
+        <AccountSettings
+          onRequireWallet={openWalletDialog}
+          browserSessionBlocked={Boolean(shareToken || props.projectToken)}
+        />
+      </div>
+    </div>
+  ) : props.runId || routedRun ? (
     <RunCockpit
       runId={props.runId}
       authorityToken={authorityToken}

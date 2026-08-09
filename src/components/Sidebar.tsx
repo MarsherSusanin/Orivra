@@ -7,7 +7,7 @@ const items = [
   { label: "Requests", icon: FileText },
   { label: "Consumers", icon: UsersThree },
   { label: "CI", icon: Code },
-  { label: "Settings", icon: Gear },
+  { label: "Settings", icon: Gear, href: "/settings" },
 ];
 
 export function Sidebar({ active = "Runs" }: { active?: string }) {
