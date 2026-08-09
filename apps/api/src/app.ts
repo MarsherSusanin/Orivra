@@ -46,6 +46,18 @@ export type CanonicalUrlAttackDemoCache =
       recordingEtag: string;
     };
 
+type PreparedCanonicalUrlAttackDemoCache =
+  | { status: "unavailable" }
+  | {
+      status: "available";
+      summary: CanonicalUrlAttackDemoSummaryV1;
+      summaryBytes: string;
+      summaryEtag: string;
+      recordingBytes: Uint8Array<ArrayBuffer>;
+      recordingSha256: string;
+      recordingEtag: string;
+    };
+
 const TOKEN_PATTERN = /^(?:project|share)_[a-f0-9]{64}$/i;
 const PUBLIC_AUTH_BODY_LIMIT_BYTES = 8 * 1_024;
 const PRIVATE_RESPONSE_HEADERS = {
@@ -186,34 +198,67 @@ function sha256Envelope(value: string | Uint8Array): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-function validatedCanonicalUrlAttackDemoCache(
-  value: CanonicalUrlAttackDemoCache | undefined,
-): Extract<CanonicalUrlAttackDemoCache, { status: "available" }> | null {
-  if (!value || value.status !== "available") return null;
-  const summary = CanonicalUrlAttackDemoSummaryV1Schema.safeParse(value.summary);
-  if (!summary.success || !(value.recordingBytes instanceof Uint8Array)) {
-    return null;
-  }
-  const canonicalSummary = canonicalJson(summary.data);
-  if (
-    canonicalSummary !== value.summaryBytes ||
-    value.summaryEtag !== `"${sha256Envelope(canonicalSummary)}"` ||
-    value.recordingSha256 !== summary.data.recording.sha256 ||
-    value.recordingEtag !== `"${value.recordingSha256}"` ||
-    value.recordingBytes.byteLength < 1 ||
-    value.recordingBytes.byteLength >
-      CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES ||
-    sha256Envelope(value.recordingBytes) !== value.recordingSha256
-  ) {
-    return null;
+function deepFreezeCanonicalUrlAttackDemoValue<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) {
+      deepFreezeCanonicalUrlAttackDemoValue(child);
+    }
   }
   return value;
+}
+
+function prepareCanonicalUrlAttackDemoCache(
+  value: CanonicalUrlAttackDemoCache | undefined,
+): PreparedCanonicalUrlAttackDemoCache {
+  try {
+    if (!value || value.status !== "available") {
+      return { status: "unavailable" };
+    }
+    const summaryValue = value.summary;
+    const summaryBytes = value.summaryBytes;
+    const summaryEtag = value.summaryEtag;
+    const recordingBytesValue = value.recordingBytes;
+    const recordingSha256 = value.recordingSha256;
+    const recordingEtag = value.recordingEtag;
+    const summary = CanonicalUrlAttackDemoSummaryV1Schema.safeParse(
+      summaryValue,
+    );
+    if (!summary.success || !(recordingBytesValue instanceof Uint8Array)) {
+      return { status: "unavailable" };
+    }
+    const recordingBytes = Uint8Array.from(recordingBytesValue);
+    const canonicalSummary = canonicalJson(summary.data);
+    if (
+      canonicalSummary !== summaryBytes ||
+      summaryEtag !== `"${sha256Envelope(canonicalSummary)}"` ||
+      recordingSha256 !== summary.data.recording.sha256 ||
+      recordingEtag !== `"${recordingSha256}"` ||
+      recordingBytes.byteLength < 1 ||
+      recordingBytes.byteLength >
+        CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES ||
+      sha256Envelope(recordingBytes) !== recordingSha256
+    ) {
+      return { status: "unavailable" };
+    }
+    return Object.freeze({
+      status: "available" as const,
+      summary: deepFreezeCanonicalUrlAttackDemoValue(summary.data),
+      summaryBytes,
+      summaryEtag,
+      recordingBytes,
+      recordingSha256,
+      recordingEtag,
+    });
+  } catch {
+    return { status: "unavailable" };
+  }
 }
 
 function canonicalUrlAttackDemoResponse(
   request: Request,
   url: URL,
-  cache: CanonicalUrlAttackDemoCache | undefined,
+  cache: PreparedCanonicalUrlAttackDemoCache,
 ): Response {
   if (url.search !== "") {
     return privateError(
@@ -227,10 +272,11 @@ function canonicalUrlAttackDemoResponse(
       allow: "GET",
     });
   }
-  const available = validatedCanonicalUrlAttackDemoCache(cache);
-  if (available === null) return canonicalUrlAttackDemoUnavailable();
+  if (cache.status !== "available") {
+    return canonicalUrlAttackDemoUnavailable();
+  }
   const recording = url.pathname.endsWith("/recording");
-  const etag = recording ? available.recordingEtag : available.summaryEtag;
+  const etag = recording ? cache.recordingEtag : cache.summaryEtag;
   const responseHeaders = {
     ...PUBLIC_REVALIDATION_HEADERS,
     etag,
@@ -239,7 +285,7 @@ function canonicalUrlAttackDemoResponse(
     return new Response(null, { status: 304, headers: responseHeaders });
   }
   if (!recording) {
-    return new Response(available.summaryBytes, {
+    return new Response(cache.summaryBytes, {
       status: 200,
       headers: {
         ...responseHeaders,
@@ -247,15 +293,15 @@ function canonicalUrlAttackDemoResponse(
       },
     });
   }
-  return new Response(new Uint8Array(available.recordingBytes), {
+  return new Response(cache.recordingBytes, {
     status: 200,
     headers: {
       ...responseHeaders,
       "content-type":
         "application/vnd.proofline.canonical-url-attack-recording.v1+json; charset=utf-8",
-      "content-length": String(available.recordingBytes.byteLength),
+      "content-length": String(cache.recordingBytes.byteLength),
       "content-disposition":
-        `attachment; filename="canonical-url-attack-recording-${available.recordingSha256.slice("sha256:".length)}.json"`,
+        `attachment; filename="canonical-url-attack-recording-${cache.recordingSha256.slice("sha256:".length)}.json"`,
       "x-content-type-options": "nosniff",
     },
   });
@@ -551,6 +597,16 @@ export function createProoflineApi(input: {
   canonicalUrlAttackDemo?: CanonicalUrlAttackDemoCache;
 }) {
   const publicWebOrigin = normalizePublicWebOrigin(input.publicWebOrigin);
+  let canonicalUrlAttackDemo: PreparedCanonicalUrlAttackDemoCache = {
+    status: "unavailable",
+  };
+  try {
+    canonicalUrlAttackDemo = prepareCanonicalUrlAttackDemoCache(
+      input.canonicalUrlAttackDemo,
+    );
+  } catch {
+    // A hostile input getter is equivalent to any other invalid cache.
+  }
   return {
     async fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
@@ -561,7 +617,7 @@ export function createProoflineApi(input: {
           canonicalUrlAttackDemoResponse(
             request,
             url,
-            input.canonicalUrlAttackDemo,
+            canonicalUrlAttackDemo,
           ),
           publicWebOrigin,
         );

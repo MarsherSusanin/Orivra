@@ -1,7 +1,7 @@
 # Slice 024B — Persisted public canonical URL attack demo
 
-Status: Production-author GREEN candidate rejected by independent Core and
-Product verification; corrective RED frozen.
+Status: Replacement production-author GREEN candidate after corrective RED;
+independent Core and Product verification pending.
 
 ## Outcome
 

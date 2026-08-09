@@ -1,15 +1,19 @@
 # Slice 024B GREEN — persisted public canonical URL attack demo
 
-Status: Rejected by independent Core and Product verification on the exact
-candidate below. Corrective RED is required before a replacement GREEN.
+Status: Replacement production-author candidate after corrective RED;
+independent Core and Product verification pending.
 
 Date: 2026-08-10 (Asia/Vladivostok)
 
 Role: Production implementer
 
-Final corrective RED commit: `4e03267277b449913b2f5f7bc781454b8825beed`
+Original implementation RED commit: `4e03267277b449913b2f5f7bc781454b8825beed`
 
-Final corrective RED tree: `fd5227d44e779bcf8ca0b1ff4d4bc8f4bf3088ea`
+Original implementation RED tree: `fd5227d44e779bcf8ca0b1ff4d4bc8f4bf3088ea`
+
+Digest/cache corrective RED commit: `f18d4d2356596c59f7cfee13b6f88b1b790bab22`
+
+Digest/cache corrective RED tree: `e806234677929772e45b2eeb8a8fc38724e0bb98`
 
 Architecture decision: [ADR 0032](../adr/0032-persisted-public-canonical-url-attack-demo.md)
 
@@ -103,7 +107,7 @@ deployment, hosted Sites result or DigitalOcean deployment is claimed. With no
 configured exact digest the product deliberately returns unavailable. This
 production author cannot serve as either independent verifier.
 
-## Independent verification rejection
+## Rejected predecessor and corrective implementation
 
 Both read-only verifiers inspected commit
 `57f1b38c14a33d9c6d3a2b76f39120469301a2a9`, tree
@@ -119,3 +123,51 @@ migration, importer, HTTP, browser, Sites or package blocker.
 
 The command and browser results above remain historical production-author
 evidence, but they do not constitute an accepted GREEN or verifier PASS.
+
+The replacement implementation binds summary derivation to
+`sha256(canonicalSerialize(validatedRecording))`; a different well-formed
+digest now fails before summary projection. `createProoflineApi` prepares the
+optional injected cache once during composition: it reads each valid field
+once, parses and canonically validates the summary, verifies both ETags and the
+recording digest, copies the visible `Uint8Array` bytes into an owned private
+view, and freezes the independently parsed summary. Getter failure or invalid
+input becomes the same unavailable snapshot. Request handling retains no
+caller getter, Proxy or byte view and performs no validation, parsing,
+canonicalization, hashing or explicit copy.
+
+Corrective candidate evidence:
+
+```sh
+npm run typecheck
+npx vitest run \
+  packages/domain/test/slice024b-canonical-url-attack-demo-summary.contract.test.ts \
+  apps/api/test/slice024b-public-demo-api.contract.test.ts
+npm run test:core:coverage
+npm run test:coverage:backend
+PROOFLINE_TESTCONTAINERS=1 npm run test:postgres -- --maxWorkers=1
+npm run build
+npm --workspace @proofline/api run build
+npm --workspace @proofline/worker run build
+npm --workspace @proofline/cli run build
+npm --workspace @proofline/action run build
+npm run test:sites
+```
+
+- Exact corrective matrix: 2 files and 27 tests PASS.
+- Nearest domain replay, startup-cache and API controls: 3 files and 45 tests
+  PASS.
+- Contracts/domain: 42 files and 478 tests PASS at 100% statements, branches,
+  functions and lines.
+- Backend: 106 files and 1007 tests PASS; overall 92.12% lines and 87.18%
+  branches, with API at 90.72% lines and 85.91% branches. PostgreSQL skips in
+  this coverage configuration are not integration evidence.
+- Exact 024B matrix with real PostgreSQL: 8 files and 90 tests PASS with zero
+  skips. Full real PostgreSQL: 20 files and 151 tests PASS with zero skips.
+- Fresh worker artifact/package purity: 11/11 PASS. Root Web/Sites, API,
+  importer, worker, CLI and Action builds PASS. Sites is 23/23 PASS and all
+  required compatibility artifacts exist.
+
+This correction changes no migration, importer, Web/Sites behavior, package
+boundary, credential or deployment surface. The predecessor remains rejected;
+the replacement candidate still requires two independent reports on its exact
+tree. This production author cannot serve as either verifier.

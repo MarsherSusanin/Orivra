@@ -3,13 +3,25 @@ import {
   type CanonicalUrlAttackDemoSummaryV1,
   type CanonicalUrlAttackRecordingV1,
 } from "@proofline/contracts";
-import { validateCanonicalUrlAttackRecording } from "./canonical-url-attack-recording";
+import {
+  canonicalSerializeCanonicalUrlAttackRecording,
+  validateCanonicalUrlAttackRecording,
+} from "./canonical-url-attack-recording";
+import { sha256Hex } from "./sha256";
 
 export function deriveCanonicalUrlAttackDemoSummary(input: {
   recording: CanonicalUrlAttackRecordingV1;
   recordingSha256: string;
 }): CanonicalUrlAttackDemoSummaryV1 {
   const recording = validateCanonicalUrlAttackRecording(input.recording);
+  const canonicalRecording =
+    canonicalSerializeCanonicalUrlAttackRecording(recording);
+  const recordingSha256 = `sha256:${sha256Hex(canonicalRecording)}`;
+  if (input.recordingSha256 !== recordingSha256) {
+    throw new Error(
+      "Canonical URL attack recording digest does not match canonical bytes",
+    );
+  }
 
   return CanonicalUrlAttackDemoSummaryV1Schema.parse({
     version: "1",
@@ -17,7 +29,7 @@ export function deriveCanonicalUrlAttackDemoSummary(input: {
     status: "available",
     statement: recording.statement,
     recording: {
-      sha256: input.recordingSha256,
+      sha256: recordingSha256,
       checksum: recording.checksum,
       recordedAt: recording.recordedAt,
       release: recording.release,
