@@ -20,12 +20,17 @@ catalog, manifest-digest and public HTTP/browser trust boundary.
 - pure feature entries `@proofline/contracts/templates` and
   `@proofline/domain/templates` with identity-preserving root re-exports and no
   worker artifact contribution;
+- cycle-free `@proofline/contracts/manifest` extraction with identity-preserving
+  root re-exports; templates import manifest/template features rather than the
+  contracts root, while the worker retains required manifest runtime bytes;
 - catalog revision `1`, template revision `1`, canonical IDs
   `open-meteo-current-weather` and `eth-usd`;
 - one statically compiled catalog/detail implementation in `packages/domain`;
 - pure resolver reparses the manifest, canonicalizes it, recomputes SHA-256 and
   rejects any summary/detail/provenance/manifest mix-and-match;
 - exact defensive immutable resolution with canonical manifest bytes.
+- `createEthUsdComposerDraft` remains an exact compatibility adapter over
+  canonical `eth-usd` resolution and contains no duplicate Coinbase manifest.
 
 The Open-Meteo manifest digest is
 `sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8`.

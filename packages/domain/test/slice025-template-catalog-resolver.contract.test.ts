@@ -42,6 +42,29 @@ function exactDigest(manifest: unknown): string {
   return `sha256:${sha256Hex(canonicalJson(Web2JsonManifestV1Schema.parse(manifest)))}`;
 }
 
+function exportedFunctionBody(source: string, name: string): string {
+  const declaration = `export function ${name}`;
+  const start = source.indexOf(declaration);
+  expect(
+    start,
+    `${name} must remain a named compatibility export`,
+  ).toBeGreaterThanOrEqual(0);
+  if (start < 0) return "";
+  const openingBrace = source.indexOf("{", start);
+  expect(openingBrace).toBeGreaterThan(start);
+  if (openingBrace < 0) return "";
+
+  let depth = 0;
+  for (let index = openingBrace; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    if (source[index] === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, index + 1);
+    }
+  }
+  throw new Error(`Unable to isolate ${name} source body.`);
+}
+
 describe("Slice 025A static template catalog and resolver", () => {
   it("publishes the exact ordered catalog with Open-Meteo featured first", () => {
     const getCatalog = requireFunction(api.getWeb2JsonTemplateCatalog);
@@ -117,16 +140,52 @@ describe("Slice 025A static template catalog and resolver", () => {
     const detail = getDetail("eth-usd");
     expect(detail).not.toBeNull();
     if (!detail) return;
-    const expectedDraft = Domain.createEthUsdComposerDraft({
+    const caller = {
       updatedAt: "2026-08-10T00:00:00.000Z",
       createIdempotencyKey: "composer_00000000-0000-4000-8000-000000000000",
-    });
+    };
+    const expectedDraft = Domain.createEthUsdComposerDraft(caller);
     const finalized = Domain.finalizeWeb2JsonManifestDraft(expectedDraft);
     expect(finalized.valid).toBe(true);
     if (!finalized.valid) return;
     expect(detail.manifest).toEqual(finalized.manifest);
     expect(detail.manifestCanonicalJson).toBe(finalized.canonicalJson);
     expect(exactDigest(detail.manifest)).toBe("sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db");
+    expect(expectedDraft).toEqual(
+      Domain.importWeb2JsonManifestDraft({ ...caller, manifest: detail.manifest }),
+    );
+    expect(expectedDraft.updatedAt).toBe(caller.updatedAt);
+    expect(expectedDraft.createIdempotencyKey).toBe(
+      caller.createIdempotencyKey,
+    );
+    const freshCaller = {
+      updatedAt: "2026-08-10T00:00:01.000Z",
+      createIdempotencyKey:
+        "composer_11111111-1111-4111-8111-111111111111",
+    };
+    const freshDraft = Domain.createEthUsdComposerDraft(freshCaller);
+    expect(freshDraft.fields).toEqual(expectedDraft.fields);
+    expect(freshDraft.updatedAt).toBe(freshCaller.updatedAt);
+    expect(freshDraft.createIdempotencyKey).toBe(
+      freshCaller.createIdempotencyKey,
+    );
+  });
+
+  it("delegates the ETH/USD compatibility helper without embedding a second manifest", () => {
+    const source = readFileSync(
+      new URL("../src/manifest-composer.ts", import.meta.url),
+      "utf8",
+    );
+    const body = exportedFunctionBody(source, "createEthUsdComposerDraft");
+
+    expect(body).toMatch(/getWeb2JsonTemplateDetail\(\s*["']eth-usd["']\s*\)/);
+    expect(body).toMatch(/resolveWeb2JsonTemplate\s*\(/);
+    expect(source).not.toMatch(
+      /api\.coinbase\.com|ETH-USD|\.data\s*\|\s*\{amount|internalType["']:\s*["']string["'],["']name["']:\s*["']amount/,
+    );
+    expect(body).not.toMatch(
+      /attestationType|request\s*:|consumer\s*:|submission\s*:|url\s*:|jq\s*:|abiSignature\s*:|expectedHost|expectedPathPrefix|feeCapWei/,
+    );
   });
 
   it.each(["", "Open-Meteo", "../eth-usd", "a".repeat(65), "missing"])(

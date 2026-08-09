@@ -119,3 +119,57 @@ No coverage, browser, build, Docker, broad/full, hosted, provider-network or
 live Coston2 matrix is claimed by this intentional RED wave. GREEN must run the
 slice coverage, black-box browser, production build and Sites acceptance gates
 frozen by ADR 0033 and the Slice 025 contract.
+
+## Corrective package-boundary RED
+
+A post-freeze architecture review found two package-boundary regressions before
+GREEN acceptance. The frozen correction requires:
+
+- `createEthUsdComposerDraft` to delegate to canonical `eth-usd` catalog
+  resolution without retaining a second Coinbase URL, JQ, ABI or manifest
+  literal, while preserving exact draft fields and caller-owned freshness;
+- cycle-free `@proofline/contracts/manifest` ownership with root identity
+  re-exports, contracts templates importing the relative manifest feature, and
+  domain templates importing only the contracts template/manifest features;
+- a fresh worker metafile to retain required manifest runtime bytes while both
+  template leaves contribute zero bytes.
+
+The earlier 100 RED / 55 PASS result above remains the exact first Slice 025
+freeze and is not rewritten.
+
+```text
+npm run typecheck
+PASS
+
+npx vitest run \
+  packages/domain/test/slice025-template-catalog-resolver.contract.test.ts \
+  apps/worker/test/slice009-production-worker-purity.contract.test.ts
+
+EXPECTED RED — 2 files failed; 27 failed, 9 passed, 36 total
+```
+
+The domain suite has 22 intentional failures: the original 21 absent catalog
+and resolver contracts plus the new source-level delegation boundary. The
+worker/package suite has five intentional failures and nine controls: the
+original absent template metadata/feature entry, absent manifest feature
+identity, absent cycle-free feature sources, and zero manifest feature bytes in
+the fresh worker metafile. The failures are semantic boundary evidence; the
+new source probes guard missing files before reading them.
+
+The nearest unchanged affected baseline is PASS:
+
+```text
+npx vitest run \
+  packages/contracts/test/public-contracts.test.ts \
+  packages/contracts/test/composer-draft.contract.test.ts \
+  packages/domain/test/manifest-composer.test.ts \
+  packages/domain/test/manifest-composer-finalization.contract.test.ts \
+  apps/worker/test/production-bootstrap.contract.test.ts \
+  apps/worker/test/live-runtime-adapter.contract.test.ts
+
+PASS — 6 files, 99 tests
+```
+
+No production, package metadata, dependency or generated artifact is changed
+by this corrective RED wave. No broad/full, coverage, build, Docker, provider,
+hosted or live matrix is claimed.

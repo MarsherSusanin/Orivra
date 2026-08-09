@@ -40,6 +40,15 @@ every module has effect-free initialization. The production worker imports
 neither feature and a fresh bundled worker must receive zero output bytes from
 both template leaves.
 
+The cycle-free manifest boundary is
+`@proofline/contracts/manifest`. It owns the Web2Json manifest schemas and
+public URL/ABI helpers previously declared in the root barrel; the root
+re-exports the same runtime identities. The contracts template feature imports
+the relative manifest feature, never the root barrel, while the domain template
+feature imports only `@proofline/contracts/templates` and
+`@proofline/contracts/manifest`. A fresh worker retains non-zero manifest
+runtime contribution but receives zero bytes from either template leaf.
+
 The Open-Meteo template is the Coston2 replay-mode Berlin current-temperature
 manifest. It uses HTTPS GET `https://api.open-meteo.com/v1/forecast` with the
 exact query `latitude=52.52`, `longitude=13.41`,
@@ -107,6 +116,12 @@ creates the editable draft. On an unedited submission, `createRun` receives the
 exact resolved manifest; after edits, the existing finalizer and
 `Web2JsonManifestV1Schema` remain the sole authority. Public provenance is
 bounded display metadata and is never copied into the run request.
+
+The compatibility export `createEthUsdComposerDraft` is a thin adapter over
+canonical `eth-usd` catalog resolution. It contains no second Coinbase URL,
+JQ, ABI or manifest literal. It preserves the exact draft behavior and copies
+only the caller's fresh `updatedAt` and `createIdempotencyKey` into the draft
+derived from the resolved manifest.
 
 ## Consequences
 

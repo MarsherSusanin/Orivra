@@ -40,6 +40,18 @@ const templateContractRuntimeExports = [
   "Web2JsonTemplateDetailV1Schema",
 ] as const;
 
+const manifestContractRuntimeExports = [
+  "Web2JsonAbiParameterV1Schema",
+  "Web2JsonManifestV1Schema",
+  "Coston2Web2JsonManifestV1Schema",
+  "ComposerStepV1Schema",
+  "Web2JsonDraftQueryRowV1Schema",
+  "Web2JsonManifestDraftV1Schema",
+  "isPublicUrlCredentialQueryName",
+  "isPrivateUrlQueryValue",
+  "isSafePublicUrlQueryEntry",
+] as const;
+
 const templateDomainRuntimeExports = [
   "getWeb2JsonTemplateCatalog",
   "getWeb2JsonTemplateDetail",
@@ -136,6 +148,7 @@ describe("Slice 009 production worker purity", () => {
     expect(contracts.exports).toEqual({
       ".": "./src/index.ts",
       "./wallet-auth": "./src/wallet-auth.ts",
+      "./manifest": "./src/web2json-manifest.ts",
       "./templates": "./src/web2json-templates.ts",
     });
     expect(domain.exports).toEqual({
@@ -205,6 +218,68 @@ describe("Slice 009 production worker purity", () => {
     }
   });
 
+  it("keeps every manifest runtime export identical through the root entry", async () => {
+    const contractsSpecifier = "@proofline/contracts";
+    const manifestSpecifier = "@proofline/contracts/manifest";
+    const [rootContracts, manifestContracts] = await Promise.all([
+      import(/* @vite-ignore */ contractsSpecifier),
+      import(/* @vite-ignore */ manifestSpecifier),
+    ]);
+
+    expect(Object.keys(manifestContracts).sort()).toEqual(
+      [...manifestContractRuntimeExports].sort(),
+    );
+    for (const name of manifestContractRuntimeExports) {
+      expect(manifestContracts[name]).toBe(rootContracts[name]);
+    }
+  });
+
+  it("keeps manifest and template feature imports cycle-free", () => {
+    const manifestFeature = resolve(
+      root,
+      "packages/contracts/src/web2json-manifest.ts",
+    );
+    const contractTemplates = resolve(
+      root,
+      "packages/contracts/src/web2json-templates.ts",
+    );
+    const domainTemplates = resolve(
+      root,
+      "packages/domain/src/web2json-template-catalog.ts",
+    );
+    expect(existsSync(manifestFeature)).toBe(true);
+    expect(existsSync(contractTemplates)).toBe(true);
+    expect(existsSync(domainTemplates)).toBe(true);
+    if (
+      !existsSync(manifestFeature) ||
+      !existsSync(contractTemplates) ||
+      !existsSync(domainTemplates)
+    ) {
+      return;
+    }
+
+    const manifestSource = readFileSync(manifestFeature, "utf8");
+    const contractTemplateSource = readFileSync(contractTemplates, "utf8");
+    const domainTemplateSource = readFileSync(domainTemplates, "utf8");
+    expect(manifestSource).not.toMatch(/from\s*["']\.\/index["']/);
+    expect(manifestSource).not.toMatch(/web2json-templates/);
+    expect(contractTemplateSource).toMatch(
+      /from\s*["']\.\/web2json-manifest["']/,
+    );
+    expect(contractTemplateSource).not.toMatch(
+      /from\s*["']\.\/index["']|from\s*["']@proofline\/contracts["']/,
+    );
+    expect(domainTemplateSource).toMatch(
+      /from\s*["']@proofline\/contracts\/templates["']/,
+    );
+    expect(domainTemplateSource).toMatch(
+      /from\s*["']@proofline\/contracts\/manifest["']/,
+    );
+    expect(domainTemplateSource).not.toMatch(
+      /from\s*["']@proofline\/contracts["']/,
+    );
+  });
+
   it("proves a fresh worker build excludes unused custody and demo feature modules", async () => {
     const directory = await mkdtemp(join(tmpdir(), "proofline-worker-purity-"));
     const artifact = join(directory, "worker.js");
@@ -271,6 +346,10 @@ describe("Slice 009 production worker purity", () => {
       ] as const) {
         expect(bytesForPattern(pattern), label).toBeGreaterThan(0);
       }
+      expect(
+        bytesForSuffix("packages/contracts/src/web2json-manifest.ts"),
+        "manifest feature runtime",
+      ).toBeGreaterThan(0);
       expect(freshArtifact).toMatch(/await startProductionWorker\(\)/);
       expect(freshArtifact).toMatch(/PROOFLINE_COSTON2_PRIVATE_KEY/);
       const artifactFindings = matchingLabels(
