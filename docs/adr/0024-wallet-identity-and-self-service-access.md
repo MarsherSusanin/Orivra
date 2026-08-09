@@ -187,8 +187,10 @@ subscriber surface, so no observer contract is introduced by this correction.
   cancellation, reconnect/sign-out recovery and forget-browser semantics.
 - **023C2A — wallet provider adapter:** lazy EIP-6963/EIP-1193 discovery,
   enabled-Coston2 EOA verification, exact signing and bounded provider errors.
-- **023C2B — wallet sign-in surface:** provider chooser, persisted
-  challenge/session orchestration and unsupported/rejected/reconnect states.
+- **023C2B1 — isolated wallet sign-in:** app-wide session context, lazy provider
+  chooser and cancellable challenge/sign/session dialog.
+- **023C2B2 — product entry wiring:** replace manual-token entry on Runs/deep
+  routes, preserve embed/share paths and resume one Composer create intent.
 - **023C3 — Settings surface:** account inspection plus one-time CLI/Action
   token issue, copy and revoke UX.
 - **023D — quotas and hardening:** challenge/run limits, active-live-run cap,

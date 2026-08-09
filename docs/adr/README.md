@@ -28,5 +28,6 @@ ADR фиксирует архитектурное решение, которое
 | [0023](0023-network-capability-boundary.md) | Известная сеть отделена от разрешённой Web2Json capability; Flare fail-closed до I/O |
 | [0024](0024-wallet-identity-and-self-service-access.md) | Server-authored EIP-4361 выдаёт session-only project access без клиентского message authority |
 | [0025](0025-lazy-browser-wallet-provider-boundary.md) | Ленивый EIP-6963/EIP-1193 adapter проверяет enabled Coston2 EOA до подписи |
+| [0026](0026-wallet-session-context-and-lazy-sign-in-dialog.md) | Один wallet-session context лениво подключает доступный Coston2 sign-in dialog |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.
