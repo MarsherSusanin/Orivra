@@ -39,6 +39,12 @@ wallet.
 - `src/slice023c2b2-wallet-product-journey.contract.test.tsx`;
 - `tests/slice023c2b2-wallet-bundle.contract.mjs` after `npm run build`.
 
+The previously accepted production-surface contracts in
+`product-entry-accessibility.contract.test.tsx`, `product-entry.states.test.tsx`,
+`production-run-surface.contract.test.tsx` and
+`slice015b-submit.contract.test.tsx` are corrected in the same RED freeze. Only
+their manual-token expectations change; all unrelated assertions remain.
+
 ## Targeted GREEN gates
 
 Run typecheck, the new contracts, accepted B1, direct App/Runs/Composer/share

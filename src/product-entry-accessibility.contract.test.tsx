@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -24,41 +24,47 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("project token dialog escape routes", () => {
-  it("closes the optional /runs connection dialog with Escape", async () => {
+describe("wallet sign-in dialog escape routes", () => {
+  it("closes the optional /runs wallet dialog with Escape and restores focus", async () => {
     window.history.replaceState({}, "", "/runs");
     const user = userEvent.setup();
     render(<App services={services()} />);
 
-    await user.click(screen.getByRole("button", { name: /connect project/i }));
-    expect(screen.getByRole("dialog", { name: /connect project/i })).toBeVisible();
+    const opener = screen.getByRole("button", { name: /^sign in with wallet$/i });
+    await user.click(opener);
+    expect(screen.getByRole("dialog", { name: /sign in with wallet/i })).toBeVisible();
     await user.keyboard("{Escape}");
 
-    expect(screen.queryByRole("dialog", { name: /connect project/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /sign in with wallet/i })).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
   });
 
-  it("provides a visible Cancel or Close control for the optional /runs dialog", async () => {
+  it("provides a visible Close control for the optional /runs wallet dialog", async () => {
     window.history.replaceState({}, "", "/runs");
     const user = userEvent.setup();
     render(<App services={services()} />);
 
-    await user.click(screen.getByRole("button", { name: /connect project/i }));
-    const close = screen.getByRole("button", { name: /cancel|close/i });
+    await user.click(screen.getByRole("button", { name: /^sign in with wallet$/i }));
+    const dialog = screen.getByRole("dialog", { name: /sign in with wallet/i });
+    const close = within(dialog).getByRole("button", { name: /close wallet sign in/i });
     expect(close).toBeVisible();
     await user.click(close);
 
-    expect(screen.queryByRole("dialog", { name: /connect project/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /sign in with wallet/i })).not.toBeInTheDocument();
   });
 
-  it("offers Back to runs when a deep-linked run is locked", () => {
+  it("keeps a locked deep URL and offers wallet sign-in plus Back to runs", () => {
     window.history.replaceState({}, "", "/runs/run_locked");
     render(<App services={services()} />);
 
-    expect(screen.getByRole("heading", { name: /connect project to open run/i })).toBeVisible();
+    expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^sign in with wallet$/i })).toBeEnabled();
     expect(screen.getByRole("link", { name: /back to runs/i })).toHaveAttribute(
       "href",
       "/runs",
     );
+    expect(window.location.pathname).toBe("/runs/run_locked");
+    expect(document.body).not.toHaveTextContent(/project token|connect project/i);
   });
 });
 

@@ -90,7 +90,7 @@ describe("run discovery states", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/unavailable/i);
-    expect(within(alert).getByRole("button", { name: /reconnect project/i })).toBeEnabled();
+    expect(within(alert).getByRole("button", { name: /reconnect wallet session/i })).toBeEnabled();
     expect(alert).not.toHaveTextContent(projectToken);
   });
 

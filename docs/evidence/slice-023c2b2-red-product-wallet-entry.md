@@ -24,6 +24,11 @@ Evidence is recorded immediately before the RED freeze commit:
   tests, 2 preserved-boundary tests pass and 5 fail because App has no wallet
   root, sign-in entry or pending Composer intent. The JSON run completes in
   about 5 seconds and performs no live wallet/network work.
+- Corrected historical App/Runs/Composer contracts — expected semantic RED: 4
+  files / 21 tests, 15 unaffected controls pass and 6 deprecated manual-token
+  scenarios now fail on the missing wallet entry. The six are two `/runs`
+  dialog escape/close cases, one locked deep route, one reconnect label, one
+  deep hydration gate and one valid unauthenticated Composer submit.
 - Nearest accepted B1/App/Composer/share baseline — PASS: 8 files / 39 tests.
 - `npm run build` — PASS baseline; initial entry is 149.65 kB gzip.
 - Standalone bundle contract — expected RED: 1 test fails because no reachable

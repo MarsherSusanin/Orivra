@@ -123,21 +123,23 @@ describe("production run route and hydration", () => {
   });
 });
 
-describe("session-only project token onboarding", () => {
-  it("blocks API hydration until a project token is configured in session storage", async () => {
+describe("session-only wallet onboarding", () => {
+  it("blocks deep hydration until explicit wallet sign-in without changing the URL", async () => {
     window.history.replaceState({}, "", `/runs/${deepRunId}`);
     const ports = services();
     const user = userEvent.setup();
     render(<App services={asSurface(ports)} />);
 
-    expect(screen.getByRole("dialog", { name: /connect project/i })).toBeVisible();
+    expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();
+    const opener = screen.getByRole("button", { name: /^sign in with wallet$/i });
+    expect(screen.getByRole("link", { name: /back to runs/i })).toHaveAttribute("href", "/runs");
+    expect(window.location.pathname).toBe(`/runs/${deepRunId}`);
+    expect(document.body).not.toHaveTextContent(/project token|connect project/i);
     expect(ports.hydrateRun).not.toHaveBeenCalled();
-    await user.type(screen.getByLabelText(/project token/i), projectToken);
-    await user.click(screen.getByRole("button", { name: /open run/i }));
+    await user.click(opener);
 
-    await waitFor(() => expect(ports.hydrateRun).toHaveBeenCalledOnce());
-    expect(sessionStorage.getItem("proofline:project-token")).toBe(projectToken);
-    expect(localStorage.getItem("proofline:project-token")).toBeNull();
-    expect(screen.queryByRole("dialog", { name: /connect project/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /sign in with wallet/i })).toBeVisible();
+    expect(ports.hydrateRun).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe(`/runs/${deepRunId}`);
   });
 });

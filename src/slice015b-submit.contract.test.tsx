@@ -114,7 +114,7 @@ afterEach(() => {
 });
 
 describe("Slice 015B explicit Submit boundary", () => {
-  it("requires a project connection without validating or creating implicitly", async () => {
+  it("validates once before wallet sign-in without creating or losing the draft", async () => {
     persistSubmitDraft();
     const createRun = vi.fn();
     const analytics = collector();
@@ -122,10 +122,15 @@ describe("Slice 015B explicit Submit boundary", () => {
     renderSubmit({ createRun, analytics: analytics.port });
 
     expect(manifestEvents(analytics.events)).toHaveLength(0);
-    await user.click(screen.getByRole("button", { name: /connect.*create|create preflight run/i }));
-    expect(screen.getByRole("dialog", { name: /connect project/i })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /sign in with wallet|create preflight run/i }));
+    expect(screen.getByRole("dialog", { name: /sign in with wallet/i })).toBeVisible();
     expect(createRun).not.toHaveBeenCalled();
-    expect(manifestEvents(analytics.events)).toHaveLength(0);
+    expect(manifestEvents(analytics.events)).toEqual([
+      expect.objectContaining({
+        name: "MANIFEST_VALIDATED",
+        metadata: { outcome: "accepted" },
+      }),
+    ]);
     expect(localStorage.getItem(DRAFT_KEY)).not.toBeNull();
   });
 
