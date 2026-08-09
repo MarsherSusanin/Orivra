@@ -32,6 +32,27 @@ production lacks the context method and rendered controls/classes. Fixtures
 use only local ports and strict recorded values. No network, wallet provider,
 PostgreSQL, Docker, hosted or live Coston2 operation is reached.
 
+## Superseded C3A assertion correction
+
+After the C3B freeze, the two C3A assertions that required Revoke and Sign out
+to remain absent became superseded negative contracts. They expressed C3A's
+then-deferred scope, not durable product behavior, and would contradict this
+frozen C3B surface once GREEN. The corrective wave removes only those two
+negative assertions. It preserves C3A wallet identity, exact ordered statuses,
+provider silence, axe, issuance, generation, reveal and leakage expectations.
+
+Recorded on RED parent `86794dc51724b59187a673e61dfa5010c314c2cf` /
+tree `74aca81152e411f22d9ce64d04d2e276ca0bf596`:
+
+- corrected C3A Settings contract — 1 file / 10 tests PASS;
+- focused C3B remains 2 files / 28 tests, exactly 28 intentional RED;
+- nearest unchanged C1 controller, C2B2 authority and C3A context baseline —
+  3 files / 32 tests PASS;
+- typecheck and diff-check — PASS.
+
+No C3B expectation is weakened and no new positive C3A revoke/sign-out behavior
+is invented; those behaviors remain owned exclusively by the frozen C3B tests.
+
 ## Frozen corrective details
 
 - One authority generation serializes account mutations. Identical issue or

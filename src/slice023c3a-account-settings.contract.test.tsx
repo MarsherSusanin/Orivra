@@ -248,8 +248,6 @@ describe("Slice 023C3A authenticated account Settings", () => {
       expect.stringMatching(/Old workstation.*cli.*expired/i),
       expect.stringMatching(/Former laptop.*cli.*revoked/i),
     ]);
-    expect(screen.queryByRole("button", { name: /revoke/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /sign out/i })).not.toBeInTheDocument();
     const result = await axe.run(rendered.container, {
       rules: { "color-contrast": { enabled: false } },
     });
