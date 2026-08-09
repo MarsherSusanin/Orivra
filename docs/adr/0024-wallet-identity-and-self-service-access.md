@@ -115,6 +115,33 @@ issuance index and a stable account-list index. Raw tokens are never stored.
 Account lists never select token digests and order CLI/Action summaries by
 `created_at DESC, id DESC`. Revocation preserves the first `revoked_at` value.
 
+The Web access boundary is split from wallet-provider integration. A dedicated
+`WalletAccessServices` client is the only browser transport for network,
+challenge, session and account calls. It parses every success through the
+existing strict V1 schemas, requires an exact empty `204` for current-session
+revocation, and maps transport, HTTP, input and output-contract failures to
+fixed sanitized typed errors. Browser requests use CORS with omitted
+credentials, disabled caching and referrer suppression. Authorization is
+attached only to protected account/session-management calls; the bearer never
+appears in a URL or JSON body.
+
+A pure Web session controller owns the browser token lifecycle independently of
+React and EIP-1193. It accepts only `project_<64 lowercase hex>` in the exact
+`proofline:project-token` `sessionStorage` key, keeps the token out of public
+state snapshots, and exposes it only through a private access-token accessor.
+Startup validates a stored token through `GET /v1/account`; `401` and a
+non-browser `403 ACCOUNT_SESSION_REQUIRED` forget it, while an unavailable
+network retains it and exposes a safe retry. Reload never invokes a wallet.
+
+After a valid session response, denied session storage produces an explicitly
+ephemeral in-memory authenticated state; there is no `localStorage`, URL,
+history, analytics or logging fallback. Session creation, restore and sign-out
+are single-flight. Cancellation, controller close and superseding attempts
+invalidate late responses before they can persist a token. Sign-out clears on
+an exact `204` or `401`; transport/server failure retains access for retry, and
+an explicit forget-browser action clears local access without claiming server
+revocation.
+
 ## Delivery waves
 
 - **023A — contracts and crypto:** public schemas, deterministic EIP-4361
@@ -127,8 +154,13 @@ Account lists never select token digests and order CLI/Action summaries by
 - **023B2 — account token management:** browser-session-only account read,
   CLI/Action issue and revoke endpoints for 1–90 day tokens, plus current
   browser-session sign-out.
-- **023C — Web session and Settings:** wallet states, lazy wallet code,
-  session-only token retention, reconnect/sign-out and CLI/Action token UI.
+- **023C1 — Web access client and session controller:** strict browser
+  transport, sanitized failures, session-only token retention, restore,
+  cancellation, reconnect/sign-out recovery and forget-browser semantics.
+- **023C2 — wallet provider and sign-in surface:** lazy EIP-1193 loading,
+  challenge/signature orchestration and unsupported/rejected/reconnect states.
+- **023C3 — Settings surface:** account inspection plus one-time CLI/Action
+  token issue, copy and revoke UX.
 - **023D — quotas and hardening:** challenge/run limits, active-live-run cap,
   cleanup, concurrency, leakage and a pre-buffer Node stream 413 boundary.
 
