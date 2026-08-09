@@ -69,11 +69,29 @@ idempotency, rollback, concurrency, privilege and leakage. Product integration
 verification reviews HTTP/CORS, wallet/run client retry evidence and unchanged
 ordinary create/sign-in behavior on the same recorded tree.
 
+## Corrective verifier-finding RED
+
+Independent verification rejected the first GREEN candidate
+`b46040c5671ccd2398f06d391441a4377ef29436` (tree
+`5258bb0d73bfabd7c76e23dca22bb2f9b24ab1dd`). Core verification found that
+challenge admission holds its transaction client after `COMMIT` and then asks
+the same pool for a cleanup client. A `max=1` pool deadlocks; `max=N` concurrent
+admissions can occupy all `N` clients and deadlock together. Product
+verification found that the create-run quota branch rewrites the established
+sanitized `409 IDEMPOTENCY_CONFLICT` and
+`409 NETWORK_CAPABILITY_DISABLED` outcomes to `HTTP_409`.
+
+Corrective tests freeze max-one success/release, fail-open awaited cleanup,
+saturated max-N exact admission and a gated real-PostgreSQL max-one ownership
+case. Run-client tests preserve the two established 409 codes while retaining
+the new status-compatible quota outcomes and fail-closed unknown/mismatch
+fallback without response leaks.
+
 ## Implementation status
 
-Production GREEN is implemented by migration 008, fail-fast quota composition,
+The first production GREEN implemented migration 008, fail-fast quota composition,
 transactional wallet/run admission, bounded cleanup, exact HTTP/CORS mapping and
-sanitized Web clients. Author evidence is recorded in
+sanitized Web clients, but the exact candidate above is rejected pending the
+corrective GREEN and two fresh independent passes. Author evidence is recorded in
 [`../evidence/slice-023d1-green-persisted-api-admission-quotas.md`](../evidence/slice-023d1-green-persisted-api-admission-quotas.md).
-This status is module evidence only; two independent verifiers must still PASS
-the exact committed tree before the module is accepted.
+That status is module evidence only.

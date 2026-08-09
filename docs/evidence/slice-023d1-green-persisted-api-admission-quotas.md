@@ -64,3 +64,20 @@ No external network, credentials, hosted service or live Coston2 environment
 was used or claimed. The exact candidate commit/tree is recorded after this
 documentation is committed; two different read-only verifiers must inspect that
 same tree.
+
+## Independent verification result
+
+The resulting production candidate
+`b46040c5671ccd2398f06d391441a4377ef29436`, tree
+`5258bb0d73bfabd7c76e23dca22bb2f9b24ab1dd`, is rejected and received neither
+independent PASS. Core verification reproduced post-commit cleanup pool
+starvation: the held admission client asks the same pool for another client,
+deadlocking at `max=1` and when all `max=N` concurrent slots are occupied.
+Product verification reproduced a create-run compatibility regression: the
+quota-specific client branch replaces accepted sanitized
+`409 IDEMPOTENCY_CONFLICT` and `409 NETWORK_CAPABILITY_DISABLED` evidence with
+`HTTP_409`.
+
+The corrective RED is frozen in the original RED evidence and the Slice
+Contract. This author report remains historical implementation evidence; it is
+not acceptance evidence for the rejected tree.

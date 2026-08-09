@@ -138,7 +138,11 @@ describe.runIf(enabled)("Slice 023D1 real PostgreSQL admission quotas", () => {
     for (const migration of all) await pool.query(migration.sql);
   }, 120_000);
 
-  function service(policy: QuotaPolicy, address = ADDRESS_A) {
+  function service(
+    policy: QuotaPolicy,
+    address = ADDRESS_A,
+    servicePool: pg.Pool = pool,
+  ) {
     const factory = createProductionProoflineService as unknown as (input: {
       pool: pg.Pool;
       tokenDigestKey: string;
@@ -147,7 +151,7 @@ describe.runIf(enabled)("Slice 023D1 real PostgreSQL admission quotas", () => {
       walletAuthPorts: { recoverAddress(input: unknown): Promise<string> };
     }) => ReturnType<typeof createProductionProoflineService>;
     return factory({
-      pool,
+      pool: servicePool,
       tokenDigestKey: "slice-023d1-real-pg-key",
       publicWebOrigin: "https://proofline.example",
       quotaPolicy: policy,
@@ -212,6 +216,38 @@ describe.runIf(enabled)("Slice 023D1 real PostgreSQL admission quotas", () => {
          AND table_name IN ('quota_windows', 'wallet_challenges')`,
     );
     expect(worker.rows).toEqual([]);
+  });
+
+  it("never asks a max-one pool for cleanup while its admission client is held", async () => {
+    const maxOne = new pg.Pool({
+      host: container.getHost(),
+      port: container.getMappedPort(5432),
+      user: "proofline",
+      password: "proofline",
+      database: "proofline",
+      max: 1,
+    });
+    const saturatedPoolQueries: string[] = [];
+    const guardedPool = {
+      connect: maxOne.connect.bind(maxOne),
+      async query(text: string, values?: unknown[]) {
+        if (maxOne.totalCount >= 1 && maxOne.idleCount === 0) {
+          saturatedPoolQueries.push(text);
+          throw new Error("pool max=1 has no second cleanup slot");
+        }
+        return maxOne.query(text, values);
+      },
+    } as unknown as pg.Pool;
+    try {
+      const production = service(policy(), ADDRESS_A, guardedPool);
+      await expect(production.createWalletChallenge({
+        version: "1",
+        address: ADDRESS_A,
+      })).resolves.toMatchObject({ version: "1", address: ADDRESS_A });
+      expect(saturatedPoolQueries).toEqual([]);
+    } finally {
+      await maxOne.end();
+    }
   });
 
   it("admits exact concurrent address/global winners across restarted services on the database clock", async () => {

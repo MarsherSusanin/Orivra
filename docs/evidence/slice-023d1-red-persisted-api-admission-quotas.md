@@ -128,3 +128,53 @@ boundaries, project isolation, replay-before-quota, terminal slot release,
 rollback without partial run/event/command effects and cleanup preservation.
 This module gate is credential-free and is not the unified 022–029A candidate
 matrix.
+
+## Corrective RED after independent verification
+
+The first GREEN candidate
+`b46040c5671ccd2398f06d391441a4377ef29436`, tree
+`5258bb0d73bfabd7c76e23dca22bb2f9b24ab1dd`, is rejected and received neither
+independent PASS.
+
+Core verification found that `createWalletChallenge` retains its checked-out
+admission client after `COMMIT`, awaits cleanup through `pool.query`, and only
+releases the client in `finally`. A `max=1` pool therefore blocks after commit;
+when `max=N` successful requests occupy all `N` clients, every request can wait
+for a second slot. The corrective contract permits cleanup through the same
+committed client or one exact release before awaited pool cleanup. It also
+requires cleanup failure to remain fail-open and fully awaited, with no
+detached unhandled work or extra quota/challenge reservations.
+
+Product verification found that the quota-specific create-run client branch
+turns established safe `409 IDEMPOTENCY_CONFLICT` and
+`409 NETWORK_CAPABILITY_DISABLED` outcomes into `HTTP_409`. The corrective
+client matrix preserves those exact status-compatible codes with fixed copy,
+keeps the two new quota outcomes status-compatible, and retains `HTTP_<status>`
+fallback for unknown, malformed or mismatched evidence without echoing hostile
+body, header or bearer bytes.
+
+Corrective focused command:
+
+```sh
+npx vitest run \
+  apps/api/test/slice023d1-persisted-quota-service.contract.test.ts \
+  apps/api/test/slice023d1-quota-http.contract.test.ts \
+  apps/api/test/postgres/slice023d1-quota-migration.contract.test.ts \
+  src/services/slice023d1-quota-client.contract.test.ts
+```
+
+Result: 4 files, 57 cases total: 5 intentional failures, 46 passing controls
+and 6 opt-in real-PostgreSQL cases skipped. The five failures are exactly the
+three post-commit pool-starvation cases and the two established 409 codes being
+received as `HTTP_409`. The two directly changed hermetic suites report 38
+cases: the same 5 intentional failures and 33 passing controls.
+
+The nearest unchanged seven-file baseline was rerun and remains 89 PASS with
+5 existing opt-in PostgreSQL cases skipped. `npm run typecheck` is PASS and
+`git diff --check` is clean.
+
+The new gated max-one PostgreSQL case was invoked with Testcontainers enabled,
+but this environment reported `Could not find a working container runtime
+strategy` before the test body and reported 9 skipped cases. This is neither a
+semantic test result nor a PostgreSQL PASS. The gated case remains mandatory
+GREEN evidence and may not be reported as PASS while skipped.

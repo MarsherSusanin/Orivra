@@ -47,6 +47,108 @@ function service(pool: unknown, quotaPolicy: QuotaPolicy = DEFAULT_POLICY) {
   });
 }
 
+function boundedChallengePool(input: {
+  max: number;
+  cleanupFailure?: boolean;
+}) {
+  type Call = { owner: "client" | "pool" | "release"; text: string };
+  const calls: Call[] = [];
+  const waiters: Array<() => void> = [];
+  let active = 0;
+  let cleanupSettled = 0;
+
+  const acquire = async () => {
+    if (active < input.max) {
+      active += 1;
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      waiters.push(() => {
+        active += 1;
+        resolve();
+      });
+    });
+  };
+  const release = () => {
+    active -= 1;
+    calls.push({ owner: "release", text: "RELEASE" });
+    const next = waiters.shift();
+    if (next) queueMicrotask(next);
+  };
+  const execute = async (
+    owner: "client" | "pool",
+    text: string,
+  ) => {
+    calls.push({ owner, text });
+    if (/quota_clock|clock_timestamp\(\)/i.test(text) && !/DELETE\s+FROM/i.test(text)) {
+      return result([{
+        database_now: DB_NOW,
+        minute_start: MINUTE_START,
+        minute_end: MINUTE_END,
+        issued_at: DB_NOW,
+        expires_at: new Date(DB_NOW.getTime() + 5 * 60_000),
+      }]);
+    }
+    if (/INSERT INTO proofline_private\.quota_windows/i.test(text)) {
+      return result([{ used_count: 1, limit_value: 300, window_end: MINUTE_END }]);
+    }
+    if (/DELETE\s+FROM/i.test(text)) {
+      await Promise.resolve();
+      cleanupSettled += 1;
+      if (input.cleanupFailure) throw new Error(`private cleanup ${ADDRESS}`);
+    }
+    return result();
+  };
+  const pool = {
+    async connect() {
+      await acquire();
+      let released = false;
+      return {
+        query: (text: string) => execute("client", text),
+        release() {
+          if (released) throw new Error("Pool client released twice");
+          released = true;
+          release();
+        },
+      };
+    },
+    async query(text: string) {
+      await acquire();
+      try {
+        return await execute("pool", text);
+      } finally {
+        release();
+      }
+    },
+  };
+  return {
+    pool,
+    calls,
+    active: () => active,
+    cleanupSettled: () => cleanupSettled,
+  };
+}
+
+async function settleWithoutPoolStarvation<T>(
+  promise: Promise<T>,
+  timeoutMilliseconds = 100,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("blocked-after-commit: cleanup exhausted the pool")),
+          timeoutMilliseconds,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
 describe("Slice 023D1 quota configuration", () => {
   const parser = () => (bootstrapModule as unknown as {
     parseApiQuotaPolicy?: (environment: Record<string, string | undefined>) => QuotaPolicy;
@@ -273,6 +375,73 @@ describe("Slice 023D1 persisted wallet challenge admission", () => {
     await expect(auth.createWalletChallenge({ version: "1", address: ADDRESS }))
       .resolves.toMatchObject({ version: "1", address: ADDRESS });
     expect(query.mock.calls.some(([text]) => /DELETE\s+FROM/i.test(String(text)))).toBe(true);
+  });
+
+  it("returns and releases with a max-one pool instead of reacquiring for cleanup", async () => {
+    const harness = boundedChallengePool({ max: 1 });
+    const auth = service(harness.pool);
+
+    await expect(settleWithoutPoolStarvation(auth.createWalletChallenge({
+      version: "1",
+      address: ADDRESS,
+    }))).resolves.toMatchObject({ version: "1", address: ADDRESS });
+
+    expect(harness.active()).toBe(0);
+    const commit = harness.calls.findIndex(({ text }) => /^COMMIT$/i.test(text));
+    const cleanup = harness.calls
+      .map(({ text }, index) => /DELETE\s+FROM/i.test(text) ? index : -1)
+      .filter((index) => index >= 0);
+    const release = harness.calls.findIndex(({ owner }) => owner === "release");
+    expect(cleanup).toHaveLength(2);
+    expect(cleanup.every((index) => index > commit)).toBe(true);
+    expect(
+      cleanup.every((index) => harness.calls[index]?.owner === "client") &&
+        release > cleanup.at(-1)! ||
+        release < cleanup[0]! &&
+        cleanup.every((index) => harness.calls[index]?.owner === "pool"),
+    ).toBe(true);
+  });
+
+  it("awaits fail-open cleanup and returns the admitted challenge with a max-one pool", async () => {
+    const harness = boundedChallengePool({ max: 1, cleanupFailure: true });
+    const auth = service(harness.pool);
+
+    await expect(settleWithoutPoolStarvation(auth.createWalletChallenge({
+      version: "1",
+      address: ADDRESS,
+    }))).resolves.toMatchObject({ version: "1", address: ADDRESS });
+
+    expect(harness.cleanupSettled()).toBe(2);
+    expect(harness.active()).toBe(0);
+  });
+
+  it("admits a saturated max-N batch without cleanup deadlock or duplicate reservations", async () => {
+    const maximum = 4;
+    const harness = boundedChallengePool({ max: maximum });
+    const auth = service(harness.pool, {
+      ...DEFAULT_POLICY,
+      walletChallengeAddressPerMinute: maximum,
+      walletChallengeGlobalPerMinute: maximum,
+    });
+    const addresses = Array.from({ length: maximum }, (_, index) =>
+      `0x${String(index + 1).padStart(40, "0")}`
+    );
+
+    const challenges = await settleWithoutPoolStarvation(Promise.all(
+      addresses.map((address) => auth.createWalletChallenge({
+        version: "1",
+        address,
+      })),
+    ));
+
+    expect(challenges.map(({ address }) => address)).toEqual(addresses);
+    expect(harness.active()).toBe(0);
+    expect(harness.calls.filter(({ text }) =>
+      /INSERT INTO proofline_private\.wallet_challenges/i.test(text)
+    )).toHaveLength(maximum);
+    expect(harness.calls.filter(({ text }) =>
+      /INSERT INTO proofline_private\.quota_windows/i.test(text)
+    )).toHaveLength(maximum * 2);
   });
 });
 

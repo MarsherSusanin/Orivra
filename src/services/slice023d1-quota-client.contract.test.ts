@@ -135,6 +135,25 @@ describe("Slice 023D1 wallet quota client", () => {
 });
 
 describe("Slice 023D1 run quota client", () => {
+  it.each([
+    "IDEMPOTENCY_CONFLICT",
+    "NETWORK_CAPABILITY_DISABLED",
+  ])("preserves the accepted sanitized 409 create-run outcome %s", async (code) => {
+    const failure = await runFailure(quotaResponse({ status: 409, code }));
+    expect(failure).toMatchObject({
+      name: "ProoflineClientError",
+      status: 409,
+      code,
+    });
+    expect(String(failure)).toBe(
+      "ProoflineClientError: Proofline run creation failed.",
+    );
+    expect((failure as unknown as { retryAfterSeconds?: unknown }).retryAfterSeconds)
+      .toBeUndefined();
+    expect(exposedFailure(failure)).not.toContain(ATTACKER);
+    expect(exposedFailure(failure)).not.toContain(PROJECT_TOKEN);
+  });
+
   it("normalizes daily quota with fixed copy and a canonical day-bounded delay", async () => {
     const failure = await runFailure(quotaResponse({
       status: 429,
@@ -197,8 +216,12 @@ describe("Slice 023D1 run quota client", () => {
     [409, "PROJECT_RUN_QUOTA_EXHAUSTED", "HTTP_409"],
     [429, "ACTIVE_LIVE_RUN_LIMIT_REACHED", "HTTP_429"],
     [429, "WALLET_CHALLENGE_RATE_LIMITED", "HTTP_429"],
+    [429, "IDEMPOTENCY_CONFLICT", "HTTP_429"],
+    [429, "NETWORK_CAPABILITY_DISABLED", "HTTP_429"],
+    [409, "UPSTREAM_PRIVATE_FAILURE", "HTTP_409"],
+    [409, "not_a_canonical_code", "HTTP_409"],
   ] as const)(
-    "fails closed for status/surface-incompatible quota evidence %s/%s",
+    "fails closed for unknown or status/surface-incompatible create evidence %s/%s",
     async (status, code, expectedCode) => {
       const failure = await runFailure(quotaResponse({ status, code }));
       expect(failure).toMatchObject({ status, code: expectedCode });

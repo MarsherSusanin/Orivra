@@ -140,8 +140,12 @@ Terminal live runs free an active slot; they do not refund the daily unit.
 ADR 0024's exact wallet-client allowlist gains only status-compatible
 `429 WALLET_CHALLENGE_RATE_LIMITED`. The run client recognizes only
 `429 PROJECT_RUN_QUOTA_EXHAUSTED` and
-`409 ACTIVE_LIVE_RUN_LIMIT_REACHED` for this boundary. Unknown,
-status-incompatible or malformed codes fall back to `HTTP_<status>`.
+`409 ACTIVE_LIVE_RUN_LIMIT_REACHED` for this boundary. The already accepted
+create-run outcomes `409 IDEMPOTENCY_CONFLICT` and
+`409 NETWORK_CAPABILITY_DISABLED` remain available with sanitized
+client-owned copy. Unknown, status-incompatible or malformed codes fall back
+to `HTTP_<status>`; quota handling cannot erase either established 409 code or
+make it valid at another status.
 
 Clients expose only a sanitized optional integer `retryAfterSeconds` when the
 header is canonical and within the code-specific bound. Invalid, HTTP-date,
@@ -170,6 +174,15 @@ It never deletes wallet identities, API tokens, projects, runs, append-only run
 events, artifacts, commands, relayer evidence, current/recent windows or
 current/recent challenges.
 
+Cleanup is awaited after the admission transaction commits, but it cannot hold
+an admission client while asking the same pool for a second client. An
+implementation may run cleanup through that same client after `COMMIT`, then
+release it, or release the admission client exactly once before awaiting
+pool-level cleanup. It must not detach cleanup as an unhandled background
+promise. Therefore a pool with `max=1` returns and releases an admitted
+challenge, cleanup failure remains fail-open, and `max=N` concurrent admitted
+requests occupying all `N` slots cannot deadlock or create extra reservations.
+
 ## Delivery and evidence
 
 023D1 owns ADR 0030, migration 008, quota configuration, persisted challenge
@@ -185,7 +198,8 @@ PostgreSQL suite must prove migration 008 on empty and upgraded schemas,
 restart persistence, first-row limit freezing, database clock behavior,
 concurrent exact-boundary winners, project isolation, replay-before-quota,
 live/replay/terminal classification, rollback without partial effects, least
-privilege and cleanup preservation. A skipped Testcontainers case is not PASS.
+privilege, cleanup preservation and max-one pool cleanup availability. A
+skipped Testcontainers case is not PASS.
 
 ## Consequences
 
