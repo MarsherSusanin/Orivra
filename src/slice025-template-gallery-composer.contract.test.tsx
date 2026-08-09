@@ -267,6 +267,83 @@ describe("Slice 025C template gallery, detail and Composer authority", () => {
     expectOnlyTemplateApiRequests(fixture.fetch);
   });
 
+  it("treats same-template step history as navigation rather than replacement", async () => {
+    const user = userEvent.setup();
+    const fixture = renderPath(
+      "/runs/new?template=open-meteo-current-weather&revision=1&step=source",
+    );
+    const source = await screen.findByLabelText(/source url/i);
+    await user.clear(source);
+    await user.type(source, "https://edited.example.com/public");
+    await waitFor(() => {
+      expect(JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null").fields.sourceUrl)
+        .toBe("https://edited.example.com/public");
+    });
+    const authoritativeBytes = localStorage.getItem(DRAFT_KEY);
+
+    window.history.pushState(
+      {},
+      "",
+      "/runs/new?template=open-meteo-current-weather&revision=1&step=transform",
+    );
+    await act(async () => window.dispatchEvent(new PopStateEvent("popstate")));
+    expect(within(screen.getByRole("navigation", {
+      name: /composer steps/i,
+    })).getByRole("link", { name: /^transform/i })).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(authoritativeBytes);
+    expect(screen.queryByRole("button", {
+      name: "Review replacement",
+    })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", {
+      name: "Replace saved draft?",
+    })).not.toBeInTheDocument();
+
+    await act(async () => {
+      window.history.back();
+      await waitFor(() => {
+        expect(new URLSearchParams(window.location.search).get("step")).toBe(
+          "source",
+        );
+      });
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(await screen.findByLabelText(/source url/i)).toHaveValue(
+      "https://edited.example.com/public",
+    );
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(authoritativeBytes);
+    expect(screen.queryByRole("button", {
+      name: "Review replacement",
+    })).not.toBeInTheDocument();
+
+    await act(async () => {
+      window.history.forward();
+      await waitFor(() => {
+        expect(new URLSearchParams(window.location.search).get("step")).toBe(
+          "transform",
+        );
+      });
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(within(screen.getByRole("navigation", {
+      name: /composer steps/i,
+    })).getByRole("link", { name: /^transform/i })).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(authoritativeBytes);
+    expect(screen.queryByRole("button", {
+      name: "Review replacement",
+    })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", {
+      name: "Replace saved draft?",
+    })).not.toBeInTheDocument();
+    expect(fixture.fetch).toHaveBeenCalledTimes(2);
+    expectOnlyTemplateApiRequests(fixture.fetch);
+  });
+
   it("clears the old signed-out intent and every error when replacement is confirmed", async () => {
     const oldDraft = {
       ...structuredClone(validComposerDraft),

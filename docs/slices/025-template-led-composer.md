@@ -63,6 +63,9 @@ selection or query selector. The detail itself identifies immutable revision
 - an applied or edited template is thereafter an authoritative persisted draft;
   click/direct/history selection of another template becomes pending and never
   auto-applies over it when an asynchronous response settles;
+- same `{id, revision}` URLs that differ only by Composer step are ordinary
+  Back/Forward navigation: exact persisted draft bytes remain unchanged, no
+  replacement UI appears and no template detail is fetched again;
 - cancel preserves the saved draft byte-for-byte;
 - confirmation atomically clears the old pending create intent plus validation,
   trust and submission errors, so later authentication cannot submit replaced

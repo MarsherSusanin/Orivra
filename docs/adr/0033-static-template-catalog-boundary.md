@@ -125,6 +125,12 @@ An asynchronous detail response may auto-apply only if its selection is still
 current and no authoritative current or persisted draft exists when the response
 settles.
 
+Template selection identity is exactly `{id, revision}`. Changing only the
+Composer `step`, including Back and Forward between same-selection URLs, is
+ordinary navigation: it preserves the authoritative persisted draft bytes,
+never opens or offers replacement, and does not refetch catalog/detail. The
+initial bounded same-origin catalog/detail reads remain the only template I/O.
+
 Confirmed replacement is one state transition: it installs the newly resolved
 draft and fresh idempotency key while clearing the old pending create intent,
 submission error, validation errors, trust-dirty/validation state and pending

@@ -233,3 +233,43 @@ One accepted accessibility control emits its pre-existing non-fatal React
 No production, dependency, package metadata, style or generated artifact is
 changed; no broad/full, coverage, build, browser, Docker, provider, hosted or
 live matrix is claimed.
+
+## Corrective same-selection history RED
+
+A later pre-candidate WIP based on the accepted fixture correction was rejected
+and stashed as `0e32322a6cfe8bce0420b9af50733d5667e90c98`, tree
+`ad14a7d07315e4c88ae78db62266335cb990e12c`. It is not a frozen candidate,
+accepted GREEN commit or verification PASS.
+
+The added component contract distinguishes selection identity from Composer
+navigation. After Open-Meteo A is applied, edited and persisted, changing only
+`step` and traversing Back/Forward with the same `{id, revision}` must preserve
+the exact stored bytes and edited field, show no Review replacement or dialog,
+and retain only the initial two same-origin catalog/detail requests. The
+existing different-selection A-to-B case remains an explicit pending
+replacement. Provider I/O remains forbidden.
+
+```text
+npm run typecheck
+PASS
+
+npx vitest run \
+  src/slice025-template-gallery-composer.contract.test.tsx
+
+EXPECTED RED — 1 file failed; 19 failed, 19 total
+
+npx vitest run \
+  src/slice025-template-gallery-composer.contract.test.tsx \
+  -t "same-template step history"
+
+EXPECTED RED — 1 failed, 18 skipped; current implementation makes zero of the
+required two bounded catalog/detail requests
+```
+
+The narrow run proves the new case reaches its intended missing Slice 025 I/O
+boundary after all same-selection history and exact-byte assertions, rather
+than failing on event ordering or a test exception. The nearest unchanged
+Composer, pending-authentication and dialog controls remain 4 files / 15 tests
+PASS. No production, dependency, package metadata, style or generated artifact
+is changed; no broad/full, coverage, build, browser, Docker, provider, hosted or
+live matrix is claimed.
