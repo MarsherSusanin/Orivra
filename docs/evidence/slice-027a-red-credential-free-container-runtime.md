@@ -79,7 +79,7 @@ The deployment artifact and gate contracts are intentional RED:
 node --test --test-reporter=dot tests/deployment/*.contract.test.mjs
 ```
 
-Result: 28 tests; 24 intentional RED and 4 control PASS.
+Result: 29 tests; 25 intentional RED and 4 control PASS.
 
 Failures are the deliberately absent base lock, multi-target Dockerfile,
 Caddy/Web runtime, semantic Compose model and Docker gate scripts. Controls
@@ -141,6 +141,18 @@ npx vitest run \
 Result: 14 tests; 3 intentional RED and 11 compatibility controls PASS. The
 three failures are only the missing redacted/pre-effect deployment-secret
 boundary; there is no timeout or lifecycle fixture failure.
+
+### Compose profile harness correction
+
+The full five-service semantic renderer explicitly passes `--profile
+runtime-after-027b`; otherwise Compose correctly omits the three gated services
+and a future GREEN inventory assertion would inspect an incomplete model. A
+separate sanitized `config --services` invocation passes no profile and proves
+that only Caddy and Web are active by default. The harness removes any inherited
+`COMPOSE_PROFILES`, so an operator environment cannot create a false PASS. The
+QA metadata renderer uses the explicit profile, while the real smoke remains
+contractually limited to explicitly targeted Caddy, Web, PostgreSQL and API and
+never starts worker.
 
 ## RED interpretation
 

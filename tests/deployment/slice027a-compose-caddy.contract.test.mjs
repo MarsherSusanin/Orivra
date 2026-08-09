@@ -10,7 +10,9 @@ const composePath = resolve(root, "compose.yaml");
 const qaComposePath = resolve(root, "deploy/compose.qa.yaml");
 const immutable = (name) => `registry.invalid/proofline/${name}@sha256:${"a".repeat(64)}`;
 const composeEnvironment = {
-  ...process.env,
+  ...Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => name !== "COMPOSE_PROFILES"),
+  ),
   PROOFLINE_CADDY_IMAGE: immutable("caddy"),
   PROOFLINE_WEB_IMAGE: immutable("web"),
   PROOFLINE_API_IMAGE: immutable("api"),
@@ -27,7 +29,7 @@ const composeEnvironment = {
 function renderCompose(files = [composePath], environment = composeEnvironment) {
   const args = ["compose"];
   for (const path of files) args.push("-f", path);
-  args.push("config", "--format", "json");
+  args.push("--profile", "runtime-after-027b", "config", "--format", "json");
   const result = spawnSync("docker", args, {
     cwd: root,
     encoding: "utf8",
@@ -40,6 +42,21 @@ function renderCompose(files = [composePath], environment = composeEnvironment) 
     model = {};
   }
   return { ...result, model };
+}
+
+function renderDefaultServices(files = [composePath], environment = composeEnvironment) {
+  const args = ["compose"];
+  for (const path of files) args.push("-f", path);
+  args.push("config", "--services");
+  const result = spawnSync("docker", args, {
+    cwd: root,
+    encoding: "utf8",
+    env: environment,
+  });
+  return {
+    ...result,
+    services: result.stdout.split(/\r?\n/).filter(Boolean).sort(),
+  };
 }
 
 function networkNames(service) {
@@ -66,6 +83,7 @@ function secretTargets(service) {
 }
 
 const rendered = renderCompose();
+const defaultServices = renderDefaultServices();
 
 test("renders one semantic production Compose model with the exact service inventory", () => {
   assert.equal(rendered.status, 0, rendered.stderr || "docker compose config must pass");
@@ -73,6 +91,16 @@ test("renders one semantic production Compose model with the exact service inven
     Object.keys(rendered.model.services ?? {}).sort(),
     ["api", "caddy", "postgres", "web", "worker"],
   );
+});
+
+test("activates only Caddy and Web when no runtime profile is requested", () => {
+  assert.equal(
+    Object.hasOwn(composeEnvironment, "COMPOSE_PROFILES"),
+    false,
+    "operator COMPOSE_PROFILES must not activate hidden services in this test",
+  );
+  assert.equal(defaultServices.status, 0, defaultServices.stderr || "default Compose config must pass");
+  assert.deepEqual(defaultServices.services, ["caddy", "web"]);
 });
 
 test("keeps Caddy and Web default while gating the application runtime until 027B", () => {
