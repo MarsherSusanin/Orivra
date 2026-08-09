@@ -54,6 +54,36 @@ const WalletSessionContext = createContext<WalletSessionContextValue | null>(
   null,
 );
 
+type AccountAuthority = {
+  marker: object;
+  projectToken: string;
+};
+
+type AccountRefreshFlight = AccountAuthority & {
+  promise: Promise<void>;
+};
+
+type AccountTokenIntent = {
+  idempotencyKey: string;
+  request: AccountTokenCreateRequestV1;
+};
+
+type AccountTokenFlight = AccountAuthority & {
+  intent: AccountTokenIntent;
+  promise: Promise<AccountTokenCreatedV1>;
+};
+
+function sameAccountTokenIntent(
+  left: AccountTokenIntent,
+  right: AccountTokenIntent,
+): boolean {
+  return left.idempotencyKey === right.idempotencyKey &&
+    left.request.version === right.request.version &&
+    left.request.kind === right.request.kind &&
+    left.request.label === right.request.label &&
+    left.request.expiresInDays === right.request.expiresInDays;
+}
+
 export function WalletSessionProvider({
   services,
   storage,
@@ -72,7 +102,13 @@ export function WalletSessionProvider({
     controller.snapshot(),
   );
   const lifecycleRevision = useRef(0);
-  const accountRefreshFlight = useRef<Promise<void> | null>(null);
+  const accountAuthority = useRef<object>({});
+  const accountRefreshFlight = useRef<AccountRefreshFlight | null>(null);
+  const accountTokenFlight = useRef<AccountTokenFlight | null>(null);
+
+  const advanceAccountAuthority = useCallback(() => {
+    accountAuthority.current = {};
+  }, []);
 
   const refreshSnapshot = useCallback(() => {
     setSnapshot(controller.snapshot());
@@ -80,6 +116,7 @@ export function WalletSessionProvider({
 
   const runTransition = useCallback(
     async (start: () => Promise<void>) => {
+      advanceAccountAuthority();
       const operation = start();
       refreshSnapshot();
       try {
@@ -88,7 +125,7 @@ export function WalletSessionProvider({
         refreshSnapshot();
       }
     },
-    [refreshSnapshot],
+    [advanceAccountAuthority, refreshSnapshot],
   );
 
   const restore = useCallback(
@@ -113,14 +150,16 @@ export function WalletSessionProvider({
   );
 
   const forgetBrowser = useCallback(() => {
+    advanceAccountAuthority();
     controller.forgetBrowser();
     refreshSnapshot();
-  }, [controller, refreshSnapshot]);
+  }, [advanceAccountAuthority, controller, refreshSnapshot]);
 
   const cancelPending = useCallback(() => {
+    advanceAccountAuthority();
     controller.cancelPending();
     refreshSnapshot();
-  }, [controller, refreshSnapshot]);
+  }, [advanceAccountAuthority, controller, refreshSnapshot]);
 
   const accessToken = useCallback(
     () => controller.accessToken(),
@@ -143,13 +182,23 @@ export function WalletSessionProvider({
     retryable: false,
   }), []);
 
+  const issueBusy = useCallback(() => new WalletAccessError({
+    kind: "http",
+    status: 409,
+    code: "IDEMPOTENCY_CONFLICT",
+    retryable: false,
+  }), []);
+
   const refreshAccount = useCallback((): Promise<void> => {
-    const existing = accountRefreshFlight.current;
-    if (existing) return existing;
     const projectToken = controller.accessToken();
     const controllerSnapshot = controller.snapshot();
     if (projectToken === null || controllerSnapshot.status !== "authenticated") {
       return Promise.reject(browserSessionRequired());
+    }
+    const marker = accountAuthority.current;
+    const existing = accountRefreshFlight.current;
+    if (existing?.marker === marker && existing.projectToken === projectToken) {
+      return existing.promise;
     }
 
     let flight!: Promise<void>;
@@ -157,38 +206,80 @@ export function WalletSessionProvider({
       const account = AccountV1Schema.parse(
         await runtime.services.getAccount({ projectToken }),
       );
-      if (controller.accessToken() !== projectToken) return;
+      if (
+        accountAuthority.current !== marker ||
+        controller.accessToken() !== projectToken
+      ) return;
       const current = controller.snapshot();
       if (current.status !== "authenticated") return;
       setSnapshot({ ...current, account });
     })().finally(() => {
-      accountRefreshFlight.current = null;
+      if (accountRefreshFlight.current?.promise === flight) {
+        accountRefreshFlight.current = null;
+      }
     });
-    accountRefreshFlight.current = flight;
+    accountRefreshFlight.current = { marker, projectToken, promise: flight };
     return flight;
   }, [browserSessionRequired, controller, runtime]);
 
-  const createAccountToken = useCallback(async (input: {
+  const createAccountToken = useCallback((input: {
     idempotencyKey: string;
     request: AccountTokenCreateRequestV1;
   }): Promise<AccountTokenCreatedV1> => {
     const projectToken = controller.accessToken();
     const controllerSnapshot = controller.snapshot();
     if (projectToken === null || controllerSnapshot.status !== "authenticated") {
-      throw browserSessionRequired();
+      return Promise.reject(browserSessionRequired());
     }
-    return AccountTokenCreatedV1Schema.parse(
-      await runtime.services.createAccountToken({
-        projectToken,
-        idempotencyKey: input.idempotencyKey,
-        request: input.request,
-      }),
-    );
-  }, [browserSessionRequired, controller, runtime]);
+    const marker = accountAuthority.current;
+    const intent: AccountTokenIntent = {
+      idempotencyKey: input.idempotencyKey,
+      request: {
+        version: input.request.version,
+        kind: input.request.kind,
+        label: input.request.label,
+        expiresInDays: input.request.expiresInDays,
+      },
+    };
+    const existing = accountTokenFlight.current;
+    if (existing?.marker === marker && existing.projectToken === projectToken) {
+      return sameAccountTokenIntent(existing.intent, intent)
+        ? existing.promise
+        : Promise.reject(issueBusy());
+    }
+
+    let flight!: Promise<AccountTokenCreatedV1>;
+    flight = (async () => {
+      const created = AccountTokenCreatedV1Schema.parse(
+        await runtime.services.createAccountToken({
+          projectToken,
+          idempotencyKey: intent.idempotencyKey,
+          request: intent.request,
+        }),
+      );
+      const current = controller.snapshot();
+      if (
+        accountAuthority.current !== marker ||
+        controller.accessToken() !== projectToken ||
+        current.status !== "authenticated"
+      ) {
+        throw browserSessionRequired();
+      }
+      return created;
+    })().finally(() => {
+      if (accountTokenFlight.current?.promise === flight) {
+        accountTokenFlight.current = null;
+      }
+    });
+    void flight.catch(() => undefined);
+    accountTokenFlight.current = { marker, projectToken, intent, promise: flight };
+    return flight;
+  }, [browserSessionRequired, controller, issueBusy, runtime]);
 
   useEffect(() => {
     let active = true;
     const effectRevision = ++lifecycleRevision.current;
+    advanceAccountAuthority();
     const operation = controller.restore();
     setSnapshot(controller.snapshot());
     void operation.finally(() => {
@@ -197,11 +288,12 @@ export function WalletSessionProvider({
 
     return () => {
       active = false;
+      advanceAccountAuthority();
       queueMicrotask(() => {
         if (lifecycleRevision.current === effectRevision) controller.close();
       });
     };
-  }, [controller]);
+  }, [advanceAccountAuthority, controller]);
 
   const value = useMemo<WalletSessionContextValue>(
     () => ({
