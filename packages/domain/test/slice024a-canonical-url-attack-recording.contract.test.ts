@@ -53,6 +53,7 @@ describe("Slice 024A canonical URL attack recording integrity", () => {
         control: content.bundles.control,
         attack: content.bundles.attack,
       },
+      reproduction: content.reproduction,
       sharedRequest: content.sharedRequest,
       statement: content.statement,
       network: content.network,
