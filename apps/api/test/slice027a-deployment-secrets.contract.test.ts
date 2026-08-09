@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 type DeploymentProfile = "api" | "worker" | "recording-importer";
@@ -23,7 +24,9 @@ type DeploymentSecretsModule = {
 const temporaryDirectories: string[] = [];
 
 async function deploymentSecretsModule(): Promise<DeploymentSecretsModule> {
-  const modulePath = new URL("../src/deployment-secrets.ts", import.meta.url).pathname;
+  const modulePath = fileURLToPath(
+    new URL("../src/deployment-secrets.ts", import.meta.url),
+  );
   try {
     return await import(/* @vite-ignore */ modulePath) as DeploymentSecretsModule;
   } catch {
