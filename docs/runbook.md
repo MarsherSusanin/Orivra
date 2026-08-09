@@ -138,8 +138,12 @@ npm run start --workspace apps/api
 | `PORT` | optional, default `8080` | HTTP port |
 | `PROOFLINE_API_DB_POOL_SIZE` | optional, default `10` | PostgreSQL pool size |
 | `PROOFLINE_WEB_ORIGIN` | required | Единственный exact public HTTPS root Origin для wallet auth, `/v1/*` browser CORS и share links; placeholder/default отсутствует |
+| `PROOFLINE_WALLET_CHALLENGE_ADDRESS_MINUTE_LIMIT` | optional, default `5`, range `1..60` | Persisted wallet challenges per normalized address per UTC minute |
+| `PROOFLINE_WALLET_CHALLENGE_GLOBAL_MINUTE_LIMIT` | optional, default `300`, range `1..10000` | Persisted global wallet challenges per UTC minute; must be at least the address limit |
+| `PROOFLINE_PROJECT_RUN_DAILY_LIMIT` | optional, default `100`, range `1..10000` | New persisted runs per project per UTC day; idempotent replay does not consume again |
+| `PROOFLINE_PROJECT_ACTIVE_LIVE_RUN_LIMIT` | optional, default `3`, range `1..100` | Nonterminal wallet/relayer runs per project; replay is excluded |
 
-API должен завершаться с ошибкой до начала обслуживания запросов, если обязательная конфигурация отсутствует.
+API должен завершаться с ошибкой до начала обслуживания запросов, если обязательная конфигурация отсутствует или quota limit не является canonical bounded integer. PostgreSQL clock выбирает quota windows; первый row фиксирует limit до конца своего окна. Active-live cap также фиксируется persisted `active_live` project policy row на UTC сутки с `used_count = 0`, поэтому rolling API processes читают один limit; новое UTC-окно может принять новый bounded config. Quota responses используют только нормализованные `429 WALLET_CHALLENGE_RATE_LIMITED`, `429 PROJECT_RUN_QUOTA_EXHAUSTED` или `409 ACTIVE_LIVE_RUN_LIMIT_REACHED`; только 429 содержит bounded integer `Retry-After`.
 
 ## 5. Worker
 
