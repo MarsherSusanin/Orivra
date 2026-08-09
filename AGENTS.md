@@ -49,7 +49,9 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
 - Sites is a compatibility package, not the selected production host. Keep its
   accepted artifacts and tests until a separate deprecation slice, and add the
   Docker/Caddy routing gate rather than weakening Sites routing contracts.
-- Production images come from GHCR by immutable digest. Migration is a one-shot
+- 028A locally builds and exports verified OCI image archives and freezes their
+  SHA-256 values in a release manifest without registry credentials, registry
+  access, external network or push. Migration is a one-shot
   checksummed job under a PostgreSQL advisory lock before app startup;
   `/healthz`, `/readyz`, schema verification, worker heartbeat and the
   persistent PostgreSQL volume remain separate acceptance evidence.
@@ -60,6 +62,17 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
   Coston2 credentials before credential-free 022–029A, the unified full matrix
   and two independent PASS reports for one tree hash. Do not claim hosted or
   deployed evidence before 028B actually runs.
+- 029A is the credential-free local MLP validation and freeze. Product gates and
+  user testing use recorded fixtures through local Docker Compose. 029A runs
+  with no credentials and no external network; all 022–029A remains
+  credential-free.
+- 028B is credentialed and starts only after the unified matrix and two PASS
+  reports. It performs a byte-preserving load/copy/push of the exact frozen OCI
+  archives to GHCR with no rebuild. The remote image digest must equal the
+  frozen release manifest before staging pull; digest mismatch aborts. The VDS
+  GHCR pull credential is read-only. Publication evidence: release manifest
+  entry. 029B is the credentialed production promotion and canary, only
+  after 028B.
 
 ## Visual contract
 

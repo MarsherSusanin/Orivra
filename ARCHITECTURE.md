@@ -165,8 +165,12 @@ third-party SDK or user analytics dashboard.
 - Sites остаётся compatibility-only package и routing test. Он не является
   выбранным production host.
 
-Production composition должна выбирать immutable GHCR image digest, запускать
-one-shot checksummed migration под PostgreSQL advisory lock до старта API и
+028A локально builds, exports и verifies OCI image archives и их SHA-256 digest
+manifest без registry credentials или external network. После candidate freeze
+028B byte-preserving публикует exact frozen OCI bytes в GHCR без rebuild и
+сверяет remote digest с manifest до staging pull; mismatch aborts. Production
+composition должна выбирать этот immutable GHCR image digest, запускать one-shot
+checksummed migration под PostgreSQL advisory lock до старта API и
 worker и проверять schema version. PostgreSQL использует persistent named
 volume. `/healthz` отделяет process liveness от `/readyz`, который проверяет
 database/schema readiness и свежий worker heartbeat.

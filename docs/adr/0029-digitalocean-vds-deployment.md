@@ -45,10 +45,21 @@ VDS image consumes only the static Web output and does not run the Sites worker.
 
 ### Immutable release and database start order
 
-CI will build the Web, API and worker images once and publish them to GHCR.
-Staging and production select immutable image digests (`@sha256`), never a
-mutable tag or a server-side rebuild. A release manifest binds commit hash,
-tree hash, image digests, expected schema version and Action artifact checksum.
+028A is the local release composition. 028A builds and exports OCI archives and
+must verify every archive and its SHA-256 digest, then freezes a
+release/digest manifest. 028A runs without registry or GHCR credentials and with
+no registry access, external network or push.
+
+028B is credentialed and starts only after the unified matrix and two PASS
+reports. It performs a byte-preserving load/copy/push of the exact frozen OCI
+image archives to GHCR with no rebuild. It verifies the remote image digest
+equals the frozen release manifest before staging pull; digest mismatch aborts.
+The VDS GHCR pull credential is read-only. Publication evidence is included in
+the frozen release manifest.
+
+Staging and production select those immutable image digests (`@sha256`), never
+a mutable tag or a server-side rebuild. The release manifest also binds commit
+hash, tree hash, expected schema version and Action artifact checksum.
 
 A one-shot migration container uses the exact release API image. It obtains a
 PostgreSQL advisory lock, verifies the ordered checksummed migrations already
@@ -86,10 +97,15 @@ and [PostgreSQL PITR documentation](https://www.postgresql.org/docs/current/cont
 
 ### Credential gate
 
-Slices 022–029A are credential-free. They use focused TDD and targeted module
-verification. After every credential-free module is implemented, one unified
-local full matrix runs once, followed by two independent PASS reports for the
-same tree hash. Only that evidence authorizes 028B.
+029A is the credential-free local MLP validation and freeze. Product gates and
+user testing use recorded fixtures through local Docker Compose. 029A runs with
+no credentials and no external network. The whole 022–029A range remains
+credential-free. After every module is implemented, one unified local full
+matrix runs once, followed by two independent PASS reports for the same tree
+hash. Only that evidence authorizes 028B.
+
+029B is the credentialed production promotion and canary. 029B starts only
+after 028B has published and staged the exact frozen candidate.
 
 DNS, restricted SSH, GHCR pull and Spaces credentials, the VDS environment and
 live Coston2 secrets are requested or configured only after the unified matrix

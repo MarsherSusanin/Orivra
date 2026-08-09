@@ -25,9 +25,10 @@ The product journey is delivered as independently frozen vertical slices:
 | 027A | Local Docker runtime, Compose/Caddy routing and private service networks | Planned, credential-free |
 | 027B | One-shot migrations, health/readiness, worker heartbeat and retention | Planned, credential-free |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |
-| 028A | Local release truth, immutable GHCR manifest and dry-run automation | Planned, credential-free |
-| 028B | Credential gate for DigitalOcean staging | Blocked until unified local candidate PASS |
-| 029 | Exact-digest production promotion and seven-day canary | Blocked until 028B hosted evidence |
+| 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
+| 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
+| 029A | Local MLP validation and candidate freeze | Planned, credential-free |
+| 029B | Exact-digest production promotion and seven-day canary | Blocked until 028B hosted evidence |
 
 ## Completed pre-infrastructure product journey
 
@@ -66,10 +67,15 @@ Credential-free delivery covers 022–029A:
 - **027C** adds off-host WAL archiving plus base backup for PITR and proves a
   credential-free MinIO restore drill. A Droplet backup is secondary host
   recovery, not database/PITR evidence.
-- **028A local release truth** builds release images once, records immutable
-  GHCR digests and tests deploy, promotion and rollback automation in dry-run
-  and local Docker composition. It performs no SSH, DNS, registry push or
-  Spaces effect.
+- **028A local release truth** builds and exports OCI archives and must verify
+  every archive and its SHA-256 digest, then freezes a release/digest
+  manifest. 028A runs without registry or GHCR credentials and with no registry
+  access, external network or push.
+
+**029A is the credential-free local MLP validation and freeze.** Product gates
+and user testing use recorded fixtures through local Docker Compose. 029A runs
+with no credentials and no external network. The whole 022–029A range remains
+credential-free.
 
 After all 022–029A credential-free modules are implemented, one unified local
 full matrix runs once. Two independent verifiers then sign the same tree hash.
@@ -78,14 +84,19 @@ Credentials are requested only after that full matrix and both PASS reports.
 Credentials for DNS, SSH and Spaces are issued strictly only after 022–029A;
 the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
 
-- **028B credential gate** may then provision isolated staging on the selected
-  DigitalOcean VDS, configure DNS/restricted SSH/private Spaces, pull the exact
-  GHCR digests, run migrations, hosted browser smoke, restore drill and the
-  persisted live Coston2 gate. It does not rebuild an image.
-- **029 promotion and canary** promotes those exact staging digests to
-  production, records schema/backup/readiness evidence and runs the seven-day
-  canary. A code change returns the plan to focused RED/GREEN and requires a new
-  unified matrix and two-PASS freeze before another credentialed deployment.
+- **028B credential gate** is credentialed and starts only after the unified
+  matrix and two PASS reports. It performs a byte-preserving load/copy/push of
+  the exact frozen OCI image archives to GHCR with no rebuild. It verifies the
+  remote image digest equals the frozen release manifest before staging pull;
+  digest mismatch aborts. The VDS GHCR pull credential is read-only.
+  Publication evidence is included in the frozen release manifest. It may then
+  provision isolated staging, run migrations, hosted browser smoke, restore
+  drill and the persisted live Coston2 gate.
+- **029B is the credentialed production promotion and canary.** 029B starts
+  only after 028B has published and staged the exact frozen candidate. It
+  records schema/backup/readiness evidence and runs the seven-day canary. A code
+  change returns the plan to focused RED/GREEN and requires a new unified
+  matrix and two-PASS freeze before another credentialed deployment.
 
 ## Validation policy
 

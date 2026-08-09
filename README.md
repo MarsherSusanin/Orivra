@@ -162,10 +162,13 @@ Web2JsonManifestV1
   клиентом, но `POST /v1/runs` fail-closed отвечает
   `409 NETWORK_CAPABILITY_DISABLED`; persisted evidence остаётся Coston2-only.
 - Run history append-only; projection и bundle вычисляются из упорядоченных событий.
-- Deployment target закреплён ADR 0029: immutable GHCR digests, one-shot
-  checksummed migration под PostgreSQL advisory lock, persistent database
-  volume, `/healthz`, `/readyz`, worker heartbeat и off-host WAL/base-backup
-  PITR. Эти механизмы ещё не реализованы и не являются текущим hosted PASS.
+- Deployment target закреплён ADR 0029: локально проверенные OCI archives и
+  digest manifest публикуются в GHCR byte-preserving, без rebuild, только после
+  unified matrix и двух PASS. Затем используются immutable GHCR digests,
+  one-shot checksummed migration под PostgreSQL advisory lock, persistent
+  database volume, `/healthz`, `/readyz`, worker heartbeat и off-host
+  WAL/base-backup PITR. Эти механизмы ещё не реализованы и не являются текущим
+  hosted PASS.
 - Любой release candidate должен получить два независимых PASS на одном tree hash.
 
 ## Документация

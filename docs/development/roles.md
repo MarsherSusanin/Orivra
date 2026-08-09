@@ -62,6 +62,21 @@ only after the unified matrix and both independent PASS reports. A credentialed
 host check cannot substitute for missing local evidence, and a local PASS cannot
 be described as hosted or deployed.
 
+028A is the local release composition: it builds and exports verified OCI image
+archives and freezes their SHA-256 values in the release manifest without
+registry credentials or external registry access. 029A is the credential-free
+local MLP validation and freeze. Product gates and user testing use recorded
+fixtures through local Docker Compose. 029A runs with no credentials and no
+external network; the whole 022–029A range remains credential-free.
+
+028B is credentialed and starts only after the unified matrix and two PASS
+reports. It performs a byte-preserving load/copy/push of the exact frozen OCI
+archives to GHCR with no rebuild. The remote image digest equals the frozen
+release manifest before staging pull or digest mismatch aborts. The VDS GHCR
+pull credential is read-only. Publication evidence: release manifest entry.
+029B is the credentialed production promotion and canary, only after
+028B has published and staged that candidate.
+
 ## Slice Contract minimum
 
 Each Slice Contract names:

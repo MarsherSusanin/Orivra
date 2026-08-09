@@ -40,8 +40,20 @@ DigitalOcean Cloud Firewall и host firewall разрешают public inbound �
 Web, API, worker, migration или backup containers. PostgreSQL хранит данные в
 persistent named volume, отдельном для production и temporary staging.
 
-Release composition должна получать Web/API/worker из GHCR по immutable image
-digest (`@sha256`). One-shot migration job из exact release image проверяет
+028A — local release composition. 028A builds and exports OCI archives and must
+verify every archive and its SHA-256 digest, then freezes a
+release/digest manifest. 028A runs without registry or GHCR credentials and
+with no registry access, external network or push.
+
+028B is credentialed and starts only after the unified matrix and two PASS
+reports. It performs a byte-preserving load/copy/push of the exact frozen OCI
+image archives to GHCR with no rebuild. The remote image digest must equal the
+frozen release manifest before staging pull; digest mismatch aborts. The VDS
+GHCR pull credential is read-only. Publication evidence is included in the
+frozen release manifest.
+
+Release composition получает Web/API/worker по immutable image digest
+(`@sha256`). One-shot migration job из exact release image проверяет
 checksummed migration history, удерживает PostgreSQL advisory lock, применяет
 изменения и подтверждает schema version before API/worker app startup. API и
 worker не выполняют migration при собственном старте.
@@ -188,6 +200,14 @@ session ID и timestamps, хотя её metadata ограничена публи
 workspace/build graph, Action artifact или Sites запускает соответствующие
 affected gates сразу, но не несвязанный repository matrix. Для MLP 022–029A
 полная матрица запускается once after все credential-free modules завершены.
+
+029A is the credential-free local MLP validation and freeze. Product gates and
+user testing use recorded fixtures through local Docker Compose. 029A runs with
+no credentials and no external network. The whole 022–029A range remains
+credential-free.
+
+029B is the credentialed production promotion and canary. 029B starts only
+after 028B has published and staged the exact frozen candidate.
 
 ### Единая полная матрица перед MLP candidate freeze
 
@@ -342,7 +362,8 @@ Upstream Coston2 outage блокирует release. Override возможен т
 
 - Target provider выбран в ADR 0029, но VDS promotion/rollback automation ещё
   не реализована и hosting is not currently deployed.
-- Staging и production выбирают один exact immutable GHCR digest; server-side
+- Staging и production выбирают один exact immutable GHCR digest из frozen
+  release manifest; server-side
   rebuild запрещён. Application rollback возвращает предыдущий
   schema-compatible digest из release manifest.
 - Не откатывайте journal или migration destructive SQL вручную. При ошибке
@@ -352,8 +373,8 @@ Upstream Coston2 outage блокирует release. Override возможен т
 - 027C должен доказать MinIO restore drill локально. Droplet backup не считается
   database restore evidence.
 - 028B получает credentials только после credential-free 022–029A, unified
-  full matrix и двух independent PASS на одном tree hash. Slice 029 затем
-  выполняет promotion и canary без rebuild candidate images.
+  full matrix и двух independent PASS на одном tree hash. 029B затем выполняет
+  production promotion и canary без rebuild candidate images, only after 028B.
 - После любого production edit или изменения candidate tree повторите affected
   RED/GREEN, unified matrix и обе независимые verification waves на новом tree
   hash.
