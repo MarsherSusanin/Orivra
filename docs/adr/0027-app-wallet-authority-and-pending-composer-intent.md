@@ -36,6 +36,14 @@ render tree. The share is scrubbed synchronously, remains run-scoped and
 read-only, and cannot open wallet sign-in or call the account endpoint. The
 browser project token is neither consumed nor deleted by share viewing.
 
+Share bootstrap distinguishes an attempted capability from a usable token. A
+valid current `#share=` remains in-memory authority even when its run-scoped
+session write fails. Any `?share=` attempt or malformed `#share=` is scrubbed
+and suppresses project restore for that render. It may then use an already
+stored valid share for the same run; otherwise it stays locked and anonymous.
+It never falls back to a readable project token, deletes either stored token or
+renders raw capability bytes.
+
 Runs, deep run routes and Composer request authentication through one root
 dialog. Production copy says `Sign in with wallet` or
 `Reconnect wallet session`; no production App/Runs/Composer surface imports or
@@ -67,3 +75,6 @@ Manual token entry is no longer a production fallback. CLI/Action token issue
 and revoke remain the later Settings slice. This decision adds no token
 persistence beyond the accepted controller, no auth analytics, no public
 relayer, no quotas and no new wallet SDK.
+
+Tests that intentionally restore a project session inject deterministic
+`WalletAccessServices`; they never let the production client reach localhost.

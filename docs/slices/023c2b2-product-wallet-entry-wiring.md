@@ -21,6 +21,9 @@ wallet.
   authentication.
 - A valid run-scoped share fragment is scrubbed synchronously, hydrates with
   share authority, suppresses project restore and never opens wallet sign-in.
+- A valid current share remains in memory when session persistence is denied.
+  Query/malformed attempts suppress project fallback, then use only a valid
+  previously stored share for that run or remain anonymous.
 - Composer finalizes before sign-in, freezes the exact manifest and existing
   idempotency key, and resumes one create after authentication.
 - Double click, dialog close/reopen and callback rerender do not duplicate
@@ -44,6 +47,10 @@ The previously accepted production-surface contracts in
 `production-run-surface.contract.test.tsx` and
 `slice015b-submit.contract.test.tsx` are corrected in the same RED freeze. Only
 their manual-token expectations change; all unrelated assertions remain.
+
+Seeded-session App hardening, production-run and recovery tests inject the
+accepted wallet access port. A fetch spy proves restore performs no localhost
+or external network request.
 
 ## Targeted GREEN gates
 

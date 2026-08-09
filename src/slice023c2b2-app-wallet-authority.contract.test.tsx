@@ -1,5 +1,5 @@
 import React, { type ComponentType } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccountV1, WalletSessionV1 } from "@proofline/contracts";
 import { RUN_ID } from "../packages/contracts/test/fixtures";
@@ -16,8 +16,10 @@ import type { HydratedRunView, RunSurfaceServices } from "./services/run-surface
 
 const PROJECT_TOKEN = `project_${"a".repeat(64)}`;
 const SHARE_TOKEN = `share_${"b".repeat(64)}`;
+const RESTORED_SHARE_TOKEN = `share_${"c".repeat(64)}`;
 const ADDRESS = "0x1111111111111111111111111111111111111111";
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
+const SHARE_SESSION_KEY = `proofline:share-token:${RUN_ID}`;
 
 type WalletAccessInjection = {
   services: WalletAccessServices;
@@ -95,6 +97,25 @@ function surfaces(overrides: Partial<RunSurfaceServices> = {}): RunSurfaceServic
     resume: vi.fn(() => null),
     ...overrides,
   } as unknown as RunSurfaceServices;
+}
+
+function injectedProjectSession(wallet: WalletAccessServices) {
+  const loadProviderAdapter = vi.fn();
+  return {
+    loadProviderAdapter,
+    walletAccess: {
+      services: wallet,
+      storage: sessionStorage,
+      dialog: { loadProviderAdapter },
+    } as WalletAccessInjection,
+  };
+}
+
+async function flushWalletRestore() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 }
 
 afterEach(() => {
@@ -203,5 +224,139 @@ describe("Slice 023C2B2 production wallet authority composition", () => {
     expect(wallet.listNetworks).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /sign in with wallet/i })).not.toBeInTheDocument();
     expect(sessionStorage.getItem(PROJECT_TOKEN_SESSION_KEY)).toBe(PROJECT_TOKEN);
+  });
+
+  it("uses a valid current share in memory when run-scoped session persistence is denied", async () => {
+    sessionStorage.setItem(PROJECT_TOKEN_SESSION_KEY, PROJECT_TOKEN);
+    window.history.replaceState({}, "", `/runs/${RUN_ID}#share=${SHARE_TOKEN}`);
+    const originalSetItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === SHARE_SESSION_KEY) throw new DOMException("denied", "SecurityError");
+      return originalSetItem.call(this, key, value);
+    });
+    const wallet = access();
+    const injection = injectedProjectSession(wallet);
+    const hydrateRun = vi.fn(async () => terminalRun);
+
+    render(
+      <WalletAwareApp
+        services={surfaces({ hydrateRun })}
+        walletAccess={injection.walletAccess}
+      />,
+    );
+
+    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.search).toBe("");
+    expect(window.location.hash).toBe("");
+    await waitFor(() => expect(hydrateRun).toHaveBeenCalledOnce());
+    expect(hydrateRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: RUN_ID,
+      projectToken: SHARE_TOKEN,
+    }));
+    expect(sessionStorage.getItem(SHARE_SESSION_KEY)).toBeNull();
+    expect(sessionStorage.getItem(PROJECT_TOKEN_SESSION_KEY)).toBe(PROJECT_TOKEN);
+    expect(wallet.getAccount).not.toHaveBeenCalled();
+    expect(wallet.listNetworks).not.toHaveBeenCalled();
+    expect(injection.loadProviderAdapter).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain(SHARE_TOKEN);
+    expect(document.body.textContent).not.toContain(PROJECT_TOKEN);
+  });
+
+  it("scrubs an invalid share fragment and stays anonymous instead of restoring the project", async () => {
+    sessionStorage.setItem(PROJECT_TOKEN_SESSION_KEY, PROJECT_TOKEN);
+    window.history.replaceState(
+      {},
+      "",
+      `/runs/${RUN_ID}?panel=diagnostics#share=share_deadbeef`,
+    );
+    const wallet = access();
+    const injection = injectedProjectSession(wallet);
+    const hydrateRun = vi.fn(async () => terminalRun);
+
+    render(
+      <WalletAwareApp
+        services={surfaces({ hydrateRun })}
+        walletAccess={injection.walletAccess}
+      />,
+    );
+    await flushWalletRestore();
+
+    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.search).toBe("?panel=diagnostics");
+    expect(window.location.hash).toBe("");
+    expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();
+    expect(hydrateRun).not.toHaveBeenCalled();
+    expect(wallet.getAccount).not.toHaveBeenCalled();
+    expect(wallet.listNetworks).not.toHaveBeenCalled();
+    expect(injection.loadProviderAdapter).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(PROJECT_TOKEN_SESSION_KEY)).toBe(PROJECT_TOKEN);
+    expect(document.body.textContent).not.toMatch(/project_[a-f0-9]{64}|share_[a-f0-9]+/i);
+  });
+
+  it("scrubs a query share attempt and stays anonymous instead of restoring the project", async () => {
+    sessionStorage.setItem(PROJECT_TOKEN_SESSION_KEY, PROJECT_TOKEN);
+    window.history.replaceState(
+      {},
+      "",
+      `/runs/${RUN_ID}?share=${SHARE_TOKEN}&status=active#ignored`,
+    );
+    const wallet = access();
+    const injection = injectedProjectSession(wallet);
+    const hydrateRun = vi.fn(async () => terminalRun);
+
+    render(
+      <WalletAwareApp
+        services={surfaces({ hydrateRun })}
+        walletAccess={injection.walletAccess}
+      />,
+    );
+    await flushWalletRestore();
+
+    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.search).toBe("?status=active");
+    expect(window.location.hash).toBe("");
+    expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();
+    expect(hydrateRun).not.toHaveBeenCalled();
+    expect(wallet.getAccount).not.toHaveBeenCalled();
+    expect(wallet.listNetworks).not.toHaveBeenCalled();
+    expect(injection.loadProviderAdapter).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(PROJECT_TOKEN_SESSION_KEY)).toBe(PROJECT_TOKEN);
+    expect(document.body.textContent).not.toContain(PROJECT_TOKEN);
+  });
+
+  it("uses a restored valid run share after scrubbing a malformed current attempt", async () => {
+    sessionStorage.setItem(PROJECT_TOKEN_SESSION_KEY, PROJECT_TOKEN);
+    sessionStorage.setItem(SHARE_SESSION_KEY, RESTORED_SHARE_TOKEN);
+    window.history.replaceState({}, "", `/runs/${RUN_ID}#share=share_deadbeef`);
+    const wallet = access();
+    const injection = injectedProjectSession(wallet);
+    const hydrateRun = vi.fn(async () => terminalRun);
+
+    render(
+      <WalletAwareApp
+        services={surfaces({ hydrateRun })}
+        walletAccess={injection.walletAccess}
+      />,
+    );
+
+    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.search).toBe("");
+    expect(window.location.hash).toBe("");
+    await waitFor(() => expect(hydrateRun).toHaveBeenCalledOnce());
+    expect(hydrateRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: RUN_ID,
+      projectToken: RESTORED_SHARE_TOKEN,
+    }));
+    expect(sessionStorage.getItem(SHARE_SESSION_KEY)).toBe(RESTORED_SHARE_TOKEN);
+    expect(sessionStorage.getItem(PROJECT_TOKEN_SESSION_KEY)).toBe(PROJECT_TOKEN);
+    expect(wallet.getAccount).not.toHaveBeenCalled();
+    expect(wallet.listNetworks).not.toHaveBeenCalled();
+    expect(injection.loadProviderAdapter).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain(RESTORED_SHARE_TOKEN);
+    expect(document.body.textContent).not.toContain(PROJECT_TOKEN);
   });
 });

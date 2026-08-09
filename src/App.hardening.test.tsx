@@ -10,6 +10,7 @@ import {
   TEST_RUN_ID,
   TEST_RUN_STAGES,
 } from "./test/cockpit-fixture";
+import { createProjectWalletAccessFixture } from "./test/wallet-access-fixture";
 
 const projectToken = `project_${"a".repeat(64)}`;
 
@@ -81,8 +82,18 @@ describe("Run Cockpit bundle and session hardening", () => {
     const ports = services({
       resume: vi.fn().mockReturnValue({ runId: "run_resumed", after: 8 }),
     });
+    const wallet = createProjectWalletAccessFixture(projectToken);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new Error("Hermetic test must not use network"),
+    );
     const user = userEvent.setup();
-    render(<App runId="run_resumed" services={ports} />);
+    render(
+      <App
+        runId="run_resumed"
+        services={ports}
+        walletAccess={wallet.walletAccess}
+      />,
+    );
 
     await user.click(await screen.findByRole("button", { name: /export bundle/i }));
     expect(ports.exportBundle).toHaveBeenCalledWith({
@@ -91,6 +102,8 @@ describe("Run Cockpit bundle and session hardening", () => {
     });
     expect(sessionStorage.getItem("proofline:project-token")).toBe(projectToken);
     expect(localStorage.getItem("proofline:project-token")).toBeNull();
+    expect(wallet.getAccount).toHaveBeenCalledOnce();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("continues rendering when sessionStorage access is denied", async () => {

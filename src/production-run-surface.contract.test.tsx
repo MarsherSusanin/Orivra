@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { RunSurfaceServices } from "./services/run-surface";
+import { createProjectWalletAccessFixture } from "./test/wallet-access-fixture";
 
 const projectToken = `project_${"a".repeat(64)}`;
 const deepRunId = "run_01DEEPJYXW5ZC6K9JSGG0TQ7V8";
@@ -61,8 +62,9 @@ describe("production run route and hydration", () => {
     window.history.replaceState({}, "", `/runs/${deepRunId}`);
     sessionStorage.setItem("proofline:project-token", projectToken);
     const ports = services();
+    const wallet = createProjectWalletAccessFixture(projectToken);
     const user = userEvent.setup();
-    render(<App services={asSurface(ports)} />);
+    render(<App services={asSurface(ports)} walletAccess={wallet.walletAccess} />);
 
     await waitFor(() =>
       expect(ports.hydrateRun).toHaveBeenCalledWith({
@@ -79,7 +81,8 @@ describe("production run route and hydration", () => {
     window.history.replaceState({}, "", `/runs/${deepRunId}`);
     sessionStorage.setItem("proofline:project-token", projectToken);
     const ports = services();
-    render(<App services={asSurface(ports)} />);
+    const wallet = createProjectWalletAccessFixture(projectToken);
+    render(<App services={asSurface(ports)} walletAccess={wallet.walletAccess} />);
 
     expect(await screen.findByRole("heading", { name: "BTC/USD oracle" })).toBeVisible();
     expect(screen.getByLabelText(/consumer: completed/i)).toBeVisible();
@@ -115,7 +118,8 @@ describe("production run route and hydration", () => {
         evidence: { transactionHash: `0x${"d".repeat(64)}` },
       }),
     });
-    render(<App services={asSurface(ports)} />);
+    const wallet = createProjectWalletAccessFixture(projectToken);
+    render(<App services={asSurface(ports)} walletAccess={wallet.walletAccess} />);
 
     expect(await screen.findByLabelText(/consumer: failed/i)).toBeVisible();
     expect(screen.getByText(/expected host is not enforced/i)).toBeVisible();

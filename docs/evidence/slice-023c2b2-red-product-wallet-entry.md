@@ -38,3 +38,19 @@ Evidence is recorded immediately before the RED freeze commit:
   in the initial entry is explicitly allowed.
 
 No browser, Sites, hosted or live-network PASS is represented by this RED.
+
+## Corrective RED after rejected GREEN
+
+Candidate `d3a543a7f7b98a89851904fb5f6efe72e35ec1a3` exposed share fallback
+and a non-hermetic historical restore harness. Four new authority cases cover
+write-denied valid share, invalid fragment plus project, query attempt plus
+project, and malformed attempt plus restored valid share. The four previous
+authority controls pass and exactly these four cases fail on the candidate.
+
+Every historical test that seeds `proofline:project-token` without an explicit
+App override now injects deterministic wallet access: one App hardening case,
+three production-run cases and five recovery cases including the second
+Composer render. Targeted harness evidence is 3 files / 23 tests PASS. A
+rejecting fetch spy is never called. Full Web is 57 files / 420 tests: 416 PASS
+and only the four intentional share RED cases fail; no localhost/EPERM network
+failure occurs. `npm run typecheck` passes.

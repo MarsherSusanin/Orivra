@@ -12,6 +12,7 @@ import {
   type HydratedRunView,
   type RunSurfaceServices,
 } from "./services/run-surface";
+import { createProjectWalletAccessFixture } from "./test/wallet-access-fixture";
 
 const PROJECT_TOKEN = `project_${"a".repeat(64)}`;
 
@@ -141,7 +142,8 @@ describe("Slice 018 recovery surface", () => {
   ] as const)("renders one safe %s action from persisted recovery", async (state, title, detail, action) => {
     window.history.replaceState({}, "", `/runs/${RUN_ID}`);
     sessionStorage.setItem("proofline:project-token", PROJECT_TOKEN);
-    render(<App services={surface(vi.fn().mockResolvedValue(run(state)))} />);
+    const wallet = createProjectWalletAccessFixture(PROJECT_TOKEN);
+    render(<App services={surface(vi.fn().mockResolvedValue(run(state)))} walletAccess={wallet.walletAccess} />);
 
     const panel = await screen.findByRole("region", { name: /run recovery/i });
     expect(panel).toHaveTextContent(title);
@@ -163,7 +165,8 @@ describe("Slice 018 recovery surface", () => {
       .fn()
       .mockResolvedValueOnce(run("waiting"))
       .mockRejectedValueOnce(new Error(`Failed to fetch Bearer ${PROJECT_TOKEN}`));
-    render(<App services={surface(hydrateRun)} />);
+    const wallet = createProjectWalletAccessFixture(PROJECT_TOKEN);
+    render(<App services={surface(hydrateRun)} walletAccess={wallet.walletAccess} />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
       await Promise.resolve();
@@ -187,7 +190,8 @@ describe("Slice 018 recovery surface", () => {
       ...run("waiting"),
       sync: { state: "partial", projectionSequence: 4, eventSequence: 2 },
     } as unknown as HydratedRunView;
-    render(<App services={surface(vi.fn().mockResolvedValue(partial))} />);
+    const wallet = createProjectWalletAccessFixture(PROJECT_TOKEN);
+    render(<App services={surface(vi.fn().mockResolvedValue(partial))} walletAccess={wallet.walletAccess} />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/partial|incomplete/i);
     expect(screen.getByRole("button", { name: /refresh status/i })).toBeVisible();
   });
@@ -199,7 +203,8 @@ describe("Slice 018 recovery surface", () => {
       ...run("waiting"),
       sync: { state: "partial", projectionSequence: 3, eventSequence: 4 },
     } as unknown as HydratedRunView;
-    render(<App services={surface(vi.fn().mockResolvedValue(feedAhead))} />);
+    const wallet = createProjectWalletAccessFixture(PROJECT_TOKEN);
+    render(<App services={surface(vi.fn().mockResolvedValue(feedAhead))} walletAccess={wallet.walletAccess} />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/event feed is ahead/i);
     expect(screen.getByRole("alert")).not.toHaveTextContent(/projection is ahead/i);
   });
@@ -208,13 +213,14 @@ describe("Slice 018 recovery surface", () => {
     window.history.replaceState({}, "", `/runs/${RUN_ID}`);
     sessionStorage.setItem("proofline:project-token", PROJECT_TOKEN);
     const sourceRun = { ...run("terminal"), manifest: exactTrustManifest } as HydratedRunView;
-    render(<App services={surface(vi.fn().mockResolvedValue(sourceRun))} />);
+    const wallet = createProjectWalletAccessFixture(PROJECT_TOKEN);
+    render(<App services={surface(vi.fn().mockResolvedValue(sourceRun))} walletAccess={wallet.walletAccess} />);
     await screen.findByRole("region", { name: /run recovery/i });
     await act(async () => {
       screen.getByRole("button", { name: /create new run/i }).click();
     });
     cleanup();
-    render(<App services={surface(vi.fn())} />);
+    render(<App services={surface(vi.fn())} walletAccess={wallet.walletAccess} />);
 
     const restored = decodeComposerDraftV1(
       localStorage.getItem("proofline:composer-draft:v1"),
