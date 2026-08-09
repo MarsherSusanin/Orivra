@@ -268,7 +268,17 @@ describe("Slice 025C template gallery, detail and Composer authority", () => {
   });
 
   it("clears the old signed-out intent and every error when replacement is confirmed", async () => {
-    const oldDraft = { ...structuredClone(validComposerDraft), step: "submit" as const };
+    const oldDraft = {
+      ...structuredClone(validComposerDraft),
+      step: "submit" as const,
+      fields: {
+        ...structuredClone(validComposerDraft.fields),
+        expectedQueryRows: [
+          ...structuredClone(validComposerDraft.fields.expectedQueryRows),
+          { id: "expected_window", key: "window", value: "1h" },
+        ],
+      },
+    };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(oldDraft));
     const createRun = vi.fn().mockRejectedValueOnce(new Error("offline"));
     const runServices = services({ createRun });
@@ -354,7 +364,17 @@ describe("Slice 025C template gallery, detail and Composer authority", () => {
   });
 
   it("refuses template replacement while authenticated creation is in flight", async () => {
-    const oldDraft = { ...structuredClone(validComposerDraft), step: "submit" as const };
+    const oldDraft = {
+      ...structuredClone(validComposerDraft),
+      step: "submit" as const,
+      fields: {
+        ...structuredClone(validComposerDraft.fields),
+        expectedQueryRows: [
+          ...structuredClone(validComposerDraft.fields.expectedQueryRows),
+          { id: "expected_window", key: "window", value: "1h" },
+        ],
+      },
+    };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(oldDraft));
     const pending = deferred<never>();
     const createRun = vi.fn(() => pending.promise);
