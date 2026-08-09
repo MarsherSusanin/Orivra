@@ -52,6 +52,14 @@ function option(argv: readonly string[], name: string): string | undefined {
 }
 
 export function safeCliErrorMessage(error: unknown): string {
+  if (
+    error !== null &&
+    typeof error === "object" &&
+    "code" in error &&
+    error.code === "CANONICAL_SOURCE_READ_FAILED"
+  ) {
+    return "Canonical URL attack source read failed";
+  }
   const message = error instanceof Error ? error.message : "Command failed";
   const sanitized = message
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")

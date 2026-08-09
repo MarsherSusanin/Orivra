@@ -232,7 +232,7 @@ proofline demo record --attack-run <persisted-live-run-id> \
   --tree <40-hex-tree> --out <recording-path>
 ```
 
-Все пять опций обязательны ровно один раз, run ID должны различаться, а run/release/output значения проходят bounded грамматику до любого I/O. Packaged CLI всегда подключает concrete `packages/fdc-coston2` runtime: команда читает ровно два persisted bundle через API port, перекомпилирует exact checked-in Solidity через pinned canonical standard JSON, выполняет три вызова в fresh Cancun `@ethereumjs/vm`, затем независимо повторяет runtime verification до atomic rename. Ошибка read/compile/EVM/verify оставляет destination неизменённым; fixture/replay fallback и wallet/relayer effect отсутствуют.
+Все пять опций обязательны ровно один раз, run ID должны различаться, а run/release/output значения проходят bounded грамматику до любого I/O. Packaged CLI всегда подключает concrete `packages/fdc-coston2` runtime: команда читает ровно два persisted bundle не более 2 200 000 UTF-8 bytes и 64 Merkle nodes каждый, перекомпилирует exact checked-in Solidity через pinned canonical standard JSON, выполняет три вызова в fresh Cancun `@ethereumjs/vm`, затем независимо повторяет runtime verification до atomic rename. Raw calldata/results не дублируются в recording: runtime выводит и сверяет их transcript hashes. Ошибка source read всегда возвращает code `CANONICAL_SOURCE_READ_FAILED` и сообщение `Canonical URL attack source read failed` без OS code, path, filename и stack. Любая read/compile/EVM/verify ошибка оставляет destination неизменённым; fixture/replay fallback и wallet/relayer effect отсутствуют.
 
 ### Локальный Product QA report
 

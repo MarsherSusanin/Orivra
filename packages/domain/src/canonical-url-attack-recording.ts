@@ -1,4 +1,6 @@
 import {
+  CANONICAL_URL_ATTACK_RECORDING_MAX_BUNDLE_UTF8_BYTES,
+  CANONICAL_URL_ATTACK_RECORDING_MAX_MERKLE_PROOF_ENTRIES,
   CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES,
   CanonicalUrlAttackRecordingContentV1Schema,
   CanonicalUrlAttackRecordingV1Schema,
@@ -49,6 +51,11 @@ function validateBundleEvidence(
   evidence: CanonicalUrlAttackRecordingContentV1["bundles"]["attack"] |
     CanonicalUrlAttackRecordingContentV1["bundles"]["control"],
 ): ProofBundleV1 {
+  assertRecording(
+    utf8Bytes(evidence.canonicalBundle) <=
+      CANONICAL_URL_ATTACK_RECORDING_MAX_BUNDLE_UTF8_BYTES,
+    `bundle exceeds the ${CANONICAL_URL_ATTACK_RECORDING_MAX_BUNDLE_UTF8_BYTES} byte size limit`,
+  );
   const bundle = replayProofBundle(evidence.canonicalBundle);
   const submitted = bundle.events.filter(
     (event) => event.type === "REQUEST_SUBMITTED",
@@ -84,6 +91,11 @@ function validateBundleEvidence(
   assertRecording(
     canonicalizeManifestUrl(bundle.manifest) === evidence.requestedUrl,
     "canonical request URL mismatch",
+  );
+  assertRecording(
+    bundle.proof.merkleProof.length <=
+      CANONICAL_URL_ATTACK_RECORDING_MAX_MERKLE_PROOF_ENTRIES,
+    `Merkle proof exceeds ${CANONICAL_URL_ATTACK_RECORDING_MAX_MERKLE_PROOF_ENTRIES} entries (2048 bytes)`,
   );
   return bundle;
 }
@@ -249,41 +261,8 @@ function validateReproductionIntegrity(
   assertRecording(
     content.sharedRequest.transformedResponseShapeSha256 === shapeSha256 &&
       content.bundles.attack.transformedResponseShapeSha256 === shapeSha256 &&
-      content.bundles.control.transformedResponseShapeSha256 === shapeSha256,
+    content.bundles.control.transformedResponseShapeSha256 === shapeSha256,
     "transformed response shape checksum mismatch",
-  );
-
-  const [vulnerableAttack, safeAttack, safeControl] =
-    reproduction.executions;
-  assertRecording(
-    rawHexSha256(vulnerableAttack.calldata) ===
-      content.transcript.executions[0].calldataSha256,
-    "vulnerable attack calldata checksum mismatch",
-  );
-  assertRecording(
-    rawHexSha256(safeAttack.calldata) ===
-      content.transcript.executions[1].calldataSha256,
-    "safe attack calldata checksum mismatch",
-  );
-  assertRecording(
-    rawHexSha256(safeControl.calldata) ===
-      content.transcript.executions[2].calldataSha256,
-    "safe control calldata checksum mismatch",
-  );
-  assertRecording(
-    rawHexSha256(vulnerableAttack.result.returnData) ===
-      content.transcript.executions[0].result.returnDataSha256,
-    "vulnerable attack return checksum mismatch",
-  );
-  assertRecording(
-    rawHexSha256(safeAttack.result.revertData) ===
-      content.transcript.executions[1].result.revertDataSha256,
-    "safe attack revert checksum mismatch",
-  );
-  assertRecording(
-    rawHexSha256(safeControl.result.returnData) ===
-      content.transcript.executions[2].result.returnDataSha256,
-    "safe control return checksum mismatch",
   );
 }
 

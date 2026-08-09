@@ -91,6 +91,19 @@ const SAFE_ADDRESS = createAddressFromString(
 const HOST_MISMATCH_SELECTOR = "0xb828610a";
 const SOLC_VERSION = "0.8.36";
 const VM_VERSION = "10.1.2";
+export const CANONICAL_URL_ATTACK_SOURCE_READ_ERROR_CODE =
+  "CANONICAL_SOURCE_READ_FAILED";
+export const CANONICAL_URL_ATTACK_SOURCE_READ_ERROR_MESSAGE =
+  "Canonical URL attack source read failed";
+
+export class CanonicalUrlAttackSourceReadError extends Error {
+  readonly code = CANONICAL_URL_ATTACK_SOURCE_READ_ERROR_CODE;
+
+  constructor() {
+    super(CANONICAL_URL_ATTACK_SOURCE_READ_ERROR_MESSAGE);
+    this.name = "CanonicalUrlAttackSourceReadError";
+  }
+}
 
 export interface CanonicalUrlAttackRuntimeInput {
   attackRunId: string;
@@ -509,11 +522,17 @@ async function buildRecording(
   const controlData = decodePersistedProof(controlBundle);
   const attackProofSha256 = hexSha256(attackBundle.proof.response as Hex);
   const controlProofSha256 = hexSha256(controlBundle.proof.response as Hex);
-  const [vulnerableSource, safeSource, invariantSource] = await Promise.all([
-    options.readCheckedInSource(SOURCE_PATHS.vulnerable),
-    options.readCheckedInSource(SOURCE_PATHS.safe),
-    options.readCheckedInSource(SOURCE_PATHS.invariantLibrary),
-  ]);
+  let checkedInSources: [string, string, string];
+  try {
+    checkedInSources = await Promise.all([
+      options.readCheckedInSource(SOURCE_PATHS.vulnerable),
+      options.readCheckedInSource(SOURCE_PATHS.safe),
+      options.readCheckedInSource(SOURCE_PATHS.invariantLibrary),
+    ]);
+  } catch {
+    throw new CanonicalUrlAttackSourceReadError();
+  }
+  const [vulnerableSource, safeSource, invariantSource] = checkedInSources;
   const verifierSource = exactProofVerifierSource(
     attackProofSha256,
     controlProofSha256,
@@ -699,35 +718,6 @@ async function buildRecording(
         },
       },
       transformedResponseShapeCanonicalJson,
-      executions: [
-        {
-          scenario: "attack",
-          consumer: "canonical-vulnerable",
-          calldata: executions.vulnerableAttackCalldata,
-          result: {
-            status: "accepted",
-            returnData: executions.vulnerableAttackReturn,
-          },
-        },
-        {
-          scenario: "attack",
-          consumer: "canonical-safe",
-          calldata: executions.safeAttackCalldata,
-          result: {
-            status: "reverted",
-            revertData: executions.safeAttackRevert as "0xb828610a",
-          },
-        },
-        {
-          scenario: "control",
-          consumer: "canonical-safe",
-          calldata: executions.safeControlCalldata,
-          result: {
-            status: "accepted",
-            returnData: executions.safeControlReturn,
-          },
-        },
-      ],
     },
   };
   return createCanonicalUrlAttackRecording(content);

@@ -1767,6 +1767,10 @@ export type ProofBundleV1 = z.infer<typeof ProofBundleV1Schema>;
 
 export const CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES =
   6 * 1_024 * 1_024;
+export const CANONICAL_URL_ATTACK_RECORDING_MAX_BUNDLE_UTF8_BYTES = 2_200_000;
+export const CANONICAL_URL_ATTACK_RECORDING_MAX_MERKLE_PROOF_ENTRIES = 64;
+
+const canonicalUrlAttackTextEncoder = new TextEncoder();
 
 const CanonicalUrlAttackReleaseShaV1Schema = z
   .string()
@@ -1797,12 +1801,18 @@ function canonicalUrlAttackBundleSchema(role: "attack" | "control") {
       canonicalBundle: z
         .string()
         .min(1)
-        .max(CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES),
+        .max(CANONICAL_URL_ATTACK_RECORDING_MAX_BUNDLE_UTF8_BYTES)
+        .refine(
+          (bundle) =>
+            canonicalUrlAttackTextEncoder.encode(bundle).byteLength <=
+            CANONICAL_URL_ATTACK_RECORDING_MAX_BUNDLE_UTF8_BYTES,
+          "Canonical recording bundle exceeds its UTF-8 byte limit",
+        ),
       canonicalBundleUtf8Bytes: z
         .number()
         .int()
         .positive()
-        .max(CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES),
+        .max(CANONICAL_URL_ATTACK_RECORDING_MAX_BUNDLE_UTF8_BYTES),
       canonicalBundleSha256: Sha256EnvelopeSchema,
       bundleChecksum: Sha256EnvelopeSchema,
       lastSequence: z.number().int().positive(),
@@ -1842,35 +1852,6 @@ function canonicalUrlAttackSourceSchema<TPath extends string>(path: TPath) {
       path: z.literal(path),
       content: z.string().min(1).max(262_144),
       sha256: Sha256EnvelopeSchema,
-    })
-    .strict();
-}
-
-const CanonicalUrlAttackRawAcceptedResultV1Schema = z
-  .object({
-    status: z.literal("accepted"),
-    returnData: CanonicalUrlAttackRawHexV1Schema,
-  })
-  .strict();
-
-const CanonicalUrlAttackRawHostMismatchResultV1Schema = z
-  .object({
-    status: z.literal("reverted"),
-    revertData: z.literal("0xb828610a"),
-  })
-  .strict();
-
-function canonicalUrlAttackRawExecutionSchema<
-  TScenario extends "attack" | "control",
-  TConsumer extends "canonical-vulnerable" | "canonical-safe",
-  TResult extends z.ZodType,
->(scenario: TScenario, consumer: TConsumer, result: TResult) {
-  return z
-    .object({
-      scenario: z.literal(scenario),
-      consumer: z.literal(consumer),
-      calldata: CanonicalUrlAttackRawHexV1Schema,
-      result,
     })
     .strict();
 }
@@ -1931,23 +1912,6 @@ const CanonicalUrlAttackReproductionV1Schema = z
       .string()
       .min(1)
       .max(65_536),
-    executions: z.tuple([
-      canonicalUrlAttackRawExecutionSchema(
-        "attack",
-        "canonical-vulnerable",
-        CanonicalUrlAttackRawAcceptedResultV1Schema,
-      ),
-      canonicalUrlAttackRawExecutionSchema(
-        "attack",
-        "canonical-safe",
-        CanonicalUrlAttackRawHostMismatchResultV1Schema,
-      ),
-      canonicalUrlAttackRawExecutionSchema(
-        "control",
-        "canonical-safe",
-        CanonicalUrlAttackRawAcceptedResultV1Schema,
-      ),
-    ]),
   })
   .strict();
 
