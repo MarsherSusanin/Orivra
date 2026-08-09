@@ -302,8 +302,8 @@ describe("Slice 026 public landing", () => {
   });
 
   it.each([
-    ["catalog", async () => Response.json({ version: "1", templates: [], fixture: true })],
-    ["demo", async () => Response.json({ version: "1", status: "available", fixture: true })],
+    ["catalog", async () => Response.json({ version: "1", templates: [], fixture: "FABRICATED_FIXTURE_PAYLOAD" })],
+    ["demo", async () => Response.json({ version: "1", status: "available", fixture: "FABRICATED_FIXTURE_PAYLOAD" })],
   ] as const)("normalizes a malformed %s response without coupling the other region", async (kind, invalid) => {
     renderPath(kind === "catalog" ? { catalog: invalid } : { demo: invalid });
     if (kind === "catalog") {
@@ -312,8 +312,15 @@ describe("Slice 026 public landing", () => {
     } else {
       expect(await screen.findByRole("heading", { name: "Response-derived starting point" })).toBeVisible();
       expect(await screen.findByRole("heading", { name: "Verified recording unavailable" })).toBeVisible();
+      expect(screen.getByText(
+        "No verified persisted recording is available for this deployment. Proofline does not substitute a fixture or synthetic result.",
+      )).toBeVisible();
+      expect(screen.queryByText("Persisted evidence available")).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Inspect evidence" })).not.toBeInTheDocument();
+      expect(document.querySelector('a[href*="/recording"]')).toBeNull();
+      expect(document.body.textContent).not.toMatch(/sha256:[a-f0-9]{64}|0x[a-f0-9]{64}/i);
     }
-    expect(document.body).not.toHaveTextContent("fixture");
+    expect(document.body).not.toHaveTextContent("FABRICATED_FIXTURE_PAYLOAD");
   });
 
   it("scrubs root search and hash before reads, storage or analytics", async () => {

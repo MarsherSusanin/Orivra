@@ -112,6 +112,16 @@ npm run test:sites
 
 Result: 36/36 PASS, zero skipped.
 
+### Corrective harness note
+
+After the initial RED commit `46e653a00fbf9babf3e3b6a22127865b7ec4c6b7`
+was reviewed, the malformed-demo case was found to forbid the word `fixture`
+while ADR 0034 requires the honest unavailable sentence `Proofline does not
+substitute a fixture or synthetic result.` The corrective RED preserves that
+exact sentence and instead forbids the fabricated payload marker, available
+evidence state, hashes and recording CTA. Public behavior is unchanged and the
+focused RED/PASS counts remain unchanged.
+
 Focused failures must be the absent Slice 026 landing/route composition and the
 known absent/hostile Origin cache variation only. A compilation, fixture,
 timeout or test-environment failure is not accepted as semantic RED. A Sites
