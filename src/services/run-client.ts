@@ -228,6 +228,12 @@ async function responseError(
       response.status === 429 && code === "PROJECT_RUN_QUOTA_EXHAUSTED";
     const activeLive =
       response.status === 409 && code === "ACTIVE_LIVE_RUN_LIMIT_REACHED";
+    const establishedCreateConflictCode =
+      response.status === 409 &&
+      (code === "IDEMPOTENCY_CONFLICT" ||
+        code === "NETWORK_CAPABILITY_DISABLED")
+        ? code
+        : null;
     const rawRetryAfter = response.headers.get("retry-after");
     const retryAfterSeconds =
       dailyQuota &&
@@ -251,6 +257,12 @@ async function responseError(
       return new ProoflineClientError(
         "Proofline has reached the active live-run limit.",
         { status: response.status, code: "ACTIVE_LIVE_RUN_LIMIT_REACHED" },
+      );
+    }
+    if (establishedCreateConflictCode !== null) {
+      return new ProoflineClientError(
+        "Proofline run creation failed.",
+        { status: response.status, code: establishedCreateConflictCode },
       );
     }
     return new ProoflineClientError(

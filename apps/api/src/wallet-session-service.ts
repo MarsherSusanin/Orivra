@@ -172,7 +172,9 @@ export function createPersistedWalletAuthService(input: {
   ports: WalletAuthPorts;
   quotaPolicy?: ApiQuotaPolicy | null;
 }) {
-  async function boundedChallengeCleanup(): Promise<void> {
+  async function boundedChallengeCleanup(
+    query: Pool["query"],
+  ): Promise<void> {
     const statements = [
       `WITH expired AS (
          SELECT ctid
@@ -199,7 +201,7 @@ export function createPersistedWalletAuthService(input: {
     ];
     for (const statement of statements) {
       try {
-        await input.pool.query(statement);
+        await query(statement);
       } catch {
         // Cleanup is bounded maintenance and never weakens accepted admission.
       }
@@ -364,7 +366,11 @@ export function createPersistedWalletAuthService(input: {
         await client.query("COMMIT");
         transactionOpen = false;
       }
-      if (input.quotaPolicy) await boundedChallengeCleanup();
+      if (input.quotaPolicy) {
+        await boundedChallengeCleanup(
+          client.query.bind(client) as Pool["query"],
+        );
+      }
       return challenge;
     } catch (cause) {
       if (transactionOpen) await client.query("ROLLBACK");
