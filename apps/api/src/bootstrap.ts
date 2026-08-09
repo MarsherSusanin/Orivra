@@ -1,4 +1,10 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
+import { performance } from "node:perf_hooks";
 import { Pool } from "pg";
 import { createProoflineApi } from "./app";
 import { digestOpaqueToken } from "./postgres";
@@ -19,6 +25,46 @@ const DEFAULT_API_QUOTA_POLICY: Readonly<ApiQuotaPolicy> = Object.freeze({
   projectRunsPerUtcDay: 100,
   projectActiveLiveRuns: 3,
 });
+
+const PUBLIC_AUTH_BODY_LIMIT_BYTES = 8 * 1_024;
+const PUBLIC_AUTH_BODY_DEADLINE_MS = 10_000;
+const PUBLIC_AUTH_PATHS = new Set([
+  "/v1/auth/wallet/challenges",
+  "/v1/auth/wallet/sessions",
+]);
+
+type DirectAuthRejection = Readonly<{
+  status: number;
+  code: string;
+}>;
+
+const AUTH_ORIGIN_FORBIDDEN: DirectAuthRejection = {
+  status: 403,
+  code: "AUTH_ORIGIN_FORBIDDEN",
+};
+const UNSUPPORTED_CONTENT_ENCODING: DirectAuthRejection = {
+  status: 415,
+  code: "UNSUPPORTED_CONTENT_ENCODING",
+};
+const INVALID_REQUEST_BODY: DirectAuthRejection = {
+  status: 400,
+  code: "INVALID_REQUEST_BODY",
+};
+const REQUEST_BODY_TOO_LARGE: DirectAuthRejection = {
+  status: 413,
+  code: "REQUEST_BODY_TOO_LARGE",
+};
+const REQUEST_BODY_TIMEOUT: DirectAuthRejection = {
+  status: 408,
+  code: "REQUEST_BODY_TIMEOUT",
+};
+
+class AuthBodyReadError extends Error {
+  constructor(readonly rejection: DirectAuthRejection) {
+    super(rejection.code);
+    this.name = "AuthBodyReadError";
+  }
+}
 
 const QUOTA_ENVIRONMENT = {
   walletChallengeAddressPerMinute: {
@@ -178,23 +224,232 @@ export function createProductionApi(input: {
           };
     },
   });
-  return { api, pool, port: parsePort(environment.PORT) };
+  return {
+    api,
+    pool,
+    port: parsePort(environment.PORT),
+    publicWebOrigin: new URL(publicWebOrigin).origin,
+  };
+}
+
+function configuredNodeUrl(
+  requestTarget: string | undefined,
+  port: number,
+): URL {
+  const base = new URL(`http://127.0.0.1:${port}`);
+  const parsed = new URL(requestTarget ?? "/", base);
+  return new URL(`${parsed.pathname}${parsed.search}`, base);
+}
+
+function legacyNodeUrl(
+  request: IncomingMessage,
+  port: number,
+): URL {
+  const origin = `http://${request.headers.host ?? `127.0.0.1:${port}`}`;
+  return new URL(request.url ?? "/", origin);
+}
+
+function isPublicAuthPost(request: IncomingMessage, url: URL): boolean {
+  return request.method === "POST" && PUBLIC_AUTH_PATHS.has(url.pathname);
+}
+
+function privateCorsHeaders(
+  request: IncomingMessage,
+  publicWebOrigin: string,
+): Record<string, string> {
+  return request.headers.origin === publicWebOrigin
+    ? {
+        "access-control-allow-origin": publicWebOrigin,
+        vary: "Origin",
+      }
+    : {};
+}
+
+function directAuthRejection(
+  request: IncomingMessage,
+  response: ServerResponse,
+  publicWebOrigin: string,
+  rejection: DirectAuthRejection,
+): void {
+  const closeConnection = () => {
+    if (request.socket && !request.socket.destroyed) {
+      request.socket.end();
+    } else if (!request.destroyed) {
+      request.destroy();
+    }
+  };
+  if (
+    request.aborted ||
+    response.destroyed ||
+    response.writableEnded
+  ) {
+    closeConnection();
+    return;
+  }
+
+  const body = Buffer.from(JSON.stringify({
+    version: "1",
+    error: { code: rejection.code, message: "Request rejected" },
+  }));
+  response.writeHead(rejection.status, {
+    "content-type": "application/json; charset=utf-8",
+    "content-length": String(body.byteLength),
+    "cache-control": "no-store",
+    "referrer-policy": "no-referrer",
+    connection: "close",
+    ...privateCorsHeaders(request, publicWebOrigin),
+  });
+
+  if (typeof response.once === "function") {
+    response.once("finish", closeConnection);
+    response.once("close", closeConnection);
+    response.end(body);
+  } else {
+    response.end(body);
+    closeConnection();
+  }
+}
+
+function authHeaderRejection(
+  request: IncomingMessage,
+  publicWebOrigin: string,
+): DirectAuthRejection | null {
+  if (request.headers.origin !== publicWebOrigin) {
+    return AUTH_ORIGIN_FORBIDDEN;
+  }
+  if (request.headers["content-encoding"] !== undefined) {
+    return UNSUPPORTED_CONTENT_ENCODING;
+  }
+
+  const transferEncoding = request.headers["transfer-encoding"];
+  if (
+    transferEncoding !== undefined &&
+    (Array.isArray(transferEncoding) ||
+      transferEncoding.toLowerCase() !== "chunked")
+  ) {
+    return INVALID_REQUEST_BODY;
+  }
+
+  const contentLength = request.headers["content-length"];
+  if (
+    contentLength !== undefined &&
+    (Array.isArray(contentLength) ||
+      BigInt(contentLength) > BigInt(PUBLIC_AUTH_BODY_LIMIT_BYTES))
+  ) {
+    return REQUEST_BODY_TOO_LARGE;
+  }
+  return null;
+}
+
+async function readBoundedAuthBody(
+  request: IncomingMessage,
+  deadlineAt: number,
+): Promise<Buffer> {
+  const iterator = request[Symbol.asyncIterator]();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const remainingMs = deadlineAt - performance.now();
+    if (remainingMs <= 0) {
+      throw new AuthBodyReadError(REQUEST_BODY_TIMEOUT);
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<{ kind: "timeout" }>((resolve) => {
+      timer = setTimeout(() => resolve({ kind: "timeout" }), remainingMs);
+    });
+    const next = Promise.resolve(iterator.next()).then(
+      (result) => ({ kind: "next" as const, result }),
+      (cause) => ({ kind: "error" as const, cause }),
+    );
+    const outcome = await Promise.race([next, timeout]);
+    if (timer !== undefined) clearTimeout(timer);
+
+    if (outcome.kind === "timeout") {
+      throw new AuthBodyReadError(REQUEST_BODY_TIMEOUT);
+    }
+    if (outcome.kind === "error") throw outcome.cause;
+    if (outcome.result.done) break;
+
+    const chunk = outcome.result.value as Uint8Array;
+    totalBytes += chunk.byteLength;
+    if (totalBytes > PUBLIC_AUTH_BODY_LIMIT_BYTES) {
+      throw new AuthBodyReadError(REQUEST_BODY_TOO_LARGE);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, totalBytes);
 }
 
 export function createNodeRequestHandler(input: {
   api: { fetch(request: Request): Promise<Response> };
   port: number;
+  publicWebOrigin?: string;
+  authBodyDeadlineMs?: number;
 }) {
+  if (input.publicWebOrigin === undefined && process.env.NODE_ENV !== "test") {
+    throw new Error("publicWebOrigin is required for the production Node bridge");
+  }
+  if (
+    input.authBodyDeadlineMs !== undefined &&
+    process.env.NODE_ENV !== "test"
+  ) {
+    throw new Error("The auth body deadline is fixed in production");
+  }
   return async (
     request: IncomingMessage,
     response: ServerResponse,
   ): Promise<void> => {
-    const origin = `http://${request.headers.host ?? `127.0.0.1:${input.port}`}`;
+    const deadlineAt =
+      performance.now() +
+      (input.authBodyDeadlineMs ?? PUBLIC_AUTH_BODY_DEADLINE_MS);
+    const url = input.publicWebOrigin === undefined
+      ? legacyNodeUrl(request, input.port)
+      : configuredNodeUrl(request.url, input.port);
+    const guardedAuth =
+      input.publicWebOrigin !== undefined && isPublicAuthPost(request, url);
+
+    if (guardedAuth) {
+      const rejection = authHeaderRejection(request, input.publicWebOrigin!);
+      if (rejection !== null) {
+        directAuthRejection(
+          request,
+          response,
+          input.publicWebOrigin!,
+          rejection,
+        );
+        return;
+      }
+    }
+
+    if (request.headers.expect?.toLowerCase() === "100-continue") {
+      response.writeContinue();
+    }
+
     const body: Uint8Array[] = [];
-    for await (const chunk of request) body.push(chunk as Uint8Array);
-    const bufferedBody = Buffer.concat(body);
+    let bufferedBody: Buffer;
+    try {
+      if (guardedAuth) {
+        bufferedBody = await readBoundedAuthBody(request, deadlineAt);
+      } else {
+        for await (const chunk of request) body.push(chunk as Uint8Array);
+        bufferedBody = Buffer.concat(body);
+      }
+    } catch (cause) {
+      if (!guardedAuth) throw cause;
+      directAuthRejection(
+        request,
+        response,
+        input.publicWebOrigin!,
+        cause instanceof AuthBodyReadError
+          ? cause.rejection
+          : INVALID_REQUEST_BODY,
+      );
+      return;
+    }
+
     const apiResponse = await input.api.fetch(
-      new Request(new URL(request.url ?? "/", origin), {
+      new Request(url, {
         method: request.method,
         headers: request.headers as HeadersInit,
         body:
@@ -202,7 +457,7 @@ export function createNodeRequestHandler(input: {
           request.method === "HEAD" ||
           bufferedBody.byteLength === 0
             ? undefined
-            : bufferedBody,
+            : new Uint8Array(bufferedBody),
       }),
     );
     response.writeHead(
@@ -213,16 +468,27 @@ export function createNodeRequestHandler(input: {
   };
 }
 
+export function createProductionNodeServer(input: {
+  api: { fetch(request: Request): Promise<Response> };
+  port: number;
+  publicWebOrigin: string;
+}): Server {
+  const server = createServer();
+  const handler = createNodeRequestHandler(input);
+  server.on("request", handler);
+  server.on("checkContinue", handler);
+  return server;
+}
+
 export async function startProductionApi(
   environment: Environment = process.env,
 ): Promise<void> {
   const production = createProductionApi({ environment });
-  const server = createServer(
-    createNodeRequestHandler({
-      api: production.api,
-      port: production.port,
-    }),
-  );
+  const server = createProductionNodeServer({
+    api: production.api,
+    port: production.port,
+    publicWebOrigin: production.publicWebOrigin,
+  });
   server.listen(production.port, "0.0.0.0");
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
