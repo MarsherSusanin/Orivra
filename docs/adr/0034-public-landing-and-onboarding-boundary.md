@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted for the Slice 026 RED contract. Production implementation and the two
-independent verification reports are pending.
+Accepted and implemented as a production-author candidate. Two independent
+verification reports for one exact candidate tree are pending.
 
 ## Context
 

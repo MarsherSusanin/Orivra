@@ -321,11 +321,11 @@ to render the corresponding neutral unavailable region. With
 200/304 responses for absent, exact and hostile Origin; ACAO remains exact-only.
 
 The frozen RED commands and first-run counts are recorded in
-`docs/evidence/slice-026-red-public-product-surface.md`. GREEN additionally
-requires affected API/Web coverage, build/Sites artifacts and built-browser
-desktop/mobile, keyboard, axe, console/network and reload/back-forward evidence.
-This is credential-free local evidence; Caddy and deployment remain later
-slices.
+`docs/evidence/slice-026-red-public-product-surface.md`. Production-author GREEN
+commands, coverage, artifacts and browser acceptance are recorded in
+`docs/evidence/slice-026-green-public-product-surface.md`. Two independent
+verifiers must still inspect one exact candidate tree. This is credential-free
+local evidence; Caddy and deployment remain later slices.
 
 ### Локальный Product QA report
 

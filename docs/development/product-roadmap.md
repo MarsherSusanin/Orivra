@@ -24,7 +24,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 024B2 | Exact-digest API startup cache and anonymous summary/download | Complete; independently verified, credential-free |
 | 024B3 | Token-free canonical URL demo Web route and Sites deep route | Complete; independently verified, credential-free |
 | 025 | Template-led Composer | Complete; independently verified, credential-free |
-| 026 | Public product surface | RED contract frozen; implementation pending, credential-free |
+| 026 | Public product surface | Production-author GREEN candidate; independent verification pending, credential-free |
 | 027A | Local Docker runtime, Compose/Caddy routing and private service networks | Planned, credential-free |
 | 027B | One-shot migrations, health/readiness, worker heartbeat and retention | Planned, credential-free |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |

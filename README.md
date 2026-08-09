@@ -43,11 +43,13 @@ blockchain-операций.
   Open-Meteo Berlin current temperature и совместимый `eth-usd` выбираются
   через anonymous same-origin API, а manifest повторно canonicalize/hash
   проверяется до Composer без browser/API source-host fetch.
-- Slice 026 RED contract фиксирует `/` как token-free public landing: он
+- Slice 026 реализует `/` как token-free public landing: он
   независимо читает только static catalog summary и bounded persisted demo
-  summary, не восстанавливает wallet, не подменяет недоступные данные fixture и
-  не добавляет analytics event. Production landing implementation ещё не
-  выполнен.
+  summary, не монтирует wallet/session, не подменяет недоступные
+  данные fixture и не добавляет analytics event. Unknown routes fail
+  honestly, а cacheable template variants с configured Web origin всегда
+  варьируются по `Origin`. Production-author candidate ожидает два
+  независимых PASS-отчёта.
 - API реализует self-service EOA wallet auth: одноразовый пятиминутный
   EIP-4361 challenge создаёт стабильный default project и возвращает случайный
   12-часовой browser project token, сохраняя в PostgreSQL только keyed digest.

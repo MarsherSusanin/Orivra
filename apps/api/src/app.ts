@@ -451,31 +451,31 @@ function decorateCorsResponse(
   url: URL,
   response: Response,
   publicWebOrigin: string | null,
+  varyForConfiguredOrigin = false,
 ): Response {
   if (
     publicWebOrigin === null ||
     !isV1Path(url.pathname) ||
-    request.headers.get("origin") !== publicWebOrigin ||
     !(CORS_ALLOWED_METHODS as readonly string[]).includes(request.method)
   ) {
     return response;
   }
+  const allowedOrigin = request.headers.get("origin") === publicWebOrigin;
+  if (!allowedOrigin && !varyForConfiguredOrigin) return response;
   const headers = new Headers(response.headers);
-  for (const [name, value] of corsAuthorityHeaders(
-    publicWebOrigin,
-    response.headers.has("retry-after"),
-  )) {
-    if (name === "vary" && headers.has("vary")) {
-      const existing = headers
-        .get("vary")!
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-      if (!existing.some((item) => item.toLowerCase() === "origin")) {
-        headers.set("vary", [...existing, "Origin"].join(", "));
-      }
-    } else {
-      headers.set(name, value);
+  const existingVary = (headers.get("vary") ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!existingVary.some((item) => item.toLowerCase() === "origin")) {
+    headers.set("vary", [...existingVary, "Origin"].join(", "));
+  }
+  if (allowedOrigin) {
+    for (const [name, value] of corsAuthorityHeaders(
+      publicWebOrigin,
+      response.headers.has("retry-after"),
+    )) {
+      if (name !== "vary") headers.set(name, value);
     }
   }
   return new Response(response.body, {
@@ -713,11 +713,17 @@ export function createProoflineApi(input: {
       );
       if (preflight) return preflight;
       if (isWeb2JsonTemplatePath(url.pathname)) {
+        const templateResponse = web2JsonTemplateResponse(
+          request,
+          url,
+          templateRepresentations,
+        );
         return decorateCorsResponse(
           request,
           url,
-          web2JsonTemplateResponse(request, url, templateRepresentations),
+          templateResponse,
           publicWebOrigin,
+          templateResponse.status === 200 || templateResponse.status === 304,
         );
       }
 

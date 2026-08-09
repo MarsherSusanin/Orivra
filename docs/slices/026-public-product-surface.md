@@ -1,7 +1,7 @@
 # Slice 026 — Public product surface
 
-Status: RED contract frozen; credential-free; production implementation
-pending.
+Status: Production-author GREEN candidate; credential-free; independent Core
+and Product verification pending.
 
 ## Outcome
 

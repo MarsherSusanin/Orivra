@@ -216,8 +216,8 @@ third-party SDK or user analytics dashboard.
 ## Public landing boundary
 
 [ADR 0034](docs/adr/0034-public-landing-and-onboarding-boundary.md) reserves
-exact `/` for a credential-free product explanation. The Slice 026 RED
-contract permits exactly two independent same-origin anonymous reads through
+exact `/` for a credential-free product explanation. Slice 026 implements
+exactly two independent same-origin anonymous reads through
 the existing static template catalog and persisted canonical URL demo clients.
 Root does not mount wallet/session authority, load template detail or recording
 bytes, fetch a provider/source host, or emit a new product event. Search/hash
@@ -228,6 +228,9 @@ When exact-origin Web CORS is configured, cacheable template catalog/detail
 200 and 304 variants must always merge `Vary: Origin`, including absent and
 hostile Origin requests; only the exact configured origin receives ACAO. This
 changes no public schema, persistence, worker or source-fetch boundary.
+Production-author evidence is recorded in
+[`slice-026-green-public-product-surface.md`](docs/evidence/slice-026-green-public-product-surface.md);
+independent Core and Product verification remain pending.
 
 ## Release architecture and current operational status
 

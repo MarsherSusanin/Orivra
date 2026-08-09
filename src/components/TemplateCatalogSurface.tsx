@@ -24,7 +24,19 @@ function useTemplateClient(): TemplateCatalogClient {
   );
 }
 
-function TemplateCard({ template }: { template: Web2JsonTemplateSummaryV1 }) {
+export function templateComposerPath(
+  template: Pick<Web2JsonTemplateSummaryV1, "id" | "revision">,
+): string {
+  return `/runs/new?template=${encodeURIComponent(template.id)}&revision=${template.revision}&step=source`;
+}
+
+export function TemplateCard({
+  template,
+  showDetails = true,
+}: {
+  template: Web2JsonTemplateSummaryV1;
+  showDetails?: boolean;
+}) {
   const Icon = template.category === "weather" ? CloudSun : CurrencyEth;
   return (
     <section className="template-card" aria-label={template.title}>
@@ -38,10 +50,14 @@ function TemplateCard({ template }: { template: Web2JsonTemplateSummaryV1 }) {
         <p>{template.summary}</p>
       </div>
       <div className="template-card-actions">
-        <a className="entry-secondary" href={`/templates/${template.id}`}>View details</a>
+        {showDetails ? (
+          <a className="entry-secondary" href={`/templates/${encodeURIComponent(template.id)}`}>
+            View details
+          </a>
+        ) : null}
         <a
           className="entry-primary"
-          href={`/runs/new?template=${template.id}&revision=${template.revision}&step=source`}
+          href={templateComposerPath(template)}
         >
           Use template <ArrowRight size={17} aria-hidden="true" />
         </a>
@@ -150,7 +166,7 @@ export function TemplateDetail({ id }: { id: string }) {
                 <p>{detail.value.template.summary}</p>
                 <a
                   className="entry-primary"
-                  href={`/runs/new?template=${detail.value.template.id}&revision=${detail.value.template.revision}&step=source`}
+                  href={templateComposerPath(detail.value.template)}
                 >
                   Use template <ArrowRight size={17} aria-hidden="true" />
                 </a>

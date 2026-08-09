@@ -15,7 +15,7 @@ export function Sidebar({ active = "Runs" }: { active?: string }) {
 
   return (
     <aside className="sidebar" aria-label="Primary navigation">
-      <a className="brand-mark" href="/runs" aria-label="Proofline home">
+      <a className="brand-mark" href="/" aria-label="Proofline home">
         <img src={prooflineMark} width="48" height="48" alt="" />
       </a>
       <nav className="nav-list">

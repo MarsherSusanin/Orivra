@@ -11,7 +11,7 @@ export function Topbar({
   title: string | undefined;
   network?: string;
   attestationType?: string;
-  mode?: "detail" | "index" | "new";
+  mode?: "detail" | "index" | "new" | "overview";
   proofAvailable?: boolean;
   statusLabel?: string;
 }) {
@@ -28,9 +28,11 @@ export function Topbar({
         </button>
         <span className="topbar-divider" aria-hidden="true" />
         <div className="breadcrumbs" aria-label="Breadcrumb">
-          {mode === "index" ? <span>Runs</span> : <a href="/runs">Runs</a>}
-          {mode !== "index" ? <CaretRight size={15} aria-hidden="true" /> : null}
-          {mode !== "index" ? <span>{breadcrumbTitle}</span> : null}
+          {mode === "overview" ? <span>Overview</span> : null}
+          {mode === "index" ? <span>Runs</span> : null}
+          {mode !== "index" && mode !== "overview" ? <a href="/runs">Runs</a> : null}
+          {mode !== "index" && mode !== "overview" ? <CaretRight size={15} aria-hidden="true" /> : null}
+          {mode !== "index" && mode !== "overview" ? <span>{breadcrumbTitle}</span> : null}
         </div>
       </div>
       <div className="topbar-right">

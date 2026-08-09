@@ -36,6 +36,11 @@ import {
   type CanonicalUrlAttackDemoRequestRef,
 } from "./components/CanonicalUrlAttackDemo";
 import {
+  PageUnavailable,
+  PublicLanding,
+  type PublicLandingRequestRefs,
+} from "./components/PublicLanding";
+import {
   WalletSessionProvider,
   useWalletSession,
 } from "./wallet-session-context";
@@ -1316,20 +1321,14 @@ function ProductApp({
   );
 }
 
-export function App(props: AppProps = {}) {
-  const [pathname, setPathname] = useState(
-    () => globalThis.location?.pathname ?? "/",
-  );
+function PrivateApp(props: AppProps) {
   const [share] = useState<ShareBootstrap>(() =>
-    pathname === "/demo/canonical-url"
-      ? { attempted: false, token: "" }
-      : sessionShareAuthority(),
+    sessionShareAuthority(),
   );
   const [walletAccess] = useState(() => props.walletAccess ?? {
     services: createWalletAccessClient({ baseUrl: walletApiBaseUrl() }),
     storage: browserSessionStorage(),
   });
-  const canonicalDemoRequest = useRef<CanonicalUrlAttackDemoRequestRef["current"]>(null);
   const suppressWalletRestore = Boolean(
     share.attempted || share.token || props.projectToken,
   );
@@ -1339,6 +1338,40 @@ export function App(props: AppProps = {}) {
     return () => clearShareBootstrapHandoff(share.handoffRevision);
   }, [share.handoffRevision]);
 
+  return (
+    <WalletSessionProvider
+      services={walletAccess.services}
+      storage={suppressWalletRestore ? UNAVAILABLE_STORAGE : walletAccess.storage}
+    >
+      <ProductApp {...props} walletAccess={walletAccess} shareToken={share.token} />
+    </WalletSessionProvider>
+  );
+}
+
+function isPrivateProductPath(pathname: string): boolean {
+  if (
+    pathname === "/runs" ||
+    pathname === "/runs/new" ||
+    pathname === "/settings"
+  ) {
+    return true;
+  }
+  const runRoute = /^\/runs\/([^/]+)\/?$/.exec(pathname);
+  if (!runRoute) return false;
+  try {
+    return decodeURIComponent(runRoute[1]) !== "new";
+  } catch {
+    return false;
+  }
+}
+
+export function App(props: AppProps = {}) {
+  const [pathname, setPathname] = useState(
+    () => globalThis.location?.pathname ?? "/",
+  );
+  const catalogRequest = useRef<PublicLandingRequestRefs["catalog"]["current"]>(null);
+  const canonicalDemoRequest = useRef<CanonicalUrlAttackDemoRequestRef["current"]>(null);
+
   useEffect(() => {
     const restorePathname = () => {
       setPathname(globalThis.location?.pathname ?? "/");
@@ -1347,6 +1380,20 @@ export function App(props: AppProps = {}) {
     return () => globalThis.removeEventListener("popstate", restorePathname);
   }, []);
 
+  if (props.runId) return <PrivateApp {...props} />;
+
+  if (pathname === "/") {
+    const location = globalThis.location;
+    if (location && (location.search !== "" || location.hash !== "")) {
+      globalThis.history.replaceState({}, "", "/");
+    }
+    return (
+      <PublicLanding requests={{
+        catalog: catalogRequest,
+        demo: canonicalDemoRequest,
+      }} />
+    );
+  }
   if (pathname === "/demo/canonical-url") {
     return <CanonicalUrlAttackDemo requestRef={canonicalDemoRequest} />;
   }
@@ -1357,13 +1404,6 @@ export function App(props: AppProps = {}) {
   if (templateDetailRoute) {
     return <TemplateDetail id={templateDetailRoute[1]} />;
   }
-
-  return (
-    <WalletSessionProvider
-      services={walletAccess.services}
-      storage={suppressWalletRestore ? UNAVAILABLE_STORAGE : walletAccess.storage}
-    >
-      <ProductApp {...props} walletAccess={walletAccess} shareToken={share.token} />
-    </WalletSessionProvider>
-  );
+  if (isPrivateProductPath(pathname)) return <PrivateApp {...props} />;
+  return <PageUnavailable />;
 }
