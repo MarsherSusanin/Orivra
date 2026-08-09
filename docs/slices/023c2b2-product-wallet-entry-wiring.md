@@ -28,8 +28,10 @@ wallet.
 - Dialog cancellation leaves the persisted draft and pending action safe.
 - App/Runs/Composer copy uses `Sign in with wallet` and
   `Reconnect wallet session`, with no project-token terminology.
-- Provider RPC strings are absent from the <=180 kB gzip initial entry and
-  present in exactly one lazy provider chunk.
+- Sign-in-only RPC markers `wallet_addEthereumChain`, `eth_getCode` and
+  `personal_sign` are absent from the <=180 kB gzip initial entry. The full
+  sign-in method set is present in exactly one lazy
+  `wallet-provider-adapter` chunk; run-submission methods are not misclassified.
 
 ## Frozen tests
 

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const client = path.join(root, "dist", "client");
 
-test("keeps wallet RPC code in one lazy production chunk under the initial budget", async () => {
+test("keeps wallet sign-in RPC code in one lazy production chunk under the initial budget", async () => {
   const html = await readFile(path.join(client, "index.html"), "utf8");
   const entryMatch = html.match(/<script[^>]+type="module"[^>]+src="([^"]+\.js)"/);
   assert.ok(entryMatch, "production index must reference one module entry");
@@ -23,8 +23,6 @@ test("keeps wallet RPC code in one lazy production chunk under the initial budge
     `initial JavaScript exceeds 180 kB gzip: ${gzipSync(entry).byteLength}`,
   );
   for (const method of [
-    "eth_requestAccounts",
-    "wallet_switchEthereumChain",
     "wallet_addEthereumChain",
     "eth_getCode",
     "personal_sign",
@@ -41,6 +39,9 @@ test("keeps wallet RPC code in one lazy production chunk under the initial budge
   }
   assert.equal(lazyCandidates.length, 1, "wallet provider must compile into one lazy chunk");
   assert.match(lazyCandidates[0].name, /wallet-provider-adapter/i);
+  assert.match(lazyCandidates[0].source, /eth_requestAccounts/);
   assert.match(lazyCandidates[0].source, /wallet_switchEthereumChain/);
+  assert.match(lazyCandidates[0].source, /wallet_addEthereumChain/);
   assert.match(lazyCandidates[0].source, /eth_getCode/);
+  assert.match(lazyCandidates[0].source, /personal_sign/);
 });

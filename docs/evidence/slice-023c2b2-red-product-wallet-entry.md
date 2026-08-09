@@ -26,8 +26,10 @@ Evidence is recorded immediately before the RED freeze commit:
   about 5 seconds and performs no live wallet/network work.
 - Nearest accepted B1/App/Composer/share baseline — PASS: 8 files / 39 tests.
 - `npm run build` — PASS baseline; initial entry is 149.65 kB gzip.
-- Standalone bundle contract — expected RED: 1 test fails because wallet RPC
-  method strings remain in the initial entry and no reachable lazy provider
-  chunk exists.
+- Standalone bundle contract — expected RED: 1 test fails because no reachable
+  lazy `wallet-provider-adapter` chunk contains the sign-in-only
+  `personal_sign`, `eth_getCode` and `wallet_addEthereumChain` markers. Existing
+  run-submission use of `eth_requestAccounts` and `wallet_switchEthereumChain`
+  in the initial entry is explicitly allowed.
 
 No browser, Sites, hosted or live-network PASS is represented by this RED.

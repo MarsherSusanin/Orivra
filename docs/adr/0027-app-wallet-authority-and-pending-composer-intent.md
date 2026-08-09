@@ -54,8 +54,11 @@ saved draft/idempotency key but requires a new explicit submit action; no
 in-memory action is executed implicitly after reload.
 
 The initial production entry must remain at most 180 kB gzip and contain no
-wallet RPC method strings. Those strings occur in exactly one lazy wallet
-provider chunk. B2 freezes this post-build artifact contract; actual
+sign-in-only RPC markers: `wallet_addEthereumChain`, `eth_getCode` or
+`personal_sign`. Existing run submission may legitimately retain
+`eth_requestAccounts` and `wallet_switchEthereumChain` in the entry. The full
+sign-in method set occurs in exactly one lazy `wallet-provider-adapter` chunk.
+B2 freezes this post-build artifact contract; actual
 desktop/mobile browser evidence is recorded after GREEN.
 
 ## Consequences
