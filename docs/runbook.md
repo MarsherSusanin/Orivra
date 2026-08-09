@@ -378,12 +378,18 @@ Upstream Coston2 outage блокирует release. Override возможен т
 - Staging и production выбирают verified remote digest из отдельного
   publication evidence, связанного с frozen release manifest checksum;
   server-side
-  rebuild запрещён. Application rollback возвращает предыдущий
-  schema-compatible digest из release manifest.
-- Не откатывайте journal или migration destructive SQL вручную. При ошибке
-  схемы выпускайте forward repair либо восстанавливайте подтверждённый
-  WAL/base-backup PITR в новый PostgreSQL volume, проверяйте его и только затем
-  выполняйте явное переключение.
+  rebuild запрещён.
+- Application rollback selects only a prior schema-compatible verified remote digest
+  from its prior immutable publication/deployment evidence. That prior
+  publication/deployment evidence binds the digest to the corresponding
+  `frozenReleaseManifestSha256`. The frozen release manifest supplies schema compatibility metadata
+  and is never pull authority. An unpublished digest is forbidden for rollback;
+  an unverified digest is forbidden. Evidence mismatch blocks rollback, and
+  missing publication/deployment evidence blocks rollback.
+- Database schema rollback remains forward repair or new-volume restore. Не
+  откатывайте journal или migration destructive SQL вручную. При ошибке схемы
+  восстанавливайте подтверждённый WAL/base-backup PITR в новый PostgreSQL
+  volume, проверяйте его и только затем выполняйте явное переключение.
 - 027C должен доказать MinIO restore drill локально. Droplet backup не считается
   database restore evidence.
 - 028B получает credentials только после credential-free 022–029A, unified

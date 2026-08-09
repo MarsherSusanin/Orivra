@@ -172,6 +172,9 @@ Web2JsonManifestV1
   database volume, `/healthz`, `/readyz`, worker heartbeat и off-host
   WAL/base-backup PITR. Эти механизмы ещё не реализованы и не являются текущим
   hosted PASS.
+- Rollback разрешён только на prior schema-compatible verified remote digest,
+  уже связанный immutable publication evidence с frozen-manifest checksum;
+  release manifest сам по себе не является pull authority.
 - Любой release candidate должен получить два независимых PASS на одном tree hash.
 
 ## Документация

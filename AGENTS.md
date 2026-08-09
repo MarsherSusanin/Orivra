@@ -79,6 +79,11 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
   bound by that publication evidence, using a read-only GHCR pull
   credential. 029B is the credentialed production promotion and canary, only
   after 028B.
+- Application rollback may select only a prior schema-compatible verified
+  remote digest from immutable publication/deployment evidence bound to its
+  `frozenReleaseManifestSha256`. The frozen manifest supplies schema metadata,
+  never pull authority. Missing, mismatched, unpublished or unverified evidence
+  blocks rollback; database repair remains forward or new-volume restore.
 
 ## Visual contract
 

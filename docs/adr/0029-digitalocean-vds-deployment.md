@@ -70,6 +70,15 @@ does not mutate candidate tree and does not mutate image bytes. The VDS pulls on
 that publication evidence binds through
 `frozenReleaseManifestSha256`; its GHCR pull credential is read-only.
 
+Application rollback selects only a prior schema-compatible verified remote digest
+from its prior immutable publication/deployment evidence. That prior
+publication/deployment evidence binds the digest to the corresponding
+`frozenReleaseManifestSha256`. The frozen release manifest supplies schema compatibility metadata
+and is never pull authority. An unpublished digest is forbidden for rollback;
+an unverified digest is forbidden. Evidence mismatch blocks rollback, and
+missing publication/deployment evidence blocks rollback. Database schema rollback
+remains forward repair or new-volume restore.
+
 Staging and production select those immutable image digests (`@sha256`), never
 a mutable tag or a server-side rebuild. The release manifest also binds commit
 hash, tree hash, expected schema version and Action artifact checksum.
@@ -135,7 +144,7 @@ cannot be claimed by this ADR or by the credential-free implementation.
 - A single VDS is operationally simple but shares host resources and failure
   domain across application services; resource limits, log rotation, backup
   age, disk pressure and worker readiness must be observable before promotion.
-- Application rollback selects a prior schema-compatible immutable digest.
-  Database repair remains roll-forward or restore-to-new-volume.
+- Application and database rollback follow the immutable authority and
+  forward-repair rules above.
 - No Droplet, DNS record, firewall, registry credential, Spaces bucket or live
   environment is created by accepting this decision.

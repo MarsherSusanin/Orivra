@@ -105,6 +105,14 @@ the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
   `frozenReleaseManifestSha256`; its GHCR pull credential is read-only. It may
   then provision isolated staging, run migrations, hosted browser smoke,
   restore drill and the persisted live Coston2 gate.
+
+  Application rollback selects only a prior schema-compatible verified remote digest
+  from its prior immutable publication/deployment evidence. That prior
+  publication/deployment evidence binds the digest to the corresponding
+  `frozenReleaseManifestSha256`. The frozen release manifest supplies schema compatibility metadata
+  and is never pull authority. An unpublished digest is forbidden for rollback;
+  an unverified digest is forbidden. Evidence mismatch blocks rollback, and
+  missing publication/deployment evidence blocks rollback.
 - **029B is the credentialed production promotion and canary.** 029B starts
   only after 028B has published and staged the exact frozen candidate. It
   records schema/backup/readiness evidence and runs the seven-day canary. A code

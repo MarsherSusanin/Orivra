@@ -178,6 +178,13 @@ worker и проверять schema version. PostgreSQL использует per
 volume. `/healthz` отделяет process liveness от `/readyz`, который проверяет
 database/schema readiness и свежий worker heartbeat.
 
+Rollback использует только ранее опубликованный schema-compatible verified
+remote digest из immutable publication/deployment evidence, связанного с
+`frozenReleaseManifestSha256`. Frozen manifest сообщает schema compatibility,
+но не даёт pull authority; missing, mismatched, unpublished или unverified
+evidence блокирует rollback. Database repair остаётся forward repair либо
+restore в новый volume.
+
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна
 выполнять MinIO restore drill в отдельный volume. Droplet backup не является

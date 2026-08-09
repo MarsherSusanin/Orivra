@@ -82,6 +82,12 @@ candidate tree or image bytes. The VDS pulls only a verified remote digest
 bound by that publication evidence. 029B is the credentialed production
 promotion and canary, only after 028B has published and staged that candidate.
 
+Rollback verification must prove that a prior schema-compatible verified
+remote digest is present in immutable publication/deployment evidence bound to
+its `frozenReleaseManifestSha256`. The release manifest provides compatibility
+metadata, never pull authority; missing, mismatched or unpublished evidence
+blocks rollback, as does any unverified digest.
+
 ## Slice Contract minimum
 
 Each Slice Contract names:
