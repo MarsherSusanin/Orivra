@@ -44,6 +44,18 @@ function requirePatterns(document, label, patterns) {
   }
 }
 
+function requireCredentialFree029A(document, label) {
+  requirePatterns(document, label, [
+    /029A[\s\S]{0,240}credential[- ]free/i,
+    /029A[\s\S]{0,320}(?:local MLP validation|local MLP candidate freeze|MLP validation and freeze)/i,
+    /(?:product gates?|user testing|user validation)[\s\S]{0,240}(?:recorded )?fixtures?/i,
+    /(?:recorded )?fixtures?[\s\S]{0,240}(?:local )?(?:Docker )?Compose/i,
+    /029A[\s\S]{0,720}(?:no|without)[\s\S]{0,80}credentials?[\s\S]{0,160}(?:no|without)[\s\S]{0,80}(?:external )?network/i,
+    /029B[\s\S]{0,280}(?:credentialed|credentials?)[\s\S]{0,280}(?:production )?promotion[\s\S]{0,160}canary/i,
+    /029B[\s\S]{0,240}(?:after|only after)[\s\S]{0,120}028B/i,
+  ]);
+}
+
 test("ADR 0029 is accepted, indexed, and supersedes only the Sites-host portions of prior decisions", async () => {
   const documents = await readMany([
     "adr",
@@ -250,4 +262,85 @@ test("the current documentation makes no hosted or Render production claim", asy
     /render\.com|render\.yaml|Render (?:is|as|becomes|hosts?|deploys?)[\s\S]{0,100}(?:production|hosting|target|API|worker|PostgreSQL)/i,
   );
   await assert.rejects(access(resolve(root, "render.yaml")));
+});
+
+test("029A is the satisfiable credential-free local MLP freeze and 029B owns credentialed promotion", async () => {
+  const documents = await readMany([
+    "adr",
+    "roadmap",
+    "runbook",
+    "roles",
+    "agents",
+  ]);
+
+  for (const [key, label] of [
+    ["adr", "ADR 0029"],
+    ["roadmap", "product roadmap"],
+    ["runbook", "runbook"],
+    ["roles", "development roles"],
+    ["agents", "AGENTS.md"],
+  ]) {
+    requireCredentialFree029A(documents[key], label);
+    assert.match(
+      documents[key],
+      /022[\s–-]*029A[\s\S]{0,180}credential[- ]free/i,
+      `${label} must keep every credential authorization bound to the now-defined 022–029A range`,
+    );
+  }
+});
+
+test("028A creates verified local OCI archives and a frozen digest manifest without registry access", async () => {
+  const documents = await readMany(["adr", "roadmap", "runbook"]);
+
+  for (const [key, label] of [
+    ["adr", "ADR 0029"],
+    ["roadmap", "product roadmap"],
+    ["runbook", "runbook"],
+  ]) {
+    requirePatterns(documents[key], label, [
+      /028A[\s\S]{0,240}local/i,
+      /028A[\s\S]{0,360}(?:builds?|creates?|exports?)[\s\S]{0,160}OCI (?:image )?archives?/i,
+      /028A[\s\S]{0,480}(?:digest|release) manifest/i,
+      /OCI (?:image )?archives?[\s\S]{0,240}(?:verified|verification|verify)/i,
+      /OCI (?:image )?archives?[\s\S]{0,240}(?:SHA-256|sha256|checksum|digest)/i,
+      /028A[\s\S]{0,600}(?:without|no)[\s\S]{0,100}(?:registry|GHCR)[\s\S]{0,80}credentials?/i,
+      /028A[\s\S]{0,600}(?:no|without)[\s\S]{0,100}(?:registry|external)[\s\S]{0,80}(?:access|network|push)/i,
+    ]);
+  }
+});
+
+test("028B publishes the exact frozen OCI bytes to GHCR and fails closed before staging pull", async () => {
+  const documents = await readMany([
+    "adr",
+    "roadmap",
+    "runbook",
+    "roles",
+    "agents",
+  ]);
+
+  for (const [key, label] of [
+    ["adr", "ADR 0029"],
+    ["roadmap", "product roadmap"],
+    ["runbook", "runbook"],
+  ]) {
+    requirePatterns(documents[key], label, [
+      /028B[\s\S]{0,240}credentialed/i,
+      /028B[\s\S]{0,520}byte[- ]preserving/i,
+      /028B[\s\S]{0,520}(?:load[\s/,]+copy[\s/,]+push|load\/copy\/push)[\s\S]{0,160}(?:exact|same|frozen)[\s\S]{0,120}OCI/i,
+      /028B[\s\S]{0,500}(?:after|only after)[\s\S]{0,180}two[\s\S]{0,80}PASS/i,
+      /028B[\s\S]{0,620}(?:no rebuild|without rebuild|must not rebuild|never rebuild)/i,
+      /remote (?:image )?digest[\s\S]{0,220}(?:equals?|matches?)[\s\S]{0,180}(?:frozen|release) manifest/i,
+      /digest mismatch[\s\S]{0,120}(?:abort|blocks?|fail(?:s)? closed)/i,
+      /(?:before|prior to)[\s\S]{0,100}staging pull/i,
+      /(?:VDS|Droplet)[\s\S]{0,180}GHCR pull credential[\s\S]{0,120}read[- ]only/i,
+      /publication evidence[\s\S]{0,180}(?:joins?|part of|included in)[\s\S]{0,120}(?:frozen )?release manifest/i,
+    ]);
+  }
+
+  requirePatterns(`${documents.roles}\n${documents.agents}`, "agent and verifier boundary", [
+    /028A[\s\S]{0,300}OCI/i,
+    /028B[\s\S]{0,360}(?:no rebuild|without rebuild|must not rebuild|never rebuild)/i,
+    /remote (?:image )?digest[\s\S]{0,200}(?:equals?|matches?)[\s\S]{0,180}(?:frozen|release) manifest/i,
+    /publication evidence[\s\S]{0,180}(?:release manifest|candidate evidence)/i,
+  ]);
 });

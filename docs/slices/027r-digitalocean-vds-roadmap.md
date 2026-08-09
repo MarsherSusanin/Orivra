@@ -35,7 +35,21 @@ release composition. Development keeps focused TDD per module. One unified
 local full matrix runs only after those modules are complete; two independent
 verifiers then sign the same tree. The 028B credential gate may authorize DNS,
 restricted SSH and Spaces configuration only after that evidence. Slice 029
-owns promotion and canary operations.
+is split below; only 029B owns promotion and canary operations.
+
+The numeric boundary is executable rather than aspirational:
+
+- 028A locally builds and verifies OCI image archives and freezes their digest
+  manifest without registry credentials or external network access;
+- 029A is the credential-free local MLP validation/freeze: product gates and
+  user testing run against recorded fixtures and local Compose with no
+  credentials or external network;
+- only after the unified matrix and two PASS reports, 028B may load/copy/push
+  the exact frozen OCI bytes to GHCR without a rebuild. Remote digests must
+  match the frozen manifest before staging can pull; mismatch aborts;
+- the VDS GHCR pull credential is read-only, and publication evidence joins the
+  frozen release manifest;
+- 029B, after 028B, owns credentialed production promotion and canary.
 
 No infrastructure, credentials, DNS, SSH session, Spaces bucket or network
 effect belongs to this RED. It adds no hosted, deployed or live Coston2 claim.

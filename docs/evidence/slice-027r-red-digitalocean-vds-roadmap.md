@@ -45,3 +45,44 @@ tree `e1d606cd5feab28548a468a905739fbc1a65b4bc`:
 The candidate commit/tree are reported after this tests/evidence-only wave is
 committed. No production, dependency, infrastructure or canonical operating
 document was changed.
+
+## Corrective RED — satisfiable 029 boundary and immutable publication chain
+
+Rejected candidate `aed9d7c4fe2c58dc375c4528a768c108c4ae6aa3` /
+tree `faab64ded0315b91803504e7f1e65b287e035854` made the original eight
+documentation contracts GREEN but referred to credential-free `022–029A`
+without defining 029A. It also described images as built and published by CI,
+which leaves the pre-credential release candidate dependent on GHCR access.
+
+Three corrective contracts now require:
+
+1. ADR 0029, roadmap, runbook, roles and AGENTS define 029A as local,
+   credential-free MLP validation/freeze over recorded fixtures and local
+   Compose, including product gates and user testing with no credentials or
+   external network; 029B is credentialed production promotion/canary after
+   028B;
+2. 028A builds, exports and verifies local OCI archives plus a frozen digest
+   manifest without registry credentials or external registry access;
+3. after the unified matrix and two PASS reports, 028B publishes those exact
+   OCI bytes to GHCR without rebuild, verifies remote digests against the
+   frozen manifest before staging pull, aborts a mismatch, limits the VDS pull
+   credential to read-only and joins publication evidence to the release
+   manifest.
+
+The prior eight contracts are unchanged controls. Recorded on the rejected
+parent above:
+
+- `npm run typecheck` and `git diff --check` — PASS;
+- `node --test --test-reporter=dot
+  tests/slice027r-digitalocean-vds-roadmap.contract.test.mjs` — 11 tests:
+  original 8 PASS and exactly 3 corrective RED (`........XXX`);
+- the three failures map one-to-one to the undefined 029A/029B boundary, absent
+  offline OCI candidate chain and absent credentialed byte-preserving GHCR
+  publication chain;
+- nearest unchanged documentation contract
+  `npm test -- tests/slice016-runbook.contract.test.ts --maxWorkers=1` — 1 file /
+  3 tests PASS.
+
+Candidate commit/tree are reported after commit. This correction changes no
+canonical implementation, production, infra, dependency, credential or network
+surface.
