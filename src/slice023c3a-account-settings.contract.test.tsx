@@ -92,6 +92,24 @@ const created: AccountTokenCreatedV1 = {
   item: createdItem,
 };
 
+let restoreClipboardDescriptor: (() => void) | undefined;
+
+function installClipboardWriteText(
+  writeText = vi.fn(async (_value: string) => undefined),
+) {
+  const descriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    enumerable: descriptor?.enumerable ?? true,
+    value: { writeText },
+  });
+  restoreClipboardDescriptor = () => {
+    if (descriptor) Object.defineProperty(navigator, "clipboard", descriptor);
+    else Reflect.deleteProperty(navigator, "clipboard");
+  };
+  return writeText;
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
@@ -153,6 +171,8 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 afterEach(() => {
+  restoreClipboardDescriptor?.();
+  restoreClipboardDescriptor = undefined;
   window.history.replaceState({}, "", "/settings");
   sessionStorage.clear();
   localStorage.clear();
@@ -162,10 +182,12 @@ afterEach(() => {
 describe("Slice 023C3A authenticated account Settings", () => {
   it("shows wallet identity and ordered active, expired and revoked summaries without another wallet prompt", async () => {
     const user = userEvent.setup();
+    const writeText = installClipboardWriteText();
     const rendered = await renderSettings();
     expect(screen.getByText(ADDRESS)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Copy wallet address" }));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(ADDRESS);
+    expect(writeText).toHaveBeenCalledOnce();
+    expect(writeText).toHaveBeenCalledWith(ADDRESS);
 
     const list = screen.getByRole("list", { name: "Access tokens" });
     const items = within(list).getAllByRole("listitem");
@@ -227,6 +249,8 @@ describe("Slice 023C3A authenticated account Settings", () => {
     const replace = vi.spyOn(window.history, "replaceState");
     const push = vi.spyOn(window.history, "pushState");
     const user = userEvent.setup();
+    const writeText = installClipboardWriteText();
+    const browserStorageWrite = vi.spyOn(Storage.prototype, "setItem");
     await renderSettings(services({ getAccount }), stored);
     await fillValidForm(user);
     const generate = screen.getByRole("button", { name: "Generate" });
@@ -253,17 +277,20 @@ describe("Slice 023C3A authenticated account Settings", () => {
     await user.click(within(dialog).getByRole("button", { name: "Keep token visible" }));
 
     await user.click(screen.getByRole("button", { name: "Copy" }));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(RAW_TOKEN);
+    expect(writeText).toHaveBeenCalledOnce();
+    expect(writeText).toHaveBeenCalledWith(RAW_TOKEN);
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(generate).toHaveFocus();
     expect(document.body.textContent).not.toContain(RAW_TOKEN);
     expect(stored.values()).not.toContain(RAW_TOKEN);
+    expect(Object.values(sessionStorage)).not.toContain(RAW_TOKEN);
+    expect(Object.values(localStorage)).not.toContain(RAW_TOKEN);
     expect(window.location.href).not.toContain(RAW_TOKEN);
     for (const element of document.querySelectorAll("*")) {
       for (const attribute of element.attributes) expect(attribute.value).not.toContain(RAW_TOKEN);
     }
-    for (const spy of [log, warn, error, replace, push]) {
+    for (const spy of [log, warn, error, replace, push, browserStorageWrite]) {
       expect(JSON.stringify(spy.mock.calls)).not.toContain(RAW_TOKEN);
     }
   });

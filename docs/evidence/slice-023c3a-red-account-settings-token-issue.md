@@ -28,3 +28,17 @@ The App source also lacks the frozen account-only `createAccountToken` and
 `refreshAccount` context transitions; no test reaches network, wallet provider,
 API, PostgreSQL or live Coston2 behavior. No browser, coverage, build, Sites,
 hosted or live-network PASS is represented here.
+
+## Clipboard harness correction
+
+Both copy contracts install their own deterministic `vi.fn` `writeText` port
+through a configurable `navigator.clipboard` descriptor after
+`userEvent.setup()`. `afterEach` restores the exact prior descriptor even when
+the missing production module makes the test RED. Assertions now target the
+explicit spy rather than relying on user-event's environment clipboard stub.
+The reveal case also inspects real `Storage.prototype.setItem` calls and both
+browser storage objects, so the raw token cannot enter the local analytics
+queue or another browser persistence path. Product behavior is unchanged.
+After the correction, typecheck and diff-check remain PASS, the focused result
+remains 4 files / 21 tests with 9 controls PASS and the same 12 intentional RED,
+and the nearest accepted baseline remains 5 files / 29 tests PASS.
