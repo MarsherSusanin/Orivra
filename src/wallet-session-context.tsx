@@ -257,14 +257,21 @@ export function WalletSessionProvider({
           request: intent.request,
         }),
       );
-      const current = controller.snapshot();
-      if (
-        accountAuthority.current !== marker ||
-        controller.accessToken() !== projectToken ||
-        current.status !== "authenticated"
-      ) {
+      const currentAuthority = () =>
+        accountAuthority.current === marker &&
+        controller.accessToken() === projectToken &&
+        controller.snapshot().status === "authenticated";
+      if (!currentAuthority()) {
         throw browserSessionRequired();
       }
+
+      try {
+        await refreshAccount();
+      } catch {
+        if (!currentAuthority()) throw browserSessionRequired();
+        return created;
+      }
+      if (!currentAuthority()) throw browserSessionRequired();
       return created;
     })().finally(() => {
       if (accountTokenFlight.current?.promise === flight) {
@@ -274,7 +281,7 @@ export function WalletSessionProvider({
     void flight.catch(() => undefined);
     accountTokenFlight.current = { marker, projectToken, intent, promise: flight };
     return flight;
-  }, [browserSessionRequired, controller, issueBusy, runtime]);
+  }, [browserSessionRequired, controller, issueBusy, refreshAccount, runtime]);
 
   useEffect(() => {
     let active = true;

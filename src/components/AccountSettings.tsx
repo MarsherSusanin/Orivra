@@ -223,13 +223,19 @@ export function AccountSettings({
   const labelRef = useRef<HTMLInputElement>(null);
   const expiresRef = useRef<HTMLInputElement>(null);
   const mounted = useRef(true);
-  const browserAuthorized = useRef(snapshot.status === "authenticated");
-  browserAuthorized.current = snapshot.status === "authenticated";
+  const browserSessionActive = snapshot.status === "authenticated" &&
+    !browserSessionBlocked;
+  const browserAuthorized = useRef(browserSessionActive);
+  browserAuthorized.current = browserSessionActive;
 
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!browserSessionActive) setRevealToken(null);
+  }, [browserSessionActive]);
 
   const needsAccount = snapshot.status === "authenticated" && snapshot.account === undefined;
   useEffect(() => {
@@ -285,12 +291,6 @@ export function AccountSettings({
       try {
         const created = await createAccountToken({ idempotencyKey, request });
         if (!mounted.current || !browserAuthorized.current) return;
-        try {
-          await refreshAccount();
-        } catch {
-          // The raw one-time result remains recoverable even if summary refresh fails.
-        }
-        if (!mounted.current || !browserAuthorized.current) return;
         setRevealToken(created.token);
       } catch {
         setFailure(true);
@@ -300,7 +300,7 @@ export function AccountSettings({
       }
     })();
     issueFlight.current = flight;
-  }, [createAccountToken, expiresInDays, kind, label, refreshAccount]);
+  }, [createAccountToken, expiresInDays, kind, label]);
 
   if (browserSessionBlocked) {
     return (
