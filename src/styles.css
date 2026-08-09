@@ -3330,7 +3330,7 @@ a {
   color: var(--cyan);
 }
 
-.settings-token-list li > div {
+.settings-token-list li > .settings-token-details {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -3343,10 +3343,45 @@ a {
   white-space: nowrap;
 }
 
-.settings-token-list li > div span {
+.settings-token-list li > .settings-token-details span {
   color: var(--muted);
   font-size: 12px;
   text-transform: uppercase;
+}
+
+.settings-token-actions {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.settings-revoke-token,
+.settings-signout-trigger {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.settings-revoke-token {
+  padding: 0 12px;
+  color: var(--amber);
+  border: 1px solid rgba(244, 186, 8, 0.34);
+  border-radius: var(--radius-sm);
+  background: rgba(244, 186, 8, 0.055);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-revoke-token:hover,
+.settings-revoke-token:focus-visible {
+  border-color: var(--amber);
+  outline: 2px solid rgba(244, 186, 8, 0.16);
 }
 
 .settings-token-status {
@@ -3477,6 +3512,49 @@ a {
   gap: 8px;
 }
 
+.settings-access-confirm {
+  width: min(560px, 100%);
+  max-height: 91dvh;
+  overflow-y: auto;
+}
+
+.settings-confirm-body,
+.settings-signout-recovery,
+.settings-signout-recovery > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-confirm-body > p,
+.settings-session-access > p,
+.settings-signout-recovery p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.settings-confirm-actions,
+.settings-signout-recovery-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.settings-confirm-actions > *,
+.settings-signout-recovery-actions > * {
+  min-height: 44px;
+}
+
+.settings-signout-recovery {
+  align-items: stretch;
+}
+
+.settings-signout-recovery-actions {
+  justify-content: flex-start;
+}
+
 @media (max-width: 720px) {
   .settings-account {
     min-height: calc(100dvh - 72px);
@@ -3486,6 +3564,39 @@ a {
   .settings-session-card,
   .settings-token-form {
     grid-template-columns: 1fr;
+  }
+
+  .settings-token-list li {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding-block: 9px;
+  }
+
+  .settings-token-actions {
+    width: 100%;
+    grid-column: 2 / -1;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-token-actions > * {
+    width: 100%;
+  }
+
+  .settings-panel-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .settings-confirm-actions,
+  .settings-signout-recovery,
+  .settings-signout-recovery-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-confirm-actions > * {
+    width: 100%;
   }
 
   .settings-session-card {

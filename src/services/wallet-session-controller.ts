@@ -332,7 +332,7 @@ export function createWalletSessionController(input: {
       } catch (cause) {
         if (!current(attempt)) return;
         const failure = normalizedFailure(cause);
-        if (failure.status === 401) {
+        if (isInvalidAuthority(failure)) {
           clearAuthority();
           return;
         }

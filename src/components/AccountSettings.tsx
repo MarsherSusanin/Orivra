@@ -1,7 +1,8 @@
-import { Copy, Key, SpinnerGap, Wallet, X } from "@phosphor-icons/react";
+import { Copy, Key, SignOut, SpinnerGap, Trash, Wallet, X } from "@phosphor-icons/react";
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -203,6 +204,112 @@ function TokenRevealDialog({
   );
 }
 
+function AccessConfirmationDialog({
+  title,
+  description,
+  confirmLabel,
+  pendingLabel,
+  retryLabel,
+  pending,
+  failed,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  pendingLabel: string;
+  retryLabel?: string;
+  pending: boolean;
+  failed: boolean;
+  onCancel(): void;
+  onConfirm(): void;
+}) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef<HTMLElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  const trapFocus = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (!pending) onCancel();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const controls = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }, [onCancel, pending]);
+
+  useLayoutEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement;
+    cancelRef.current?.focus();
+    return () => previousFocusRef.current?.focus();
+  }, []);
+
+  return (
+    <div className="dialog-backdrop settings-confirm-backdrop" role="presentation">
+      <section
+        ref={dialogRef}
+        className="verification-dialog settings-access-confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        onKeyDown={trapFocus}
+      >
+        <header className="dialog-header">
+          <div>
+            <span className="dialog-kicker">Account access</span>
+            <h2 id={titleId}>{title}</h2>
+          </div>
+        </header>
+        <div className="dialog-body settings-confirm-body">
+          <p id={descriptionId}>{description}</p>
+          {failed ? (
+            <p className="settings-safe-error" role="alert">
+              Token could not be revoked. Retry safely.
+            </p>
+          ) : null}
+          <div className="settings-confirm-actions">
+            <button
+              ref={cancelRef}
+              className="entry-secondary"
+              type="button"
+              disabled={pending}
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+            <button
+              className="dialog-primary"
+              type="button"
+              disabled={pending}
+              onClick={onConfirm}
+            >
+              {pending ? pendingLabel : failed && retryLabel ? retryLabel : confirmLabel}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function AccountSettings({
   onRequireWallet,
   browserSessionBlocked = false,
@@ -210,7 +317,15 @@ export function AccountSettings({
   onRequireWallet(): void;
   browserSessionBlocked?: boolean;
 }) {
-  const { snapshot, createAccountToken, refreshAccount } = useWalletSession();
+  const {
+    snapshot,
+    createAccountToken,
+    revokeAccountToken,
+    refreshAccount,
+    signOut,
+    retry,
+    forgetBrowser,
+  } = useWalletSession();
   const [kind, setKind] = useState<"cli" | "action">("cli");
   const [label, setLabel] = useState("");
   const [expiresInDays, setExpiresInDays] = useState("30");
@@ -219,10 +334,19 @@ export function AccountSettings({
   const [issuing, setIssuing] = useState(false);
   const [revealToken, setRevealToken] = useState<string | null>(null);
   const [accountRefreshFailed, setAccountRefreshFailed] = useState(false);
+  const [revokeTarget, setRevokeTarget] = useState<AccountTokenSummaryV1 | null>(null);
+  const [revokePending, setRevokePending] = useState(false);
+  const [revokeFailed, setRevokeFailed] = useState(false);
+  const [signOutConfirming, setSignOutConfirming] = useState(false);
+  const [signOutPending, setSignOutPending] = useState(false);
   const issueFlight = useRef<Promise<void> | null>(null);
   const labelRef = useRef<HTMLInputElement>(null);
   const expiresRef = useRef<HTMLInputElement>(null);
   const mounted = useRef(true);
+  const lastAccount = useRef<Extract<typeof snapshot, { status: "authenticated" }>["account"]>(undefined);
+  const tokensHeadingRef = useRef<HTMLHeadingElement>(null);
+  const focusTokensHeading = useRef(false);
+  const retrySignOutRef = useRef<HTMLButtonElement>(null);
   const browserSessionActive = snapshot.status === "authenticated" &&
     !browserSessionBlocked;
   const browserAuthorized = useRef(browserSessionActive);
@@ -234,8 +358,26 @@ export function AccountSettings({
   }, []);
 
   useLayoutEffect(() => {
-    if (!browserSessionActive) setRevealToken(null);
-  }, [browserSessionActive]);
+    if (!browserSessionActive) {
+      setRevealToken(null);
+      setRevokeTarget(null);
+      setRevokeFailed(false);
+      if (snapshot.status !== "signing-out") setSignOutConfirming(false);
+    }
+  }, [browserSessionActive, snapshot.status]);
+
+  const signOutRecovery = snapshot.status === "unavailable" &&
+    snapshot.operation === "sign-out";
+  useLayoutEffect(() => {
+    if (signOutRecovery) retrySignOutRef.current?.focus();
+  }, [signOutRecovery]);
+
+  useLayoutEffect(() => {
+    if (revokeTarget === null && focusTokensHeading.current) {
+      focusTokensHeading.current = false;
+      tokensHeadingRef.current?.focus();
+    }
+  }, [revokeTarget, snapshot]);
 
   const needsAccount = snapshot.status === "authenticated" && snapshot.account === undefined;
   useEffect(() => {
@@ -302,6 +444,45 @@ export function AccountSettings({
     issueFlight.current = flight;
   }, [createAccountToken, expiresInDays, kind, label]);
 
+  const confirmRevoke = useCallback(() => {
+    if (revokeTarget === null || revokePending) return;
+    setRevokePending(true);
+    setRevokeFailed(false);
+    void (async () => {
+      try {
+        await revokeAccountToken(revokeTarget.tokenId);
+        if (!mounted.current) return;
+        focusTokensHeading.current = true;
+        setRevokeTarget(null);
+      } catch {
+        if (mounted.current) setRevokeFailed(true);
+      } finally {
+        if (mounted.current) setRevokePending(false);
+      }
+    })();
+  }, [revokeAccountToken, revokePending, revokeTarget]);
+
+  const confirmSignOut = useCallback(() => {
+    if (signOutPending) return;
+    setRevealToken(null);
+    setSignOutPending(true);
+    void signOut().finally(() => {
+      if (mounted.current) setSignOutPending(false);
+    });
+  }, [signOut, signOutPending]);
+
+  const retrySignOut = useCallback(() => {
+    if (signOutPending) return;
+    setSignOutPending(true);
+    void retry().finally(() => {
+      if (mounted.current) setSignOutPending(false);
+    });
+  }, [retry, signOutPending]);
+
+  if (snapshot.status === "authenticated" && snapshot.account !== undefined) {
+    lastAccount.current = snapshot.account;
+  }
+
   if (browserSessionBlocked) {
     return (
       <main className="settings-account settings-account-locked">
@@ -314,7 +495,48 @@ export function AccountSettings({
     );
   }
 
-  if (snapshot.status !== "authenticated") {
+  if (signOutRecovery) {
+    return (
+      <main className="settings-account">
+        <header className="settings-heading">
+          <span className="section-label">ACCOUNT</span>
+          <h1>Account settings</h1>
+          <p>Recover or remove this browser's retained account access.</p>
+        </header>
+        <section className="settings-panel settings-signout-recovery" role="alert" aria-labelledby="settings-signout-recovery-title">
+          <div>
+            <span className="section-label">SIGN-OUT RECOVERY</span>
+            <h2 id="settings-signout-recovery-title">Browser access retained</h2>
+            <p>Sign-out could not be completed. This browser still has account access.</p>
+          </div>
+          <div className="settings-signout-recovery-actions">
+            <button
+              ref={retrySignOutRef}
+              className="entry-primary"
+              type="button"
+              disabled={signOutPending}
+              onClick={retrySignOut}
+            >
+              {signOutPending ? "Retrying sign-out…" : "Retry sign-out"}
+            </button>
+            <button
+              className="entry-secondary"
+              type="button"
+              disabled={signOutPending}
+              onClick={() => {
+                setRevealToken(null);
+                forgetBrowser();
+              }}
+            >
+              Forget this browser
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (snapshot.status !== "authenticated" && snapshot.status !== "signing-out") {
     return (
       <main className="settings-account">
         <header className="settings-heading">
@@ -336,7 +558,9 @@ export function AccountSettings({
     );
   }
 
-  const account = snapshot.account;
+  const account = snapshot.status === "authenticated"
+    ? snapshot.account
+    : lastAccount.current;
   if (!account) {
     return (
       <main className="settings-account">
@@ -380,7 +604,7 @@ export function AccountSettings({
         <div className="settings-panel-heading">
           <div>
             <span className="section-label">ACCESS TOKENS</span>
-            <h2 id="settings-tokens-title">Issued credentials</h2>
+            <h2 ref={tokensHeadingRef} id="settings-tokens-title" tabIndex={-1}>Issued credentials</h2>
           </div>
         </div>
         {account.tokens.length > 0 ? (
@@ -390,8 +614,23 @@ export function AccountSettings({
               return (
                 <li key={token.tokenId}>
                   <Key size={19} aria-hidden="true" />
-                  <div><strong>{token.label}</strong><span>{token.kind}</span></div>
-                  <span className={`settings-token-status is-${status}`}>{status}</span>
+                  <div className="settings-token-details"><strong>{token.label}</strong><span>{token.kind}</span></div>
+                  <div className="settings-token-actions">
+                    <span className={`settings-token-status is-${status}`}>{status}</span>
+                    {token.revokedAt === null ? (
+                      <button
+                        className="settings-revoke-token"
+                        type="button"
+                        aria-label={`Revoke ${token.label}`}
+                        onClick={() => {
+                          setRevokeFailed(false);
+                          setRevokeTarget(token);
+                        }}
+                      >
+                        <Trash size={16} aria-hidden="true" />Revoke
+                      </button>
+                    ) : null}
+                  </div>
                 </li>
               );
             })}
@@ -450,7 +689,58 @@ export function AccountSettings({
         {failure ? <p className="settings-safe-error" role="alert">Token could not be generated. Retry safely.</p> : null}
       </section>
 
+      <section className="settings-panel settings-session-access" aria-labelledby="settings-session-access-title">
+        <div className="settings-panel-heading">
+          <div>
+            <span className="section-label">BROWSER SESSION</span>
+            <h2 id="settings-session-access-title">Current browser access</h2>
+          </div>
+          <button
+            className="entry-secondary settings-signout-trigger"
+            type="button"
+            disabled={signOutPending}
+            onClick={() => setSignOutConfirming(true)}
+          >
+            <SignOut size={17} aria-hidden="true" />Sign out
+          </button>
+        </div>
+        <p>Remove this browser session without disconnecting or prompting the wallet provider.</p>
+      </section>
+
       {revealToken ? <TokenRevealDialog token={revealToken} onClear={() => setRevealToken(null)} /> : null}
+      {revokeTarget ? (
+        <AccessConfirmationDialog
+          title={`Revoke ${revokeTarget.label}?`}
+          description="This credential cannot be used again. Its persisted summary will remain as revoked evidence."
+          confirmLabel="Revoke token"
+          pendingLabel="Revoking…"
+          retryLabel="Retry revoke"
+          pending={revokePending}
+          failed={revokeFailed}
+          onCancel={() => {
+            if (revokePending) return;
+            setRevokeFailed(false);
+            setRevokeTarget(null);
+          }}
+          onConfirm={confirmRevoke}
+        />
+      ) : null}
+      {signOutConfirming ? (
+        <AccessConfirmationDialog
+          title="Sign out this browser?"
+          description="This removes the current browser session and its account access without calling the wallet provider."
+          confirmLabel="Sign out browser"
+          pendingLabel="Signing out…"
+          pending={signOutPending || snapshot.status === "signing-out"}
+          failed={false}
+          onCancel={() => {
+            if (!signOutPending && snapshot.status !== "signing-out") {
+              setSignOutConfirming(false);
+            }
+          }}
+          onConfirm={confirmSignOut}
+        />
+      ) : null}
     </main>
   );
 }
