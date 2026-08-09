@@ -73,7 +73,41 @@ test("runs only the bounded loopback Caddy/Web/PostgreSQL/API smoke", async () =
     assert.match(script, new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(script, /docker["',\s]+inspect|compose["',\s]+ps/i);
-  assert.match(script, /docker\.sock|HostPort|NetworkSettings|Mounts/);
+  assert.match(script, /docker\.sock/);
+  assert.match(script, /HostIp/);
+  assert.match(script, /HostPort/);
+  assert.match(script, /NetworkSettings/);
+  assert.match(script, /Mounts/);
+  assert.match(script, /requestLedger/);
+  assert.match(script, /forbiddenHosts/);
+  assert.match(
+    script,
+    /(?:HostIp[\s\S]{0,240}127\.0\.0\.1|127\.0\.0\.1[\s\S]{0,240}HostIp)/,
+    "live inspection must bind Caddy to loopback",
+  );
+  assert.match(
+    script,
+    /(?:HostPort[\s\S]{0,240}PROOFLINE_QA_HTTP_PORT|PROOFLINE_QA_HTTP_PORT[\s\S]{0,240}HostPort)/,
+    "live inspection must bind the exact selected port",
+  );
+  assert.match(
+    script,
+    /(?:requestLedger[\s\S]{0,480}forbiddenHosts|forbiddenHosts[\s\S]{0,480}requestLedger)/,
+    "forbidden-host checks must consume the runner ledger",
+  );
+  for (const host of [
+    "api.open-meteo.com",
+    "api.coinbase.com",
+    "fdc-verifiers-testnet.flare.network",
+    "coston2-api.flare.network",
+  ]) {
+    assert.match(script, new RegExp(host.replaceAll(".", "\\.")));
+  }
+  assert.match(script, /worker[\s\S]{0,160}(?:not start|absent|must not|unexpected)/i);
+  assert.doesNotMatch(
+    script,
+    /PROOFLINE_(?:VERIFIER_API_KEY|COSTON2_PRIVATE_KEY|COSTON2_RPC_URL)/,
+  );
   assert.doesNotMatch(script, /healthz|readyz|live Coston2|deployed|hosted/i);
 });
 

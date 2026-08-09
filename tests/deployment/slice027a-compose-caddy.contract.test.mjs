@@ -17,6 +17,7 @@ const composeEnvironment = {
   PROOFLINE_WEB_IMAGE: immutable("web"),
   PROOFLINE_API_IMAGE: immutable("api"),
   PROOFLINE_WORKER_IMAGE: immutable("worker"),
+  PROOFLINE_CADDY_SITE_ADDRESS: "proofline.example",
   PROOFLINE_WEB_ORIGIN: "https://proofline.example",
   PROOFLINE_API_DATABASE_URL_FILE: "/tmp/proofline-api-database-url",
   PROOFLINE_API_TOKEN_DIGEST_KEY_FILE: "/tmp/proofline-api-token-digest-key",
@@ -62,6 +63,13 @@ function renderDefaultServices(files = [composePath], environment = composeEnvir
 function networkNames(service) {
   if (Array.isArray(service?.networks)) return [...service.networks].sort();
   return Object.keys(service?.networks ?? {}).sort();
+}
+
+function networkMembers(model, network) {
+  return Object.entries(model.services ?? {})
+    .filter(([, service]) => networkNames(service).includes(network))
+    .map(([name]) => name)
+    .sort();
 }
 
 function publishedPorts(service) {
@@ -238,6 +246,14 @@ test("routes exact API paths before Web and strips the prefix exactly once", asy
   assert.match(caddyfile, /handle\s+@api\s*\{/);
   assert.match(caddyfile, /uri\s+strip_prefix\s+\/api/);
   assert.match(caddyfile, /reverse_proxy\s+api:8080/);
+  assert.match(caddyfile, /\{\$PROOFLINE_CADDY_SITE_ADDRESS\}/);
+  assert.deepEqual(
+    [...new Set(
+      [...caddyfile.matchAll(/reverse_proxy\s+([^\s{]+)/g)].map((match) => match[1]),
+    )].sort(),
+    ["api:8080", "web:8080"],
+    "Caddy must have no external or provider upstream",
+  );
   const apiIndex = caddyfile.search(/handle\s+@api/);
   const webIndex = caddyfile.search(/reverse_proxy\s+web:8080/);
   assert.ok(apiIndex >= 0 && webIndex > apiIndex, "API handler must precede Web fallback");
@@ -254,7 +270,7 @@ test("keeps health, schema and worker readiness explicitly outside 027A", () => 
   assert.doesNotMatch(pgHealth, /schema|migration|heartbeat/i);
 });
 
-test("renders a loopback-only no-egress QA override with local tags and no worker activation", () => {
+test("renders the bounded loopback QA override with local tags and no worker activation", () => {
   const environment = {
     ...composeEnvironment,
     PROOFLINE_CADDY_IMAGE: "proofline/caddy:027a-qa",
@@ -265,10 +281,19 @@ test("renders a loopback-only no-egress QA override with local tags and no worke
   };
   const qa = renderCompose([composePath, qaComposePath], environment);
   assert.equal(qa.status, 0, qa.stderr || "QA Compose config must pass");
-  assert.equal(qa.model.networks?.public_edge?.internal, true);
+  assert.notEqual(
+    qa.model.networks?.public_edge?.internal,
+    true,
+    "Docker Desktop requires a non-internal edge for a loopback host publish",
+  );
+  assert.deepEqual(networkMembers(qa.model, "public_edge"), ["caddy"]);
+  assert.equal(qa.model.services?.caddy?.environment?.PROOFLINE_CADDY_SITE_ADDRESS, ":80");
   assert.deepEqual(publishedPorts(qa.model.services?.caddy), [
     { target: 80, published: 49152, protocol: "tcp" },
   ]);
+  for (const name of ["web", "api", "worker", "postgres"]) {
+    assert.deepEqual(publishedPorts(qa.model.services?.[name]), []);
+  }
   for (const name of ["caddy", "web", "api", "worker"]) {
     assert.match(qa.model.services?.[name]?.image ?? "", /^proofline\/[a-z]+:027a-qa$/);
     assert.equal(qa.model.services?.[name]?.pull_policy, "never");

@@ -53,8 +53,8 @@ credential, provider or live Coston2 effect.
 - production image inputs require immutable digest references with pull never;
   the QA override uses local tags with pull never;
 - a unique temporary Compose project runs the bounded loopback smoke, inspects
-  ports/networks/mounts/users and removes only its own resources and secret
-  files;
+  live ports/networks/mounts/users, records every runner HTTP request and
+  removes only its own resources and secret files;
 - Sites compatibility files remain byte-identical.
 
 ## Frozen public contracts
@@ -86,6 +86,14 @@ validated by the exact pinned Caddy image before smoke.
 `app_internal` and `db_internal` are Docker-internal. `worker_egress` has only
 worker and no host binding. No service is privileged or receives host network,
 the Docker socket or an unbounded log.
+
+The QA `public_edge` remains non-internal so Docker Desktop can publish Caddy's
+random loopback port. Caddy is its only member and only Caddy publishes a port;
+the site address `:80` disables automatic HTTPS/ACME. This topology does not
+prove DNS or provider denial. No-external-effects acceptance additionally
+requires only Web/API Caddy upstreams, no worker or live provider credentials,
+an exact runner request ledger restricted to `127.0.0.1`, explicit forbidden
+Coinbase/Open-Meteo/verifier/Coston2 RPC hosts, and live port inspection.
 
 ### Web server
 

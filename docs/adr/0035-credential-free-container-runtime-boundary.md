@@ -144,15 +144,27 @@ serves existing hashed/static files, returns 404 for missing asset-like paths,
 and returns the exact client `index.html` only for non-asset application deep
 routes.
 
-QA binds a random loopback HTTP port, makes `public_edge` internal so local
-Caddy performs no ACME or other egress, creates temporary local secret files
-and runs with no external network, registry access, pull or worker. It proves the
-root and accepted deep routes, an anonymous DB-free API template response,
-query preservation (the strict template endpoint keeps rejecting a query),
-strip-once behavior, API/asset fail-closed behavior,
-private network membership, named volumes, absence of the Docker socket and
-that only Caddy has a host binding. Temporary projects, containers, networks,
-volumes and secret files are removed by exact project identity.
+QA binds a random loopback HTTP port. `public_edge` remains non-internal because
+Docker Desktop cannot publish that host port from an internal network; Caddy is
+its sole member and the sole service with a published port. The QA Caddy site
+address is `:80`, so it does not activate automatic HTTPS or ACME. Caddy has
+only the private Web and API upstreams. `web_internal`, `app_internal` and
+`db_internal` remain internal; `worker_egress` is unused because QA never starts
+worker.
+
+The non-internal edge is not evidence that DNS or provider access is impossible.
+The bounded no-external-effects claim instead requires the HTTP-only Caddy
+configuration, the exact internal upstream set, no live worker/provider
+credentials, and a runner request ledger that permits only the selected
+`127.0.0.1` port and explicitly rejects the Coinbase, Open-Meteo, Coston2 RPC
+and verifier hosts. QA runs with no registry access or pull. It proves the root
+and accepted deep routes, an anonymous DB-free API template response, query
+preservation (the strict template endpoint keeps rejecting a query), strip-once
+and API/asset fail-closed behavior, private-network membership, named volumes,
+absence of the Docker socket and the live inspected loopback Caddy binding.
+Topology alone makes no DNS/provider-denial claim. Temporary projects,
+containers, networks, volumes and secret files are removed by exact project
+identity.
 
 The PostgreSQL engine may use `pg_isready` only as an engine-liveness signal.
 027A adds no API `/healthz`, `/readyz`, schema probe or worker heartbeat and

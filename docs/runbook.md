@@ -96,15 +96,20 @@ never`. Production image variables accept only immutable
 `repository@sha256:<64 lowercase hex>` identities; QA accepts only local tags
 and also never pulls.
 
-The QA smoke uses a unique temporary Compose project, makes `public_edge`
-internal to disable Caddy ACME/egress, binds a random loopback HTTP port and
-creates temporary local secret files. It explicitly starts only Caddy, Web,
-PostgreSQL and API, then checks Web/deep routes plus the DB-free anonymous
-template endpoint through `/api`. It never starts worker, contacts Coston2,
-uses registry credentials or calls a routed response readiness. Exact `/api`
-and `/api/*` strip the prefix once and never SPA-fallback; missing asset-like
-paths remain 404. Only Caddy has a host binding. Cleanup is scoped to that
-temporary project and its secret directory.
+The QA smoke uses a unique temporary Compose project. `public_edge` remains
+non-internal so Docker Desktop can publish a random `127.0.0.1` HTTP port, but
+Caddy is its only member and only published service. QA selects Caddy site
+address `:80`, which avoids automatic HTTPS/ACME; Caddy routes only to private
+Web and API upstreams. It explicitly starts only Caddy, Web, PostgreSQL and
+API, then checks Web/deep routes plus the DB-free anonymous template endpoint
+through `/api`. It never starts worker or supplies live verifier/Coston2
+credentials. A request ledger allows only the selected loopback origin and
+rejects Coinbase, Open-Meteo, verifier and Coston2 RPC hosts. Exact `/api` and
+`/api/*` strip the prefix once and never SPA-fallback; missing asset-like paths
+remain 404. Live inspection, not Compose text, proves the Caddy host binding
+and absence of other published ports. The topology alone is not DNS/provider
+denial evidence. Cleanup is scoped to that temporary project and its secret
+directory.
 
 Compose mounts API `DATABASE_URL_FILE` and
 `PROOFLINE_TOKEN_DIGEST_KEY_FILE`; worker `DATABASE_URL_FILE`,

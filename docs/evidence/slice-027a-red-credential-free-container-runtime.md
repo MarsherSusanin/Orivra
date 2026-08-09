@@ -154,6 +154,24 @@ QA metadata renderer uses the explicit profile, while the real smoke remains
 contractually limited to explicitly targeted Caddy, Web, PostgreSQL and API and
 never starts worker.
 
+### Docker Desktop edge correction
+
+The earlier RED topology incorrectly required the QA `public_edge` network to
+be internal. That prevents the required random loopback host publish on Docker
+Desktop. The corrected contract keeps the edge non-internal, with Caddy as its
+sole member and sole published service, and derives bounded no-external-effects
+evidence from the HTTP-only `:80` site, exact Web/API upstreams, absence of live
+worker credentials, a loopback-only runner request ledger with explicit
+provider-host denials, and live port inspection. It makes no DNS/provider claim
+from network topology alone; production `public_edge` egress remains intact.
+
+All invalid iterations through this correction were tests/documentation-only.
+No Docker build, pull, Compose start, container, network, volume or secret file
+was created in the RED wave, so there was no runtime resource to abandon. The
+future real smoke remains required to record its unique project identity and
+complete `down --volumes --remove-orphans` plus post-cleanup absence after every
+failed or successful attempt.
+
 ## RED interpretation
 
 Only absent 027A production surfaces are accepted failures. A TypeScript
