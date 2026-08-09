@@ -1,6 +1,6 @@
 # ADR 0026 — App-wide wallet session context and lazy sign-in dialog
 
-Status: accepted for Slice 023C2B1 RED
+Status: accepted
 
 ## Context
 
