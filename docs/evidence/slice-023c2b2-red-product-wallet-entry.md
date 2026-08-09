@@ -54,3 +54,33 @@ Composer render. Targeted harness evidence is 3 files / 23 tests PASS. A
 rejecting fetch spy is never called. Full Web is 57 files / 420 tests: 416 PASS
 and only the four intentional share RED cases fail; no localhost/EPERM network
 failure occurs. `npm run typecheck` passes.
+
+## StrictMode corrective RED
+
+React development `StrictMode` replays the App state initializer after the
+first invocation has scrubbed the capability URL. The focused contract now
+also renders the real App root under `React.StrictMode`: a valid current share
+whose session write is denied must still hydrate exactly once with read-only
+share authority, perform zero account/network/provider work and preserve the
+stored project token. After unmount, another run must restore only its project
+authority, proving that the bootstrap handoff is bounded and cannot leak a
+share across mounts or runs. Two table cases require invalid-fragment and
+query-share attempts to stay suppressive across the same initializer replay.
+
+The implementation may retain the first parse result only for the same run and
+initialization turn, clearing it after initialization (at latest the next
+microtask) and on unmount. A long-lived global capability cache is explicitly
+outside the accepted trust boundary.
+
+Recorded on parent `203351da3ee7976ce97fed7cb4a7ec12e35a08e5` /
+tree `c7c67ace160237813d901bba5e652361ade62b3c`:
+
+- `npm run typecheck` and `git diff --check` — PASS;
+- focused authority contract — 1 file / 11 tests: 4 established controls PASS
+  and 7 intentional RED (the prior 4 authority failures plus these 3
+  StrictMode failures);
+- the valid StrictMode case receives two hydration calls instead of one; the
+  invalid-fragment and query cases lose their suppressive result after the URL
+  is scrubbed and fall back to the readable project session;
+- deterministic seeded-session controls — 3 files / 23 tests PASS with no
+  browser provider or localhost/network work.

@@ -44,6 +44,16 @@ stored valid share for the same run; otherwise it stays locked and anonymous.
 It never falls back to a readable project token, deletes either stored token or
 renders raw capability bytes.
 
+React development `StrictMode` may invoke the App state initializer twice. The
+second invocation must observe the same current-share result even though the
+first invocation already scrubbed the URL: a valid write-denied share remains
+the in-memory authority, while an invalid fragment or query attempt remains
+suppressive. This may use only a bounded bootstrap handoff keyed to the same
+run and initialization turn. It is cleared after initialization (at latest the
+next microtask) and on unmount, and cannot become a module-lifetime capability
+cache. A later mount or another run must never inherit the token or attempted
+state; its normal authority resolution starts afresh.
+
 Runs, deep run routes and Composer request authentication through one root
 dialog. Production copy says `Sign in with wallet` or
 `Reconnect wallet session`; no production App/Runs/Composer surface imports or

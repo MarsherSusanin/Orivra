@@ -359,4 +359,112 @@ describe("Slice 023C2B2 production wallet authority composition", () => {
     expect(document.body.textContent).not.toContain(RESTORED_SHARE_TOKEN);
     expect(document.body.textContent).not.toContain(PROJECT_TOKEN);
   });
+
+  it("preserves a write-denied current share across the StrictMode initializer replay without leaking it to another run", async () => {
+    sessionStorage.setItem(PROJECT_TOKEN_SESSION_KEY, PROJECT_TOKEN);
+    window.history.replaceState({}, "", `/runs/${RUN_ID}#share=${SHARE_TOKEN}`);
+    const originalSetItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === SHARE_SESSION_KEY) throw new DOMException("denied", "SecurityError");
+      return originalSetItem.call(this, key, value);
+    });
+    const wallet = access();
+    const injection = injectedProjectSession(wallet);
+    const hydrateRun = vi.fn(async () => terminalRun);
+
+    const shared = render(
+      <React.StrictMode>
+        <WalletAwareApp
+          services={surfaces({ hydrateRun })}
+          walletAccess={injection.walletAccess}
+        />
+      </React.StrictMode>,
+    );
+
+    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.search).toBe("");
+    expect(window.location.hash).toBe("");
+    await waitFor(() => expect(hydrateRun).toHaveBeenCalledOnce());
+    expect(hydrateRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: RUN_ID,
+      projectToken: SHARE_TOKEN,
+    }));
+    expect(sessionStorage.getItem(SHARE_SESSION_KEY)).toBeNull();
+    expect(sessionStorage.getItem(PROJECT_TOKEN_SESSION_KEY)).toBe(PROJECT_TOKEN);
+    expect(wallet.getAccount).not.toHaveBeenCalled();
+    expect(wallet.listNetworks).not.toHaveBeenCalled();
+    expect(injection.loadProviderAdapter).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain(SHARE_TOKEN);
+    expect(document.body.textContent).not.toContain(PROJECT_TOKEN);
+
+    shared.unmount();
+    window.history.replaceState({}, "", "/runs/run_other");
+    const nextWallet = access();
+    const nextInjection = injectedProjectSession(nextWallet);
+    const hydrateOther = vi.fn(async () => ({ ...terminalRun, runId: "run_other" }));
+    render(
+      <React.StrictMode>
+        <WalletAwareApp
+          services={surfaces({ hydrateRun: hydrateOther })}
+          walletAccess={nextInjection.walletAccess}
+        />
+      </React.StrictMode>,
+    );
+
+    await waitFor(() => expect(hydrateOther).toHaveBeenCalledOnce());
+    expect(hydrateOther).toHaveBeenCalledWith(expect.objectContaining({
+      runId: "run_other",
+      projectToken: PROJECT_TOKEN,
+    }));
+    expect(hydrateOther).not.toHaveBeenCalledWith(expect.objectContaining({
+      projectToken: SHARE_TOKEN,
+    }));
+    expect(nextWallet.getAccount).toHaveBeenCalledOnce();
+    expect(nextWallet.listNetworks).not.toHaveBeenCalled();
+    expect(nextInjection.loadProviderAdapter).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "invalid fragment",
+      initial: `/runs/${RUN_ID}?panel=diagnostics#share=share_deadbeef`,
+      search: "?panel=diagnostics",
+    },
+    {
+      label: "query attempt",
+      initial: `/runs/${RUN_ID}?share=${SHARE_TOKEN}&status=active#ignored`,
+      search: "?status=active",
+    },
+  ])("keeps a $label suppressive across the StrictMode initializer replay", async ({ initial, search }) => {
+    sessionStorage.setItem(PROJECT_TOKEN_SESSION_KEY, PROJECT_TOKEN);
+    window.history.replaceState({}, "", initial);
+    const wallet = access();
+    const injection = injectedProjectSession(wallet);
+    const hydrateRun = vi.fn(async () => terminalRun);
+
+    render(
+      <React.StrictMode>
+        <WalletAwareApp
+          services={surfaces({ hydrateRun })}
+          walletAccess={injection.walletAccess}
+        />
+      </React.StrictMode>,
+    );
+    await flushWalletRestore();
+
+    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.search).toBe(search);
+    expect(window.location.hash).toBe("");
+    expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();
+    expect(hydrateRun).not.toHaveBeenCalled();
+    expect(wallet.getAccount).not.toHaveBeenCalled();
+    expect(wallet.listNetworks).not.toHaveBeenCalled();
+    expect(injection.loadProviderAdapter).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(PROJECT_TOKEN_SESSION_KEY)).toBe(PROJECT_TOKEN);
+    expect(document.body.textContent).not.toMatch(/project_[a-f0-9]{64}|share_[a-f0-9]+/i);
+  });
 });
