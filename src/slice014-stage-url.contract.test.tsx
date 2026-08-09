@@ -3,6 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { HydratedRunView, RunSurfaceServices } from "./services/run-surface";
+import {
+  expectOnlyTemplateCatalogFetches,
+  installTemplateCatalogFetch,
+} from "./test/slice025-template-fetch";
 
 const projectToken = `project_${"b".repeat(64)}`;
 const runId = "run_stage_truth";
@@ -111,19 +115,22 @@ describe("stage-aware Run Cockpit truth", () => {
 });
 
 describe("/runs/new Composer step URL contract", () => {
-  it("canonicalizes an invalid step to source while preserving unrelated params", () => {
+  it("canonicalizes an invalid step and legacy template revision in one URL replacement", async () => {
     window.history.replaceState({}, "", "/runs/new?step=unknown&template=eth-usd");
     const replaceState = vi.spyOn(window.history, "replaceState");
+    const fetch = installTemplateCatalogFetch();
     render(<App services={services(runAt({}))} />);
 
-    const steps = screen.getByRole("navigation", { name: /composer steps/i });
+    const steps = await screen.findByRole("navigation", { name: /composer steps/i });
     expect(within(steps).getByRole("link", { name: /source/i })).toHaveAttribute(
       "aria-current",
       "step",
     );
     expect(new URLSearchParams(window.location.search).get("step")).toBe("source");
     expect(new URLSearchParams(window.location.search).get("template")).toBe("eth-usd");
+    expect(new URLSearchParams(window.location.search).get("revision")).toBe("1");
     expect(replaceState).toHaveBeenCalledTimes(1);
+    expectOnlyTemplateCatalogFetches(fetch);
   });
 
   it("writes a real URL and restores the visible current step on popstate", async () => {

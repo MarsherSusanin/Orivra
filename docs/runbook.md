@@ -270,6 +270,38 @@ proofline demo record --attack-run <persisted-live-run-id> \
 
 Все пять опций обязательны ровно один раз, run ID должны различаться, а run/release/output значения проходят bounded грамматику до любого I/O. Packaged CLI всегда подключает concrete `packages/fdc-coston2` runtime: команда читает ровно два persisted bundle не более 2 200 000 UTF-8 bytes и 64 Merkle nodes каждый, перекомпилирует exact checked-in Solidity через pinned canonical standard JSON, выполняет три вызова в fresh Cancun `@ethereumjs/vm`, затем независимо повторяет runtime verification до atomic rename. Raw calldata/results не дублируются в recording: runtime выводит и сверяет их transcript hashes. Ошибка source read всегда возвращает code `CANONICAL_SOURCE_READ_FAILED` и сообщение `Canonical URL attack source read failed` без OS code, path, filename и stack. Любая read/compile/EVM/verify ошибка оставляет destination неизменённым; fixture/replay fallback и wallet/relayer effect отсутствуют.
 
+### Static template catalog (Slice 025)
+
+Public discovery is limited to exact no-query reads:
+
+```text
+GET /v1/templates
+GET /v1/templates/open-meteo-current-weather
+GET /v1/templates/eth-usd
+```
+
+The catalog is compiled into the pure domain package. Do not provision a table,
+Redis cache, source proxy or dynamic registry for it. A detail is usable only
+after strict manifest parse, exact canonical JSON equality and recomputed
+manifest SHA-256 agree with summary and built-in provenance. HTTP ETags cover
+the canonical response bytes and are distinct from the embedded manifest hash.
+
+Web uses only same-origin `/api/v1/templates*`. During gallery, detail,
+selection, replacement and reload/back-forward verification, reject any
+browser request, preconnect, prefetch, image, active source link or service
+worker request to `api.open-meteo.com` or `api.coinbase.com`. Template selection
+does not fetch a source response; that remains an authenticated persisted
+preflight effect. A saved valid Composer draft must survive until the user
+confirms replacement, and cancellation must preserve its exact local bytes.
+
+Focused GREEN verification starts with typecheck and the Slice 025 contract
+matrix recorded in `docs/evidence/slice-025-red-template-led-composer.md`, then
+the contracts/domain, API/client and Web coverage thresholds from AGENTS.md.
+Before Sites handoff run `npm run build` and `npm run test:sites`; the generic
+SPA fallback must serve `/templates` and detail routes while `/api` stays fail
+closed. These are local credential-free gates, not Open-Meteo/Coinbase, live
+Coston2, Docker, hosted or deployed evidence.
+
 ### Локальный Product QA report
 
 Web хранит не более 500 валидированных `ProductEventV1` под versioned key

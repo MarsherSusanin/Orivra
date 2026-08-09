@@ -20,10 +20,10 @@ The product journey is delivered as independently frozen vertical slices:
 | 022 | Network capability boundary | Complete; independently verified |
 | 023 | Wallet identity and self-service access | In progress through small focused waves |
 | 024A | Honest canonical URL attack recording contracts and recorder | Complete; independently verified, credential-free |
-| 024B1 | Public summary, immutable migration 009 and runtime-authorized one-shot import | RED frozen; credential-free |
-| 024B2 | Exact-digest API startup cache and anonymous summary/download | RED frozen; credential-free |
-| 024B3 | Token-free canonical URL demo Web route and Sites deep route | RED frozen; credential-free |
-| 025 | Template-led Composer | Planned, credential-free |
+| 024B1 | Public summary, immutable migration 009 and runtime-authorized one-shot import | Complete; independently verified, credential-free |
+| 024B2 | Exact-digest API startup cache and anonymous summary/download | Complete; independently verified, credential-free |
+| 024B3 | Token-free canonical URL demo Web route and Sites deep route | Complete; independently verified, credential-free |
+| 025 | Template-led Composer | RED frozen, credential-free |
 | 026 | Public product surface | Planned, credential-free |
 | 027A | Local Docker runtime, Compose/Caddy routing and private service networks | Planned, credential-free |
 | 027B | One-shot migrations, health/readiness, worker heartbeat and retention | Planned, credential-free |

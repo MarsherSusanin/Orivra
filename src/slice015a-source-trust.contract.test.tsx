@@ -3,6 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { RunSurfaceServices } from "./services/run-surface";
+import {
+  expectOnlyTemplateCatalogFetches,
+  installTemplateCatalogFetch,
+} from "./test/slice025-template-fetch";
 
 const COINBASE_SOURCE = "https://api.coinbase.com/v2/prices/ETH-USD/spot";
 
@@ -37,12 +41,10 @@ afterEach(() => {
 describe("Slice 015A ETH/USD Source and Trust template", () => {
   it("starts with the exact public Coinbase source and derived trust defaults", async () => {
     const user = userEvent.setup();
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(
-      new Error("A browser source fetch must never occur"),
-    );
+    const fetchSpy = installTemplateCatalogFetch();
     renderComposer("/runs/new?template=eth-usd&step=source");
 
-    expect(screen.getByLabelText(/source url/i)).toHaveValue(COINBASE_SOURCE);
+    expect(await screen.findByLabelText(/source url/i)).toHaveValue(COINBASE_SOURCE);
     expect(screen.getByText(/remote access happens during server-side preflight/i)).toBeVisible();
 
     await openTrust(user);
@@ -52,7 +54,7 @@ describe("Slice 015A ETH/USD Source and Trust template", () => {
     expect(screen.getByLabelText(/expected path prefix/i)).toHaveValue(
       "/v2/prices/ETH-USD/spot",
     );
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expectOnlyTemplateCatalogFetches(fetchSpy);
   });
 
   it("adds, edits and removes source query rows using named controls", async () => {
@@ -211,27 +213,31 @@ describe("Slice 015A Composer flow order", () => {
 
   it("moves Trust to Submit and preserves the template URL state", async () => {
     const user = userEvent.setup();
+    const fetchSpy = installTemplateCatalogFetch();
     renderComposer("/runs/new?template=eth-usd&step=trust&status=active");
 
-    await user.click(screen.getByRole("button", { name: /continue to submit/i }));
+    await user.click(await screen.findByRole("button", { name: /continue to submit/i }));
 
     const params = new URLSearchParams(window.location.search);
     expect(params.get("step")).toBe("submit");
     expect(params.get("template")).toBe("eth-usd");
+    expect(params.get("revision")).toBe("1");
     expect(params.get("status")).toBe("active");
     expect(
       within(screen.getByRole("navigation", { name: /composer steps/i }))
         .getByRole("link", { name: /^submit/i }),
     ).toHaveAttribute("aria-current", "step");
+    expectOnlyTemplateCatalogFetches(fetchSpy);
   });
 });
 
 describe("Slice 015A Trust validation gate", () => {
   it("keeps invalid host and query invariants inline until both are corrected", async () => {
     const user = userEvent.setup();
+    const fetchSpy = installTemplateCatalogFetch();
     renderComposer("/runs/new?template=eth-usd&step=trust&status=active");
 
-    const host = screen.getByLabelText(/expected host/i);
+    const host = await screen.findByLabelText(/expected host/i);
     await user.clear(host);
     await user.type(host, "bad host");
     await user.click(screen.getByRole("button", { name: /add expected query/i }));
@@ -254,5 +260,6 @@ describe("Slice 015A Trust validation gate", () => {
     await user.click(screen.getByRole("button", { name: /continue to submit/i }));
 
     expect(new URLSearchParams(window.location.search).get("step")).toBe("submit");
+    expectOnlyTemplateCatalogFetches(fetchSpy);
   });
 });

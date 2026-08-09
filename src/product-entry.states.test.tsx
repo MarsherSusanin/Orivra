@@ -65,9 +65,9 @@ describe("run discovery states", () => {
     render(<App projectToken={projectToken} services={services()} />);
 
     expect(await screen.findByRole("heading", { name: /no runs yet/i })).toBeVisible();
-    expect(screen.getByRole("link", { name: /open example setup/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /browse templates/i })).toHaveAttribute(
       "href",
-      "/runs/new?template=eth-usd",
+      "/templates",
     );
     for (const label of ["Requests", "Consumers", "CI"]) {
       const item = screen.getByRole("button", { name: label });

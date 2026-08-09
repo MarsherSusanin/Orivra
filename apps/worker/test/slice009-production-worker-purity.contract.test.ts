@@ -33,6 +33,19 @@ const walletAuthRuntimeExports = [
   "AccountTokenRevokedV1Schema",
 ] as const;
 
+const templateContractRuntimeExports = [
+  "Web2JsonTemplateProvenanceV1Schema",
+  "Web2JsonTemplateSummaryV1Schema",
+  "Web2JsonTemplateCatalogV1Schema",
+  "Web2JsonTemplateDetailV1Schema",
+] as const;
+
+const templateDomainRuntimeExports = [
+  "getWeb2JsonTemplateCatalog",
+  "getWeb2JsonTemplateDetail",
+  "resolveWeb2JsonTemplate",
+] as const;
+
 const workerArtifactForbiddenRules = [
   ["project-token environment compatibility", /PROJECT_TOKEN/],
   ["projectToken execution field", /projectToken/],
@@ -114,7 +127,7 @@ function expectNoPreflightTestBridge(candidate: string, label: string) {
 }
 
 describe("Slice 009 production worker purity", () => {
-  it("declares pure package metadata and the exact wallet-auth feature subpath", () => {
+  it("declares pure package metadata and exact custody/template feature subpaths", () => {
     const contracts = JSON.parse(readFileSync(contractsPackage, "utf8"));
     const domain = JSON.parse(readFileSync(domainPackage, "utf8"));
 
@@ -123,6 +136,11 @@ describe("Slice 009 production worker purity", () => {
     expect(contracts.exports).toEqual({
       ".": "./src/index.ts",
       "./wallet-auth": "./src/wallet-auth.ts",
+      "./templates": "./src/web2json-templates.ts",
+    });
+    expect(domain.exports).toEqual({
+      ".": "./src/index.ts",
+      "./templates": "./src/web2json-template-catalog.ts",
     });
   });
 
@@ -157,6 +175,33 @@ describe("Slice 009 production worker purity", () => {
     );
     for (const name of walletAuthRuntimeExports) {
       expect(walletAuth[name]).toBe(rootContracts[name]);
+    }
+  });
+
+  it("keeps every template runtime export identical through pure feature entries", async () => {
+    const contractsSpecifier = "@proofline/contracts";
+    const contractTemplatesSpecifier = "@proofline/contracts/templates";
+    const domainSpecifier = "@proofline/domain";
+    const domainTemplatesSpecifier = "@proofline/domain/templates";
+    const [rootContracts, contractTemplates, rootDomain, domainTemplates] =
+      await Promise.all([
+        import(/* @vite-ignore */ contractsSpecifier),
+        import(/* @vite-ignore */ contractTemplatesSpecifier),
+        import(/* @vite-ignore */ domainSpecifier),
+        import(/* @vite-ignore */ domainTemplatesSpecifier),
+      ]);
+
+    expect(Object.keys(contractTemplates).sort()).toEqual(
+      [...templateContractRuntimeExports].sort(),
+    );
+    expect(Object.keys(domainTemplates).sort()).toEqual(
+      [...templateDomainRuntimeExports].sort(),
+    );
+    for (const name of templateContractRuntimeExports) {
+      expect(contractTemplates[name]).toBe(rootContracts[name]);
+    }
+    for (const name of templateDomainRuntimeExports) {
+      expect(domainTemplates[name]).toBe(rootDomain[name]);
     }
   });
 
@@ -236,7 +281,7 @@ describe("Slice 009 production worker purity", () => {
         .filter(
           ({ input, bytesInOutput }) =>
             bytesInOutput > 0 &&
-            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$/.test(
+            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$/.test(
               input,
             ),
         )

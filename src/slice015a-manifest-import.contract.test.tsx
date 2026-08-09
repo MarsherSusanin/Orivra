@@ -3,6 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { RunSurfaceServices } from "./services/run-surface";
+import {
+  expectOnlyTemplateCatalogFetches,
+  installTemplateCatalogFetch,
+} from "./test/slice025-template-fetch";
 
 const COINBASE_SOURCE = "https://api.coinbase.com/v2/prices/ETH-USD/spot";
 const importedManifest = {
@@ -43,7 +47,9 @@ function file(contents: string, name = "manifest.json") {
 
 function renderTemplate() {
   window.history.replaceState({}, "", "/runs/new?template=eth-usd&step=source");
+  const fetch = installTemplateCatalogFetch();
   render(<App services={services()} />);
+  return fetch;
 }
 
 afterEach(() => {
@@ -56,10 +62,10 @@ afterEach(() => {
 describe("Slice 015A strict manifest import", () => {
   it("atomically replaces Source and Trust from one strict manifest", async () => {
     const user = userEvent.setup();
-    renderTemplate();
+    const fetch = renderTemplate();
 
     await user.upload(
-      screen.getByLabelText(/import manifest/i),
+      await screen.findByLabelText(/import manifest/i),
       file(JSON.stringify(importedManifest)),
     );
     expect(screen.getByLabelText(/source url/i)).toHaveValue(importedManifest.request.url);
@@ -78,6 +84,7 @@ describe("Slice 015A strict manifest import", () => {
     expect(within(expectedQuery).getByDisplayValue("source")).toBeVisible();
     expect(within(expectedQuery).getByDisplayValue("primary")).toBeVisible();
     expect(within(expectedQuery).getByDisplayValue("currency")).toBeVisible();
+    expectOnlyTemplateCatalogFetches(fetch);
   });
 
   it.each([
@@ -102,14 +109,15 @@ describe("Slice 015A strict manifest import", () => {
     ],
   ])("rejects %s without partially mutating the template", async (_name, contents) => {
     const user = userEvent.setup();
-    renderTemplate();
+    const fetch = renderTemplate();
 
-    await user.upload(screen.getByLabelText(/import manifest/i), file(contents));
+    await user.upload(await screen.findByLabelText(/import manifest/i), file(contents));
 
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent(/manifest.*invalid|could not import/i);
     expect(alert).not.toHaveTextContent(/project_[a-f0-9]{64}/i);
     expect(alert).not.toHaveTextContent("user:secret");
     expect(screen.getByLabelText(/source url/i)).toHaveValue(COINBASE_SOURCE);
+    expectOnlyTemplateCatalogFetches(fetch);
   });
 });

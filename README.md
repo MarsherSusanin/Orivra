@@ -39,6 +39,10 @@ blockchain-операций.
 - Публичный `GET /v1/networks` различает известную сеть и доступную
   возможность: Coston2 Web2Json включён, Flare Mainnet распознаётся как
   `upstream-unsupported` и отклоняется до создания run или network I/O.
+- Slice 025 фиксирует credential-free static template catalog: featured
+  Open-Meteo Berlin current temperature и совместимый `eth-usd` выбираются
+  через anonymous same-origin API, а manifest повторно canonicalize/hash
+  проверяется до Composer без browser/API source-host fetch.
 - API реализует self-service EOA wallet auth: одноразовый пятиминутный
   EIP-4361 challenge создаёт стабильный default project и возвращает случайный
   12-часовой browser project token, сохраняя в PostgreSQL только keyed digest.

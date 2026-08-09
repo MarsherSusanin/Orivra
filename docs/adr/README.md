@@ -35,5 +35,6 @@ ADR фиксирует архитектурное решение, которое
 | [0030](0030-persisted-api-admission-quotas.md) | PostgreSQL-clock quota windows ограничивают wallet challenges, daily runs и active live runs без нарушения idempotent replay |
 | [0031](0031-canonical-url-attack-recording.md) | Два независимых persisted live bundle и детерминированный EVM transcript доказывают URL attack без synthetic fallback |
 | [0032](0032-persisted-public-canonical-url-attack-demo.md) | Runtime-verified recording импортируется в immutable PostgreSQL и публикуется через bounded anonymous API/Web demo |
+| [0033](0033-static-template-catalog-boundary.md) | Статический immutable catalog связывает public template metadata с exact canonical manifest bytes без DB или source fetch |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

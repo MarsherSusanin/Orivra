@@ -87,6 +87,22 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
 
 ## Trust boundaries
 
+### Static template catalog
+
+Slice 025 exposes two immutable built-in Web2Json template revisions through a
+pure catalog and anonymous same-origin reads. Domain resolution reparses the
+strict manifest, canonicalizes it and recomputes its SHA-256 before catalog
+metadata or provenance can become a Composer draft. API and browser never fetch
+the Coinbase/Open-Meteo source while listing, inspecting or selecting a
+template; source I/O remains inside the persisted run preflight boundary.
+
+`GET /v1/templates` and `GET /v1/templates/:id` are exact no-query routes with
+response-byte ETags. They use no PostgreSQL or upstream port. The Web selection
+URL carries exact revision `1`; a saved valid draft wins until explicit
+confirmed replacement. Public provenance is display metadata, while the final
+strict `Web2JsonManifestV1` is the only run authority. See
+[ADR 0033](docs/adr/0033-static-template-catalog-boundary.md).
+
 ### Canonical URL attack demo evidence
 
 The canonical attack demo crosses two deliberately different authorities.

@@ -11,6 +11,10 @@ import {
 } from "../packages/contracts/test/fixtures";
 import { App } from "./App";
 import type { RunSurfaceServices } from "./services/run-surface";
+import {
+  expectOnlyTemplateCatalogFetches,
+  installTemplateCatalogFetch,
+} from "./test/slice025-template-fetch";
 
 const DRAFT_KEY = "proofline:composer-draft:v1";
 const projectToken = `project_${"a".repeat(64)}`;
@@ -63,13 +67,11 @@ afterEach(() => {
 });
 
 describe("Slice 015B local Transform surface", () => {
-  it("shows the ETH/USD JQ, official ABI JSON and exact local-only canonical preview", () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(
-      new Error("The browser must not fetch the source"),
-    );
+  it("shows the ETH/USD JQ, official ABI JSON and exact local-only canonical preview", async () => {
+    const fetchSpy = installTemplateCatalogFetch();
     renderComposer("/runs/new?template=eth-usd&step=transform");
 
-    expect(screen.getByLabelText(/jq transform/i)).toHaveValue(
+    expect(await screen.findByLabelText(/jq transform/i)).toHaveValue(
       ".data | {amount: .amount, currency: .currency}",
     );
     expect(screen.getByLabelText(/abi signature/i)).toHaveValue(templateAbi);
@@ -95,13 +97,14 @@ describe("Slice 015B local Transform surface", () => {
     );
     expect(screen.getByText(/local only/i)).toBeVisible();
     expect(screen.queryByText(/remote transform preview|source response|sample output/i)).not.toBeInTheDocument();
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expectOnlyTemplateCatalogFetches(fetchSpy);
   });
 
   it("keeps invalid JQ and ABI beside their fields and gates Trust", async () => {
     const user = userEvent.setup();
+    const fetchSpy = installTemplateCatalogFetch();
     renderComposer("/runs/new?template=eth-usd&step=transform");
-    const jq = screen.getByLabelText(/jq transform/i);
+    const jq = await screen.findByLabelText(/jq transform/i);
     const abi = screen.getByLabelText(/abi signature/i);
     await user.clear(jq);
     await user.clear(abi);
@@ -120,18 +123,21 @@ describe("Slice 015B local Transform surface", () => {
     fireEvent.change(abi, { target: { value: templateAbi } });
     await user.click(screen.getByRole("button", { name: /continue to trust/i }));
     expect(new URLSearchParams(window.location.search).get("step")).toBe("trust");
+    expectOnlyTemplateCatalogFetches(fetchSpy);
   });
 
-  it("keeps the mobile canonical preview in keyboard order with its local-only label", () => {
+  it("keeps the mobile canonical preview in keyboard order with its local-only label", async () => {
     browserWindow.happyDOM.setViewport({ width: 390, height: 844 });
+    const fetchSpy = installTemplateCatalogFetch();
     renderComposer("/runs/new?template=eth-usd&step=transform");
 
-    const preview = screen.getByLabelText(/canonical manifest preview.*local only/i);
+    const preview = await screen.findByLabelText(/canonical manifest preview.*local only/i);
     expect(preview).toHaveAttribute("tabindex", "0");
     expect(preview).toHaveAccessibleName(/canonical manifest preview.*local only/i);
     expect(screen.getByText(/local only.*not remote evidence/i)).toBeVisible();
     preview.focus();
     expect(preview).toHaveFocus();
+    expectOnlyTemplateCatalogFetches(fetchSpy);
   });
 });
 
@@ -274,21 +280,23 @@ describe("Slice 015B strict local draft recovery", () => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(saved));
     const previousKey = saved.createIdempotencyKey;
     const user = userEvent.setup();
+    const fetchSpy = installTemplateCatalogFetch();
     renderComposer("/runs/new?template=eth-usd&step=source");
 
-    expect(screen.getByLabelText(/source url/i)).toHaveValue(
+    expect(await screen.findByLabelText(/source url/i)).toHaveValue(
       "https://saved.example.com/public",
     );
-    await user.click(
-      screen.getByRole("button", { name: /discard.*start eth\/usd/i }),
-    );
-    expect(screen.getByLabelText(/source url/i)).toHaveValue(
+    await user.click(screen.getByRole("button", { name: "Review replacement" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Replace saved draft?" }))
+      .getByRole("button", { name: "Replace with template" }));
+    expect(await screen.findByLabelText(/source url/i)).toHaveValue(
       "https://api.coinbase.com/v2/prices/ETH-USD/spot",
     );
     await waitFor(() => {
       expect(JSON.parse(localStorage.getItem(DRAFT_KEY)!).createIdempotencyKey)
         .not.toBe(previousKey);
     });
+    expectOnlyTemplateCatalogFetches(fetchSpy);
   });
 
   it.each([
