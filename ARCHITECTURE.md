@@ -155,19 +155,40 @@ third-party SDK or user analytics dashboard.
 - Merge-queue contract: один persisted Coston2 run через GitHub Action → API → PostgreSQL → worker.
 - Live gate имеет один monotonic deadline 600000 ms на весь flow и не повторяет broadcast после фиксации tx hash.
 - Evidence связывается с exact 40-hex commit hash и tree hash.
-- Sites размещает только Web; `/api` и write requests не получают SPA fallback.
+- [ADR 0029](docs/adr/0029-digitalocean-vds-deployment.md) выбирает один
+  DigitalOcean Droplet/VDS: Docker Compose запускает Web, API, worker и
+  PostgreSQL на том же VDS, а Caddy служит единственным TLS ingress и reverse
+  proxy для same-origin `/api`.
+- Public inbound разрешает только 80/443. SSH restricted административным
+  allowlist или VPN. PostgreSQL host port 5432 не exposed; API и worker не
+  получают public host ports, Docker socket никогда не монтируется в сервисы.
+- Sites остаётся compatibility-only package и routing test. Он не является
+  выбранным production host.
 
-Эти release paths реализованы и герметично проверяются локально, но в
-репозитории нет `.github/workflows`, настроенного merge queue или production
-deployment. API/worker hosting provider пока не выбран. Его выбор, provisioning,
-backup/restore и rollback должны быть записаны отдельным ADR до deployment
-automation. До этого deployed live Coston2 PASS не заявляется.
+Production composition должна выбирать immutable GHCR image digest, запускать
+one-shot checksummed migration под PostgreSQL advisory lock до старта API и
+worker и проверять schema version. PostgreSQL использует persistent named
+volume. `/healthz` отделяет process liveness от `/readyz`, который проверяет
+database/schema readiness и свежий worker heartbeat.
+
+Recovery contract использует off-host WAL archiving и base backup для PITR в
+private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна
+выполнять MinIO restore drill в отдельный volume. Droplet backup не является
+database backup или PITR plan.
+
+Эти release paths реализованы и герметично проверяются локально только в своей
+текущей executable части. В репозитории нет `.github/workflows`, настроенного
+merge queue, Docker VDS composition или production deployment. Hosting is not
+yet provisioned; ADR 0029 выбирает target, но не доказывает его доступность.
+Credentials выдаются только после завершения credential-free 022–029A,
+единого full matrix и двух независимых PASS на одном tree hash. До этого hosted
+или deployed live Coston2 PASS не заявляется.
 
 ## Product scope
 
 В текущем executable scope: Coston2, Web2Json, public HTTPS GET, query/JQ/ABI,
 canonical vulnerable/safe consumers, wallet/relayer, replay, CLI, Action и
-Sites. Flare Mainnet присутствует только как явно выключенная public capability;
+Sites compatibility package. Flare Mainnet присутствует только как явно выключенная public capability;
 production adapter и persisted Flare evidence отсутствуют.
 
 Product instrumentation остаётся локальным: bounded privacy-safe event queue
@@ -175,8 +196,9 @@ Product instrumentation остаётся локальным: bounded privacy-saf
 report, сетевого analytics transport нет.
 
 Вне scope: Mainnet execution, custody пользовательских ключей, arbitrary
-methods/headers/body, произвольные Solidity contracts и автоматический
-production deploy.
+methods/headers/body, произвольные Solidity contracts и выполненный production
+deploy. Credential-free composition входит в 027A–029A; provisioning,
+promotion и canary остаются за credential gate.
 
 ## Решения
 

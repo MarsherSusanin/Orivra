@@ -4,6 +4,10 @@
 
 Accepted for Slice 023.
 
+The separate Sites/API hosting portion is partially superseded by
+[ADR 0029](0029-digitalocean-vds-deployment.md). Exact-origin authentication,
+CORS and all remaining access-boundary decisions remain accepted.
+
 ## Context
 
 Proofline's persisted product journey requires a project bearer token, but the

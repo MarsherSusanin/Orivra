@@ -4,6 +4,10 @@
 
 Accepted for Slice 020.
 
+The Sites-hosting portion is partially superseded by
+[ADR 0029](0029-digitalocean-vds-deployment.md). Evidence, share and exact-byte
+handoff decisions remain accepted.
+
 ## Context
 
 Proofline already persists a canonical proof bundle, exact generated Solidity and

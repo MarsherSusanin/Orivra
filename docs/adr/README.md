@@ -31,5 +31,6 @@ ADR фиксирует архитектурное решение, которое
 | [0026](0026-wallet-session-context-and-lazy-sign-in-dialog.md) | Один wallet-session context лениво подключает доступный Coston2 sign-in dialog |
 | [0027](0027-app-wallet-authority-and-pending-composer-intent.md) | App сводит wallet/share/embed authority в один root и возобновляет ровно один Composer intent |
 | [0028](0028-settings-one-time-token-issue.md) | Settings выдаёт CLI/Action token только из browser session и удерживает raw secret в one-time reveal |
+| [0029](0029-digitalocean-vds-deployment.md) | DigitalOcean VDS запускает same-origin Docker Compose stack за Caddy с credential-gated release |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

@@ -17,6 +17,17 @@ The product journey is delivered as independently frozen vertical slices:
 | 019 | Consumer evidence matrix and deterministic safe artifact | Complete; independently verified in the final handoff journey |
 | 020 | Evidence receipt, integration package and read-only handoff | Complete; independently verified |
 | 021B | Deterministic local product QA report | Complete; independently verified |
+| 022 | Network capability boundary | Complete; independently verified |
+| 023 | Wallet identity and self-service access | In progress through small focused waves |
+| 024 | Canonical URL attack demo | Planned, credential-free |
+| 025 | Template-led Composer | Planned, credential-free |
+| 026 | Public product surface | Planned, credential-free |
+| 027A | Local Docker runtime, Compose/Caddy routing and private service networks | Planned, credential-free |
+| 027B | One-shot migrations, health/readiness, worker heartbeat and retention | Planned, credential-free |
+| 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |
+| 028A | Local release truth, immutable GHCR manifest and dry-run automation | Planned, credential-free |
+| 028B | Credential gate for DigitalOcean staging | Blocked until unified local candidate PASS |
+| 029 | Exact-digest production promotion and seven-day canary | Blocked until 028B hosted evidence |
 
 ## Completed pre-infrastructure product journey
 
@@ -35,18 +46,56 @@ discovery through evidence handoff:
 No external analytics provider, deployment automation or live-infrastructure
 PASS is part of these slices.
 
-The next roadmap is operational rather than another product module: select and
-record the API/worker/PostgreSQL platform, token provisioning, secrets,
-backup/restore, observability and rollback model; then configure hosted CI and
-run the persisted live Coston2 gate. None of that infrastructure is currently
-present in this repository.
+## MLP implementation and infrastructure roadmap
+
+[ADR 0029](../adr/0029-digitalocean-vds-deployment.md) selects the deployment
+target without provisioning it. One DigitalOcean Droplet/VDS will use Docker
+Compose to run Web, API, worker and PostgreSQL behind Caddy with same-origin
+`/api`. Sites remains compatibility-only. Hosting is not yet provisioned and
+the repository has no current hosted or deployed PASS.
+
+Credential-free delivery covers 022–029A:
+
+- **027A** packages the local and VDS Docker runtime, Caddy/Web routing,
+  private Compose networks and a persistent PostgreSQL volume. Public exposure
+  is limited to 80/443; SSH is restricted, while 5432, API/worker host ports
+  and the Docker socket remain private.
+- **027B** adds a one-shot checksummed migration runner under a PostgreSQL
+  advisory lock, exact schema verification, `/healthz`, `/readyz`, a worker
+  heartbeat and retention behavior.
+- **027C** adds off-host WAL archiving plus base backup for PITR and proves a
+  credential-free MinIO restore drill. A Droplet backup is secondary host
+  recovery, not database/PITR evidence.
+- **028A local release truth** builds release images once, records immutable
+  GHCR digests and tests deploy, promotion and rollback automation in dry-run
+  and local Docker composition. It performs no SSH, DNS, registry push or
+  Spaces effect.
+
+After all 022–029A credential-free modules are implemented, one unified local
+full matrix runs once. Two independent verifiers then sign the same tree hash.
+The release requires two independent PASS reports for the same tree hash.
+Credentials are requested only after that full matrix and both PASS reports.
+Credentials for DNS, SSH and Spaces are issued strictly only after 022–029A;
+the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
+
+- **028B credential gate** may then provision isolated staging on the selected
+  DigitalOcean VDS, configure DNS/restricted SSH/private Spaces, pull the exact
+  GHCR digests, run migrations, hosted browser smoke, restore drill and the
+  persisted live Coston2 gate. It does not rebuild an image.
+- **029 promotion and canary** promotes those exact staging digests to
+  production, records schema/backup/readiness evidence and runs the seven-day
+  canary. A code change returns the plan to focused RED/GREEN and requires a new
+  unified matrix and two-PASS freeze before another credentialed deployment.
 
 ## Validation policy
 
-Each row above is a separate candidate. RED/GREEN development stays focused and
-fast; the full matrix runs before that row is frozen, followed by two independent
-PASS reports on one tree hash. See `docs/development/roles.md` and
-`docs/runbook.md` for the exact cadence and commands.
+Each module above retains strict focused TDD: frozen RED, nearest baseline,
+GREEN core/surfaces, affected coverage and targeted verification. Those
+targeted reviews are not release PASS reports. The full/unified repository
+matrix runs once after all credential-free 022–029A modules, not after every
+small edit. A release candidate exists only after that matrix and two
+independent PASS reports on one exact tree hash. See
+`docs/development/roles.md` and `docs/runbook.md` for the exact cadence.
 
 Slice 017 passed both independent verification roles on commit
 `57099232f957123f11574e8137948de1467d1d6d` and tree

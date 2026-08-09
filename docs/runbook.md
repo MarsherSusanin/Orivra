@@ -26,6 +26,46 @@ npm run dev
 PostgreSQL, API и worker. Без API интерфейс обязан показывать честное
 configuration/network state, а не demo run.
 
+### Выбранная VDS topology, ещё не реализованная
+
+[ADR 0029](adr/0029-digitalocean-vds-deployment.md) выбирает один
+DigitalOcean Droplet/VDS. Docker Compose должен запускать Web, API, worker и
+PostgreSQL на том же VDS. Caddy остаётся единственным public reverse proxy,
+завершает TLS и передаёт same-origin `/api/*` в API. Sites остаётся
+compatibility-only artifact, а не production host.
+
+DigitalOcean Cloud Firewall и host firewall разрешают public inbound только на
+80/443. SSH restricted административным allowlist или VPN. Не expose host port
+5432; API и worker не получают public host ports. Не монтируйте Docker socket в
+Web, API, worker, migration или backup containers. PostgreSQL хранит данные в
+persistent named volume, отдельном для production и temporary staging.
+
+Release composition должна получать Web/API/worker из GHCR по immutable image
+digest (`@sha256`). One-shot migration job из exact release image проверяет
+checksummed migration history, удерживает PostgreSQL advisory lock, применяет
+изменения и подтверждает schema version before API/worker app startup. API и
+worker не выполняют migration при собственном старте.
+
+`/healthz` является process-only liveness. `/readyz` проверяет database,
+verified schema version и worker heartbeat; stale heartbeat должен возвращать
+degraded readiness, даже если containers продолжают работать. Эти endpoints,
+Compose files и Docker images ещё не реализованы, поэтому этот раздел не
+является Docker, hosted или deployed PASS.
+
+Database recovery contract использует continuous WAL archive и base backup для
+PITR в private S3-compatible DigitalOcean Spaces. До получения
+credentials локальный Docker gate выполняет MinIO restore drill в новый
+изолированный PostgreSQL volume. A Droplet backup does not replace the database
+backup or PITR plan. Он остаётся только дополнительным host-recovery snapshot.
+
+Официальные operational references:
+
+- [DigitalOcean Cloud Firewalls](https://docs.digitalocean.com/products/networking/firewalls/getting-started/quickstart/);
+- [DigitalOcean Droplet backup behavior](https://docs.digitalocean.com/products/backups/details/features/);
+- [DigitalOcean Spaces S3 compatibility](https://docs.digitalocean.com/products/spaces/reference/s3-compatibility/);
+- [Docker Compose production guidance](https://docs.docker.com/compose/how-tos/production/);
+- [PostgreSQL continuous archiving and PITR](https://www.postgresql.org/docs/current/continuous-archiving.html).
+
 ## 3. PostgreSQL и миграции
 
 Применяйте миграции строго по номеру к пустой или поддерживаемой предыдущей схеме:
@@ -40,7 +80,11 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/006_wallet_ide
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/007_account_token_management.sql
 ```
 
-Автоматизированного production migration runner и down migrations в репозитории нет. Перед инфраструктурным rollout необходимо выбрать владельца миграций и backup/restore процедуру; до этого безопасная стратегия изменения схемы — additive migration и roll-forward.
+Автоматизированного production migration runner и down migrations в репозитории
+нет. ADR 0029 уже выбирает one-shot checksummed/advisory-lock runner как будущего
+владельца миграций, но его реализация относится к 027B. До его GREEN безопасная
+стратегия изменения схемы — additive migration и roll-forward; hosting is not
+yet provisioned.
 
 Первичный browser project token выпускают только публичные wallet-auth routes:
 сервер создаёт пятиминутный EIP-4361 challenge, а валидная локально проверенная
@@ -138,14 +182,14 @@ session ID и timestamps, хотя её metadata ограничена публи
 2. `GREEN` — focused tests изменяемого package и прямых потребителей.
 3. Перед коммитом волны — `npm run typecheck`, affected regression и affected
    coverage gate.
-4. Перед freeze каждого вертикального среза — полная матрица ниже.
+4. После refactor — те же focused/affected gates и targeted verification.
 
 Изменение public schema, миграции, auth/trust boundary, journal/replay,
 workspace/build graph, Action artifact или Sites запускает соответствующие
-полные gates уже в affected regression. Полный проход нельзя откладывать до
-окончания нескольких срезов.
+affected gates сразу, но не несвязанный repository matrix. Для MLP 022–029A
+полная матрица запускается once after все credential-free modules завершены.
 
-### Полная матрица перед freeze
+### Единая полная матрица перед MLP candidate freeze
 
 Минимальная герметичная проверка:
 
@@ -161,6 +205,21 @@ npm run build
 npm run test:sites
 npx vitest run tests/action-artifact-sync.contract.test.ts --reporter=verbose
 ```
+
+После добавления 027A–029A эта unified full matrix должна включать Docker image,
+Compose routing, migration concurrency, restart/persistence и MinIO
+backup/restore gates. До появления соответствующих checked-in commands нельзя
+заявлять их PASS.
+
+После единого full PASS фиксируются commit и tree hash. Два independent
+verifier одновременно, read-only, проверяют один и тот же tree. Credentials для
+DNS, SSH и Spaces выдаются strictly only after 022–029A, unified full matrix и
+два независимых PASS; 028B не может начинаться раньше. Любая production-правка
+после freeze требует affected RED/fix, повторной unified matrix и нового exact
+tree hash.
+
+Release authorization requires two independent PASS reports for that exact
+tree hash.
 
 Standalone Action artifact-sync test обязателен после изменения
 `packages/action`, public contracts или импортируемого domain-кода. Checked-in
@@ -200,6 +259,10 @@ npm run preview
 
 ## 8. Sites package
 
+Это compatibility gate, а не выбранный production host. VDS Docker/Caddy
+routing станет отдельным production-hosting gate в 027A; существующий Sites
+contract сохраняется до отдельного deprecation slice.
+
 ```bash
 npm run build
 npm run test:sites
@@ -236,10 +299,11 @@ PR использует local canonical bundle (`PROOFLINE_REPLAY_BUNDLE_PATH`) 
 Live flow имеет один общий timeout 10 минут. PASS требует persisted run identity, tx hash, voting round, proof checksum, успешную consumer verification, byte-identical replay и отсутствие rebroadcast после записанного tx hash.
 
 В репозитории нет `.github/workflows`; `packages/action/action.yml` — готовый
-Action package, а не доказательство настроенного CI. До выбора инфраструктуры
-live gate ожидаемо блокирован отсутствием размещённых API/worker/PostgreSQL,
-provisioning и secrets. Не переводите merge queue на direct-worker или
-simulation fallback.
+Action package, а не доказательство настроенного CI. DigitalOcean VDS target
+выбран ADR 0029, но hosting is not yet provisioned. Live gate ожидаемо
+блокирован отсутствием размещённых API/worker/PostgreSQL, DNS, restricted SSH,
+Spaces/backup evidence и secrets. Не переводите merge queue на direct-worker
+или simulation fallback.
 
 ## 10. Наблюдаемость и диагностика
 
@@ -247,6 +311,10 @@ simulation fallback.
 distributed traces, alerting и централизованное log storage не настроены; их
 нельзя указывать как доступные сигналы до выбора инфраструктуры. API не должен
 логировать authorization headers или request bodies с capabilities.
+
+027B должен разделить `/healthz`, `/readyz` и persisted worker heartbeat.
+Container-running state сам по себе не доказывает readiness. До GREEN этих
+сигналов их нельзя описывать как действующий monitoring.
 
 Проверяйте состояние в таком порядке:
 
@@ -272,7 +340,20 @@ Upstream Coston2 outage блокирует release. Override возможен т
 
 ## 11. Rollback и восстановление
 
-- Web/API/worker artifact rollback зависит от ещё не выбранного hosting provider и пока не автоматизирован.
-- Не откатывайте journal или migration destructive SQL вручную.
-- При ошибке приложения верните предыдущий совместимый artifact; при ошибке схемы выпускайте forward migration либо восстанавливайте подтверждённый backup по процедуре выбранной платформы.
-- После любого production edit или изменения candidate tree повторите обе независимые verification waves на новом tree hash.
+- Target provider выбран в ADR 0029, но VDS promotion/rollback automation ещё
+  не реализована и hosting is not currently deployed.
+- Staging и production выбирают один exact immutable GHCR digest; server-side
+  rebuild запрещён. Application rollback возвращает предыдущий
+  schema-compatible digest из release manifest.
+- Не откатывайте journal или migration destructive SQL вручную. При ошибке
+  схемы выпускайте forward repair либо восстанавливайте подтверждённый
+  WAL/base-backup PITR в новый PostgreSQL volume, проверяйте его и только затем
+  выполняйте явное переключение.
+- 027C должен доказать MinIO restore drill локально. Droplet backup не считается
+  database restore evidence.
+- 028B получает credentials только после credential-free 022–029A, unified
+  full matrix и двух independent PASS на одном tree hash. Slice 029 затем
+  выполняет promotion и canary без rebuild candidate images.
+- После любого production edit или изменения candidate tree повторите affected
+  RED/GREEN, unified matrix и обе независимые verification waves на новом tree
+  hash.

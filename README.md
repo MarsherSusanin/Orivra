@@ -47,7 +47,10 @@ blockchain-операций.
   и Composer уже используют общий wallet sign-in; следующий Web-срез 023C3A
   подключает `/settings` account view и безопасный one-time token reveal.
 - Реализованы, но не размещены Web, PostgreSQL API, restart-safe worker, CLI,
-  GitHub Action package и Sites package.
+  GitHub Action package и Sites compatibility package. Production target
+  выбран в [ADR 0029](docs/adr/0029-digitalocean-vds-deployment.md): один
+  DigitalOcean Droplet/VDS с Docker Compose, Caddy, Web, API, worker и
+  PostgreSQL. Он ещё не provisioned и не deployed.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Privacy-safe product events сводятся локально в детерминированный
@@ -87,8 +90,8 @@ journey требует отдельно запущенных PostgreSQL, API и 
 | `npm run test:postgres` | PostgreSQL contracts; Testcontainers включается отдельно |
 | `npm run test:solidity` | Компиляция и проверки canonical consumers |
 | `npm run test:e2e` | Герметичный Node replay через API и worker; не запускает browser |
-| `npm run build` | Web/Sites release package |
-| `npm run test:sites` | Sites routing и artifact contract |
+| `npm run build` | Web и Sites compatibility package |
+| `npm run test:sites` | Sites compatibility routing и artifact contract |
 
 Полная матрица проверок, конфигурация API/worker и live gate описаны в [операционном runbook](docs/runbook.md).
 
@@ -97,6 +100,25 @@ gate на локальном built/preview Web. Он фиксируется дл
 конкретных commit/tree и не имеет отдельной автоматизированной repo-команды;
 PASS `npm run test:e2e` не заменяет browser PASS. Автоматический CI workflow
 сейчас также отсутствует: команды из runbook запускаются вручную.
+
+## Выбранная инфраструктурная граница
+
+Будущий MLP deployment использует один DigitalOcean Droplet/VDS. Docker Compose
+запускает на нём Web, API, worker и PostgreSQL, а Caddy остаётся единственным
+public ingress и даёт Web same-origin `/api`. Публичны только 80/443; SSH
+ограничивается administrator allowlist или VPN. PostgreSQL 5432, API/worker
+ports и Docker socket не публикуются.
+
+Решение пока является только reviewable architecture contract. В репозитории
+ещё нет реализованной VDS composition, provisioned DNS, SSH, GHCR/Spaces
+credentials, hosted staging или production deployment. Sites сохраняется
+только как compatibility artifact; это больше не выбранный production host.
+
+Credentials разрешены только после credential-free slices 022–029A, одного
+unified local full matrix и двух независимых PASS для одного tree hash.
+Детали delivery order, backup/PITR и promotion находятся в
+[product roadmap](docs/development/product-roadmap.md) и
+[runbook](docs/runbook.md).
 
 ## Поток продукта
 
@@ -140,6 +162,10 @@ Web2JsonManifestV1
   клиентом, но `POST /v1/runs` fail-closed отвечает
   `409 NETWORK_CAPABILITY_DISABLED`; persisted evidence остаётся Coston2-only.
 - Run history append-only; projection и bundle вычисляются из упорядоченных событий.
+- Deployment target закреплён ADR 0029: immutable GHCR digests, one-shot
+  checksummed migration под PostgreSQL advisory lock, persistent database
+  volume, `/healthz`, `/readyz`, worker heartbeat и off-host WAL/base-backup
+  PITR. Эти механизмы ещё не реализованы и не являются текущим hosted PASS.
 - Любой release candidate должен получить два независимых PASS на одном tree hash.
 
 ## Документация

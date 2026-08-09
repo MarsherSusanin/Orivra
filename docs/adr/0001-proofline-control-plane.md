@@ -2,6 +2,10 @@
 
 Status: accepted
 
+The Sites-hosting portion is partially superseded by
+[ADR 0029](0029-digitalocean-vds-deployment.md). All other control-plane and
+package-boundary decisions remain accepted.
+
 ## Decision
 
 Use an npm-workspace TypeScript monorepo with a pure domain core, versioned public contracts, a Node API, a PostgreSQL-backed worker, a Coston2 adapter package, React/Vite Web, CLI, GitHub Action, and Solidity consumer fixtures.
