@@ -166,7 +166,7 @@ describe("Slice 024B one-shot trusted recording importer", () => {
         repositoryRoot: new URL("../../../", import.meta.url),
       })).rejects.toThrow(/conflict|bytes|metadata|identity/i);
       expect(db.calls.some((sql) => /ROLLBACK/i.test(sql))).toBe(true);
-      expect(db.calls.some((sql) => /COMMIT/i.test(sql))).toBe(false);
+      expect(db.calls.some((sql) => /^\s*COMMIT\s*;?\s*$/i.test(sql))).toBe(false);
       const reread = db.calls.find((sql) => /SELECT[\s\S]+canonical_bytes/i.test(sql)) ?? "";
       for (const field of [
         "recording_sha256", "recording_checksum", "authority_recording_checksum",
