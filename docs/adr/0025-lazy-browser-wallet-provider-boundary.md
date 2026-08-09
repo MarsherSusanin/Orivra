@@ -67,12 +67,33 @@ message and canonical address, so signing cannot precede the EOA check. A
 signature must be exact 65-byte hexadecimal evidence.
 
 Numeric provider code `4001` at account, switch, add, code or sign phases maps
-to the same bounded rejected error. Every other provider failure maps to a
-bounded provider/offline error. Raw error code, message, data, stack and RPC
-response bytes are discarded. Contract-wallet, disabled-network, validation,
+to the same bounded rejected error only when `code` is a safely read own data
+property. Inherited, accessor, Proxy and otherwise hostile code evidence is not
+trusted. Every other provider failure maps to a bounded provider/offline error.
+Raw identity, code, message, data, cause, stack and RPC response bytes are
+discarded. Exported class identity is never an internal-trust signal: a
+provider may import, construct or mutate any exported value. Internal errors
+therefore use an unforgeable module-private distinction or are normalized at
+every external boundary. Contract-wallet, disabled-network, validation,
 cancelled and stale results use separate fixed adapter-owned codes.
 
-Discovery, connection and signing are single-flight. Cancellation or close
+Capability parsing is also an external boundary. Ordinary invalid objects,
+throwing getters, Proxies and schema exceptions all become the existing fixed
+`NETWORK_CAPABILITY_INVALID` before provider I/O. The raw exception is never
+returned.
+
+Every `wallet_addEthereumChain` request receives a fresh deeply immutable
+metadata graph. The fixed RPC, explorer, currency and chain values cannot be
+mutated by a provider and no reference is shared with a later request or
+adapter. The metadata constant is not exported.
+
+Discovery, connection and signing are intent-sensitive single-flight.
+Discovery has one input-free intent. Connection coalesces only the same
+provider reference and the same schema-canonical enabled Coston2 capability;
+signing coalesces only the exact message on the same verified connection. A
+different provider, capability or message while an operation is pending fails
+without another RPC or an aliased result as fixed
+`WALLET_OPERATION_IN_PROGRESS`. Cancellation or close
 increments an attempt generation before a late promise can publish a provider,
 connection or signature. A new explicit attempt after cancellation cannot be
 overwritten by the old result. Close is terminal.

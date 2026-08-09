@@ -61,22 +61,32 @@ The adapter-owned codes are exactly `NETWORK_CAPABILITY_DISABLED`,
 `WALLET_CHAIN_INVALID`, `WALLET_CHAIN_UNAVAILABLE`,
 `CONTRACT_WALLET_UNSUPPORTED`, `WALLET_PROVIDER_UNAVAILABLE`,
 `WALLET_CONNECTION_REQUIRED`, `WALLET_SIGNATURE_INVALID`,
-`WALLET_REQUEST_REJECTED` and `WALLET_OPERATION_CANCELLED`. Every error uses
+`WALLET_REQUEST_REJECTED`, `WALLET_OPERATION_IN_PROGRESS` and
+`WALLET_OPERATION_CANCELLED`. Every error uses
 the fixed public message `Wallet request failed.` and carries no raw cause.
 
-Every operation is single-flight. Cancellation and close make late provider
-responses stale; a subsequent explicit attempt owns the current generation.
+Every operation is intent-sensitive single-flight. Duplicate discovery,
+provider+canonical-capability connection, or exact-message signing coalesces.
+A different provider/capability/message during its matching flight receives
+`WALLET_OPERATION_IN_PROGRESS` without another effect or an aliased result.
+Cancellation and close make late provider responses stale; a subsequent
+explicit attempt owns the current generation.
 
 ## RED and focused validation
 
 Frozen test:
 
 - `src/services/slice023c2a-lazy-wallet-provider-adapter.contract.test.ts`.
+- `src/services/slice023c2a-wallet-provider-corrective.contract.test.ts`.
 
 Intentional RED: `wallet-provider-adapter` does not exist. The test freezes
 lazy import/construction, discovery ordering/fallback, capability fail-closed,
 exact RPC order and add-chain metadata, EOA proof, sanitized failures and
 single-flight/cancellation behavior.
+
+The corrective RED additionally freezes external-error normalization even for
+forged same-class and hostile Proxy values, exceptional capability parsing,
+fresh deeply immutable add-chain parameters, and intent-sensitive flights.
 
 Focused GREEN must run:
 
