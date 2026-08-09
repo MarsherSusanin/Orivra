@@ -29,6 +29,34 @@ describe("Slice 024B token-free canonical URL attack demo client", () => {
     expect(init?.body).toBeUndefined();
   });
 
+  it("invokes an injected browser fetch with the global receiver", async () => {
+    const module = await clientModule();
+    expect(module.createCanonicalUrlAttackDemoClient).toBeTypeOf("function");
+    const summary = makeCanonicalUrlAttackDemoSummaryFixture();
+    const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+    async function brandedFetch(
+      this: unknown,
+      target: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      calls.push([target, init]);
+      return Response.json(summary);
+    }
+    const client = module.createCanonicalUrlAttackDemoClient({ fetch: brandedFetch });
+
+    await expect(client.getSummary()).resolves.toEqual(summary);
+    expect(calls).toHaveLength(1);
+    const [target, init] = calls[0];
+    const url = new URL(String(target));
+    expect(`${url.origin}${url.pathname}${url.search}`).toBe(
+      "http://localhost/api/v1/demo/canonical-url",
+    );
+    expect(init).toMatchObject({ method: "GET" });
+    expect(new Headers(init?.headers).has("authorization")).toBe(false);
+    expect(init?.body).toBeUndefined();
+  });
+
   it("strictly validates the public summary before exposing it", async () => {
     const module = await clientModule();
     expect(module.createCanonicalUrlAttackDemoClient).toBeTypeOf("function");
