@@ -33,6 +33,22 @@ const walletAuthRuntimeExports = [
   "AccountTokenRevokedV1Schema",
 ] as const;
 
+const workerArtifactForbiddenRules = [
+  ["project-token environment compatibility", /PROJECT_TOKEN/],
+  ["projectToken execution field", /projectToken/],
+  ["privateKey execution field", /\[\s*["']privateKey["']\s*\]\s*:/],
+  ["wildcard private-key lookup", /endsWith\(["']PRIVATE_KEY["']\)/],
+  [
+    "injectable compatibility runtime",
+    /compatibilityRuntime|createRuntime\?\./,
+  ],
+  [
+    "synthetic live handler marker",
+    /RUN_LIVE_COSTON2|\[\s*["']RUN["']\s*,\s*["']LIVE["']\s*,\s*["']COSTON2["']\s*\]/,
+  ],
+  ["legacy credential error", /Legacy test credentials/],
+] as const;
+
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(directory, entry.name);
@@ -116,6 +132,16 @@ describe("Slice 009 production worker purity", () => {
       ...sourceFiles(resolve(root, "packages/domain/src")),
     ];
     expect(files.flatMap(moduleLoadEffectViolations)).toEqual([]);
+  });
+
+  it("exports the shared auth timestamp helper directly without loading wallet custody", () => {
+    const contractsRoot = readFileSync(
+      resolve(root, "packages/contracts/src/index.ts"),
+      "utf8",
+    );
+    expect(contractsRoot).toMatch(
+      /export\s*\{[^}]*\bisCanonicalAuthTimestampV1\b[^}]*\}\s*from\s*["']\.\/auth-timestamp["']/s,
+    );
   });
 
   it("keeps every wallet-auth runtime export identical through the root entry", async () => {
@@ -202,10 +228,10 @@ describe("Slice 009 production worker purity", () => {
       }
       expect(freshArtifact).toMatch(/await startProductionWorker\(\)/);
       expect(freshArtifact).toMatch(/PROOFLINE_COSTON2_PRIVATE_KEY/);
-      const artifactFindings = matchingLabels(freshArtifact, [
-        ["project-token environment compatibility", /PROJECT_TOKEN/],
-        ["projectToken execution field", /projectToken/],
-      ]);
+      const artifactFindings = matchingLabels(
+        freshArtifact,
+        workerArtifactForbiddenRules,
+      );
       const featureFindings = inputContributions
         .filter(
           ({ input, bytesInOutput }) =>
@@ -251,15 +277,7 @@ describe("Slice 009 production worker purity", () => {
     const artifact = readFileSync(workerArtifact, "utf8");
 
     expect(
-      matchingLabels(artifact, [
-        ["project-token environment compatibility", /PROJECT_TOKEN/],
-        ["projectToken execution field", /projectToken/],
-        ["privateKey execution field", /\[\s*["']privateKey["']\s*\]\s*:/],
-        ["wildcard private-key lookup", /endsWith\(["']PRIVATE_KEY["']\)/],
-        ["injectable compatibility runtime", /compatibilityRuntime|createRuntime\?\./],
-        ["synthetic live handler marker", /RUN_LIVE_COSTON2|\[\s*["']RUN["']\s*,\s*["']LIVE["']\s*,\s*["']COSTON2["']\s*\]/],
-        ["legacy credential error", /Legacy test credentials/],
-      ]),
+      matchingLabels(artifact, workerArtifactForbiddenRules),
     ).toEqual([]);
   });
 

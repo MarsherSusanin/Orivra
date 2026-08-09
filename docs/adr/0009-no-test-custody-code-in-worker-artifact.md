@@ -21,14 +21,21 @@ packages `@proofline/contracts` and `@proofline/domain` declare
 without treating schema construction as an observable package effect. Wallet
 and account-authentication contracts live at the feature subpath
 `@proofline/contracts/wallet-auth`; the root contracts entry re-exports the same
-runtime values for backwards compatibility.
+runtime values for backwards compatibility. The shared
+`isCanonicalAuthTimestampV1` helper lives in `./auth-timestamp`: the contracts
+root exports it directly from that module, while wallet-auth may re-export the
+same value. A root helper import therefore does not make the custody feature
+contribute worker output bytes.
 
 Worker artifact evidence is built into a fresh temporary directory from
 `apps/worker/src/entry.ts` with the production esbuild settings and a metafile.
 A checked-in or previously rebuilt `dist/worker.js` is not sufficient evidence.
 The fresh artifact must retain the entry/bootstrap/worker/live-runtime execution
 graph and the top-level `startProductionWorker` call, while excluding
-`projectToken`/`PROJECT_TOKEN`. In the selected metafile output, unused
+the full original ADR 0009 forbidden set: `projectToken`/`PROJECT_TOKEN`, a
+`privateKey` execution request field, wildcard private-key lookup, injectable
+compatibility runtime, synthetic live handler and legacy credential error. In
+the selected metafile output, unused
 `wallet-auth` and `canonical-url-attack-demo` inputs contribute exactly zero
 bytes; esbuild may still list a parsed side-effect-free re-export. Required
 worker, API persistence, contracts, domain and FDC runtime inputs each retain a

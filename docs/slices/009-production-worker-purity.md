@@ -15,6 +15,8 @@ private-key, and synthetic live-handler logic.
   execution field, legacy credential error, or synthetic live handler marker.
 - Contracts expose wallet/account auth through
   `@proofline/contracts/wallet-auth` while preserving identical root exports;
+  the root exports `isCanonicalAuthTimestampV1` directly from the shared
+  `./auth-timestamp` module, so helper-only imports do not load wallet custody;
   contracts and domain declare `sideEffects: false` and pass the module-load
   purity source gate.
 - Artifact evidence comes from a fresh temporary production-equivalent esbuild
