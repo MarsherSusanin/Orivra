@@ -28,6 +28,12 @@ once without another wallet prompt.
 - The raw token exists only as component-memory text. It is absent from
   storage, URL/history, analytics, logs, attributes and serialized errors.
 - Failure is redacted and retains the user's form.
+- Account issue/refresh flights are keyed by an internal authority generation,
+  not bearer equality. Late A evidence cannot affect B even when B receives the
+  same token bytes; the generation is never public or rendered.
+- Same-generation refresh and identical issue intents coalesce. A different
+  concurrent issue intent fails safe/busy without a second request; a new
+  generation owns distinct flights.
 
 Revocation and current-session sign-out are deferred to 023C3B. Run retention
 and deletion remain Slice 027. This slice changes no contract, API, migration,

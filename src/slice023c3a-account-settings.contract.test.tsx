@@ -7,6 +7,7 @@ import type {
   AccountTokenCreatedV1,
   AccountTokenSummaryV1,
   AccountV1,
+  WalletSessionRequestV1,
   WalletSessionV1,
 } from "@proofline/contracts";
 import type { WalletAccessServices } from "./services/wallet-access-client";
@@ -17,7 +18,13 @@ const CONTEXT_PATH = "./wallet-session-context";
 const PROJECT_TOKEN = `project_${"a".repeat(64)}`;
 const RAW_TOKEN = `project_${"d".repeat(64)}`;
 const ADDRESS = "0x1111111111111111111111111111111111111111";
+const ADDRESS_B = "0x2222222222222222222222222222222222222222";
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
+const SESSION_REQUEST: WalletSessionRequestV1 = {
+  version: "1",
+  challengeId: `challenge_${"e".repeat(64)}`,
+  signature: `0x${"11".repeat(65)}`,
+};
 
 type SettingsModule = {
   AccountSettings: ComponentType<{ onRequireWallet(): void }>;
@@ -29,6 +36,11 @@ type ContextModule = {
     storage: StorageLike;
     children: ReactNode;
   }>;
+  useWalletSession(): {
+    snapshot: unknown;
+    createSession(request: WalletSessionRequestV1): Promise<void>;
+    forgetBrowser(): void;
+  };
 };
 
 const active: AccountTokenSummaryV1 = {
@@ -78,6 +90,11 @@ const refreshedAccount: AccountV1 = {
   ...account,
   tokens: [createdItem, active, expired, revoked],
 };
+const accountB: AccountV1 = {
+  ...account,
+  wallet: { kind: "eoa", address: ADDRESS_B },
+  tokens: [],
+};
 const session: WalletSessionV1 = {
   version: "1",
   wallet: account.wallet,
@@ -85,6 +102,12 @@ const session: WalletSessionV1 = {
   projectToken: PROJECT_TOKEN,
   issuedAt: "2026-08-09T00:00:00.000Z",
   expiresAt: "2026-08-09T12:00:00.000Z",
+};
+const sameBearerSessionB: WalletSessionV1 = {
+  ...session,
+  wallet: accountB.wallet,
+  issuedAt: "2026-08-09T01:00:00.000Z",
+  expiresAt: "2026-08-09T13:00:00.000Z",
 };
 const created: AccountTokenCreatedV1 = {
   version: "1",
@@ -164,15 +187,30 @@ async function loadUi() {
 }
 
 async function renderSettings(access = services(), stored = storage()) {
-  const { AccountSettings, WalletSessionProvider } = await loadUi();
+  const { AccountSettings, WalletSessionProvider, useWalletSession } = await loadUi();
   const requireWallet = vi.fn();
+  let sessionControl: ReturnType<ContextModule["useWalletSession"]> | null = null;
+  function CaptureSession() {
+    sessionControl = useWalletSession();
+    return null;
+  }
   const rendered = render(
     <WalletSessionProvider services={access} storage={stored.port}>
+      <CaptureSession />
       <AccountSettings onRequireWallet={requireWallet} />
     </WalletSessionProvider>,
   );
   expect(await screen.findByRole("heading", { name: "Account settings" })).toBeVisible();
-  return { ...rendered, access, stored, requireWallet };
+  return {
+    ...rendered,
+    access,
+    stored,
+    requireWallet,
+    session: () => {
+      if (sessionControl === null) throw new Error("wallet session was not captured");
+      return sessionControl;
+    },
+  };
 }
 
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
@@ -430,5 +468,45 @@ describe("Slice 023C3A authenticated account Settings", () => {
     expect(Object.values(localStorage)).not.toContain(RAW_TOKEN);
     expect(window.location.href).not.toContain(RAW_TOKEN);
     expect(JSON.stringify(browserStorageWrite.mock.calls)).not.toContain(RAW_TOKEN);
+  });
+
+  it("never reveals or refreshes a late A issue after B authenticates with the same bearer bytes", async () => {
+    const issuedA = deferred<AccountTokenCreatedV1>();
+    const getAccount = vi.fn()
+      .mockResolvedValueOnce(account)
+      .mockResolvedValueOnce(accountB);
+    const createAccountToken = vi.fn(() => issuedA.promise);
+    const createWalletSession = vi.fn(async () => sameBearerSessionB);
+    const stored = storage();
+    const browserStorageWrite = vi.spyOn(Storage.prototype, "setItem");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    const rendered = await renderSettings(
+      services({ getAccount, createAccountToken, createWalletSession }),
+      stored,
+    );
+    await fillValidForm(user);
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+    expect(createAccountToken).toHaveBeenCalledOnce();
+
+    act(() => rendered.session().forgetBrowser());
+    await act(async () => { await rendered.session().createSession(SESSION_REQUEST); });
+    expect(await screen.findByText(ADDRESS_B)).toBeVisible();
+    await waitFor(() => expect(getAccount).toHaveBeenCalledTimes(2));
+    expect(getAccount).toHaveBeenLastCalledWith({ projectToken: PROJECT_TOKEN });
+
+    await act(async () => issuedA.resolve(created));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole("dialog", { name: "Save this token now" })).not.toBeInTheDocument();
+    expect(getAccount).toHaveBeenCalledTimes(2);
+    expect(document.body.textContent).not.toContain(RAW_TOKEN);
+    expect(document.body.textContent).not.toMatch(/authority generation/i);
+    expect(stored.values()).not.toContain(RAW_TOKEN);
+    expect(Object.values(sessionStorage)).not.toContain(RAW_TOKEN);
+    expect(Object.values(localStorage)).not.toContain(RAW_TOKEN);
+    expect(window.location.href).not.toContain(RAW_TOKEN);
+    expect(JSON.stringify(browserStorageWrite.mock.calls)).not.toContain(RAW_TOKEN);
+    expect(JSON.stringify([...log.mock.calls, ...error.mock.calls])).not.toContain(RAW_TOKEN);
   });
 });

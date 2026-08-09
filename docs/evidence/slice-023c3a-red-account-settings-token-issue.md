@@ -71,3 +71,32 @@ account-operation branches yet. The frozen cases map every reported reachable
 decision; the production writer must run include-only coverage after GREEN and
 meet at least 85% lines / 80% branches for the new component and changed
 context before candidate freeze.
+
+## Authority-generation corrective RED
+
+Rejected candidate `1d34635cfc241f20825f62a3e598b48a59d0b893` /
+tree `3f537020790c3826438dcee5c62c73fe3f3ac75e` compared account effects only by
+bearer and kept one global refresh flight. Five focused race contracts now
+cover:
+
+1. late A issue after B authentication with the same bearer bytes;
+2. full Settings behavior for that same transition;
+3. unresolved refresh A followed by a distinct refresh B;
+4. same-generation refresh coalescing;
+5. same-generation identical issue coalescing and different-intent safe busy.
+
+Recorded evidence:
+
+- typecheck and diff-check — PASS;
+- focused Settings/context contracts — 2 files / 15 tests: 11 PASS and exactly
+  4 intentional RED;
+- the four RED reasons are late A raw result returned by context, late A secret
+  revealed by Settings, B refresh aliased to A, and identical issue intent not
+  coalesced; same-generation refresh already passes;
+- nearest unmodified Settings route/navigation/provider baseline — 4 files /
+  20 tests PASS.
+
+The tests use the real provider/controller transitions rather than a token-only
+mock. They require the opaque generation to stay absent from runtime context
+keys, serializable snapshot, DOM, public context type and analytics imports.
+No production, public schema, API or persistence change is part of this RED.

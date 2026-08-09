@@ -62,6 +62,30 @@ analytics, logs, DOM attributes or serialized errors. Account summaries keep
 the order supplied by `AccountV1`; status is `revoked` when `revokedAt` exists,
 otherwise `expired` after `expiresAt`, otherwise `active`.
 
+### Authority generation and in-flight account operations
+
+Bearer equality is not session identity. The provider maintains an internal
+opaque authority generation which changes whenever browser authority is
+accepted, forgotten, signed out, superseded or closed. It is not part of
+`WalletSessionContextValue`, `WalletSessionSnapshot`, DOM, analytics or any
+public schema. Account operations capture both bearer and generation before
+calling a service.
+
+A token issue is single-flight within one generation. The frozen intent is the
+exact idempotency key plus the strict request tuple. A concurrent identical
+intent receives the same Promise and performs one service call; a different
+intent fails locally with fixed safe `409 IDEMPOTENCY_CONFLICT` evidence and
+does not call the service. If authority generation changes before the response,
+a success containing the raw token is discarded and the caller receives fixed
+safe `403 ACCOUNT_SESSION_REQUIRED`; the secret is absent from the returned
+value, serialized failure, UI, refresh, storage, logs and analytics. Reissuing
+the same bearer bytes in a later session does not make the old result current.
+
+Account refresh is also single-flight per generation. Concurrent refreshes in
+one generation coalesce. A new generation may start its own refresh while an
+old one is unresolved. An old completion cannot update the new account or
+clear its flight; only current-generation evidence may replace the snapshot.
+
 ## Consequences
 
 The browser can bootstrap CLI and Action usage without teaching users manual
