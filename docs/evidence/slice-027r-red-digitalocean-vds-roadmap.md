@@ -66,8 +66,8 @@ Three corrective contracts now require:
 3. after the unified matrix and two PASS reports, 028B publishes those exact
    OCI bytes to GHCR without rebuild, verifies remote digests against the
    frozen manifest before staging pull, aborts a mismatch, limits the VDS pull
-   credential to read-only and joins publication evidence to the release
-   manifest.
+   credential to read-only and records separate publication evidence bound to
+   the frozen release-manifest checksum.
 
 The prior eight contracts are unchanged controls. Recorded on the rejected
 parent above:
@@ -86,3 +86,48 @@ parent above:
 Candidate commit/tree are reported after commit. This correction changes no
 canonical implementation, production, infra, dependency, credential or network
 surface.
+
+## Final corrective RED — distinct digests and external publication evidence
+
+Rejected candidate `e7c7aa237ed518f4852f505253427156a727ef48` /
+tree `81891455aea72e5757f27a3a5385dab567ffc871` made the first corrective
+contracts GREEN but treated an archive checksum, an OCI image-manifest digest
+and credentialed publication evidence as if they were one mutable release
+manifest value.
+
+The frozen contract is corrected before adding implementation requirements:
+
+- every image entry has distinct `archiveSha256`, `imageManifestDigest`,
+  `platform` and repository/reference identity; the frozen manifest also binds
+  commit/tree and has its own canonical checksum;
+- 028B checks exact archive bytes only against `archiveSha256`, and the GHCR
+  remote digest only against `imageManifestDigest`; either mismatch aborts and
+  no rebuild is allowed;
+- publication/deployment evidence is a separate immutable append-only external
+  record containing `frozenReleaseManifestSha256`, commit/tree, remote
+  repository/digests, timestamp, operator and run evidence. It cannot rewrite
+  the frozen manifest, candidate tree or images;
+- the VDS may pull only the verified remote digest bound by that separate
+  record to the frozen manifest.
+
+The previous requirement that publication evidence be included in the frozen
+release manifest is explicitly removed. The original eleven tests remain, with
+their remote-digest expectation corrected to `imageManifestDigest`; three new
+tests freeze the manifest schema, digest-role separation and external evidence
+binding.
+
+Recorded on the rejected parent above:
+
+- `npm run typecheck` and `git diff --check` — PASS;
+- `node --test --test-reporter=dot
+  tests/slice027r-digitalocean-vds-roadmap.contract.test.mjs` — 14 tests:
+  10 unchanged controls PASS and exactly 4 intentional RED
+  (`..........XXXX`);
+- the four RED results are the corrected existing remote-digest comparison plus
+  the three new manifest-schema, digest-role and external-evidence contracts;
+- nearest unchanged documentation contract
+  `npm test -- tests/slice016-runbook.contract.test.ts --maxWorkers=1` — 1 file /
+  3 tests PASS.
+
+Candidate commit/tree are reported after commit. This wave changes no canonical
+implementation, production, infra, dependency, credential or network surface.

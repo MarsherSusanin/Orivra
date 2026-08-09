@@ -39,16 +39,23 @@ is split below; only 029B owns promotion and canary operations.
 
 The numeric boundary is executable rather than aspirational:
 
-- 028A locally builds and verifies OCI image archives and freezes their digest
-  manifest without registry credentials or external network access;
+- 028A locally builds and verifies OCI image archives. The frozen release
+  manifest records distinct `archiveSha256`, `imageManifestDigest`, `platform`
+  and repository/reference fields for each image, plus commit, tree and its own
+  canonical checksum, without registry credentials or external network access;
 - 029A is the credential-free local MLP validation/freeze: product gates and
   user testing run against recorded fixtures and local Compose with no
   credentials or external network;
 - only after the unified matrix and two PASS reports, 028B may load/copy/push
-  the exact frozen OCI bytes to GHCR without a rebuild. Remote digests must
-  match the frozen manifest before staging can pull; mismatch aborts;
-- the VDS GHCR pull credential is read-only, and publication evidence joins the
-  frozen release manifest;
+  the exact frozen OCI bytes to GHCR without a rebuild. It first matches those
+  bytes to `archiveSha256`, then compares the GHCR remote digest only with
+  `imageManifestDigest`; either mismatch aborts;
+- publication/deployment evidence is a separate immutable, append-only external
+  record. It contains `frozenReleaseManifestSha256`, commit, tree, remote
+  repository/digests, timestamp, operator and run evidence. It never edits the
+  frozen manifest, candidate tree or image bytes;
+- the VDS GHCR pull credential is read-only and may pull only the verified
+  remote digest bound by that separate evidence to the frozen manifest;
 - 029B, after 028B, owns credentialed production promotion and canary.
 
 No infrastructure, credentials, DNS, SSH session, Spaces bucket or network

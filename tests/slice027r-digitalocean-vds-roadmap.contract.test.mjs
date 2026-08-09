@@ -329,18 +329,110 @@ test("028B publishes the exact frozen OCI bytes to GHCR and fails closed before 
       /028B[\s\S]{0,520}(?:load[\s/,]+copy[\s/,]+push|load\/copy\/push)[\s\S]{0,160}(?:exact|same|frozen)[\s\S]{0,120}OCI/i,
       /028B[\s\S]{0,500}(?:after|only after)[\s\S]{0,180}two[\s\S]{0,80}PASS/i,
       /028B[\s\S]{0,620}(?:no rebuild|without rebuild|must not rebuild|never rebuild)/i,
-      /remote (?:image )?digest[\s\S]{0,220}(?:equals?|matches?)[\s\S]{0,180}(?:frozen|release) manifest/i,
+      /remote (?:image )?digest[\s\S]{0,220}(?:equals?|matches?)[\s\S]{0,120}imageManifestDigest/i,
       /digest mismatch[\s\S]{0,120}(?:abort|blocks?|fail(?:s)? closed)/i,
       /(?:before|prior to)[\s\S]{0,100}staging pull/i,
       /(?:VDS|Droplet)[\s\S]{0,180}GHCR pull credential[\s\S]{0,120}read[- ]only/i,
-      /publication evidence[\s\S]{0,180}(?:joins?|part of|included in)[\s\S]{0,120}(?:frozen )?release manifest/i,
     ]);
   }
 
   requirePatterns(`${documents.roles}\n${documents.agents}`, "agent and verifier boundary", [
     /028A[\s\S]{0,300}OCI/i,
     /028B[\s\S]{0,360}(?:no rebuild|without rebuild|must not rebuild|never rebuild)/i,
-    /remote (?:image )?digest[\s\S]{0,200}(?:equals?|matches?)[\s\S]{0,180}(?:frozen|release) manifest/i,
-    /publication evidence[\s\S]{0,180}(?:release manifest|candidate evidence)/i,
+    /remote (?:image )?digest[\s\S]{0,200}(?:equals?|matches?)[\s\S]{0,120}imageManifestDigest/i,
+  ]);
+});
+
+test("the frozen release manifest separates archive bytes from registry image identity", async () => {
+  const documents = await readMany(["adr", "roadmap", "runbook"]);
+
+  for (const [key, label] of [
+    ["adr", "ADR 0029"],
+    ["roadmap", "product roadmap"],
+    ["runbook", "runbook"],
+  ]) {
+    requirePatterns(documents[key], label, [
+      /per[- ]image[\s\S]{0,240}archiveSha256/i,
+      /per[- ]image[\s\S]{0,320}imageManifestDigest/i,
+      /per[- ]image[\s\S]{0,400}platform/i,
+      /per[- ]image[\s\S]{0,480}(?:repository|reference)/i,
+      /archiveSha256[\s\S]{0,200}(?:OCI )?archive bytes/i,
+      /imageManifestDigest[\s\S]{0,220}(?:OCI )?image manifest|(?:OCI )?image manifest[\s\S]{0,220}imageManifestDigest/i,
+      /archiveSha256[\s\S]{0,260}(?:distinct|different|not the same)[\s\S]{0,160}imageManifestDigest/i,
+      /frozen release manifest[\s\S]{0,260}canonical[\s\S]{0,120}(?:SHA-256|checksum)/i,
+      /frozen release manifest[\s\S]{0,320}commit[\s\S]{0,120}tree/i,
+    ]);
+  }
+});
+
+test("028B verifies archiveSha256 before publication and compares the remote digest only to imageManifestDigest", async () => {
+  const documents = await readMany([
+    "adr",
+    "roadmap",
+    "runbook",
+    "roles",
+    "agents",
+  ]);
+
+  for (const [key, label] of [
+    ["adr", "ADR 0029"],
+    ["roadmap", "product roadmap"],
+    ["runbook", "runbook"],
+  ]) {
+    requirePatterns(documents[key], label, [
+      /028B[\s\S]{0,500}(?:exact|frozen) OCI archive bytes[\s\S]{0,180}archiveSha256/i,
+      /archiveSha256[\s\S]{0,220}(?:before|prior to)[\s\S]{0,120}(?:load|copy|push|publication)/i,
+      /(?:push|copy)[\s\S]{0,180}(?:no rebuild|without rebuild|must not rebuild|never rebuild)/i,
+      /GHCR remote (?:image )?digest[\s\S]{0,220}(?:only|solely)[\s\S]{0,120}imageManifestDigest/i,
+      /(?:must not|never|not)[\s\S]{0,180}(?:compare|match)[\s\S]{0,160}(?:remote )?digest[\s\S]{0,120}archiveSha256/i,
+      /archiveSha256[\s\S]{0,260}mismatch[\s\S]{0,120}(?:abort|blocks?|fail(?:s)? closed)/i,
+      /imageManifestDigest[\s\S]{0,260}mismatch[\s\S]{0,120}(?:abort|blocks?|fail(?:s)? closed)/i,
+    ]);
+  }
+
+  requirePatterns(`${documents.roles}\n${documents.agents}`, "agent and verifier boundary", [
+    /archiveSha256/i,
+    /imageManifestDigest/i,
+    /remote (?:image )?digest[\s\S]{0,220}(?:only|solely)[\s\S]{0,120}imageManifestDigest/i,
+    /(?:must not|never|not)[\s\S]{0,180}(?:compare|match)[\s\S]{0,160}(?:remote )?digest[\s\S]{0,120}archiveSha256/i,
+  ]);
+});
+
+test("publication evidence is a separate append-only record and is the only verified VDS pull authority", async () => {
+  const documents = await readMany([
+    "adr",
+    "roadmap",
+    "runbook",
+    "roles",
+    "agents",
+  ]);
+
+  for (const [key, label] of [
+    ["adr", "ADR 0029"],
+    ["roadmap", "product roadmap"],
+    ["runbook", "runbook"],
+  ]) {
+    requirePatterns(documents[key], label, [
+      /publication(?:\/deployment)? evidence[\s\S]{0,220}separate[\s\S]{0,120}(?:external )?record/i,
+      /publication(?:\/deployment)? evidence[\s\S]{0,260}immutable/i,
+      /publication(?:\/deployment)? evidence[\s\S]{0,260}append[- ]only/i,
+      /frozenReleaseManifestSha256/i,
+      /publication(?:\/deployment)? evidence[\s\S]{0,420}commit[\s\S]{0,120}tree/i,
+      /publication(?:\/deployment)? evidence[\s\S]{0,520}remote repositor(?:y|ies)[\s\S]{0,160}(?:remote )?digests?/i,
+      /publication(?:\/deployment)? evidence[\s\S]{0,620}timestamp[\s\S]{0,120}operator[\s\S]{0,160}(?:run ID|run evidence|runId)/i,
+      /(?:never|must not|does not)[\s\S]{0,180}(?:edit|mutate|rewrite)[\s\S]{0,180}(?:frozen )?release manifest/i,
+      /(?:never|must not|does not)[\s\S]{0,180}(?:edit|mutate|rewrite)[\s\S]{0,180}(?:candidate )?tree/i,
+      /(?:never|must not|does not)[\s\S]{0,180}(?:edit|mutate|rewrite)[\s\S]{0,180}(?:image bytes|images?)/i,
+      /(?:VDS|Droplet)[\s\S]{0,220}pulls? only[\s\S]{0,180}verified remote digest[\s\S]{0,220}(?:publication evidence|frozenReleaseManifestSha256)/i,
+    ]);
+  }
+
+  requirePatterns(`${documents.roles}\n${documents.agents}`, "agent and verifier boundary", [
+    /publication(?:\/deployment)? evidence[\s\S]{0,200}separate/i,
+    /publication(?:\/deployment)? evidence[\s\S]{0,220}immutable/i,
+    /publication(?:\/deployment)? evidence[\s\S]{0,220}append[- ]only/i,
+    /frozenReleaseManifestSha256/i,
+    /(?:never|must not|does not)[\s\S]{0,160}(?:edit|mutate|rewrite)[\s\S]{0,180}(?:frozen )?release manifest/i,
+    /(?:VDS|Droplet)[\s\S]{0,220}pulls? only[\s\S]{0,180}verified remote digest/i,
   ]);
 });
