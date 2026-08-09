@@ -125,6 +125,26 @@ credentials, disabled caching and referrer suppression. Authorization is
 attached only to protected account/session-management calls; the bearer never
 appears in a URL or JSON body.
 
+HTTP response codes are not accepted through a pattern. The client recognizes
+only this status-compatible server allowlist:
+
+- `400`: `INVALID_JSON`, `INVALID_REQUEST_BODY`,
+  `IDEMPOTENCY_KEY_REQUIRED`, `INVALID_IDEMPOTENCY_KEY`;
+- `401`: `UNAUTHORIZED`, `WALLET_SIGNATURE_INVALID`;
+- `403`: `AUTH_ORIGIN_FORBIDDEN`, `ACCOUNT_SESSION_REQUIRED`;
+- `404`: `ACCOUNT_NOT_FOUND`, `ACCOUNT_TOKEN_NOT_FOUND`;
+- `409`: `CHALLENGE_UNAVAILABLE`,
+  `ACCOUNT_TOKEN_SECRET_ALREADY_ISSUED`, `IDEMPOTENCY_CONFLICT`;
+- `413`: `REQUEST_BODY_TOO_LARGE`;
+- `500`: `REQUEST_FAILED`.
+
+The response must be the strict V1 error envelope with no extra top-level or
+error fields. Its message is never copied into the client error. Unknown,
+overlong, lowercase, secret-shaped, status-incompatible or structurally
+poisoned codes become exactly `HTTP_<status>`. Future quota codes are not
+pre-authorized here; 023D must extend this allowlist through its own RED and ADR
+decision.
+
 A pure Web session controller owns the browser token lifecycle independently of
 React and EIP-1193. It accepts only `project_<64 lowercase hex>` in the exact
 `proofline:project-token` `sessionStorage` key, keeps the token out of public
@@ -141,6 +161,12 @@ invalidate late responses before they can persist a token. Sign-out clears on
 an exact `204` or `401`; transport/server failure retains access for retry, and
 an explicit forget-browser action clears local access without claiming server
 revocation.
+
+Controller close is terminal. After `close()` every existing public mutating or
+async method, including repeated close, cancellation, forget, restore, session
+creation, sign-out and retry, is a no-op. The snapshot remains `closed`; no
+storage or service effect occurs. 023C1 exposes a pull-only snapshot and has no
+subscriber surface, so no observer contract is introduced by this correction.
 
 ## Delivery waves
 

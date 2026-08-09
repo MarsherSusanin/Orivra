@@ -38,6 +38,11 @@ closed. `WalletAccessError` exposes only stable `kind`, `status`, `code` and
 `retryable` evidence plus a fixed message. It never echoes response bodies,
 tokens, transport messages or stacks.
 
+Server error codes use the exact status-compatible allowlist in ADR 0024, not a
+regular expression. A strict V1 envelope may preserve one enumerated code; all
+unknown, mismatched or poisoned shapes fall back to `HTTP_<status>`. The
+controller may therefore branch only on bounded client-owned evidence.
+
 ## Session controller contract
 
 The pure controller receives only `WalletAccessServices` and a `StorageLike`
@@ -70,18 +75,27 @@ server errors preserve authority, identify whether the safe retry is restore or
 sign-out, and expose one retry action. `forgetBrowser` clears memory and the
 session key without implying that server revocation succeeded.
 
+`close()` is a terminal transition. Every later existing public action is a
+no-op, the snapshot stays `closed`, and neither storage nor service ports are
+touched. The controller remains pull-only in 023C1; subscription is deferred
+rather than introduced by a corrective test.
+
 ## RED and validation
 
 Frozen tests:
 
 - `src/services/slice023c1-wallet-access-client.contract.test.ts`;
-- `src/services/slice023c1-wallet-session-controller.contract.test.ts`.
+- `src/services/slice023c1-wallet-session-controller.contract.test.ts`;
+- `src/services/slice023c1-wallet-access-corrective.contract.test.ts`;
+- `src/services/slice023c1-wallet-session-controller-corrective.contract.test.ts`.
 
 The intentional RED is absence of `wallet-access-client` and
 `wallet-session-controller`. Once implemented, focused GREEN must cover all
 success/error/corruption/single-flight paths and the affected Web coverage
 threshold. 023C2 owns wallet-provider and UI browser acceptance. No browser,
 Sites, broad Web coverage or full repository matrix is evidence for this RED
-wave.
+wave. The corrective tests also require affected-only coverage of these two
+modules at at least 85% lines and above 80% branches; aggregate Web coverage
+cannot mask an under-tested new controller.
 
 Architecture decision: [ADR 0024](../adr/0024-wallet-identity-and-self-service-access.md).
