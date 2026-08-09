@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -125,19 +125,17 @@ describe("Slice 024B /demo/canonical-url product route", () => {
     const fixture = renderDemo(Response.json(makeCanonicalUrlAttackDemoSummaryFixture()));
     await screen.findByRole("heading", { name: "Valid proof ≠ trusted URL" });
 
-    await act(async () => {
-      window.history.back();
-      window.dispatchEvent(new PopStateEvent("popstate"));
+    window.history.back();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/runs");
+      expect(screen.getByRole("heading", { name: /^Runs$/i })).toBeVisible();
     });
-    await waitFor(() => expect(window.location.pathname).toBe("/runs"));
-    expect(await screen.findByRole("heading", { name: /runs/i })).toBeVisible();
 
-    await act(async () => {
-      window.history.forward();
-      window.dispatchEvent(new PopStateEvent("popstate"));
+    window.history.forward();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/demo/canonical-url");
+      expect(screen.getByRole("heading", { name: "Valid proof ≠ trusted URL" })).toBeVisible();
     });
-    await waitFor(() => expect(window.location.pathname).toBe("/demo/canonical-url"));
-    expect(await screen.findByRole("heading", { name: "Valid proof ≠ trusted URL" })).toBeVisible();
     expect(fixture.fetch.mock.calls.length).toBeLessThanOrEqual(2);
   });
 

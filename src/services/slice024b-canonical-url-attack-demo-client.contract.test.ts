@@ -22,7 +22,7 @@ describe("Slice 024B token-free canonical URL attack demo client", () => {
     expect(fetch).toHaveBeenCalledOnce();
     const [target, init] = fetch.mock.calls[0];
     expect(new URL(String(target)).pathname).toBe("/api/v1/demo/canonical-url");
-    expect(new URL(String(target)).origin).toBe(globalThis.location.origin);
+    expect(new URL(String(target)).origin).toBe("http://localhost");
     expect(init).toMatchObject({ method: "GET" });
     const headers = new Headers(init?.headers);
     expect(headers.has("authorization")).toBe(false);
