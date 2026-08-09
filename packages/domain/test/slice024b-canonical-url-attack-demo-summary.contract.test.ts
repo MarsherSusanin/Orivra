@@ -65,6 +65,27 @@ describe("Slice 024B pure canonical URL attack demo derivation", () => {
     }
   });
 
+  it("binds the supplied digest to the exact canonical recording bytes", () => {
+    const canonicalBytes = canonicalSerializeTestRecording();
+    const recording = domain.replayCanonicalUrlAttackRecording(canonicalBytes);
+    expect(
+      domain.canonicalSerializeCanonicalUrlAttackRecording(recording),
+    ).toBe(canonicalBytes);
+    const exactDigest = sha256(canonicalBytes);
+    const differentDigest = `${exactDigest.slice(0, -1)}${
+      exactDigest.endsWith("0") ? "1" : "0"
+    }`;
+
+    expect(domain.deriveCanonicalUrlAttackDemoSummary({
+      recording,
+      recordingSha256: exactDigest,
+    }).recording.sha256).toBe(exactDigest);
+    expect(() => domain.deriveCanonicalUrlAttackDemoSummary({
+      recording,
+      recordingSha256: differentDigest,
+    })).toThrow(/digest|sha-?256|canonical bytes/i);
+  });
+
   it("does not turn pure replay or derivation into import authority", () => {
     expect(domain.authorizeCanonicalUrlAttackRecordingImport).toBeUndefined();
     expect(domain.runtimeVerifyCanonicalUrlAttackRecording).toBeUndefined();

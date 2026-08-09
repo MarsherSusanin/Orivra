@@ -1,7 +1,7 @@
 # Slice 024B GREEN — persisted public canonical URL attack demo
 
-Status: Production-author candidate; independent Core and Product verification
-pending.
+Status: Rejected by independent Core and Product verification on the exact
+candidate below. Corrective RED is required before a replacement GREEN.
 
 Date: 2026-08-10 (Asia/Vladivostok)
 
@@ -102,3 +102,20 @@ No recording fixture, credential, external request, live Coston2 run, Docker
 deployment, hosted Sites result or DigitalOcean deployment is claimed. With no
 configured exact digest the product deliberately returns unavailable. This
 production author cannot serve as either independent verifier.
+
+## Independent verification rejection
+
+Both read-only verifiers inspected commit
+`57f1b38c14a33d9c6d3a2b76f39120469301a2a9`, tree
+`a7b803b4c724307cc3f8458cc8d6ea875c867754`. Their reports were delivered as
+agent-message payloads and were not written as repository files.
+
+Core reported two P1 findings: summary derivation accepts an arbitrary
+well-formed `recordingSha256` instead of recomputing the digest of the canonical
+recording bytes, and anonymous API requests revalidate and rehash up to 6 MiB
+of injected cache bytes on every summary/download/304 request. Product
+independently reproduced both findings. Neither verifier confirmed any other
+migration, importer, HTTP, browser, Sites or package blocker.
+
+The command and browser results above remain historical production-author
+evidence, but they do not constitute an accepted GREEN or verifier PASS.

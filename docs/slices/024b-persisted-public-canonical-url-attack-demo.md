@@ -1,7 +1,7 @@
 # Slice 024B — Persisted public canonical URL attack demo
 
-Status: Production-author GREEN candidate; independent Core and Product
-verification pending.
+Status: Production-author GREEN candidate rejected by independent Core and
+Product verification; corrective RED frozen.
 
 ## Outcome
 
@@ -20,7 +20,8 @@ continues to own recording construction and trusted compiler/EVM verification.
 ### 024B1 — summary, persistence and import
 
 - strict `CanonicalUrlAttackDemoSummaryV1Schema` and pure deterministic
-  derivation from a valid 024A recording plus exact-byte SHA-256;
+  derivation from a valid 024A recording plus a recomputed, exact matching
+  canonical-byte SHA-256; a different well-formed digest is rejected;
 - additive immutable migration
   `009_canonical_url_attack_recordings.sql`, importer/API/worker least
   privilege and real PostgreSQL constraints;
@@ -39,6 +40,9 @@ network.
 - absent means unavailable/no query, malformed is fatal before listen, and
   exact configured row is loaded/validated once into a frozen lightweight
   cache without compiler/EVM imports;
+- `createProoflineApi` validates, copies and freezes that injected cache once at
+  composition; requests retain no caller-owned getter/Proxy/byte view and do no
+  summary revalidation, canonicalization or SHA-256 work;
 - anonymous exact summary/download GET routes, representation-correct ETags,
   revalidation, exact-origin CORS, query/method rejection and bearer
   independence;

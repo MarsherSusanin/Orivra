@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { canonicalJson } from "@proofline/domain";
 import { createProoflineApi } from "../src/app";
@@ -37,6 +38,50 @@ function availableCache() {
   };
 }
 
+const CACHE_FIELDS = [
+  "status",
+  "summary",
+  "summaryBytes",
+  "summaryEtag",
+  "recordingBytes",
+  "recordingSha256",
+  "recordingEtag",
+] as const;
+
+function observableCache(input: ReturnType<typeof availableCache> = availableCache()) {
+  const backing: Record<(typeof CACHE_FIELDS)[number], any> = { ...input };
+  let readsBlocked = false;
+  const sourceSummary = backing.summary;
+  backing.summary = new Proxy(sourceSummary, {
+    get(target, property, receiver) {
+      if (readsBlocked) throw new Error("cache summary reread after composition");
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const reads = Object.fromEntries(CACHE_FIELDS.map((field) => [field, 0])) as
+    Record<(typeof CACHE_FIELDS)[number], number>;
+  const cache = Object.fromEntries(CACHE_FIELDS.map((field) => [field, undefined])) as
+    Record<(typeof CACHE_FIELDS)[number], unknown>;
+  for (const field of CACHE_FIELDS) {
+    Object.defineProperty(cache, field, {
+      enumerable: true,
+      get() {
+        if (readsBlocked) throw new Error(`${field} reread after composition`);
+        reads[field] += 1;
+        return backing[field];
+      },
+    });
+  }
+  return {
+    cache,
+    reads,
+    backing,
+    blockReads() {
+      readsBlocked = true;
+    },
+  };
+}
+
 function harness(state: unknown = availableCache()) {
   const authenticate = vi.fn().mockResolvedValue(null);
   const service = { listNetworks: vi.fn() };
@@ -64,6 +109,68 @@ function request(
 }
 
 describe("Slice 024B anonymous canonical URL attack demo API", () => {
+  it("validates and snapshots the private cache exactly once at composition", async () => {
+    const expected = availableCache();
+    const observed = observableCache();
+    const fixture = harness(observed.cache);
+    expect(observed.reads).toEqual(
+      Object.fromEntries(CACHE_FIELDS.map((field) => [field, 1])),
+    );
+
+    const callerOwnedBytes = observed.backing.recordingBytes as Buffer;
+    callerOwnedBytes.fill(0x78);
+    observed.backing.summary = {
+      ...makeCanonicalUrlAttackDemoSummary(),
+      statement: "mutated after composition",
+    };
+    observed.backing.summaryBytes = "{}";
+    observed.backing.summaryEtag = '"sha256:mutated"';
+    observed.backing.recordingBytes = Buffer.from("mutated after composition");
+    observed.backing.recordingSha256 = `sha256:${"0".repeat(64)}`;
+    observed.backing.recordingEtag = `"sha256:${"0".repeat(64)}"`;
+    observed.blockReads();
+    const readsAtComposition = { ...observed.reads };
+
+    const firstSummary = await fixture.api.fetch(request("/v1/demo/canonical-url"));
+    const secondSummary = await fixture.api.fetch(request("/v1/demo/canonical-url"));
+    const notModified = await fixture.api.fetch(request("/v1/demo/canonical-url", {
+      etag: expected.summaryEtag,
+    }));
+    const download = await fixture.api.fetch(request(
+      "/v1/demo/canonical-url/recording",
+    ));
+
+    expect(firstSummary.status).toBe(200);
+    expect(await firstSummary.text()).toBe(expected.summaryBytes);
+    expect(secondSummary.status).toBe(200);
+    expect(await secondSummary.text()).toBe(expected.summaryBytes);
+    expect(firstSummary.headers.get("etag")).toBe(expected.summaryEtag);
+    expect(secondSummary.headers.get("etag")).toBe(expected.summaryEtag);
+    expect(notModified.status).toBe(304);
+    expect(await notModified.text()).toBe("");
+    expect(notModified.headers.get("etag")).toBe(expected.summaryEtag);
+    expect(download.status).toBe(200);
+    expect(Buffer.from(await download.arrayBuffer())).toEqual(
+      Buffer.from(RECORDING_BYTES),
+    );
+    expect(download.headers.get("etag")).toBe(expected.recordingEtag);
+    expect(observed.reads).toEqual(readsAtComposition);
+  });
+
+  it("keeps cache validation, canonicalization and hashing out of the request path", async () => {
+    const source = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
+    const responseStart = source.indexOf(
+      "function canonicalUrlAttackDemoResponse(",
+    );
+    const responseEnd = source.indexOf("\nfunction isV1Path(", responseStart);
+    expect(responseStart).toBeGreaterThanOrEqual(0);
+    expect(responseEnd).toBeGreaterThan(responseStart);
+    const responseSource = source.slice(responseStart, responseEnd);
+    expect(responseSource).not.toMatch(
+      /validatedCanonicalUrlAttackDemoCache|CanonicalUrlAttackDemoSummaryV1Schema|\.safeParse\s*\(|canonicalJson\s*\(|sha256Envelope\s*\(|createHash\s*\(/,
+    );
+  });
+
   it("serves the strict summary before bearer authentication", async () => {
     const fixture = harness();
     const response = await fixture.api.fetch(request("/v1/demo/canonical-url", {
@@ -188,12 +295,38 @@ describe("Slice 024B anonymous canonical URL attack demo API", () => {
     expect(fixture.authenticate).not.toHaveBeenCalled();
   });
 
-  it("fails an invalid injected available summary closed as the uniform unavailable response", async () => {
+  it("normalizes an invalid injected cache before handling any request", async () => {
     const cache: any = availableCache();
     cache.summary = { ...cache.summary, authorization: "Bearer secret" };
-    const response = await harness(cache).api.fetch(request("/v1/demo/canonical-url"));
+    const observed = observableCache(cache);
+    const fixture = harness(observed.cache);
+    const readsAtComposition = { ...observed.reads };
+    expect(Object.values(readsAtComposition).some((count) => count > 0)).toBe(true);
+    observed.blockReads();
+    const response = await fixture.api.fetch(request("/v1/demo/canonical-url"));
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual(UNAVAILABLE);
     expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(observed.reads).toEqual(readsAtComposition);
+    expect(fixture.authenticate).not.toHaveBeenCalled();
+  });
+
+  it("keeps a missing composed cache on the uniform unavailable path", async () => {
+    const authenticate = vi.fn().mockResolvedValue(null);
+    const api = createProoflineApi({
+      service: { listNetworks: vi.fn() },
+      authenticate,
+      publicWebOrigin: PUBLIC_ORIGIN,
+    });
+    for (const path of [
+      "/v1/demo/canonical-url",
+      "/v1/demo/canonical-url/recording",
+    ]) {
+      const response = await api.fetch(request(path));
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual(UNAVAILABLE);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
+    expect(authenticate).not.toHaveBeenCalled();
   });
 });

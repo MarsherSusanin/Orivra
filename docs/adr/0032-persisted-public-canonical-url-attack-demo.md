@@ -64,10 +64,12 @@ toolchain versions use the pinned semantic form.
 
 `packages/domain` owns pure
 `deriveCanonicalUrlAttackDemoSummary`. It first validates the recording through
-the non-authorizing 024A domain boundary and validates the supplied exact-byte
-digest, then projects the strict summary deterministically. It performs no file,
-PostgreSQL, compiler, EVM, process-environment or network I/O. Neither replay nor
-summary derivation is import authority.
+the non-authorizing 024A domain boundary, canonically serializes that validated
+recording and recomputes its exact UTF-8 byte SHA-256. A different digest is
+rejected even when it is a well-formed lowercase SHA-256 envelope; only an exact
+match may be projected into the strict summary. It performs no file, PostgreSQL,
+compiler, EVM, process-environment or network I/O. Neither replay nor summary
+derivation is import authority.
 
 ### Immutable PostgreSQL recording
 
@@ -146,6 +148,16 @@ or corrupt rows yield the same unavailable state. This optional absence does
 not yet change readiness; 027B will make a configured-invalid selection degrade
 `/readyz`. Startup and reads never import `packages/fdc-coston2`, `solc` or an
 EVM and never rerun runtime verification.
+
+`createProoflineApi` validates an injected available cache exactly once during
+composition, copies all public strings and exact recording bytes into an owned
+private snapshot, and freezes the validated summary snapshot. It retains no
+getter, Proxy or mutable caller-owned byte view. An invalid injected cache is
+normalized to unavailable before any request is handled. Summary GET, exact
+If-None-Match 304 and recording download use only that snapshot: request paths
+do not reread caller input, reparse the summary, recanonicalize it or recompute
+either SHA-256. Mutation of the caller-owned cache or byte array after
+composition cannot change response bytes, ETags or availability.
 
 ### Anonymous public HTTP
 
