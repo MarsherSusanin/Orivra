@@ -1,11 +1,12 @@
 import { ArrowLeft } from "@phosphor-icons/react";
 import type { ChangeEvent, MouseEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CreateRunResultV1Schema,
   type ComposerStepV1,
   type Web2JsonDraftQueryRowV1,
   type Web2JsonManifestDraftV1,
+  type Web2JsonManifestV1,
 } from "../../packages/contracts/src";
 import {
   createEthUsdComposerDraft,
@@ -37,6 +38,11 @@ type TrustDirtyState = {
   host: boolean;
   path: boolean;
   query: boolean;
+};
+
+type PendingCreateIntent = {
+  manifest: Web2JsonManifestV1;
+  idempotencyKey: string;
 };
 
 const CLEAN_TRUST: TrustDirtyState = { host: false, path: false, query: false };
@@ -260,6 +266,7 @@ export function ManifestComposer({
   const trustValidationAttempted = useRef(false);
   const startRecorded = useRef(false);
   const submissionPending = useRef(false);
+  const pendingCreateIntent = useRef<PendingCreateIntent | null>(null);
   const sourceRef = useRef<HTMLInputElement>(null);
   const jqRef = useRef<HTMLTextAreaElement>(null);
   const abiRef = useRef<HTMLTextAreaElement>(null);
@@ -537,10 +544,50 @@ export function ManifestComposer({
     goToStep("trust");
   };
 
-  const submitManifest = async () => {
+  const createRunFromIntent = useCallback(async (intent: PendingCreateIntent) => {
+    if (!projectToken || submissionPending.current) return;
+    submissionPending.current = true;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      if (!services.createRun) {
+        throw new Error("Run creation service is unavailable");
+      }
+      const rawResult = await services.createRun({
+        projectToken,
+        manifest: intent.manifest,
+        idempotencyKey: intent.idempotencyKey,
+      });
+      const parsed = CreateRunResultV1Schema.safeParse(rawResult);
+      if (!parsed.success) {
+        throw new Error("Invalid create-run response contract");
+      }
+      pendingCreateIntent.current = null;
+      draftStore.clear();
+      const destination = `/runs/${encodeURIComponent(parsed.data.runId)}?step=preflight`;
+      globalThis.history.pushState({}, "", destination);
+      onRunCreated(parsed.data.runId);
+    } catch {
+      setSubmitError(
+        "Run could not be created. Retry uses the same saved request identity.",
+      );
+      submissionPending.current = false;
+      setSubmitting(false);
+    }
+  }, [draftStore, onRunCreated, projectToken, services]);
+
+  useEffect(() => {
+    const intent = pendingCreateIntent.current;
+    if (!projectToken || !intent || submissionPending.current) return;
+    void createRunFromIntent(intent);
+  }, [createRunFromIntent, projectToken]);
+
+  const submitManifest = () => {
     if (!draft || submissionPending.current) return;
-    if (!projectToken) {
-      onConnect();
+    const existingIntent = pendingCreateIntent.current;
+    if (existingIntent) {
+      if (projectToken) void createRunFromIntent(existingIntent);
+      else onConnect();
       return;
     }
 
@@ -553,33 +600,16 @@ export function ManifestComposer({
     }
 
     onManifestValidated("accepted");
-    submissionPending.current = true;
-    setSubmitting(true);
-    setSubmitError("");
-    try {
-      if (!services.createRun) {
-        throw new Error("Run creation service is unavailable");
-      }
-      const rawResult = await services.createRun({
-        projectToken,
-        manifest: finalized.manifest,
-        idempotencyKey: draft.createIdempotencyKey,
-      });
-      const parsed = CreateRunResultV1Schema.safeParse(rawResult);
-      if (!parsed.success) {
-        throw new Error("Invalid create-run response contract");
-      }
-      draftStore.clear();
-      const destination = `/runs/${encodeURIComponent(parsed.data.runId)}?step=preflight`;
-      globalThis.history.pushState({}, "", destination);
-      onRunCreated(parsed.data.runId);
-    } catch {
-      setSubmitError(
-        "Run could not be created. Retry uses the same saved request identity.",
-      );
-      submissionPending.current = false;
-      setSubmitting(false);
+    const intent = {
+      manifest: structuredClone(finalized.manifest),
+      idempotencyKey: draft.createIdempotencyKey,
+    } satisfies PendingCreateIntent;
+    pendingCreateIntent.current = intent;
+    if (!projectToken) {
+      onConnect();
+      return;
     }
+    void createRunFromIntent(intent);
   };
 
   const startFresh = () => {

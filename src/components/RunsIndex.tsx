@@ -189,21 +189,21 @@ export function RunsIndex({
           <WarningCircle size={34} aria-hidden="true" />
           <h2>Runs are unavailable</h2>
           <p>{error}</p>
-          <button className="entry-secondary" type="button" onClick={onConnect}>Reconnect project</button>
+          <button className="entry-secondary" type="button" onClick={onConnect}>Reconnect wallet session</button>
         </section>
       ) : null}
 
       {state !== "loading" && state !== "error" && runs.length === 0 ? (
         <section className="entry-state">
           <span className="entry-state-icon" aria-hidden="true"><FileCode size={36} /></span>
-          <h2>{projectToken ? "No runs yet" : "Connect your project"}</h2>
+          <h2>{projectToken ? "No runs yet" : "Sign in to view runs"}</h2>
           <p>
             {projectToken
               ? "Your first run will keep its manifest, lifecycle, proof, and consumer evidence together."
-              : "A project token is required to load persisted runs. You can still inspect the Composer entry."}
+              : "Use your wallet to restore a browser session. You can still inspect the Composer entry first."}
           </p>
           <div className="entry-state-actions">
-            {!projectToken ? <button className="entry-secondary" type="button" onClick={onConnect}>Connect project</button> : null}
+            {!projectToken ? <button className="entry-secondary" type="button" onClick={onConnect}>Sign in with wallet</button> : null}
             <a className="entry-text-link" href="/runs/new?template=eth-usd" onClick={onStart}>Open example setup <ArrowRight size={16} /></a>
           </div>
         </section>

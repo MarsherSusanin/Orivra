@@ -244,7 +244,7 @@ export function ComposerSourceStep({
 
       <div className="composer-actions">
         <button className="entry-text-button" type="button" onClick={onConnect}>
-          Connect project
+          Sign in with wallet
         </button>
         <button className="entry-primary" type="button" onClick={onContinue}>
           Continue to Transform <ArrowRight size={18} weight="bold" aria-hidden="true" />
@@ -537,7 +537,7 @@ export function ComposerSubmitStep({
             ? "Creating preflight run…"
             : projectConnected
               ? "Create preflight run"
-              : "Connect project to create"}
+              : "Sign in with wallet"}
           <ArrowRight size={18} weight="bold" aria-hidden="true" />
         </button>
       </div>

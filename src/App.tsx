@@ -1,5 +1,5 @@
 import { ArrowClockwise, ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass } from "@phosphor-icons/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createLocalProductAnalytics,
   createProductEventEmitter,
@@ -19,13 +19,25 @@ import {
   PreflightWorkbench,
   type PreflightReportSurfaceState,
 } from "./components/PreflightWorkbench";
-import { ProjectTokenDialog } from "./components/ProjectTokenDialog";
 import { RunTimeline } from "./components/RunTimeline";
 import { RunsIndex } from "./components/RunsIndex";
 import { Sidebar } from "./components/Sidebar";
 import { SubmissionDecision } from "./components/SubmissionDecision";
 import { Topbar } from "./components/Topbar";
 import { VerificationDialog } from "./components/VerificationDialog";
+import { WalletSignInDialog } from "./components/WalletSignInDialog";
+import {
+  WalletSessionProvider,
+  useWalletSession,
+} from "./wallet-session-context";
+import {
+  createWalletAccessClient,
+  type WalletAccessServices,
+} from "./services/wallet-access-client";
+import type {
+  BrowserPort,
+} from "./services/wallet-provider-adapter";
+import type { StorageLike } from "./services/wallet-session-controller";
 import type { PreflightReportV1, RunRecoveryV1 } from "../packages/contracts/src";
 import {
   timelineFromProjection,
@@ -40,7 +52,6 @@ import {
   type RunSurfaceServices,
 } from "./services/run-surface";
 
-const PROJECT_TOKEN_KEY = "proofline:project-token";
 const SHARE_TOKEN_PATTERN = /^share_[a-f0-9]{64}$/;
 const UNAVAILABLE_STORAGE = {
   getItem: () => null,
@@ -53,6 +64,17 @@ export type AppProps = {
   projectToken?: string;
   services?: RunSurfaceServices;
   analytics?: ProductAnalyticsPort;
+  walletAccess?: {
+    services: WalletAccessServices;
+    storage: StorageLike;
+    dialog?: {
+      loadProviderAdapter?: () => Promise<
+        typeof import("./services/wallet-provider-adapter")
+      >;
+      browser?: BrowserPort;
+      clock?: { wait(milliseconds: number): Promise<void> };
+    };
+  };
 };
 
 function browserLocalStorage() {
@@ -122,7 +144,7 @@ function scrubShareLocation(url: URL): void {
   globalThis.history.replaceState({}, "", `${url.pathname}${url.search}`);
 }
 
-function sessionAccessToken(): string {
+function sessionShareToken(): string {
   const runId = deepRouteRunId();
   if (runId && globalThis.location) {
     const url = new URL(globalThis.location.href);
@@ -148,11 +170,12 @@ function sessionAccessToken(): string {
       return "";
     }
   }
-  try {
-    return browserSessionStorage().getItem(PROJECT_TOKEN_KEY) ?? "";
-  } catch {
-    return "";
-  }
+  return "";
+}
+
+function walletApiBaseUrl(): string {
+  const configured = import.meta.env.VITE_PROOFLINE_API_BASE_URL ?? "/api";
+  return new URL(configured, globalThis.location?.origin ?? "http://localhost").toString();
 }
 
 function deepRouteRunId(): string | null {
@@ -407,7 +430,18 @@ function reportFailureKind(cause: unknown): Exclude<PreflightReportSurfaceState[
   return "transport";
 }
 
-function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {}) {
+type ProductRouteProps = Pick<AppProps, "runId" | "services" | "analytics"> & {
+  authorityToken: string;
+  onRequireWallet(): void;
+};
+
+function RunCockpit({
+  runId,
+  authorityToken,
+  services,
+  analytics,
+  onRequireWallet,
+}: ProductRouteProps) {
   const [diagnosticExpanded, setDiagnosticExpanded] = useState(diagnosticsPanelFromLocation);
   const [runStep, setRunStep] = useState(runStepFromLocation);
   const [verificationOpen, setVerificationOpen] = useState(
@@ -419,9 +453,6 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const [bundleState, setBundleState] = useState<"idle" | "running" | "verified" | "error">("idle");
   const [bundleSource, setBundleSource] = useState<string | null>(null);
   const [bundleError, setBundleError] = useState("");
-  const [sessionToken, setSessionToken] = useState(
-    () => projectToken ?? sessionAccessToken(),
-  );
   const [hydratedRun, setHydratedRun] = useState<HydratedRunView | null>(null);
   const [hydrationError, setHydrationError] = useState("");
   const [hydrationRevision, setHydrationRevision] = useState(0);
@@ -434,7 +465,7 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
   const recordedPreflightRuns = useRef(new Set<string>());
   const preflightReportAttempts = useRef(new Map<string, PreflightReportAttempt>());
   const [routeRunId] = useState(deepRouteRunId);
-  const resolvedToken = projectToken ?? sessionToken;
+  const resolvedToken = authorityToken;
   const emitProductEvent = useProductEventEmitter(analytics);
   const servicePort = useMemo(() => {
     if (services) return services;
@@ -676,15 +707,6 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
     };
   }, [activeRunId, hydratedRun?.sequence, needsPreflightReport, resolvedToken, servicePort]);
 
-  const connectProject = (token: string) => {
-    try {
-      browserSessionStorage().setItem(PROJECT_TOKEN_KEY, token);
-    } catch {
-      // The in-memory token still permits the current session in privacy-restricted browsers.
-    }
-    setSessionToken(token);
-  };
-
   const closeVerification = () => {
     setVerificationOpen(false);
     if (secondaryPanelFromLocation() === "consumer") writeSecondaryPanel(null);
@@ -798,15 +820,20 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
       <div className="app-shell">
         <Sidebar />
         <div className="shell-main entry-shell-main">
-          <Topbar title="Locked run" attestationType="Web2Json" mode="new" />
+          <Topbar title="Sign in required" attestationType="Web2Json" mode="new" />
           <main className="entry-layout">
             <section className="entry-state">
-              <h1>Connect project to open run</h1>
-              <p>Proofline needs a session-scoped project token to load this persisted run.</p>
+              <h1>Sign in to open run</h1>
+              <p>Use your wallet to restore this browser session and load the persisted evidence.</p>
+              <div className="entry-state-actions">
+                <button className="entry-primary" type="button" onClick={onRequireWallet}>
+                  Sign in with wallet
+                </button>
+                <a className="entry-secondary" href="/runs">Back to runs</a>
+              </div>
             </section>
           </main>
         </div>
-        <ProjectTokenDialog onConnect={connectProject} backHref="/runs" />
       </div>
     );
   }
@@ -1063,17 +1090,14 @@ function RunCockpit({ runId, projectToken, services, analytics }: AppProps = {})
 }
 
 function ProductEntry({
-  projectToken,
+  authorityToken,
+  onRequireWallet,
   services,
   analytics,
   route,
-}: AppProps & { route: "runs" | "new" }) {
-  const [sessionToken, setSessionToken] = useState(
-    () => projectToken ?? sessionAccessToken(),
-  );
-  const [connectOpen, setConnectOpen] = useState(false);
+}: ProductRouteProps & { route: "runs" | "new" }) {
   const [createdRunId, setCreatedRunId] = useState<string | null>(null);
-  const resolvedToken = projectToken ?? sessionToken;
+  const resolvedToken = authorityToken;
   const servicePort = useMemo(() => {
     if (services) return services;
     if (import.meta.env.MODE === "test") return createTestSurfaceServices();
@@ -1085,15 +1109,6 @@ function ProductEntry({
   }, [resolvedToken, services]);
   const emitProductEvent = useProductEventEmitter(analytics);
 
-  const connectProject = (token: string) => {
-    try {
-      browserSessionStorage().setItem(PROJECT_TOKEN_KEY, token);
-    } catch {
-      // The current in-memory session remains usable when storage is denied.
-    }
-    setSessionToken(token);
-    setConnectOpen(false);
-  };
   const emitComposerStart = (entryPoint: "runs" | "direct") => {
     emitProductEvent({
       name: "COMPOSER_STARTED",
@@ -1120,9 +1135,10 @@ function ProductEntry({
     return (
       <RunCockpit
         runId={createdRunId}
-        projectToken={resolvedToken}
+        authorityToken={resolvedToken}
         services={servicePort}
         analytics={analytics}
+        onRequireWallet={onRequireWallet}
       />
     );
   }
@@ -1140,7 +1156,7 @@ function ProductEntry({
           <RunsIndex
             services={servicePort}
             projectToken={resolvedToken}
-            onConnect={() => setConnectOpen(true)}
+            onConnect={onRequireWallet}
             onStart={recordRunsStart}
             onResume={(run) => emitProductEvent({
               name: "RUN_RESUMED",
@@ -1149,7 +1165,7 @@ function ProductEntry({
           />
         ) : (
           <ManifestComposer
-            onConnect={() => setConnectOpen(true)}
+            onConnect={onRequireWallet}
             onStart={recordDirectStart}
             projectToken={resolvedToken}
             services={servicePort}
@@ -1158,21 +1174,72 @@ function ProductEntry({
           />
         )}
       </div>
-      {connectOpen ? (
-        <ProjectTokenDialog
-          onConnect={connectProject}
-          onClose={() => setConnectOpen(false)}
-        />
-      ) : null}
     </div>
   );
 }
 
-export function App(props: AppProps = {}) {
+function ProductApp({
+  shareToken,
+  ...props
+}: AppProps & { shareToken: string }) {
+  const wallet = useWalletSession();
+  const [walletDialogOpen, setWalletDialogOpen] = useState(false);
+  const walletToken = wallet.accessToken() ?? "";
+  const authorityToken = shareToken || props.projectToken || walletToken;
+  const walletAvailable = !shareToken && !props.projectToken;
+  const openWalletDialog = useCallback(() => {
+    if (walletAvailable) setWalletDialogOpen(true);
+  }, [walletAvailable]);
+  const closeWalletDialog = useCallback(() => setWalletDialogOpen(false), []);
+
   const pathname = globalThis.location?.pathname ?? "/";
   const routedRun = deepRouteRunId();
-  if (props.runId || routedRun) {
-    return <RunCockpit {...props} />;
-  }
-  return <ProductEntry {...props} route={pathname === "/runs/new" ? "new" : "runs"} />;
+  const route = props.runId || routedRun ? (
+    <RunCockpit
+      runId={props.runId}
+      authorityToken={authorityToken}
+      services={props.services}
+      analytics={props.analytics}
+      onRequireWallet={openWalletDialog}
+    />
+  ) : (
+    <ProductEntry
+      authorityToken={authorityToken}
+      services={props.services}
+      analytics={props.analytics}
+      onRequireWallet={openWalletDialog}
+      route={pathname === "/runs/new" ? "new" : "runs"}
+    />
+  );
+
+  return (
+    <>
+      {route}
+      {walletDialogOpen && walletAvailable ? (
+        <WalletSignInDialog
+          {...props.walletAccess?.dialog}
+          onClose={closeWalletDialog}
+          onAuthenticated={closeWalletDialog}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export function App(props: AppProps = {}) {
+  const [shareToken] = useState(sessionShareToken);
+  const [walletAccess] = useState(() => props.walletAccess ?? {
+    services: createWalletAccessClient({ baseUrl: walletApiBaseUrl() }),
+    storage: browserSessionStorage(),
+  });
+  const suppressWalletRestore = Boolean(shareToken || props.projectToken);
+
+  return (
+    <WalletSessionProvider
+      services={walletAccess.services}
+      storage={suppressWalletRestore ? UNAVAILABLE_STORAGE : walletAccess.storage}
+    >
+      <ProductApp {...props} walletAccess={walletAccess} shareToken={shareToken} />
+    </WalletSessionProvider>
+  );
 }
