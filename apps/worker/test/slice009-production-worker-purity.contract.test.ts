@@ -65,9 +65,13 @@ const recoveryContractRuntimeExports = [
   "BackupEvidenceV1Schema",
   "RestoreDrillEvidenceV1Schema",
   "RestorePromotionAuthorizationV1Schema",
+  "RestorePromotionAuthorizationV2Schema",
+  "RecoveryEvidenceHandoffV1Schema",
   "canonicalSerializeBackupEvidence",
+  "canonicalSerializeRecoveryEvidenceHandoff",
   "canonicalSerializeRestoreDrillEvidence",
   "checksumBackupEvidence",
+  "checksumRecoveryEvidenceHandoff",
   "checksumRestoreDrillEvidence",
 ] as const;
 
@@ -414,17 +418,20 @@ describe("Slice 009 production worker purity", () => {
         bytesForSuffix("packages/contracts/src/web2json-manifest.ts"),
         "manifest feature runtime",
       ).toBeGreaterThan(0);
-      expect(
-        bytesForSuffix("packages/contracts/src/recovery.ts"),
-        "recovery feature runtime",
-      ).toBe(0);
+      for (const recoveryInput of [
+        "packages/contracts/src/recovery.ts",
+        "packages/contracts/src/recovery-schema.ts",
+        "packages/contracts/src/recovery-runtime.mjs",
+      ]) {
+        expect(bytesForSuffix(recoveryInput), recoveryInput).toBe(0);
+      }
       expect(freshArtifact).toMatch(/await startProductionWorker\(\)/);
       expect(freshArtifact).toMatch(/PROOFLINE_COSTON2_PRIVATE_KEY/);
       expect(freshArtifact).not.toMatch(
         /parseLegacyLiveCoston2RuntimeConfig|\bLiveRuntimeFactoryInput\b|\bLiveEnvironment\b/,
       );
       expect(freshArtifact).not.toMatch(
-        /BackupEvidenceV1Schema|RestoreDrillEvidenceV1Schema|RestorePromotionAuthorizationV1Schema|canonicalSerializeBackupEvidence|canonicalSerializeRestoreDrillEvidence|checksumBackupEvidence|checksumRestoreDrillEvidence/,
+        /BackupEvidenceV1Schema|RestoreDrillEvidenceV1Schema|RestorePromotionAuthorizationV1Schema|RestorePromotionAuthorizationV2Schema|RecoveryEvidenceHandoffV1Schema|canonicalSerializeBackupEvidence|canonicalSerializeRecoveryEvidenceHandoff|canonicalSerializeRestoreDrillEvidence|checksumBackupEvidence|checksumRecoveryEvidenceHandoff|checksumRestoreDrillEvidence/,
       );
       const artifactFindings = matchingLabels(
         freshArtifact,
@@ -434,7 +441,7 @@ describe("Slice 009 production worker purity", () => {
         .filter(
           ({ input, bytesInOutput }) =>
             bytesInOutput > 0 &&
-            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$|(?:^|\/)recovery(?:-schema)?\.ts$/.test(
+            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$|(?:^|\/)recovery(?:-schema)?\.ts$|(?:^|\/)recovery-runtime\.mjs$/.test(
               input,
             ),
         )

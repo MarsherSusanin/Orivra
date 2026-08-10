@@ -726,6 +726,40 @@ static attempt hit the retained process-group probe's transient macOS
 evidence. Nearest controls remain 30/30 and 45/45 PASS; Sites remains 36/36
 PASS.
 
+### Slice 009 terminal-recovery export compatibility correction
+
+This follow-up starts from exact clean commit
+`6628fe1083a136f5937698211ee0e9c051f711be` / tree
+`348f8f2c6ac66208132cdc16bab285222e7a7161`. Production work-in-progress
+stash `260693721be81d64de583a68fdbfcf7ece6594d3` / tree
+`243419967b81498d3127568d629a12b9454e9b79` was inspected read-only and was
+never applied. The retained Slice 009 purity contract still froze the earlier
+seven-member recovery feature inventory, so it would reject the accepted
+terminal evidence handoff and V2 promotion authority even when production was
+otherwise correct.
+
+The compatibility correction requires exactly eleven runtime exports through
+both `@proofline/contracts/recovery` and the root entry: the prior seven plus
+`RecoveryEvidenceHandoffV1Schema`,
+`RestorePromotionAuthorizationV2Schema`,
+`canonicalSerializeRecoveryEvidenceHandoff` and
+`checksumRecoveryEvidenceHandoff`. Root identity, the exact package export map,
+cycle-free/effect-free initialization and all existing custody exclusions stay
+unchanged. The fresh worker esbuild gate now proves that `recovery.ts`,
+`recovery-schema.ts` and `recovery-runtime.mjs` each contribute zero metafile
+bytes and that none of the eleven recovery runtime symbols appears in the
+worker artifact.
+
+Typecheck and wave-4 syntax PASS. The combined Slice 009/recovery/wave-4 focus
+is 53 cases: 33 controls PASS and 20 intentional RED. The only added RED is the
+accepted eleven-member inventory against the clean base's historical seven;
+the fresh worker bundle/metafile purity case remains PASS. The nearest worker
+bootstrap/entry/lifecycle matrix is 21/21 PASS. The serialized deployment
+static suite remains 146 cases with 137 controls PASS / nine intentional RED,
+and Sites remains 36/36 PASS. Only this retained test and chronology changed;
+production, package metadata, dependencies, build artifacts, Docker and
+network state remain untouched.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;
