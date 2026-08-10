@@ -39,8 +39,6 @@ function docker(args, environment, capture = false) {
 function compose(arguments_, environment, capture = false) {
   return docker([
     "compose",
-    "--profile",
-    "runtime-after-027b",
     "--project-name",
     project,
     "--file",
@@ -139,11 +137,19 @@ async function waitFor(path, expectedStatus) {
 }
 
 async function prepareTemporaryDirectory(temporaryDirectory) {
-  const password = randomBytes(24).toString("hex");
+  const postgresPassword = randomBytes(24).toString("hex");
+  const apiPassword = randomBytes(24).toString("hex");
+  const migratorPassword = randomBytes(24).toString("hex");
+  const recordingImporterPassword = randomBytes(24).toString("hex");
+  const workerPassword = randomBytes(24).toString("hex");
   const secretValues = {
-    apiDatabase: `postgres://proofline:${password}@postgres:5432/proofline`,
+    postgresAdminDatabase: `postgres://proofline:${postgresPassword}@postgres:5432/proofline`,
+    apiDatabase: `postgres://proofline_api_login:${apiPassword}@postgres:5432/proofline`,
+    migratorDatabase: `postgres://proofline_migrator_login:${migratorPassword}@postgres:5432/proofline`,
+    recordingImporterDatabase: `postgres://proofline_recording_importer_login:${recordingImporterPassword}@postgres:5432/proofline`,
+    workerDatabase: `postgres://proofline_worker_login:${workerPassword}@postgres:5432/proofline`,
     apiDigest: randomBytes(32).toString("hex"),
-    postgresPassword: password,
+    postgresPassword,
   };
   const secretPaths = {};
   for (const [name, value] of Object.entries(secretValues)) {
@@ -159,8 +165,14 @@ async function prepareTemporaryDirectory(temporaryDirectory) {
       PROOFLINE_API_IMAGE: "proofline/api:027a-qa",
       PROOFLINE_WORKER_IMAGE: "proofline/worker:027a-qa",
       PROOFLINE_PUBLIC_ORIGIN,
+      PROOFLINE_DEPLOYMENT_ID: `deployment_${"a".repeat(64)}`,
+      PROOFLINE_RELEASE_TREE_SHA: "b".repeat(40),
+      PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE: secretPaths.postgresAdminDatabase,
       PROOFLINE_API_DATABASE_URL_FILE: secretPaths.apiDatabase,
       PROOFLINE_API_TOKEN_DIGEST_KEY_FILE: secretPaths.apiDigest,
+      PROOFLINE_MIGRATOR_DATABASE_URL_FILE: secretPaths.migratorDatabase,
+      PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE: secretPaths.recordingImporterDatabase,
+      PROOFLINE_WORKER_DATABASE_URL_FILE: secretPaths.workerDatabase,
       PROOFLINE_POSTGRES_PASSWORD_FILE: secretPaths.postgresPassword,
     },
   };
@@ -287,6 +299,8 @@ async function runSmoke({ environment }) {
         "caddy",
         "web",
         "postgres",
+        "db-role-bootstrap",
+        "migrator",
         "api",
       ], environment);
     } catch {}

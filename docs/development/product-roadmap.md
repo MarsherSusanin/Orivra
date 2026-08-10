@@ -28,9 +28,9 @@ The product journey is delivered as independently frozen vertical slices:
 | 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | Complete; independently verified, credential-free |
 | 027A2 | Split private Compose topology, production ACME Caddy and QA-only internal TLS | Complete; independently verified, credential-free |
 | 027A3 | CLI-isolated prefetch, offline-repeat build and exact HTTPS local smoke | Complete; independently verified, credential-free |
-| 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Intentional RED frozen; implementation pending |
-| 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Intentional RED frozen; implementation pending |
-| 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Intentional RED frozen; implementation pending |
+| 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Production-author candidate GREEN; independent verification pending |
+| 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Production-author candidate GREEN; independent verification pending |
+| 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Production-author candidate GREEN; independent verification pending |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
@@ -97,7 +97,9 @@ Credential-free delivery covers 022–029A:
   lock, least-privilege login-role bootstrap, exact schema verification,
   `/healthz`, `/readyz`, a persisted real-worker heartbeat and an ordered
   credential-free PostgreSQL/API lifecycle. Its SQL heartbeat fixture never
-  counts as actual worker readiness.
+  counts as actual worker readiness. The production-author candidate passes
+  local static, real-PostgreSQL and bounded runtime lifecycle gates; two
+  independent PASS reports for one exact tree are still required.
 - **027C** adds off-host WAL archiving plus base backup for PITR and proves a
   credential-free MinIO restore drill. A Droplet backup is secondary host
   recovery, not database/PITR evidence.

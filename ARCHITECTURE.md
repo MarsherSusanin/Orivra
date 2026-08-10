@@ -259,10 +259,13 @@ independent Core and Product verification remain pending.
   worker. The first 027A candidate is rejected; its second corrective
   replacement was independently verified on exact commit `820f61dd` / tree
   `ea13cf179`. [ADR 0036](docs/adr/0036-checksummed-migrations-and-deployment-readiness.md)
-  now freezes the intentional RED boundary for checksum-authorized migrations,
+  defines the boundary for checksum-authorized migrations,
   least-privilege login-role bootstrap, process health, exact schema/readiness
-  and the real production-worker deployment heartbeat. No 027B schema,
-  readiness or hosted container evidence exists yet.
+  and the real production-worker deployment heartbeat. The production-author
+  candidate now implements that boundary and passes local credential-free
+  static, real-PostgreSQL and bounded Compose lifecycle gates. Independent
+  verification remains pending; the SQL heartbeat fixture is not actual worker
+  readiness and no hosted container evidence exists.
 
 028A локально exports и verifies OCI archives. Frozen manifest раздельно хранит
 `archiveSha256` архивных bytes и `imageManifestDigest` registry identity, а его
@@ -292,8 +295,9 @@ database backup или PITR plan.
 Эти release paths реализованы и герметично проверяются локально только в своей
 текущей executable части. Первый 027A image/Compose/Caddy candidate отклонён;
 его second corrective replacement независимо проверен на одном exact tree.
-027B migration/readiness boundary пока является intentional RED freeze. Нет release-ready
-VDS composition или production deployment. В репозитории нет
+027B migration/readiness boundary реализован как локальный production-author
+candidate, но ещё не имеет двух независимых PASS для одного exact tree. Нет
+release-ready VDS composition или production deployment. В репозитории нет
 `.github/workflows` или настроенного merge queue. Hosting is not yet
 provisioned; ADR 0029 выбирает target, но не доказывает его доступность.
 Credentials выдаются только после завершения credential-free 022–029A,

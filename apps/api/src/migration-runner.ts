@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { grantApplicationRoleMemberships } from "./db-role-bootstrap";
+import { grantApplicationRoleMemberships } from "./db-role-bootstrap-core";
 
 export const PROOFLINE_SCHEMA_VERSION = 10;
 export const MIGRATION_ADVISORY_LOCK = -4_708_329_426_407_388_777n;

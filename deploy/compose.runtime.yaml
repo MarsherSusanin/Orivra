@@ -21,14 +21,15 @@ x-runtime-service-defaults: &runtime-service-defaults
 
 services:
   caddy:
+    depends_on:
+      api:
+        condition: service_healthy
     networks:
       - app_internal
 
   api:
     <<: *runtime-service-defaults
     image: ${PROOFLINE_API_IMAGE:?PROOFLINE_API_IMAGE is required}
-    profiles:
-      - runtime-after-027b
     user: "1000:1000"
     read_only: true
     tmpfs:
@@ -38,6 +39,8 @@ services:
       DATABASE_URL_FILE: /run/secrets/api_database_url
       PROOFLINE_TOKEN_DIGEST_KEY_FILE: /run/secrets/api_token_digest_key
       PROOFLINE_WEB_ORIGIN: ${PROOFLINE_PUBLIC_ORIGIN:?PROOFLINE_PUBLIC_ORIGIN is required}
+      PROOFLINE_DEPLOYMENT_ID: ${PROOFLINE_DEPLOYMENT_ID:?PROOFLINE_DEPLOYMENT_ID is required}
+      PROOFLINE_RELEASE_TREE_SHA: ${PROOFLINE_RELEASE_TREE_SHA:?PROOFLINE_RELEASE_TREE_SHA is required}
     secrets:
       - source: api_database_url
         target: api_database_url
@@ -45,6 +48,17 @@ services:
         target: api_token_digest_key
     expose:
       - "8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then((response) => process.exit(response.status === 200 ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     networks:
       - app_internal
       - db_internal
@@ -52,8 +66,6 @@ services:
   worker:
     <<: *runtime-service-defaults
     image: ${PROOFLINE_WORKER_IMAGE:?PROOFLINE_WORKER_IMAGE is required}
-    profiles:
-      - runtime-after-027b
     user: "1000:1000"
     read_only: true
     tmpfs:
@@ -62,6 +74,8 @@ services:
       DATABASE_URL_FILE: /run/secrets/worker_database_url
       PROOFLINE_VERIFIER_API_KEY_FILE: /run/secrets/worker_verifier_api_key
       PROOFLINE_COSTON2_PRIVATE_KEY_FILE: /run/secrets/worker_coston2_private_key
+      PROOFLINE_DEPLOYMENT_ID: ${PROOFLINE_DEPLOYMENT_ID:?PROOFLINE_DEPLOYMENT_ID is required}
+      PROOFLINE_RELEASE_TREE_SHA: ${PROOFLINE_RELEASE_TREE_SHA:?PROOFLINE_RELEASE_TREE_SHA is required}
     secrets:
       - source: worker_database_url
         target: worker_database_url
@@ -69,6 +83,11 @@ services:
         target: worker_verifier_api_key
       - source: worker_coston2_private_key
         target: worker_coston2_private_key
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     networks:
       - db_internal
       - worker_egress
@@ -76,8 +95,6 @@ services:
   postgres:
     <<: *runtime-service-defaults
     image: postgres@sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be
-    profiles:
-      - runtime-after-027b
     user: "70:70"
     tmpfs:
       - /var/run/postgresql:uid=70,gid=70,mode=3775
@@ -101,6 +118,60 @@ services:
     networks:
       - db_internal
 
+  db-role-bootstrap:
+    <<: *runtime-service-defaults
+    image: ${PROOFLINE_API_IMAGE:?PROOFLINE_API_IMAGE is required}
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    restart: "no"
+    command: ["node", "/app/apps/api/dist/db-role-bootstrap.js"]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/postgres_admin_database_url
+      PROOFLINE_API_DATABASE_URL_FILE: /run/secrets/api_database_url
+      PROOFLINE_MIGRATOR_DATABASE_URL_FILE: /run/secrets/migrator_database_url
+      PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE: /run/secrets/recording_importer_database_url
+      PROOFLINE_WORKER_DATABASE_URL_FILE: /run/secrets/worker_database_url
+    secrets:
+      - source: postgres_admin_database_url
+        target: postgres_admin_database_url
+      - source: api_database_url
+        target: api_database_url
+      - source: migrator_database_url
+        target: migrator_database_url
+      - source: recording_importer_database_url
+        target: recording_importer_database_url
+      - source: worker_database_url
+        target: worker_database_url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - db_internal
+
+  migrator:
+    <<: *runtime-service-defaults
+    image: ${PROOFLINE_API_IMAGE:?PROOFLINE_API_IMAGE is required}
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    restart: "no"
+    command: ["node", "/app/apps/api/dist/migrate.js"]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/migrator_database_url
+    secrets:
+      - source: migrator_database_url
+        target: migrator_database_url
+    depends_on:
+      db-role-bootstrap:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    networks:
+      - db_internal
+
 networks:
   app_internal:
     internal: true
@@ -112,6 +183,10 @@ volumes:
   postgres_data: {}
 
 secrets:
+  postgres_admin_database_url:
+    file: ${PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE:?PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE is required}
+  migrator_database_url:
+    file: ${PROOFLINE_MIGRATOR_DATABASE_URL_FILE:?PROOFLINE_MIGRATOR_DATABASE_URL_FILE is required}
   api_database_url:
     file: ${PROOFLINE_API_DATABASE_URL_FILE:?PROOFLINE_API_DATABASE_URL_FILE is required}
   api_token_digest_key:
@@ -122,5 +197,7 @@ secrets:
     file: ${PROOFLINE_WORKER_VERIFIER_API_KEY_FILE:-/run/proofline/unconfigured-worker-verifier-api-key}
   worker_coston2_private_key:
     file: ${PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE:-/run/proofline/unconfigured-worker-coston2-private-key}
+  recording_importer_database_url:
+    file: ${PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE:?PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE is required}
   postgres_password:
     file: ${PROOFLINE_POSTGRES_PASSWORD_FILE:?PROOFLINE_POSTGRES_PASSWORD_FILE is required}

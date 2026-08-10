@@ -31,11 +31,20 @@ export async function runProductionCompose({
   if (runtime) {
     validateProductionImageReference(environment.PROOFLINE_API_IMAGE);
     validateProductionImageReference(environment.PROOFLINE_WORKER_IMAGE);
+    if (composeArguments.some((argument) => argument === "start" || argument === "restart")) {
+      throw new Error("Runtime one-shot jobs require an up deployment and cannot use start or restart");
+    }
+    if (composeArguments.includes("up") && composeArguments.includes("--no-recreate")) {
+      throw new Error("Runtime one-shot jobs require forced recreation during up");
+    }
   }
 
   const args = ["compose", "--file", "compose.yaml"];
   if (runtime) args.push("--file", "deploy/compose.runtime.yaml");
   args.push(...composeArguments);
+  if (runtime && composeArguments.includes("up") && !composeArguments.includes("--force-recreate")) {
+    args.push("--force-recreate");
+  }
   const result = spawnSync(dockerExecutable, args, {
     cwd: root,
     encoding: "utf8",

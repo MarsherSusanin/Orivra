@@ -69,11 +69,13 @@ blockchain-операций.
   CLI-isolated prefetch, immutable-image validation, split base/runtime
   Compose, exact `https://127.0.0.1` QA, bounded FIFO and read-only Caddy gates;
   two independent reviews PASS exact commit `820f61dd` / tree `ea13cf179`.
-  Slice 027B now has intentional RED contracts under
+  Slice 027B now has a credential-free production-author candidate under
   [ADR 0036](docs/adr/0036-checksummed-migrations-and-deployment-readiness.md)
-  for checksummed migrations, deployment roles, health/readiness and a real
-  production-worker heartbeat. No live
-  worker, migration, readiness, hosting or deployment is claimed.
+  for checksummed migrations, deployment roles, health/readiness and the real
+  production-worker heartbeat path. Local static, real-PostgreSQL and bounded
+  Docker lifecycle gates pass; independent verification is still pending. The
+  SQL heartbeat fixture is test-only, so no actual worker readiness, hosting or
+  deployment is claimed.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
@@ -138,8 +140,10 @@ public ingress и даёт Web same-origin `/api`. Публичны только
 ports и Docker socket не публикуются.
 
 Репозиторий содержит независимо проверенный replacement 027A после rejected
-первой реализации. Для 027B заморожены intentional RED contracts на
-migration/readiness/heartbeat; production implementation ещё отсутствует.
+первой реализации. 027B production-author candidate реализует immutable
+migration manifest/runner, role bootstrap, health/readiness, worker heartbeat
+и ordered runtime Compose; локальные credential-free gates GREEN, но два
+independent verifier PASS для его exact commit/tree ещё не получены.
 027C–029B по-прежнему владеют recovery, release и promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment
 не provisioned. Sites сохраняется только как

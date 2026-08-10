@@ -74,12 +74,12 @@ checksummed migration history, удерживает PostgreSQL advisory lock, п
 worker не выполняют migration при собственном старте.
 
 `/healthz` является process-only liveness. `/readyz` проверяет database,
-verified schema version и worker heartbeat; stale heartbeat должен возвращать
-degraded readiness, даже если containers продолжают работать. 027A Compose и
-image boundary независимо проверены. ADR 0036 и Slice 027B заморозили эти
-endpoint/migration/heartbeat contracts как intentional RED; production
-implementation ещё отсутствует, поэтому этот раздел не является hosted или
-deployed PASS.
+verified schema version и worker heartbeat; stale heartbeat возвращает
+`503 not-ready`, даже если containers продолжают работать. 027A Compose и
+image boundary независимо проверены. 027B production-author candidate
+реализует эти endpoint/migration/heartbeat contracts; его локальные static,
+real-PostgreSQL и bounded runtime gates GREEN, но independent verification ещё
+pending. Этот раздел не является actual-worker, hosted или deployed PASS.
 
 ### Slice 027A local container gate
 
@@ -160,13 +160,19 @@ has bounded `/tmp`, and only named `/data` and `/config` are writable.
 Do not commit `.env`, `.env.*`, dummy relayer/verifier credentials or a
 production test adapter.
 
-The accepted `runtime-after-027b` profile remains a deliberate historical 027A
-block, not a readiness feature flag. ADR 0036 freezes its replacement as
-intentional RED: exact role-bootstrap and migrator jobs, immutable checksum
-history, `/healthz`, `/readyz` and a persisted deployment-worker heartbeat.
-Until that RED is implemented and independently verified, a full Compose
-runtime/readiness PASS is forbidden. `pg_isready` is engine liveness only, and
-the existing command-lease heartbeat is not deployment readiness.
+The historical `runtime-after-027b` profile is removed. The runtime overlay now
+owns exact API-image `db-role-bootstrap` and `migrator` one-shot jobs, immutable
+checksum history, `/healthz`, `/readyz` and the persisted deployment-worker
+heartbeat. Production runtime `up` must go through the immutable-reference
+wrapper, which forces one-shot recreation and rejects `start`/`restart`:
+
+```bash
+npm run compose:production -- --runtime up --detach
+```
+
+`pg_isready` remains engine liveness only. Promotion still requires `/readyz`;
+the command-lease heartbeat and the test-only SQL fixture are not actual
+deployment-worker readiness.
 
 Database recovery contract использует continuous WAL archive и base backup для
 PITR в private S3-compatible DigitalOcean Spaces. До получения
@@ -184,27 +190,39 @@ backup or PITR plan. Он остаётся только дополнительн
 
 ## 3. PostgreSQL и миграции
 
-Применяйте миграции строго по номеру к пустой или поддерживаемой предыдущей схеме:
+Production migration authority is the strict checked-in manifest and the
+one-shot API-image jobs. Do not apply individual files with ad-hoc `psql`.
+The manifest executes this immutable history in order:
+
+1. `apps/api/db/migrations/001_initial.sql`
+2. `apps/api/db/migrations/002_one_active_submission.sql`
+3. `apps/api/db/migrations/003_run_discovery.sql`
+4. `apps/api/db/migrations/004_preflight_report.sql`
+5. `apps/api/db/migrations/005_explicit_submission_authority.sql`
+6. `apps/api/db/migrations/006_wallet_identity_sessions.sql`
+7. `apps/api/db/migrations/007_account_token_management.sql`
+8. `apps/api/db/migrations/008_persisted_admission_quotas.sql`
+9. `apps/api/db/migrations/009_canonical_url_attack_recordings.sql`
+10. `apps/api/db/migrations/010_deployment_lifecycle.sql`
+
+Before API/worker startup, Compose performs exact ordering:
+
+`postgres healthy → db-role-bootstrap completed → migrator completed → API/worker`.
+
+For credential-free local acceptance run:
 
 ```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/001_initial.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/002_one_active_submission.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/003_run_discovery.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/004_preflight_report.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/005_explicit_submission_authority.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/006_wallet_identity_sessions.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/007_account_token_management.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/008_persisted_admission_quotas.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/009_canonical_url_attack_recordings.sql
+npm run test:docker:static
+PROOFLINE_TESTCONTAINERS=1 npm run test:postgres -- --maxWorkers=1
+npm run test:docker
+npm run test:docker:runtime
 ```
 
-Автоматизированного production migration runner и down migrations в репозитории
-нет. [ADR 0036](adr/0036-checksummed-migrations-and-deployment-readiness.md)
-замораживает one-shot runner, exact manifest, advisory lock, role bootstrap и
-migration 010 как intentional RED. До его GREEN безопасная стратегия изменения
-схемы — additive migration и roll-forward; команды `db:bootstrap-roles` и
-`db:migrate` ещё не являются executable operator instructions. Hosting is not
-yet provisioned.
+The runtime gate uses fresh random file secrets and an explicit test-only SQL
+heartbeat fixture; it never starts worker. It proves missing → ready → stale,
+database stop/restart, persistent volume identity and idempotent one-shot jobs.
+Production remains additive/roll-forward only; no down-migration command exists.
+Hosting is not provisioned and independent verification is pending.
 
 Первичный browser project token выпускают только публичные wallet-auth routes:
 сервер создаёт пятиминутный EIP-4361 challenge, а валидная локально проверенная
@@ -577,7 +595,7 @@ distributed traces, alerting и централизованное log storage н�
 нельзя указывать как доступные сигналы до выбора инфраструктуры. API не должен
 логировать authorization headers или request bodies с capabilities.
 
-027B должен разделить `/healthz`, `/readyz` и persisted worker heartbeat.
+027B разделяет `/healthz`, `/readyz` и persisted worker heartbeat.
 Container-running state сам по себе не доказывает readiness. До GREEN этих
 сигналов их нельзя описывать как действующий monitoring.
 

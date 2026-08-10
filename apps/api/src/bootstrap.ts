@@ -647,6 +647,7 @@ export async function startProductionApi(
   );
   const deploymentIdentity = parseDeploymentIdentity(resolvedEnvironment);
   const initial = createProductionApi({ environment: resolvedEnvironment });
+  initial.pool.on("error", () => undefined);
   let listening = false;
   try {
     await verifyDeploymentSchema({ pool: initial.pool });

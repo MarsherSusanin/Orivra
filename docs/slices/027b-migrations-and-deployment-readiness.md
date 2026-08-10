@@ -15,6 +15,12 @@ refining [ADR 0029](../adr/0029-digitalocean-vds-deployment.md) and
 Risk: high persistence, database-role, startup-order and release-path change;
 no provider credential, live Coston2 effect, backup, restore or hosted claim.
 
+Implementation status: the B1–B3 production-author candidate is locally GREEN
+for typecheck, frozen contracts, coverage, real PostgreSQL and bounded
+credential-free Docker lifecycle. Independent Core/Product verification on one
+exact commit/tree remains pending. The test-only SQL heartbeat fixture is not
+actual worker readiness or deployment evidence.
+
 ## Delivery split
 
 ### 027B1 — migration and role authority
