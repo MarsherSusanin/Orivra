@@ -12,21 +12,31 @@ const DEPLOYMENT_DATABASE_ROLES = [
     environmentName: "PROOFLINE_MIGRATOR_DATABASE_URL",
     username: "proofline_migrator_login",
     createRole: true,
+    replication: false,
   },
   {
     environmentName: "PROOFLINE_API_DATABASE_URL",
     username: "proofline_api_login",
     createRole: false,
+    replication: false,
   },
   {
     environmentName: "PROOFLINE_WORKER_DATABASE_URL",
     username: "proofline_worker_login",
     createRole: false,
+    replication: false,
   },
   {
     environmentName: "PROOFLINE_RECORDING_IMPORTER_DATABASE_URL",
     username: "proofline_recording_importer_login",
     createRole: false,
+    replication: false,
+  },
+  {
+    environmentName: "PROOFLINE_BACKUP_DATABASE_URL",
+    username: "proofline_backup_login",
+    createRole: false,
+    replication: true,
   },
 ] as const;
 
@@ -110,10 +120,15 @@ export async function bootstrapProductionDatabaseRoles(input: {
   );
   const adminUrl = environment.DATABASE_URL!;
   parseExactDatabaseUrl(adminUrl, "proofline");
-  const deploymentRoles = DEPLOYMENT_DATABASE_ROLES.map((role) => ({
-    ...role,
-    ...parseExactDatabaseUrl(environment[role.environmentName]!, role.username),
-  }));
+  const deploymentRoles = DEPLOYMENT_DATABASE_ROLES
+    .filter((role) => environment[role.environmentName] !== undefined)
+    .map((role) => ({
+      ...role,
+      ...parseExactDatabaseUrl(environment[role.environmentName]!, role.username),
+    }));
+  const backupConfigured = deploymentRoles.some(
+    ({ username }) => username === "proofline_backup_login",
+  );
 
   let client: RoleBootstrapClient | undefined;
   try {
@@ -123,7 +138,8 @@ export async function bootstrapProductionDatabaseRoles(input: {
 CREATE OR REPLACE FUNCTION pg_temp.ensure_login(
     login_name text,
     login_password text,
-    allow_createrole boolean
+    allow_createrole boolean,
+    allow_replication boolean
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -131,16 +147,18 @@ AS $function$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = login_name) THEN
         EXECUTE format(
-            'ALTER ROLE %I WITH LOGIN INHERIT NOSUPERUSER NOCREATEDB %s NOREPLICATION NOBYPASSRLS PASSWORD %L',
+            'ALTER ROLE %I WITH LOGIN INHERIT NOSUPERUSER NOCREATEDB %s %s NOBYPASSRLS PASSWORD %L',
             login_name,
             CASE WHEN allow_createrole THEN 'CREATEROLE' ELSE 'NOCREATEROLE' END,
+            CASE WHEN allow_replication THEN 'REPLICATION' ELSE 'NOREPLICATION' END,
             login_password
         );
     ELSE
         EXECUTE format(
-            'CREATE ROLE %I WITH LOGIN INHERIT NOSUPERUSER NOCREATEDB %s NOREPLICATION NOBYPASSRLS PASSWORD %L',
+            'CREATE ROLE %I WITH LOGIN INHERIT NOSUPERUSER NOCREATEDB %s %s NOBYPASSRLS PASSWORD %L',
             login_name,
             CASE WHEN allow_createrole THEN 'CREATEROLE' ELSE 'NOCREATEROLE' END,
+            CASE WHEN allow_replication THEN 'REPLICATION' ELSE 'NOREPLICATION' END,
             login_password
         );
     END IF;
@@ -149,8 +167,8 @@ $function$;
 `);
     for (const role of deploymentRoles) {
       await client.query(
-        "SELECT pg_temp.ensure_login($1, $2, $3)",
-        [role.username, role.password, role.createRole],
+        "SELECT pg_temp.ensure_login($1, $2, $3, $4)",
+        [role.username, role.password, role.createRole, role.replication],
       );
     }
     await client.query("ALTER ROLE proofline_migrator_login CREATEROLE");
@@ -164,6 +182,21 @@ GRANT CONNECT ON DATABASE proofline TO
     proofline_worker_login,
     proofline_recording_importer_login
 `);
+    if (backupConfigured) {
+      await client.query(
+        "GRANT CONNECT ON DATABASE proofline TO proofline_backup_login",
+      );
+      await client.query("GRANT pg_monitor TO proofline_backup_login");
+      for (const signature of [
+        "pg_backup_start(text, boolean)",
+        "pg_backup_stop(boolean)",
+        "pg_switch_wal()",
+      ]) {
+        await client.query(
+          `GRANT EXECUTE ON FUNCTION pg_catalog.${signature} TO proofline_backup_login`,
+        );
+      }
+    }
     await client.query("COMMIT");
   } catch {
     if (client) await client.query("ROLLBACK").catch(() => undefined);

@@ -1,0 +1,177 @@
+x-backup-service-defaults: &backup-service-defaults
+  platform: linux/amd64
+  pull_policy: never
+  image: ${PROOFLINE_POSTGRES_IMAGE:?PROOFLINE_POSTGRES_IMAGE is required}
+  user: "999:999"
+  read_only: true
+  tmpfs:
+    - /tmp:size=32m,mode=1777
+    - /var/run/postgresql:uid=999,gid=999,mode=3775
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  pids_limit: 128
+  deploy:
+    resources:
+      limits:
+        cpus: "1.0"
+        memory: 768M
+        pids: 128
+  restart: "no"
+
+x-backup-environment: &backup-environment
+  PROOFLINE_BACKUP_SLOT: ${PROOFLINE_BACKUP_SLOT:?PROOFLINE_BACKUP_SLOT is required}
+  PROOFLINE_BACKUP_ENDPOINT: ${PROOFLINE_BACKUP_ENDPOINT:?PROOFLINE_BACKUP_ENDPOINT is required}
+  PROOFLINE_BACKUP_REGION: ${PROOFLINE_BACKUP_REGION:?PROOFLINE_BACKUP_REGION is required}
+  PROOFLINE_BACKUP_BUCKET: ${PROOFLINE_BACKUP_BUCKET:?PROOFLINE_BACKUP_BUCKET is required}
+  PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup_encryption_key
+  WALG_PREVENT_WAL_OVERWRITE: "true"
+
+services:
+  postgres:
+    image: ${PROOFLINE_POSTGRES_IMAGE:?PROOFLINE_POSTGRES_IMAGE is required}
+    user: "999:999"
+    tmpfs:
+      - /var/run/postgresql:uid=999,gid=999,mode=3775
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_timeout=60s
+      - -c
+      - archive_command=/usr/local/bin/proofline-archive-command.sh %p %f
+    environment:
+      <<: *backup-environment
+      PROOFLINE_BACKUP_WRITER_ACCESS_KEY_ID_FILE: /run/secrets/backup_writer_access_key_id
+      PROOFLINE_BACKUP_WRITER_SECRET_ACCESS_KEY_FILE: /run/secrets/backup_writer_secret_access_key
+    secrets:
+      - source: postgres_password
+        target: postgres_password
+      - source: backup_writer_access_key_id
+        target: backup_writer_access_key_id
+      - source: backup_writer_secret_access_key
+        target: backup_writer_secret_access_key
+      - source: backup_encryption_key
+        target: backup_encryption_key
+    networks:
+      - db_internal
+      - backup_egress
+
+  db-role-bootstrap:
+    environment:
+      PROOFLINE_BACKUP_DATABASE_URL_FILE: /run/secrets/backup_database_url
+    secrets:
+      - source: postgres_admin_database_url
+        target: postgres_admin_database_url
+      - source: migrator_database_url
+        target: migrator_database_url
+      - source: api_database_url
+        target: api_database_url
+      - source: worker_database_url
+        target: worker_database_url
+      - source: recording_importer_database_url
+        target: recording_importer_database_url
+      - source: backup_database_url
+        target: backup_database_url
+
+  base-backup:
+    <<: *backup-service-defaults
+    command: ["/usr/local/bin/proofline-base-backup.sh"]
+    environment:
+      <<: *backup-environment
+      PGDATA: /var/lib/postgresql/data
+      PROOFLINE_BACKUP_DATABASE_URL_FILE: /run/secrets/backup_database_url
+      PROOFLINE_BACKUP_WRITER_ACCESS_KEY_ID_FILE: /run/secrets/backup_writer_access_key_id
+      PROOFLINE_BACKUP_WRITER_SECRET_ACCESS_KEY_FILE: /run/secrets/backup_writer_secret_access_key
+    secrets:
+      - source: backup_database_url
+        target: backup_database_url
+      - source: backup_writer_access_key_id
+        target: backup_writer_access_key_id
+      - source: backup_writer_secret_access_key
+        target: backup_writer_secret_access_key
+      - source: backup_encryption_key
+        target: backup_encryption_key
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-role-bootstrap:
+        condition: service_completed_successfully
+      migrator:
+        condition: service_completed_successfully
+    networks:
+      - db_internal
+      - backup_egress
+
+  backup-status:
+    <<: *backup-service-defaults
+    command: ["/usr/local/bin/proofline-backup-status.sh"]
+    environment:
+      <<: *backup-environment
+      PGDATA: /var/lib/postgresql/data
+      PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE: /run/secrets/backup_reader_access_key_id
+      PROOFLINE_BACKUP_READER_SECRET_ACCESS_KEY_FILE: /run/secrets/backup_reader_secret_access_key
+    secrets:
+      - source: backup_reader_access_key_id
+        target: backup_reader_access_key_id
+      - source: backup_reader_secret_access_key
+        target: backup_reader_secret_access_key
+      - source: backup_encryption_key
+        target: backup_encryption_key
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:ro
+    networks:
+      - backup_egress
+
+  backup-retention:
+    <<: *backup-service-defaults
+    command: ["/usr/local/bin/proofline-backup-retention.sh"]
+    environment:
+      <<: *backup-environment
+      PGDATA: /var/lib/postgresql/data
+      PROOFLINE_BACKUP_EVIDENCE_FILE: /run/proofline/backup/evidence.json
+      PROOFLINE_BACKUP_EVIDENCE_SHA256: ${PROOFLINE_BACKUP_EVIDENCE_SHA256:?PROOFLINE_BACKUP_EVIDENCE_SHA256 is required}
+      PROOFLINE_BACKUP_RETENTION_ACCESS_KEY_ID_FILE: /run/secrets/backup_retention_access_key_id
+      PROOFLINE_BACKUP_RETENTION_SECRET_ACCESS_KEY_FILE: /run/secrets/backup_retention_secret_access_key
+    secrets:
+      - source: backup_retention_access_key_id
+        target: backup_retention_access_key_id
+      - source: backup_retention_secret_access_key
+        target: backup_retention_secret_access_key
+      - source: backup_encryption_key
+        target: backup_encryption_key
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:ro
+      - type: bind
+        source: ${PROOFLINE_BACKUP_EVIDENCE_FILE:?PROOFLINE_BACKUP_EVIDENCE_FILE is required}
+        target: /run/proofline/backup/evidence.json
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - backup_egress
+
+networks:
+  backup_egress: {}
+
+secrets:
+  backup_database_url:
+    file: ${PROOFLINE_BACKUP_DATABASE_URL_FILE:?PROOFLINE_BACKUP_DATABASE_URL_FILE is required}
+  backup_writer_access_key_id:
+    file: ${PROOFLINE_BACKUP_WRITER_ACCESS_KEY_ID_FILE:?PROOFLINE_BACKUP_WRITER_ACCESS_KEY_ID_FILE is required}
+  backup_writer_secret_access_key:
+    file: ${PROOFLINE_BACKUP_WRITER_SECRET_ACCESS_KEY_FILE:?PROOFLINE_BACKUP_WRITER_SECRET_ACCESS_KEY_FILE is required}
+  backup_reader_access_key_id:
+    file: ${PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE:?PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE is required}
+  backup_reader_secret_access_key:
+    file: ${PROOFLINE_BACKUP_READER_SECRET_ACCESS_KEY_FILE:?PROOFLINE_BACKUP_READER_SECRET_ACCESS_KEY_FILE is required}
+  backup_retention_access_key_id:
+    file: ${PROOFLINE_BACKUP_RETENTION_ACCESS_KEY_ID_FILE:?PROOFLINE_BACKUP_RETENTION_ACCESS_KEY_ID_FILE is required}
+  backup_retention_secret_access_key:
+    file: ${PROOFLINE_BACKUP_RETENTION_SECRET_ACCESS_KEY_FILE:?PROOFLINE_BACKUP_RETENTION_SECRET_ACCESS_KEY_FILE is required}
+  backup_encryption_key:
+    file: ${PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE:?PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE is required}

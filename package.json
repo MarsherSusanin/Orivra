@@ -32,6 +32,7 @@
     "docker:prefetch": "node scripts/docker-prefetch.mjs",
     "test:docker": "node scripts/docker-gate.mjs",
     "test:docker:runtime": "node scripts/docker-runtime-smoke.mjs",
+    "test:docker:recovery": "node scripts/docker-recovery-gate.mjs",
     "compose:production": "node scripts/compose-production.mjs"
   },
   "dependencies": {

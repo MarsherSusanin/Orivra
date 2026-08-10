@@ -296,15 +296,21 @@ database backup или PITR plan.
 текущей executable части. Первый 027A image/Compose/Caddy candidate отклонён;
 его second corrective replacement независимо проверен на одном exact tree.
 027B migration/readiness boundary независимо проверен Core и Product на exact
-commit `527c561` / tree `ebdf648`. ADR 0037 замораживает следующий encrypted
-WAL/base-backup/PITR boundary, но его implementation и MinIO restore evidence
-ещё отсутствуют. Нет
-release-ready VDS composition или production deployment. В репозитории нет
+commit `527c561` / tree `ebdf648`. Для ADR 0037 локальный credential-free
+production-author candidate теперь реализует encrypted WAL/base-backup/PITR
+boundary и exact MinIO restore drill: два offline no-pull build, 027A/027B
+Docker regressions, paused target-time recovery, все восемь real negative cases
+и scoped cleanup PASS. Final author security diff scan сообщает zero reportable
+findings; immutable Dockerfile frontend identity и WAL-G retention object-set
+binding остаются двумя deferred follow-up. Две независимые проверки stopped
+candidate ещё pending. Нет release-ready VDS composition или production
+deployment. В репозитории нет
 `.github/workflows` или настроенного merge queue. Hosting is not yet
 provisioned; ADR 0029 выбирает target, но не доказывает его доступность.
 Credentials выдаются только после завершения credential-free 022–029A,
 единого full matrix и двух независимых PASS на одном tree hash. До этого hosted
-или deployed live Coston2 PASS не заявляется.
+или deployed live Coston2 PASS не заявляется; production Spaces, фактические
+RPO/RTO и SLA evidence также отсутствуют.
 
 ## Product scope
 

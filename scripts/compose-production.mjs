@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { lstat } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseProductionBackupConfiguration } from "./backup-configuration.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPOSITORY_COMPONENT = "[a-z0-9]+(?:[._-][a-z0-9]+)*";
@@ -23,6 +24,17 @@ const RUNTIME_INPUT_FILES = [
 ];
 const RUNTIME_INPUT_ERROR =
   "Production runtime input file configuration is invalid";
+const BACKUP_INPUT_FILES = [
+  "PROOFLINE_BACKUP_DATABASE_URL_FILE",
+  "PROOFLINE_BACKUP_WRITER_ACCESS_KEY_ID_FILE",
+  "PROOFLINE_BACKUP_WRITER_SECRET_ACCESS_KEY_FILE",
+  "PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE",
+  "PROOFLINE_BACKUP_READER_SECRET_ACCESS_KEY_FILE",
+  "PROOFLINE_BACKUP_RETENTION_ACCESS_KEY_ID_FILE",
+  "PROOFLINE_BACKUP_RETENTION_SECRET_ACCESS_KEY_FILE",
+  "PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE",
+  "PROOFLINE_BACKUP_EVIDENCE_FILE",
+];
 
 async function validateRuntimeInputFiles(environment) {
   try {
@@ -33,6 +45,23 @@ async function validateRuntimeInputFiles(environment) {
       }
       const status = await lstat(path);
       if (!status.isFile() || status.size < 1) {
+        throw new Error(RUNTIME_INPUT_ERROR);
+      }
+    }
+  } catch {
+    throw new Error(RUNTIME_INPUT_ERROR);
+  }
+}
+
+async function validateBackupInputFiles(environment) {
+  try {
+    for (const name of BACKUP_INPUT_FILES) {
+      const path = environment[name];
+      if (typeof path !== "string" || !isAbsolute(path)) {
+        throw new Error(RUNTIME_INPUT_ERROR);
+      }
+      const status = await lstat(path);
+      if (!status.isFile() || status.size < 1 || status.size > 65_536) {
         throw new Error(RUNTIME_INPUT_ERROR);
       }
     }
@@ -64,6 +93,9 @@ export async function runProductionCompose({
   if (runtime) {
     validateProductionImageReference(environment.PROOFLINE_API_IMAGE);
     validateProductionImageReference(environment.PROOFLINE_WORKER_IMAGE);
+    if (environment.PROOFLINE_POSTGRES_IMAGE !== undefined) {
+      validateProductionImageReference(environment.PROOFLINE_POSTGRES_IMAGE);
+    }
     if (composeArguments.some((argument) => argument === "start" || argument === "restart")) {
       throw new Error("Runtime one-shot jobs require an up deployment and cannot use start or restart");
     }
@@ -72,11 +104,18 @@ export async function runProductionCompose({
     }
     if (composeArguments.includes("up")) {
       await validateRuntimeInputFiles(environment);
+      if (environment.PROOFLINE_POSTGRES_IMAGE !== undefined) {
+        parseProductionBackupConfiguration(environment);
+        await validateBackupInputFiles(environment);
+      }
     }
   }
 
   const args = ["compose", "--file", "compose.yaml"];
-  if (runtime) args.push("--file", "deploy/compose.runtime.yaml");
+  if (runtime) {
+    args.push("--file", "deploy/compose.runtime.yaml");
+    args.push("--file", "deploy/compose.backup.yaml");
+  }
   args.push(...composeArguments);
   if (runtime && composeArguments.includes("up") && !composeArguments.includes("--force-recreate")) {
     args.push("--force-recreate");

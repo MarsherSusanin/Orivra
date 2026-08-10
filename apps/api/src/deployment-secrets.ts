@@ -6,7 +6,8 @@ export type DeploymentProfile =
   | "worker"
   | "recording-importer"
   | "db-role-bootstrap"
-  | "migration-runner";
+  | "migration-runner"
+  | "backup";
 export type DeploymentEnvironment = Record<string, string | undefined>;
 
 const REQUIRED_SECRETS = {
@@ -25,7 +26,12 @@ const REQUIRED_SECRETS = {
     "PROOFLINE_RECORDING_IMPORTER_DATABASE_URL",
   ],
   "migration-runner": ["DATABASE_URL"],
+  backup: ["PROOFLINE_BACKUP_DATABASE_URL"],
 } as const satisfies Record<DeploymentProfile, readonly string[]>;
+
+const OPTIONAL_SECRETS: Partial<Record<DeploymentProfile, readonly string[]>> = {
+  "db-role-bootstrap": ["PROOFLINE_BACKUP_DATABASE_URL"],
+};
 
 const ERROR_CODE = "DEPLOYMENT_SECRET_CONFIGURATION_INVALID";
 const ERROR_MESSAGE = "Deployment secret configuration is invalid";
@@ -101,8 +107,9 @@ export async function resolveDeploymentEnvironment(
 ): Promise<DeploymentEnvironment> {
   if (!Object.hasOwn(REQUIRED_SECRETS, profile)) invalidConfiguration();
   const requiredSecrets = REQUIRED_SECRETS[profile];
+  const optionalSecrets = OPTIONAL_SECRETS[profile] ?? [];
   const allowedFileVariables = new Set(
-    requiredSecrets.map((name) => `${name}_FILE`),
+    [...requiredSecrets, ...optionalSecrets].map((name) => `${name}_FILE`),
   );
   for (const name of Object.keys(environment)) {
     if (isDeploymentFileVariable(name) && !allowedFileVariables.has(name)) {
@@ -128,6 +135,19 @@ export async function resolveDeploymentEnvironment(
     const value = direct!.trim();
     if (!value) invalidConfiguration();
     resolved[name] = value;
+  }
+  for (const name of optionalSecrets) {
+    const direct = environment[name];
+    const file = environment[`${name}_FILE`];
+    if (direct !== undefined && file !== undefined) invalidConfiguration();
+    if (file !== undefined) {
+      if (!file.trim()) invalidConfiguration();
+      resolved[name] = await readSecretFile(file);
+    } else if (direct !== undefined) {
+      const value = direct.trim();
+      if (!value) invalidConfiguration();
+      resolved[name] = value;
+    }
   }
   return resolved;
 }

@@ -20,6 +20,21 @@ evidence only.
 Risk: high release-path, database-role, secret, egress, backup-retention and
 recovery change. No public HTTP or Web contract changes.
 
+## Status
+
+The production-author candidate is locally GREEN and awaits two independent
+verifiers on one stopped tree. Exact author evidence includes two offline
+no-pull/network-none builds, the 027A HTTPS and 027B runtime regressions, and
+the credential-free encrypted MinIO recovery gate with paused exact-time
+restore, A-present/B-absent, all eight executable negative cases, worker absent
+and exact project/container/network/volume/secret/temp cleanup.
+
+The final author security diff scan reports zero reportable findings. Two
+follow-ups remain deferred: immutable `docker/dockerfile` frontend identity and
+a bounded WAL-G v3.0.8 retention object-set proof under writer-only prefix
+mutation. This status is not hosted/VDS or production Spaces evidence, uses no
+live Coston2 or deployment credential, and makes no actual RPO/RTO or SLA claim.
+
 ## Delivery split
 
 ### 027C1 — contracts, tool identity and configuration

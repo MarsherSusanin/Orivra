@@ -1,0 +1,225 @@
+services:
+  postgres:
+    image: proofline/postgres-recovery:027c-qa
+    environment:
+      PROOFLINE_BACKUP_SLOT: qa
+      PROOFLINE_BACKUP_ENDPOINT: http://minio:9000
+      PROOFLINE_BACKUP_REGION: us-east-1
+      PROOFLINE_BACKUP_BUCKET: proofline-recovery-qa
+      PROOFLINE_BACKUP_QA: "true"
+    networks:
+      - db_internal
+      - backup_egress
+      - recovery_internal
+
+  base-backup:
+    environment:
+      PROOFLINE_BACKUP_QA: "true"
+    networks:
+      - db_internal
+      - backup_egress
+      - recovery_internal
+
+  backup-status:
+    environment:
+      PROOFLINE_BACKUP_QA: "true"
+    networks:
+      - backup_egress
+      - recovery_internal
+
+  backup-retention:
+    environment:
+      PROOFLINE_BACKUP_QA: "true"
+    networks:
+      - backup_egress
+      - recovery_internal
+
+  minio:
+    platform: linux/amd64
+    image: ${PROOFLINE_MINIO_IMAGE:?PROOFLINE_MINIO_IMAGE is required}
+    pull_policy: never
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    expose:
+      - "9000"
+    volumes:
+      - minio_data:/data
+    networks:
+      - recovery_internal
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  minio-init:
+    platform: linux/amd64
+    image: ${PROOFLINE_MINIO_CLIENT_IMAGE:?PROOFLINE_MINIO_CLIENT_IMAGE is required}
+    pull_policy: never
+    entrypoint: ["/bin/sh", "-eu", "-c"]
+    command:
+      - |
+        root_user=$$(cat /run/secrets/minio_root_user)
+        root_password=$$(cat /run/secrets/minio_root_password)
+        mc alias set recovery http://minio:9000 "$$root_user" "$$root_password"
+        mc mb --ignore-existing recovery/proofline-recovery-qa
+        mc admin user add recovery "$$(cat /run/secrets/backup_writer_access_key_id)" "$$(cat /run/secrets/backup_writer_secret_access_key)"
+        mc admin user add recovery "$$(cat /run/secrets/backup_reader_access_key_id)" "$$(cat /run/secrets/backup_reader_secret_access_key)"
+        mc admin user add recovery "$$(cat /run/secrets/backup_retention_access_key_id)" "$$(cat /run/secrets/backup_retention_secret_access_key)"
+        printf '%s\n' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetBucketLocation","s3:ListBucket","s3:ListBucketMultipartUploads"],"Resource":["arn:aws:s3:::proofline-recovery-qa"]},{"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"],"Resource":["arn:aws:s3:::proofline-recovery-qa/proofline/v1/qa/*"]}]}' > /tmp/proofline-writer.json
+        printf '%s\n' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetBucketLocation","s3:ListBucket"],"Resource":["arn:aws:s3:::proofline-recovery-qa"]},{"Effect":"Allow","Action":["s3:GetObject"],"Resource":["arn:aws:s3:::proofline-recovery-qa/proofline/v1/qa/*"]}]}' > /tmp/proofline-reader.json
+        printf '%s\n' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetBucketLocation","s3:ListBucket","s3:ListBucketMultipartUploads"],"Resource":["arn:aws:s3:::proofline-recovery-qa"]},{"Effect":"Allow","Action":["s3:GetObject","s3:DeleteObject","s3:DeleteObjectVersion","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"],"Resource":["arn:aws:s3:::proofline-recovery-qa/proofline/v1/qa/*"]}]}' > /tmp/proofline-retention.json
+        mc admin policy create recovery proofline-writer /tmp/proofline-writer.json
+        mc admin policy create recovery proofline-reader /tmp/proofline-reader.json
+        mc admin policy create recovery proofline-retention /tmp/proofline-retention.json
+        mc admin policy attach recovery proofline-writer --user "$$(cat /run/secrets/backup_writer_access_key_id)"
+        mc admin policy attach recovery proofline-reader --user "$$(cat /run/secrets/backup_reader_access_key_id)"
+        mc admin policy attach recovery proofline-retention --user "$$(cat /run/secrets/backup_retention_access_key_id)"
+    secrets:
+      - minio_root_user
+      - minio_root_password
+      - backup_writer_access_key_id
+      - backup_writer_secret_access_key
+      - backup_reader_access_key_id
+      - backup_reader_secret_access_key
+      - backup_retention_access_key_id
+      - backup_retention_secret_access_key
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - recovery_internal
+    restart: "no"
+
+  pitr-fetch:
+    platform: linux/amd64
+    image: proofline/postgres-recovery:027c-qa
+    pull_policy: never
+    user: "999:999"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    command: ["/usr/local/bin/proofline-pitr-fetch.sh"]
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      PROOFLINE_BACKUP_SLOT: qa
+      PROOFLINE_BACKUP_ENDPOINT: http://minio:9000
+      PROOFLINE_BACKUP_REGION: us-east-1
+      PROOFLINE_BACKUP_BUCKET: proofline-recovery-qa
+      PROOFLINE_BACKUP_QA: "true"
+      PROOFLINE_BACKUP_SYSTEM_IDENTIFIER: ${PROOFLINE_BACKUP_SYSTEM_IDENTIFIER:?PROOFLINE_BACKUP_SYSTEM_IDENTIFIER is required}
+      PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup_encryption_key
+      PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE: /run/secrets/backup_reader_access_key_id
+      PROOFLINE_BACKUP_READER_SECRET_ACCESS_KEY_FILE: /run/secrets/backup_reader_secret_access_key
+      PROOFLINE_RESTORE_BACKUP_ID: ${PROOFLINE_RESTORE_BACKUP_ID:?PROOFLINE_RESTORE_BACKUP_ID is required}
+      PROOFLINE_RESTORE_BACKUP_EVIDENCE_SHA256: ${PROOFLINE_RESTORE_BACKUP_EVIDENCE_SHA256:?PROOFLINE_RESTORE_BACKUP_EVIDENCE_SHA256 is required}
+      PROOFLINE_RECOVERY_TARGET_TIME: ${PROOFLINE_RECOVERY_TARGET_TIME:?PROOFLINE_RECOVERY_TARGET_TIME is required}
+      PROOFLINE_RECOVERY_TARGET_TIMELINE: ${PROOFLINE_RECOVERY_TARGET_TIMELINE:?PROOFLINE_RECOVERY_TARGET_TIMELINE is required}
+      recovery_target_inclusive: "on"
+      recovery_target_action: pause
+      recovery_target_timeline: ${PROOFLINE_RECOVERY_TARGET_TIMELINE:?PROOFLINE_RECOVERY_TARGET_TIMELINE is required}
+    secrets:
+      - backup_reader_access_key_id
+      - backup_reader_secret_access_key
+      - backup_encryption_key
+    volumes:
+      - pitr_postgres_data:/var/lib/postgresql/data
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      - recovery_internal
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  pitr-postgres:
+    platform: linux/amd64
+    image: proofline/postgres-recovery:027c-qa
+    pull_policy: never
+    user: "999:999"
+    command: ["postgres"]
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      PROOFLINE_BACKUP_SLOT: qa
+      PROOFLINE_BACKUP_ENDPOINT: http://minio:9000
+      PROOFLINE_BACKUP_REGION: us-east-1
+      PROOFLINE_BACKUP_BUCKET: proofline-recovery-qa
+      PROOFLINE_BACKUP_QA: "true"
+      PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup_encryption_key
+      PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE: /run/secrets/backup_reader_access_key_id
+      PROOFLINE_BACKUP_READER_SECRET_ACCESS_KEY_FILE: /run/secrets/backup_reader_secret_access_key
+    secrets:
+      - backup_reader_access_key_id
+      - backup_reader_secret_access_key
+      - backup_encryption_key
+    volumes:
+      - pitr_postgres_data:/var/lib/postgresql/data
+    depends_on:
+      pitr-fetch:
+        condition: service_completed_successfully
+    expose:
+      - "5432"
+    networks:
+      - recovery_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U proofline -d proofline"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  pitr-verify:
+    platform: linux/amd64
+    image: proofline/postgres-recovery:027c-qa
+    pull_policy: never
+    user: "999:999"
+    entrypoint: ["/bin/sh", "-eu", "-c"]
+    command:
+      - |
+        export PGPASSWORD="$$(cat /run/secrets/postgres_password)"
+        pg_is_in_recovery=$$(psql -h pitr-postgres -U proofline -d proofline -Atc 'SELECT pg_is_in_recovery()')
+        pg_is_wal_replay_paused=$$(psql -h pitr-postgres -U proofline -d proofline -Atc 'SELECT pg_is_wal_replay_paused()')
+        system_identifier=$$(psql -h pitr-postgres -U proofline -d proofline -Atc 'SELECT system_identifier FROM pg_control_system()')
+        schema_version=$$(psql -h pitr-postgres -U proofline -d proofline -Atc 'SELECT max(version) FROM proofline_private.schema_migrations')
+        migration_checksum_count=$$(psql -h pitr-postgres -U proofline -d proofline -Atc 'SELECT count(*) FROM proofline_private.schema_migrations')
+        before_cut_count=$$(psql -h pitr-postgres -U proofline -d proofline -Atc 'SELECT count(*) FROM proofline_recovery_sentinel WHERE cut_name = '\''before-cut'\''')
+        after_cut_count=$$(psql -h pitr-postgres -U proofline -d proofline -Atc 'SELECT count(*) FROM proofline_recovery_sentinel WHERE cut_name = '\''after-cut'\''')
+        printf '{"pgIsInRecovery":"%s","pgIsWalReplayPaused":"%s","systemIdentifier":"%s","expectedSystemIdentifier":"%s","schemaVersion":"%s","migrationChecksumCount":"%s","beforeCutCount":"%s","afterCutCount":"%s","inventorySha256":"%s","expectedInventorySha256":"%s"}\n' \
+          "$$pg_is_in_recovery" "$$pg_is_wal_replay_paused" "$$system_identifier" \
+          "${PROOFLINE_BACKUP_SYSTEM_IDENTIFIER:?PROOFLINE_BACKUP_SYSTEM_IDENTIFIER is required}" \
+          "$$schema_version" "$$migration_checksum_count" "$$before_cut_count" "$$after_cut_count" \
+          "${PROOFLINE_OBSERVED_INVENTORY_SHA256:?PROOFLINE_OBSERVED_INVENTORY_SHA256 is required}" \
+          "${PROOFLINE_EXPECTED_INVENTORY_SHA256:?PROOFLINE_EXPECTED_INVENTORY_SHA256 is required}"
+    secrets:
+      - postgres_password
+    depends_on:
+      pitr-postgres:
+        condition: service_healthy
+    networks:
+      - recovery_internal
+    restart: "no"
+
+networks:
+  recovery_internal:
+    internal: true
+
+volumes:
+  minio_data: {}
+  pitr_postgres_data: {}
+
+secrets:
+  minio_root_user:
+    file: ${PROOFLINE_MINIO_ROOT_USER_FILE:?PROOFLINE_MINIO_ROOT_USER_FILE is required}
+  minio_root_password:
+    file: ${PROOFLINE_MINIO_ROOT_PASSWORD_FILE:?PROOFLINE_MINIO_ROOT_PASSWORD_FILE is required}

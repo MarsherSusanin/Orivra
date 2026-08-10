@@ -200,6 +200,79 @@ credentials локальный Docker gate выполняет MinIO restore dril
 изолированный PostgreSQL volume. A Droplet backup does not replace the database
 backup or PITR plan. Он остаётся только дополнительным host-recovery snapshot.
 
+Slice 027C fixes PostgreSQL at 17.6-bookworm and WAL-G at v3.0.8 by checked-in
+Linux/amd64 manifest and release-asset checksums. The only network-capable
+dependency step remains the isolated no-auth prefetch; subsequent image builds
+are repeated with `--pull=false` and `--network=none`:
+
+```bash
+npm run docker:prefetch
+node scripts/docker-build.mjs
+npm run test:docker:recovery
+```
+
+The stopped production-author candidate is locally GREEN and still awaits two
+independent verifiers. Its exact credential-free evidence includes two offline
+no-pull/network-none builds, the 027A HTTPS and 027B runtime regressions, and
+`test:docker:recovery` with a paused exact-time restore, A-present/B-absent,
+all eight fixed real negative outcomes, worker never started and zero scoped
+container/network/volume/secret/temp residue. The final author security diff
+scan reports zero reportable findings. Two follow-ups remain deferred rather
+than silently closed: immutable `docker/dockerfile` frontend identity and a
+bounded WAL-G v3.0.8 proof that writer-only prefix mutations cannot change the
+authorized `retain FULL 8` deletion object set.
+
+This is local credential-free author evidence only. It uses no production
+Spaces, GHCR, DNS, SSH or live Coston2 credential and proves no hosted/VDS
+backup, production restore or promotion, actual RPO/RTO, SLA or readiness.
+
+Production runtime composition always adds `deploy/compose.backup.yaml` through
+the fixed `compose:production -- --runtime` wrapper. When the recovery
+PostgreSQL image is selected, `up` first rejects ambient AWS/WAL-G authority,
+invalid Spaces endpoint/region/bucket/slot values, and missing, non-absolute,
+empty or oversized backup input files. Writer, restore-reader and retention
+access keys are separate file-only inputs; the API and worker receive none of
+them. The backup login owns no application group membership or table DML.
+
+PostgreSQL archives exact WAL segments and backup-history files under
+`s3://<bucket>/proofline/v1/<slot>/<system_identifier>`, with client-side
+libsodium encryption and overwrite prevention. A host timer may invoke the
+fixed wrapper for `base-backup` daily at 02:00 UTC. `backup-status` is a
+read-only operator JSON command. Run `backup-retention` only with a current
+verified backup-evidence file; it retains eight completed full backups and the
+WAL they require. Do not schedule a Docker-authority container.
+
+The credential-free recovery gate creates distinct ephemeral MinIO
+writer/reader/retention identities, makes a real base backup, records a
+PostgreSQL-clock UTC cut between two transactions, restores the selected exact
+backup into a new named volume, replays WAL through the reader-only restore
+command, and requires the restored server to remain paused in recovery with the
+before-cut row present and after-cut row absent. It never starts worker and
+removes its project, containers, networks, volumes and temporary secrets on
+success or failure. Restore booleans and checks are derived from the final
+machine-readable `pitr-verify` record; a hard-coded success value or a mismatch
+with the direct PostgreSQL recovery-state query fails the gate.
+
+The same gate then executes, in order, missing WAL, corrupt backup, wrong key,
+future target, reused volume, nonempty volume, absent promotion authorization
+and mismatched promotion-evidence controls. Each must observe its fixed failure
+code within the case deadline, create zero PASS evidence, attempt zero
+promotion and leave zero case-scoped containers, networks, volumes and
+temporary paths before the next case. A drill PASS is not promotion authority:
+`scripts/restore-promotion.mjs` validates strict restore evidence plus a
+separate, unexpired, exact-digest-bound operator authorization before it can
+call `pg_promote`.
+
+Negative children report only their fixed failure code. The parent separately
+probes the mutated MinIO object or volume, the reached Docker/PostgreSQL sink,
+the absence of PASS evidence and the unpromoted recovery server; child-authored
+observation JSON is never release evidence. The gate builds fresh exact
+allowlist environments for Docker and for each child, so ambient registry,
+cloud, proxy, token and relayer authority is not inherited. Prepare, execute,
+inspect, per-case cleanup and final project cleanup use bounded asynchronous
+process groups: timeout sends `SIGTERM`, follows with `SIGKILL` after the fixed
+grace period and still runs a separately bounded scoped cleanup.
+
 Официальные operational references:
 
 - [DigitalOcean Cloud Firewalls](https://docs.digitalocean.com/products/networking/firewalls/getting-started/quickstart/);
@@ -675,13 +748,15 @@ Upstream Coston2 outage блокирует release. Override возможен т
   откатывайте journal или migration destructive SQL вручную. При ошибке схемы
   восстанавливайте подтверждённый WAL/base-backup PITR в новый PostgreSQL
   volume, проверяйте его и только затем выполняйте явное переключение.
-- 027C должен доказать MinIO restore drill локально. Droplet backup не считается
-  database restore evidence.
+- 027C production-author candidate локально доказывает credential-free MinIO
+  restore drill; две independent verification waves ещё pending. Droplet backup
+  не считается database restore evidence.
 - ADR 0037 замораживает WAL-G v3.0.8, custom official PostgreSQL 17.6 Debian
   image, encrypted prefix
   `s3://<bucket>/proofline/v1/<slot>/<systemIdentifier>`, daily 02:00 UTC base
-  backup, eight retained FULL chains and paused exact-time recovery. До 027C
-  GREEN этих image/asset locks, archive services и recovery evidence нет.
+  backup, eight retained FULL chains and paused exact-time recovery. Эти
+  image/asset locks, archive services и local recovery evidence входят в
+  production-author GREEN; это ещё не independently verified или hosted PASS.
 - Production restore authority — только exact completed backup evidence,
   backup ID, UTC target и numeric timeline; `LATEST` запрещён. Restore всегда
   пишет в новый пустой volume и остаётся paused/in-recovery. `pg_promote`
