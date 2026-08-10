@@ -340,7 +340,7 @@ accepted recorded fixtures but still does not start worker.
 
 This corrective run is intentionally RED on the rejected production
 tree. Typecheck is PASS. The expanded worker/DSN/downstream compatibility focus
-is 7 files / 86 cases: 62 semantic RED and 24 controls PASS. The rendered
+is 7 files / 86 cases: 63 semantic RED and 23 controls PASS. The rendered
 deployment focus is 29 cases: exactly 2 semantic RED and 27 controls PASS. The
 REDs identify the absent typed parser/loader/shared URL parser, post-authority
 environment/filesystem reads, incomplete Compose configuration/mounts, and the
@@ -351,3 +351,11 @@ failed only on the intended missing loader. Nine unchanged nearest API/worker
 files remain 113/113 PASS, and Sites compatibility remains 36/36 PASS. No
 production, dependency, migration, Docker, provider or network change is part
 of this RED wave.
+
+A final compatibility audit found one retained Slice 005 case still expecting
+an invalid relayer cap to be discovered after Pool and schema construction.
+That stale expectation was corrected to the same fixed pre-authority runtime
+configuration error and now requires zero Pool construction or cleanup, schema,
+heartbeat, claim, verifier or external effect. The narrow Slice 005/runtime
+authority focus is intentionally 44 RED and 4 controls PASS; typecheck and the
+unchanged 113-case nearest baseline remain PASS.
