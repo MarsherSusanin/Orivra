@@ -372,7 +372,7 @@ test("production parent probes never read child-authored observation JSON", asyn
   assert.match(negativeRuntime, /inspectPassEvidence/);
   assert.match(negativeRuntime, /inspectPromotionState/);
   assert.match(negativeRuntime, /parentObservationSha256/);
-  assert.match(negativeRuntime, /pg_is_in_recovery/);
+  assert.doesNotMatch(negativeRuntime, /pg_is_in_recovery/);
   assert.match(negativeRuntime, /volume\s+inspect|volumeInspect/);
   assert.match(negativeRuntime, /(?:mc\s+(?:stat|cat)|inspectObject)/);
   assert.doesNotMatch(negativeRuntime, /observationPath|observation\.v1\.json/);

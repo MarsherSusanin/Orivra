@@ -525,6 +525,28 @@ intentional RED and 52 controls PASS. Syntax and typecheck PASS; unchanged
 027A/027B/027R neighbors remain 45/45 PASS and Sites remains 36/36 PASS. No
 Docker daemon, network, production, dependency or lockfile operation ran.
 
+### Future-target retained-contract compatibility correction
+
+On exact clean base `c5ca9b3653590289ea221b24b6039a896b05b8a2` / tree
+`1f5bd738075a817e8e99c2cba6db2ade8536f9f9`, candidate stash
+`21f96b4e22deb603eab5655a824e624bee362901` / tree
+`94ca730d6ff7c7ec67c4688946a9461a3ab54bff` was inspected read-only and never
+applied. The retained wave-2 whole-file assertion still required a
+`pg_is_in_recovery` query in the negative runtime. That requirement became
+unsafe and contradictory once the terminal-only future-target parent contract
+removed the sole legitimate use: running recovery is an intermediate state,
+not failure or zero-promotion evidence.
+
+The obsolete positive match is replaced by a whole-file negative assertion.
+Together with wave 3's exact sink-slice, promotion-slice and dedicated-probe
+assertions, this prevents the query from returning through an adjacent future
+branch while preserving every other wave-2 parent identity, mutation, sink,
+PASS, promotion and no-child-observation check. Test counts and intentional RED
+reasons remain unchanged: wave 3 is 26/26 RED, the combined security focus is
+71/71 RED, Docker static is 86 RED plus 52 controls, neighbors are 45/45 PASS
+and Sites is 36/36 PASS. Syntax and typecheck PASS. No Docker daemon, network,
+production, dependency or lockfile operation ran.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;
