@@ -177,6 +177,37 @@ intentional RED, 2 controls PASS and 2 real-PostgreSQL cases gated; deployment
 recovery remains 12 intentional RED and 2 controls PASS. The nearest accepted
 deployment/roadmap matrix is 45/45 PASS and Sites is 36/36 PASS.
 
+### Recovery-gate control-bypass corrective RED
+
+The production WIP was inspected read-only from stash object
+`6cd5c72c2835c87e6b8d7fb896669ddc02374f7d` / tree
+`134cd52250824ebfc86f0a27224753faf6dc86b4` and its untracked tree
+`f9360f74c913270842d1dee9b8210ea8c3587fb3`; it was never applied. The candidate
+`scripts/docker-recovery-gate.mjs` declared negative case names and immediately
+discarded them with `void negativeCases`. Its positive path then assigned
+`beforeCutPresent` and `afterCutAbsent` literal `true` values after a job exit.
+No missing/corrupt object, wrong key, future target, reused/nonempty volume or
+promotion-authorization negative actually ran. This is a CWE-693 protection
+mechanism failure, so the WIP is rejected and supplies no recovery evidence.
+
+Corrective RED adds an import-safe injectable core contract with eight exact
+cases and fixed failure codes. Each case must return structured failure, zero
+PASS-evidence writes, zero promotion attempts and exact zero cleanup counts;
+strings, names, wrong codes, timeout and leftover resources fail closed. The
+core must derive every restore/check boolean from actual machine-readable
+`pitr-verify` fields. Source assertions require the Docker runtime and entry to
+invoke that core and explicitly prohibit discarded case arrays or hardcoded cut
+booleans. No negative case may reach `pg_promote`.
+
+Corrective RED was demonstrated on the clean base
+`5bd192242b09ed3a348a80456c544b431c21a9f7` / tree
+`3d81e905d600c3151482718799d0f8e02dd24fbd`: `npm run typecheck` PASS; the new
+executable-negative suite is 16/16 intentional RED because the import-safe core
+and runtime do not exist; the existing deployment recovery contract remains 12
+intentional RED and 2 controls PASS. The unchanged nearest deployment/roadmap
+controls are 45/45 PASS and Sites compatibility is 36/36 PASS. No Docker,
+network, production, dependency or lockfile operation was run.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;

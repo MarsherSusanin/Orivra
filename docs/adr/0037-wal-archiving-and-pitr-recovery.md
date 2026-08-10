@@ -225,6 +225,35 @@ volume and promotion without exact authorization all fail closed. Failure
 creates no PASS/promotion evidence and cleanup removes only the exact QA
 project, volumes, secret directory and port probes.
 
+The executable gate owns an import-safe core and an injected Docker runtime;
+an array of case names, source-text matches or `void` references is not
+negative evidence. It executes these exact bounded cases in order:
+
+| Case | Required fixed failure |
+|---|---|
+| `missing-wal-object` | `RECOVERY_MISSING_OBJECT` |
+| `corrupt-backup-object` | `RECOVERY_CORRUPT_OBJECT` |
+| `wrong-encryption-key` | `RECOVERY_ENCRYPTION_KEY_INVALID` |
+| `future-recovery-target` | `RECOVERY_TARGET_UNAVAILABLE` |
+| `reused-restore-volume` | `RECOVERY_VOLUME_REUSED` |
+| `nonempty-restore-volume` | `RECOVERY_VOLUME_NOT_EMPTY` |
+| `promotion-authorization-absent` | `RESTORE_PROMOTION_FORBIDDEN` |
+| `promotion-authorization-mismatch` | `RESTORE_PROMOTION_EVIDENCE_MISMATCH` |
+
+Each case has a bounded abort signal, observes a structured `status: "failed"`
+result with its exact code, writes zero PASS evidence, attempts zero promotion
+and performs exact scoped cleanup before the next case. A success exit, wrong
+code, string-only result, timeout, PASS write, promotion attempt or any leftover
+container/network/volume/temporary path fails the entire gate. Promotion cases
+must prove `pg_promote` was never called.
+
+The positive restore evidence is constructed only from machine-readable actual
+`pitr-verify` fields: recovery and replay-paused state, system identifier,
+schema/checksum counts, before/after cut counts and inventory SHA-256. The gate
+derives booleans by comparison with expected values. Literal assignments such
+as `beforeCutPresent = true` or `afterCutAbsent = true`, or successful job exit
+without parsed fields, cannot create PASS evidence.
+
 ## Excluded authority
 
 - No DNS, SSH, DigitalOcean, Spaces, GHCR or live Coston2 credential is used.

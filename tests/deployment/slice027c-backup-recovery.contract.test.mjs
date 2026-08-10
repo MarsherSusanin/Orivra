@@ -259,17 +259,35 @@ test("freezes private MinIO identities and exact new-volume paused PITR without 
 });
 
 test("fails closed for corrupt recovery inputs and promotion without exact authorization", async () => {
-  const [gate, promotion] = await Promise.all([
+  const [gate, core, runtime, promotion] = await Promise.all([
     source("scripts/docker-recovery-gate.mjs"),
+    source("scripts/docker-recovery-gate-core.mjs"),
+    source("scripts/docker-recovery-gate-runtime.mjs"),
     source("scripts/restore-promotion.mjs"),
   ]);
-  for (const pattern of [
-    /missing[\s_-]*wal/i,
-    /corrupt/i,
-    /wrong[\s_-]*key/i,
-    /future[\s_-]*target/i,
-    /nonempty|reused[\s_-]*volume/i,
-  ]) assert.match(gate, pattern);
+  assert.match(gate, /runRecoveryNegativeControls/);
+  assert.match(gate, /createDockerRecoveryOrchestration/);
+  assert.doesNotMatch(gate, /void\s+negativeCases/);
+  assert.doesNotMatch(
+    gate,
+    /(?:beforeCutPresent|afterCutAbsent)\s*=\s*true/,
+  );
+  assert.match(core, /deriveRestoreChecksFromPitrVerify/);
+  assert.match(core, /RECOVERY_NEGATIVE_CONTROL_BYPASSED/);
+  assert.match(runtime, /createDockerRecoveryOrchestration/);
+  for (const name of [
+    "missing-wal-object",
+    "corrupt-backup-object",
+    "wrong-encryption-key",
+    "future-recovery-target",
+    "reused-restore-volume",
+    "nonempty-restore-volume",
+    "promotion-authorization-absent",
+    "promotion-authorization-mismatch",
+  ]) assert.match(runtime, new RegExp(name));
+  assert.match(runtime, /pitr-verify|PitrVerify/i);
+  assert.match(runtime, /passEvidenceCount/);
+  assert.match(runtime, /promotionCount/);
   assert.match(promotion, /RestorePromotionAuthorizationV1Schema/);
   assert.match(promotion, /restoreDrillEvidenceSha256/);
   assert.match(promotion, /pg_promote/);

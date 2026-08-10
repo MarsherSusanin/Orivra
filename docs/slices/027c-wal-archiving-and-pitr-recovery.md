@@ -59,6 +59,11 @@ missing or placeholder values and does not invent them.
 - prove schema 10/10 and A-present/B-absent without starting API or worker;
 - reject missing/corrupt data, wrong key, future target, reused volume and
   unauthorized promotion;
+- execute all eight named negative cases through an import-safe injected core,
+  requiring their exact fixed failure codes, zero PASS/promotion effects and
+  exact cleanup after each case;
+- derive restore-state and cut/inventory evidence only from machine-readable
+  `pitr-verify` results, never literal success booleans;
 - clean exact project resources.
 
 ## Frozen contracts
@@ -109,7 +114,9 @@ non-following, nonblocking, regular, nonempty and bounded.
    fixed wrapper, advisory lock and eight-full retention;
 6. MinIO identities, exact backup selection, new-volume paused restore,
    immutable evidence and promotion authorization;
-7. corruption, missing-WAL, wrong-key, future-target and cleanup negatives;
+7. executable missing/corrupt-object, wrong-key, future-target,
+   reused/nonempty-volume and absent/mismatched-promotion controls with exact
+   failure codes, zero PASS/promotion effects, per-case timeout and cleanup;
 8. executable static seams plus one checked-in `test:docker:recovery` gate.
 
 ## GREEN and verification gates
