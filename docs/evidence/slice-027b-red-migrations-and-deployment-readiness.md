@@ -460,3 +460,33 @@ controls PASS. The unchanged nearest API/worker baseline is 12 files / 140
 PASS, deployment static is 30/30 PASS and Sites compatibility is 36/36 PASS.
 No Docker, PostgreSQL, coverage, build, provider or network action is part of
 this corrective freeze.
+
+## Corrective API coverage acceptance
+
+Independent Core verification rejected production candidate
+`f3ec2c8e85951e4b2755f6b36045bd434d1d1b37` / tree
+`ceff4b11f49f78e88e381e92cd44e51d46623a31` at the release gate. Its
+authoritative backend coverage run passed 1,196 tests with the expected 41
+integration skips and reported 91.66% aggregate lines / 86.79% branches, but
+the API source boundary was only 89.67% lines / 85.41% branches. That misses
+the AGENTS.md API line threshold even though the aggregate command exits zero.
+Real PostgreSQL, Docker, build and Sites verification therefore did not run,
+and Product remained stopped before runtime verification.
+
+The corrective tests exercise persisted-heartbeat failure authority rather
+than excluding source or lowering a threshold. Failed/missing start and stop
+rows, a disappeared row during refresh, rollback failure, an absent client
+factory and client acquisition failure must all produce the fixed bounded
+`DEPLOYMENT_HEARTBEAT_FAILED` error. A refresh failure must attempt rollback,
+release its client and never commit. Private database and rollback causes must
+not cross the public error boundary. Production code and public contracts are
+unchanged; acceptance requires a new authoritative coverage run proving the
+API source boundary itself reaches at least 90% lines and 85% branches.
+
+The corrective harness passes typecheck and the old/new heartbeat focus is 2
+files / 19 cases PASS. The authoritative backend coverage rerun is 119 files
+and 1,203 cases PASS with the same 4 files / 41 integration cases explicitly
+skipped by that non-PostgreSQL command. It reports API source at 90.35% lines /
+86.00% branches and aggregate backend at 92.00% lines / 87.10% branches. This
+closes only the coverage gate; the PostgreSQL, Docker, build and Sites gates
+held after the rejected candidate still require fresh independent verification.
