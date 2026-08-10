@@ -137,6 +137,16 @@ worker boundary is 2 files / 15 cases: 12 intentional 027B2 RED and 3 accepted
 controls PASS. The nearest worker bootstrap/lifecycle baseline remains 3 files,
 21/21 PASS with zero skip.
 
+### Identity-key harness correction
+
+The frozen startup-identity test originally scanned serialized JSON with the
+substring expression `runId|command|claim|lease`; that falsely classified the
+required key `releaseTreeSha` as lease authority. The corrected harness asserts
+the exact enumerable/JSON-visible keys `deploymentId`, `releaseTreeSha` and
+`workerInstanceId`, then recursively rejects only explicit run, command, claim
+and lease field names. Identity custody is unchanged and the rejection is no
+longer coupled to an innocent substring.
+
 ## GREEN authority still required
 
 Implementation must make the frozen contracts GREEN without adopting legacy

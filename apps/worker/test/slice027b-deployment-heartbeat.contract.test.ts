@@ -116,7 +116,35 @@ describe("Slice 027B persisted production worker deployment heartbeat", () => {
     expect(first).toMatchObject({ deploymentId: DEPLOYMENT_ID, releaseTreeSha: TREE });
     expect(first.workerInstanceId).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
     expect(second.workerInstanceId).not.toBe(first.workerInstanceId);
-    expect(JSON.stringify({ first, second })).not.toMatch(/runId|command|claim|lease/i);
+    expect(Object.keys(first).sort()).toEqual([
+      "deploymentId",
+      "releaseTreeSha",
+      "workerInstanceId",
+    ]);
+    expect(JSON.parse(JSON.stringify(first))).toEqual({
+      deploymentId: DEPLOYMENT_ID,
+      releaseTreeSha: TREE,
+      workerInstanceId: first.workerInstanceId,
+    });
+    const collectKeys = (value: unknown): string[] => {
+      if (Array.isArray(value)) return value.flatMap(collectKeys);
+      if (value === null || typeof value !== "object") return [];
+      return Object.entries(value).flatMap(([key, nested]) => [
+        key,
+        ...collectKeys(nested),
+      ]);
+    };
+    const forbidden = new Set([
+      "runId",
+      "commandId",
+      "claim",
+      "claimId",
+      "lease",
+      "leaseOwner",
+      "leaseExpiresAt",
+    ]);
+    expect(collectKeys({ first, second }).filter((key) => forbidden.has(key)))
+      .toEqual([]);
   });
 
   it("starts only after live configuration and exact schema, then refreshes every 10 seconds", async () => {
