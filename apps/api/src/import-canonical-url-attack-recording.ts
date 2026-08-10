@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { importCanonicalUrlAttackRecording } from "./canonical-url-attack-importer";
+import { verifyDeploymentSchema } from "./deployment-lifecycle";
 import { resolveDeploymentEnvironment } from "./deployment-secrets";
 
 function recordingArgument(argv: readonly string[]): string {
@@ -23,6 +24,7 @@ try {
     process.env,
   );
   pool = new Pool({ connectionString: environment.DATABASE_URL });
+  await verifyDeploymentSchema({ pool });
   const result = await importCanonicalUrlAttackRecording({
     recordingPath: recordingArgument(process.argv.slice(2)),
     pool,

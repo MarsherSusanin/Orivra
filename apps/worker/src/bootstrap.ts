@@ -2,8 +2,16 @@ import { Pool } from "pg";
 import { readFile } from "node:fs/promises";
 import { createPostgresCommandRepository } from "@proofline/api/src/postgres";
 import { resolveDeploymentEnvironment } from "@proofline/api/src/deployment-secrets";
-import { isCanonicalUint256Decimal } from "@proofline/contracts";
 import { createWeb2JsonVerifierClient } from "@proofline/fdc-coston2";
+import {
+  parseDeploymentIdentity,
+  verifyDeploymentSchema,
+} from "@proofline/api/src/deployment-lifecycle";
+import {
+  createDeploymentWorkerIdentity,
+  createPostgresDeploymentHeartbeatStore,
+} from "@proofline/api/src/deployment-heartbeat";
+import { isCanonicalUint256Decimal } from "@proofline/contracts";
 import { createLiveCoston2PipelinePorts } from "./live-runtime";
 import {
   createProductionCommandHandlers,
@@ -157,10 +165,64 @@ export async function runWorkerLoop(input: {
   shouldStop(): boolean;
   sleep(ms: number): Promise<void>;
   idleDelayMs: number;
+  deploymentHeartbeat?: {
+    refreshAndCleanup(): Promise<void>;
+  };
+  heartbeatIntervalMs?: number;
 }): Promise<void> {
-  while (!input.shouldStop()) {
-    const processed = await input.processOne();
-    if (!processed) await input.sleep(input.idleDelayMs);
+  let heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
+  let heartbeatRefresh: Promise<void> | undefined;
+  let heartbeatFailure: DeploymentHeartbeatFailure | undefined;
+  let finishHeartbeatFailure!: (failure: DeploymentHeartbeatFailure) => void;
+  const heartbeatFailed = new Promise<DeploymentHeartbeatFailure>((resolve) => {
+    finishHeartbeatFailure = resolve;
+  });
+  let loopClosed = false;
+
+  const scheduleHeartbeat = () => {
+    if (!input.deploymentHeartbeat || loopClosed) return;
+    heartbeatTimer = setTimeout(() => {
+      heartbeatRefresh = input.deploymentHeartbeat!.refreshAndCleanup()
+        .then(() => scheduleHeartbeat())
+        .catch(() => {
+          heartbeatFailure = new DeploymentHeartbeatFailure();
+          finishHeartbeatFailure(heartbeatFailure);
+        });
+    }, input.heartbeatIntervalMs ?? 10_000);
+  };
+  scheduleHeartbeat();
+
+  try {
+    while (!input.shouldStop()) {
+      if (heartbeatFailure) throw heartbeatFailure;
+      const current = input.processOne();
+      const outcome = input.deploymentHeartbeat
+        ? await Promise.race([
+            current.then((processed) => ({ kind: "processed" as const, processed })),
+            heartbeatFailed.then((failure) => ({ kind: "heartbeat" as const, failure })),
+          ])
+        : { kind: "processed" as const, processed: await current };
+      if (outcome.kind === "heartbeat") {
+        await current.catch(() => undefined);
+        throw outcome.failure;
+      }
+      if (heartbeatFailure) throw heartbeatFailure;
+      if (!outcome.processed) await input.sleep(input.idleDelayMs);
+    }
+  } finally {
+    loopClosed = true;
+    if (heartbeatTimer !== undefined) clearTimeout(heartbeatTimer);
+    await heartbeatRefresh;
+  }
+  if (heartbeatFailure) throw heartbeatFailure;
+}
+
+export class DeploymentHeartbeatFailure extends Error {
+  readonly code = "DEPLOYMENT_HEARTBEAT_FAILED";
+
+  constructor() {
+    super("Deployment heartbeat failed");
+    this.name = "DeploymentHeartbeatFailure";
   }
 }
 
@@ -171,6 +233,7 @@ export async function startProductionWorker(
     "worker",
     environment,
   );
+  const deploymentIdentity = parseDeploymentIdentity(resolvedEnvironment);
   const pool = new Pool({
     connectionString: required(resolvedEnvironment, "DATABASE_URL"),
     max: Number(resolvedEnvironment.PROOFLINE_WORKER_DB_POOL_SIZE ?? 4),
@@ -182,22 +245,34 @@ export async function startProductionWorker(
       "https://fdc-verifiers-testnet.flare.network",
     apiKey: required(resolvedEnvironment, "PROOFLINE_VERIFIER_API_KEY"),
   });
-  const worker = createProductionWorker({
-    environment: resolvedEnvironment,
-    pool,
-    verifier,
-  });
   let stopping = false;
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.on(signal, () => {
-      stopping = true;
+  try {
+    await verifyDeploymentSchema({ pool });
+    const heartbeatStore = createPostgresDeploymentHeartbeatStore({ pool });
+    const heartbeatIdentity = createDeploymentWorkerIdentity(deploymentIdentity);
+    await heartbeatStore.start(heartbeatIdentity);
+    const worker = createProductionWorker({
+      environment: resolvedEnvironment,
+      pool,
+      verifier,
     });
+    for (const signal of ["SIGINT", "SIGTERM"] as const) {
+      process.on(signal, () => {
+        stopping = true;
+      });
+    }
+    await runWorkerLoop({
+      processOne: worker.processOne,
+      shouldStop: () => stopping,
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      idleDelayMs: 1_000,
+      deploymentHeartbeat: {
+        refreshAndCleanup: () => heartbeatStore.refreshAndCleanup(heartbeatIdentity),
+      },
+      heartbeatIntervalMs: 10_000,
+    });
+    if (stopping) await heartbeatStore.stop(heartbeatIdentity);
+  } finally {
+    await pool.end();
   }
-  await runWorkerLoop({
-    processOne: worker.processOne,
-    shouldStop: () => stopping,
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    idleDelayMs: 1_000,
-  });
-  await pool.end();
 }

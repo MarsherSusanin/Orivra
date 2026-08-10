@@ -16,6 +16,10 @@ import {
   WalletSessionRequestV1Schema,
   WalletSessionV1Schema,
 } from "@proofline/contracts/wallet-auth";
+import {
+  DeploymentReadinessV1Schema,
+  type DeploymentReadinessV1,
+} from "@proofline/contracts/deployment";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@proofline/domain";
 import {
@@ -673,11 +677,77 @@ function runListQuery(url: URL):
   return { status: status.data, cursor: cursor.data, limit: limit.data };
 }
 
+type DeploymentReadiness = {
+  check(): Promise<DeploymentReadinessV1>;
+};
+
+function operationalJson(
+  value: unknown,
+  status: number,
+  headers?: HeadersInit,
+): Response {
+  const body = JSON.stringify(value);
+  return new Response(body, {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "content-length": String(Buffer.byteLength(body)),
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+      ...Object.fromEntries(new Headers(headers)),
+    },
+  });
+}
+
+async function operationalResponse(
+  request: Request,
+  url: URL,
+  readiness: DeploymentReadiness | undefined,
+): Promise<Response | null> {
+  if (url.pathname !== "/healthz" && url.pathname !== "/readyz") return null;
+  if (url.search !== "") {
+    return operationalJson(
+      { version: "1", error: { code: "NOT_FOUND", message: "Route not found" } },
+      404,
+    );
+  }
+  if (request.method !== "GET") {
+    return operationalJson(
+      {
+        version: "1",
+        error: { code: "METHOD_NOT_ALLOWED", message: "Request rejected" },
+      },
+      405,
+      { allow: "GET" },
+    );
+  }
+  if (url.pathname === "/healthz") {
+    return operationalJson({ version: "1", status: "ok" }, 200);
+  }
+  let result: DeploymentReadinessV1;
+  try {
+    result = DeploymentReadinessV1Schema.parse(await readiness?.check());
+  } catch {
+    result = {
+      version: "1",
+      status: "not-ready",
+      checks: {
+        database: "unavailable",
+        schema: "unavailable",
+        worker: "unavailable",
+      },
+    };
+  }
+  return operationalJson(result, result.status === "ready" ? 200 : 503);
+}
+
 export function createProoflineApi(input: {
   service: ProoflineApiService;
   authenticate(rawToken: string): Promise<AuthContext | null>;
   publicWebOrigin?: string;
   canonicalUrlAttackDemo?: CanonicalUrlAttackDemoCache;
+  deploymentReadiness?: DeploymentReadiness;
 }) {
   const publicWebOrigin = normalizePublicWebOrigin(input.publicWebOrigin);
   let canonicalUrlAttackDemo: PreparedCanonicalUrlAttackDemoCache = {
@@ -694,6 +764,12 @@ export function createProoflineApi(input: {
   return {
     async fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
+      const operational = await operationalResponse(
+        request,
+        url,
+        input.deploymentReadiness,
+      );
+      if (operational) return operational;
       if (CANONICAL_URL_ATTACK_DEMO_PATHS.has(url.pathname)) {
         return decorateCorsResponse(
           request,

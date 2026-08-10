@@ -16,6 +16,11 @@ import {
   replayCanonicalUrlAttackRecording,
 } from "@proofline/domain";
 import { Pool } from "pg";
+import {
+  parseDeploymentIdentity,
+  verifyDeploymentSchema,
+} from "./deployment-lifecycle";
+import { createPostgresDeploymentReadiness } from "./deployment-readiness";
 import { resolveDeploymentEnvironment } from "./deployment-secrets";
 import {
   createProoflineApi,
@@ -304,6 +309,7 @@ export function createProductionApi(input: {
   environment: Environment;
   pool?: Pool;
   canonicalUrlAttackDemo?: CanonicalUrlAttackDemoCache;
+  deploymentReadiness?: ReturnType<typeof createPostgresDeploymentReadiness>;
 }) {
   const environment = input.environment;
   const pool =
@@ -326,6 +332,7 @@ export function createProductionApi(input: {
     service,
     publicWebOrigin,
     canonicalUrlAttackDemo: input.canonicalUrlAttackDemo,
+    deploymentReadiness: input.deploymentReadiness,
     async authenticate(rawToken) {
       const digest = digestOpaqueToken(rawToken, tokenDigestKey);
       const result = await pool.query(
@@ -638,27 +645,40 @@ export async function startProductionApi(
   const recordingSha256 = parseCanonicalUrlAttackRecordingSelector(
     resolvedEnvironment,
   );
+  const deploymentIdentity = parseDeploymentIdentity(resolvedEnvironment);
   const initial = createProductionApi({ environment: resolvedEnvironment });
-  const canonicalUrlAttackDemo = await loadCanonicalUrlAttackDemoCache({
-    pool: initial.pool,
-    recordingSha256,
-  });
-  const production = createProductionApi({
-    environment: resolvedEnvironment,
-    pool: initial.pool,
-    canonicalUrlAttackDemo,
-  });
-  const server = createProductionNodeServer({
-    api: production.api,
-    port: production.port,
-    publicWebOrigin: production.publicWebOrigin,
-  });
-  server.listen(production.port, "0.0.0.0");
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.on(signal, () => {
-      server.close(() => {
-        void production.pool.end().finally(() => process.exit(0));
-      });
+  let listening = false;
+  try {
+    await verifyDeploymentSchema({ pool: initial.pool });
+    const deploymentReadiness = createPostgresDeploymentReadiness({
+      pool: initial.pool,
+      ...deploymentIdentity,
     });
+    const canonicalUrlAttackDemo = await loadCanonicalUrlAttackDemoCache({
+      pool: initial.pool,
+      recordingSha256,
+    });
+    const production = createProductionApi({
+      environment: resolvedEnvironment,
+      pool: initial.pool,
+      canonicalUrlAttackDemo,
+      deploymentReadiness,
+    });
+    const server = createProductionNodeServer({
+      api: production.api,
+      port: production.port,
+      publicWebOrigin: production.publicWebOrigin,
+    });
+    server.listen(production.port, "0.0.0.0");
+    listening = true;
+    for (const signal of ["SIGINT", "SIGTERM"] as const) {
+      process.on(signal, () => {
+        server.close(() => {
+          void production.pool.end().finally(() => process.exit(0));
+        });
+      });
+    }
+  } finally {
+    if (!listening) await initial.pool.end().catch(() => undefined);
   }
 }
