@@ -5,25 +5,10 @@ import {
   createProductionWorker,
   runWorkerLoop,
 } from "../src/bootstrap";
-
-function runtimeConfig() {
-  return {
-    maxAttempts: 8,
-    leaseHeartbeatMs: 10_000,
-    relayerPolicy: {
-      globalFeeCapWei: 20_000n,
-      balanceFloorWei: 1_000n,
-      dailyProjectQuota: 4,
-    },
-  };
-}
-
-const replayEvidence = {
-  bundleCanonicalJson: '{"version":"1"}',
-  bundleSha256: `sha256:${"a".repeat(64)}`,
-  preflightReportCanonicalJson: '{"version":"1"}',
-  preflightReportSha256: `sha256:${"b".repeat(64)}`,
-};
+import {
+  testReplayEvidence,
+  testWorkerAuthoritySlices,
+} from "./live-runtime-config.fixture";
 
 function serializeForRedaction(value: unknown): string {
   return JSON.stringify(value, (_key, entry) =>
@@ -51,8 +36,8 @@ function composition(command: Record<string, unknown>) {
   const createRepository = vi.fn(() => repository as any);
   const logger = { info: vi.fn(), error: vi.fn() };
   const worker = createProductionWorker({
-    runtimeConfig: runtimeConfig(),
-    replayEvidence,
+    ...testWorkerAuthoritySlices(),
+    replayEvidence: testReplayEvidence,
     pool: {},
     verifier: { prepareRequest: vi.fn() },
     createPipelinePorts,
@@ -67,15 +52,15 @@ describe("production worker bootstrap coverage", () => {
   it("does not request project-token or execution-private-key credentials", () => {
     expect(() =>
       createProductionWorker({
-        runtimeConfig: runtimeConfig(),
-        replayEvidence,
+        ...testWorkerAuthoritySlices(),
+        replayEvidence: testReplayEvidence,
         pool: {},
         verifier: { prepareRequest: vi.fn() },
         createPipelinePorts: vi.fn(() => ({})) as any,
         createRepository: vi.fn(() => ({ claimNextCommand: vi.fn() })) as any,
       } as any),
     ).not.toThrow();
-    const exposed = serializeForRedaction(runtimeConfig());
+    const exposed = serializeForRedaction(testWorkerAuthoritySlices());
     for (const marker of [
       "PROJECT_TOKEN",
       "COSTON2_PRIVATE_KEY",

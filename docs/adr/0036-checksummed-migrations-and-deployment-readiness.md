@@ -22,6 +22,15 @@ Slice 027B must make migration, role and readiness truth durable without
 inventing worker availability in the credential-free Docker gate. Backup,
 restore and disk-capacity evidence remain separate work.
 
+Production candidate `01bbc9ef9c1fe825498378d066e420c278f6b627` / tree
+`be04bf763761bbd39fd108f5900eecc9af882260` is rejected. Although its primary
+startup path eagerly parsed configuration and replay evidence, the public live
+factory retained an alternate `Environment` input through
+`parseLegacyLiveCoston2RuntimeConfig`. The primary path also passed one
+structurally narrowed runtime object downstream while that object still held
+the database URL/password, verifier API key, deployment identity and unrelated
+tuning. Compile-time narrowing is not runtime least authority.
+
 ## Decision
 
 ### Delivery waves
@@ -196,6 +205,27 @@ pipeline only from immutable typed configuration slices; install shutdown
 coordination; then insert the heartbeat immediately before entering the claim
 loop. Downstream worker and live-port factories receive no `Environment`, token
 map or filesystem path authority.
+
+There is one production parsing authority. `LiveEnvironment`, the
+`LiveRuntimeFactoryInput` environment alternative, `liveRuntimeConfig` and
+`parseLegacyLiveCoston2RuntimeConfig` and its helpers do not exist in the
+production source/import graph or worker artifact. The live-port factory
+accepts only an explicit immutable `LiveCoston2RuntimeConfig`; retained adapter
+tests build that value in test-only code and cannot create a production
+environment fallback.
+
+After replay loading, the worker copies and freezes separate least-authority
+slices rather than relying on structural typing. Database URL and pool sizing,
+plus verifier endpoint and API key, are startup-only inputs used to construct
+the Pool and verifier client and are never present in a downstream slice.
+Deployment ID and release tree are passed only to heartbeat/readiness identity.
+Repository policy contains only the relayer policy; worker-loop configuration
+contains only attempt and command-lease heartbeat bounds. The live slice
+contains only fixed chain/registry, derived account, RPC/DA endpoints,
+safe-consumer address, receipt/DA timeouts and relayer policy. Replay authority
+contains only the already cached canonical bundle/report strings and digests.
+None contains a database URL/password, verifier key, replay path or raw private
+key, and every slice and nested policy/account object is frozen before use.
 
 The parser requires the exact worker database role, deployment/tree identity,
 canonical uint256 fee cap and balance floor, positive daily quota, non-zero

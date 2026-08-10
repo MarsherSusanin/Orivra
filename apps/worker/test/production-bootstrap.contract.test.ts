@@ -1,6 +1,10 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
+import {
+  testReplayEvidence,
+  testWorkerAuthoritySlices,
+} from "./live-runtime-config.fixture";
 
 type BootstrapModule = {
   createProductionWorker?: (input: Record<string, unknown>) => any;
@@ -24,26 +28,12 @@ describe("Slice 004 production worker bootstrap", () => {
     const repository = { claimNextCommand: vi.fn() };
     const createPipelinePorts = vi.fn(() => pipelinePorts);
     const createRepository = vi.fn(() => repository);
-    const runtimeConfig = {
-      maxAttempts: 8,
-      leaseHeartbeatMs: 10_000,
-      relayerPolicy: {
-        globalFeeCapWei: 20_000n,
-        balanceFloorWei: 1_000n,
-        dailyProjectQuota: 4,
-      },
-    };
-    const replayEvidence = {
-      bundleCanonicalJson: '{"version":"1"}',
-      bundleSha256: `sha256:${"a".repeat(64)}`,
-      preflightReportCanonicalJson: '{"version":"1"}',
-      preflightReportSha256: `sha256:${"b".repeat(64)}`,
-    };
+    const authority = testWorkerAuthoritySlices();
     const verifier = { prepareRequest: vi.fn() };
 
     const worker = createProductionWorker({
-      runtimeConfig,
-      replayEvidence,
+      ...authority,
+      replayEvidence: testReplayEvidence,
       pool: { end: vi.fn() },
       verifier,
       createPipelinePorts,
@@ -54,10 +44,13 @@ describe("Slice 004 production worker bootstrap", () => {
 
     expect(worker).toEqual(expect.objectContaining({ processOne: expect.any(Function) }));
     expect(createPipelinePorts).toHaveBeenCalledExactlyOnceWith({
-      runtimeConfig,
+      runtimeConfig: authority.liveRuntimeConfig,
       verifier,
     });
-    expect(createRepository).toHaveBeenCalledOnce();
+    expect(createRepository).toHaveBeenCalledExactlyOnceWith({
+      pool: expect.any(Object),
+      relayerPolicy: authority.repositoryPolicy.relayerPolicy,
+    });
   });
 
   it("sleeps only for an idle iteration and stops without real timers or signals", async () => {

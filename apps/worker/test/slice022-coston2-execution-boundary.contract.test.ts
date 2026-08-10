@@ -8,21 +8,10 @@ import {
 } from "../../../packages/contracts/test/fixtures";
 import { createLiveCoston2PipelinePorts } from "../src/live-runtime";
 import { createProductionCommandHandlers } from "../src/worker";
-
-const PRIVATE_KEY = `0x${"1".repeat(64)}`;
+import { testLiveCoston2RuntimeConfig } from "./live-runtime-config.fixture";
 
 function flareManifest() {
   return { ...structuredClone(exactTrustManifest), network: "flare" as const };
-}
-
-function liveEnvironment() {
-  return {
-    PROOFLINE_COSTON2_PRIVATE_KEY: PRIVATE_KEY,
-    PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "100000",
-    PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
-    PROOFLINE_SAFE_CONSUMER_ADDRESS:
-      "0x5555555555555555555555555555555555555555",
-  };
 }
 
 describe("Slice 022 production worker Coston2 boundary", () => {
@@ -69,7 +58,7 @@ describe("Slice 022 production worker Coston2 boundary", () => {
     const getProof = vi.fn();
     const createDaClient = vi.fn(() => ({ getProof }));
     const ports = createLiveCoston2PipelinePorts({
-      environment: liveEnvironment(),
+      runtimeConfig: testLiveCoston2RuntimeConfig(),
       verifier,
       dependencies: {
         createPublicClient: vi.fn(() => ({ getBlockNumber })),

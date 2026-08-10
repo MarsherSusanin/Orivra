@@ -624,6 +624,11 @@ distributed traces, alerting и централизованное log storage н�
 027B разделяет `/healthz`, `/readyz` и persisted worker heartbeat.
 Container-running state сам по себе не доказывает readiness. До GREEN этих
 сигналов их нельзя описывать как действующий monitoring.
+Worker получает heartbeat authority только после единственного strict runtime
+parser, одноразовой canonical replay load и schema gate. Production live ports
+не принимают Environment: DB URL/password, verifier API key, replay paths и
+deployment identity не могут находиться в repository/worker/live slices даже
+если TypeScript структурно допускает более широкий объект.
 
 Проверяйте состояние в таком порядке:
 

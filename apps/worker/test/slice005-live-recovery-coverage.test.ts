@@ -2,6 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { createLiveCoston2PipelinePorts } from "../src/live-runtime";
+import { testLiveCoston2RuntimeConfig } from "./live-runtime-config.fixture";
 
 const transactionHash = `0x${"1".repeat(64)}`;
 const blockHash = `0x${"2".repeat(64)}`;
@@ -18,16 +19,9 @@ function recoveryPorts(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
   const ports = createLiveCoston2PipelinePorts({
-    environment: {
-      PROOFLINE_COSTON2_PRIVATE_KEY: `0x${"3".repeat(64)}`,
-      PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
-      PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
-      PROOFLINE_SAFE_CONSUMER_ADDRESS:
-        "0x5555555555555555555555555555555555555555",
-      PROOFLINE_COSTON2_RPC_URL: "https://rpc.invalid",
-      PROOFLINE_COSTON2_DA_URL: "https://da.invalid",
-      PROOFLINE_RECEIPT_POLL_TIMEOUT_MS: "5000",
-    },
+    runtimeConfig: testLiveCoston2RuntimeConfig({
+      receiptPollTimeoutMs: 5_000,
+    }),
     verifier: { prepareRequest: vi.fn() },
     dependencies: {
       createPublicClient: vi.fn(() => publicClient),

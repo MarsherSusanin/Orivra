@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { constants } from "node:fs";
 import {
   mkdir,
@@ -168,6 +169,24 @@ afterEach(async () => {
 });
 
 describe("Slice 027B worker runtime configuration authority", () => {
+  it("rejects Environment input at the compile-time live-port boundary", () => {
+    const compiler = fileURLToPath(
+      new URL("../../../node_modules/typescript/bin/tsc", import.meta.url),
+    );
+    const project = fileURLToPath(
+      new URL("./type-fixtures/tsconfig.json", import.meta.url),
+    );
+    const result = spawnSync(process.execPath, [compiler, "--project", project], {
+      cwd: fileURLToPath(new URL("../../../", import.meta.url)),
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    expect(
+      result.status,
+      `${result.stdout}\n${result.stderr}`,
+    ).toBe(0);
+  });
+
   it("parses one immutable typed configuration with fixed Coston2 authority and no raw key", async () => {
     const module = await runtimeModule();
     expect(module.parseWorkerRuntimeConfig).toBeTypeOf("function");
@@ -368,6 +387,12 @@ describe("Slice 027B worker runtime configuration authority", () => {
     expect(moduleSource).toMatch(/O_RDONLY/);
     expect(moduleSource).toMatch(/O_NOFOLLOW/);
     expect(moduleSource).toMatch(/O_NONBLOCK/);
+    expect(moduleSource).not.toMatch(
+      /parseLegacyLiveCoston2RuntimeConfig|legacyRequired|legacyCanonicalUint256|legacyPositiveInteger/,
+    );
+    expect(liveRuntime).not.toMatch(
+      /\bLiveEnvironment\b|\bLiveRuntimeFactoryInput\b|\bliveRuntimeConfig\b|parseLegacyLiveCoston2RuntimeConfig|PROOFLINE_COSTON2_PRIVATE_KEY|privateKeyToAccount/,
+    );
 
     const start = bootstrap.slice(bootstrap.indexOf("export async function startProductionWorker"));
     const parse = start.indexOf("parseWorkerRuntimeConfig");
@@ -386,9 +411,15 @@ describe("Slice 027B worker runtime configuration authority", () => {
       bootstrap.indexOf("export async function runWorkerLoop"),
     );
     expect(workerFactory).not.toMatch(/Environment|required\(|readFile\(/);
+    expect(workerFactory).toMatch(/repositoryPolicy/);
+    expect(workerFactory).toMatch(/workerLoopConfig/);
+    expect(workerFactory).toMatch(/liveRuntimeConfig/);
+    expect(workerFactory).not.toMatch(/\bWorkerRuntimeConfig\b/);
     const portsFactory = liveRuntime.slice(
       liveRuntime.indexOf("export function createLiveCoston2PipelinePorts"),
     );
-    expect(portsFactory).not.toMatch(/LiveEnvironment|required\(environment|readFile\(/);
+    expect(portsFactory).not.toMatch(
+      /LiveEnvironment|LiveRuntimeFactoryInput|required\(environment|readFile\(|process\.env/,
+    );
   });
 });

@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
+import { testLiveCoston2RuntimeConfig } from "./live-runtime-config.fixture";
 
 type Factory = (input: Record<string, unknown>) => any;
 
@@ -20,24 +21,11 @@ async function exportedFactory(
   return value as Factory;
 }
 
-const PRIVATE_KEY = `0x${"1".repeat(64)}`;
 const TRANSACTION_HASH = `0x${"2".repeat(64)}`;
 const BLOCK_HASH = `0x${"3".repeat(64)}`;
 const FDC_HUB = "0x3333333333333333333333333333333333333333";
 const FDC_VERIFICATION = "0x1111111111111111111111111111111111111111";
 const RELAY = "0x4444444444444444444444444444444444444444";
-
-function liveEnvironment() {
-  return {
-    PROOFLINE_COSTON2_PRIVATE_KEY: PRIVATE_KEY,
-    PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "100000",
-    PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
-    PROOFLINE_SAFE_CONSUMER_ADDRESS:
-      "0x5555555555555555555555555555555555555555",
-    GITHUB_SHA: "a".repeat(40),
-    PROOFLINE_TREE_HASH: "b".repeat(40),
-  };
-}
 
 describe("Slice 004 live Coston2 adapter injection", () => {
   it("constructs production ports only from explicit, hermetic adapter factories", async () => {
@@ -55,7 +43,7 @@ describe("Slice 004 live Coston2 adapter injection", () => {
     };
 
     const ports = createPorts({
-      environment: liveEnvironment(),
+      runtimeConfig: testLiveCoston2RuntimeConfig(),
       verifier: { prepareRequest: vi.fn() },
       dependencies,
     });

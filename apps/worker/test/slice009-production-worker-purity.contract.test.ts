@@ -363,6 +363,7 @@ describe("Slice 009 production worker purity", () => {
         "apps/worker/src/bootstrap.ts",
         "apps/worker/src/worker.ts",
         "apps/worker/src/live-runtime.ts",
+        "apps/worker/src/worker-runtime-configuration.ts",
         "apps/api/src/postgres.ts",
       ]) {
         expect(bytesForSuffix(runtimeInput), runtimeInput).toBeGreaterThan(0);
@@ -380,6 +381,9 @@ describe("Slice 009 production worker purity", () => {
       ).toBeGreaterThan(0);
       expect(freshArtifact).toMatch(/await startProductionWorker\(\)/);
       expect(freshArtifact).toMatch(/PROOFLINE_COSTON2_PRIVATE_KEY/);
+      expect(freshArtifact).not.toMatch(
+        /parseLegacyLiveCoston2RuntimeConfig|\bLiveRuntimeFactoryInput\b|\bLiveEnvironment\b/,
+      );
       const artifactFindings = matchingLabels(
         freshArtifact,
         workerArtifactForbiddenRules,
@@ -419,6 +423,14 @@ describe("Slice 009 production worker purity", () => {
         ["legacy credential error", /Legacy test credentials/],
       ]),
     ).toEqual([]);
+    const legacyRuntimeOwners = [...graph.entries()]
+      .filter(([, source]) =>
+        /parseLegacyLiveCoston2RuntimeConfig|\bLiveRuntimeFactoryInput\b|\bLiveEnvironment\b|\bliveRuntimeConfig\s*\(/.test(
+          source,
+        ),
+      )
+      .map(([file]) => relative(root, file));
+    expect(legacyRuntimeOwners).toEqual([]);
     expect([...graph.keys()]).not.toContain(obsoleteDirectGate);
   });
 
@@ -473,6 +485,12 @@ describe("Slice 009 production worker purity", () => {
       )
       .map(([file]) => relative(root, file));
     expect(keyAuthorityOwners).toEqual([
+      "apps/worker/src/worker-runtime-configuration.ts",
+    ]);
+    const accountDerivationOwners = [...graph.entries()]
+      .filter(([, candidate]) => candidate.includes("privateKeyToAccount"))
+      .map(([file]) => relative(root, file));
+    expect(accountDerivationOwners).toEqual([
       "apps/worker/src/worker-runtime-configuration.ts",
     ]);
 

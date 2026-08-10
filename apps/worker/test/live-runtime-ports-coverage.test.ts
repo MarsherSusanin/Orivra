@@ -21,6 +21,7 @@ import {
   createProductionCommandHandlers,
   createRunWorker,
 } from "../src/worker";
+import { testLiveCoston2RuntimeConfig } from "./live-runtime-config.fixture";
 
 const ADDRESSES = {
   FdcHub: "0x3333333333333333333333333333333333333333",
@@ -29,22 +30,8 @@ const ADDRESSES = {
   Relay: "0x4444444444444444444444444444444444444444",
   FdcVerification: "0x1111111111111111111111111111111111111111",
 } as const;
-const PRIVATE_KEY = `0x${"1".repeat(64)}`;
 const TRANSACTION_HASH = `0x${"2".repeat(64)}`;
 const BLOCK_HASH = `0x${"3".repeat(64)}`;
-
-function environment(override: Record<string, string | undefined> = {}) {
-  return {
-    PROOFLINE_COSTON2_PRIVATE_KEY: PRIVATE_KEY,
-    PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
-    PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
-    PROOFLINE_SAFE_CONSUMER_ADDRESS:
-      "0x5555555555555555555555555555555555555555",
-    PROOFLINE_COSTON2_RPC_URL: "https://rpc.invalid",
-    PROOFLINE_COSTON2_DA_URL: "https://da.invalid",
-    ...override,
-  };
-}
 
 function encodedResponse(url = expectedCanonicalUrl): Hex {
   const verify = (fdcVerificationAbi as Abi).find(
@@ -168,7 +155,7 @@ function harness() {
     prepareRequest: vi.fn(async () => ({ requestBytes: "0x574542324a534f4e" })),
   };
   const ports = createLiveCoston2PipelinePorts({
-    environment: environment(),
+    runtimeConfig: testLiveCoston2RuntimeConfig(),
     verifier,
     dependencies,
   });
@@ -273,28 +260,6 @@ async function composedRelayerSubmission(quotaRemaining: number) {
 }
 
 describe("live Coston2 pipeline port coverage", () => {
-  it.each([
-    ["private key", { PROOFLINE_COSTON2_PRIVATE_KEY: "" }, /missing/i],
-    [
-      "global cap",
-      { PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "not-a-number" },
-      /unsigned/i,
-    ],
-    ["balance floor", { PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "-1" }, /unsigned/i],
-    ["receipt timeout", { PROOFLINE_RECEIPT_POLL_TIMEOUT_MS: "0" }, /positive/i],
-    ["DA timeout", { PROOFLINE_DA_TIMEOUT_MS: "30001" }, /exceed 30000/i],
-  ])("rejects invalid %s before constructing clients", (_label, override, error) => {
-    const createPublicClient = vi.fn();
-    expect(() =>
-      createLiveCoston2PipelinePorts({
-        environment: environment(override),
-        verifier: { prepareRequest: vi.fn() },
-        dependencies: { createPublicClient },
-      }),
-    ).toThrow(error);
-    expect(createPublicClient).not.toHaveBeenCalled();
-  });
-
   it("runs registry-backed preflight and relayer signing through injected adapters", async () => {
     const fixture = harness();
     const preflight = await fixture.ports.preflight({

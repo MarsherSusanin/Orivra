@@ -24,6 +24,10 @@ import {
   canonicalSerializeProofBundle,
   createProofBundle,
 } from "@proofline/domain";
+import {
+  testLiveCoston2RuntimeConfig,
+  testWorkerAuthoritySlices,
+} from "./live-runtime-config.fixture";
 
 const mocks = vi.hoisted(() => {
   const databaseResult = () => ({
@@ -168,25 +172,24 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-function typedRuntimeConfig() {
-  return Object.freeze({
-    chainId: 114 as const,
-    registryAddress: "0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019",
-    verifierEndpoint: "https://fdc-verifiers-testnet.flare.network",
-    rpcUrl: "https://coston2-api.flare.network/ext/C/rpc",
-    daEndpoint: "https://ctn2-data-availability.flare.network",
-    receiptPollTimeoutMs: 25_000,
-    daTimeoutMs: 15_000,
-    databasePoolSize: 4,
-    maxAttempts: 3,
-    leaseHeartbeatMs: 2_500,
-    relayerAccount: { address: "0x3333333333333333333333333333333333333333" },
-    relayerPolicy: Object.freeze({
+function typedAuthoritySlices() {
+  const liveRuntimeConfig = testLiveCoston2RuntimeConfig({
+    relayerPolicy: {
       globalFeeCapWei: 20_000n,
       balanceFloorWei: 1_000n,
       dailyProjectQuota: 4,
+    },
+  });
+  return Object.freeze({
+    ...testWorkerAuthoritySlices(),
+    repositoryPolicy: Object.freeze({
+      relayerPolicy: liveRuntimeConfig.relayerPolicy,
     }),
-    safeConsumerAddress: "0x5555555555555555555555555555555555555555",
+    workerLoopConfig: Object.freeze({
+      maxAttempts: 3,
+      leaseHeartbeatMs: 2_500,
+    }),
+    liveRuntimeConfig,
   });
 }
 
@@ -197,11 +200,17 @@ const replayEvidence = Object.freeze({
   preflightReportSha256: `sha256:${"b".repeat(64)}`,
 });
 
+function serializeForRedaction(value: unknown): string {
+  return JSON.stringify(value, (_key, entry) =>
+    typeof entry === "bigint" ? entry.toString(10) : entry,
+  );
+}
+
 describe("Slice 005 production worker configuration", () => {
   it("passes only immutable parsed policy and replay evidence to downstream ports", async () => {
-    const runtimeConfig = typedRuntimeConfig();
+    const authority = typedAuthoritySlices();
     createProductionWorker({
-      runtimeConfig,
+      ...authority,
       replayEvidence,
       pool: mocks.pool,
       verifier: { prepareRequest: vi.fn() },
@@ -210,10 +219,10 @@ describe("Slice 005 production worker configuration", () => {
 
     expect(mocks.createRepository).toHaveBeenCalledWith({
       pool: mocks.pool,
-      relayerPolicy: runtimeConfig.relayerPolicy,
+      relayerPolicy: authority.repositoryPolicy.relayerPolicy,
     });
     expect(mocks.createPipelinePorts).toHaveBeenCalledWith({
-      runtimeConfig,
+      runtimeConfig: authority.liveRuntimeConfig,
       verifier: expect.any(Object),
     });
     expect(mocks.createRunWorker).toHaveBeenCalledWith(
@@ -233,7 +242,7 @@ describe("Slice 005 production worker configuration", () => {
     const rawHandler = vi.fn().mockResolvedValue({ nextCommands: [] });
     mocks.createHandlers.mockReturnValueOnce({ RUN_PREFLIGHT: rawHandler });
     createProductionWorker({
-      runtimeConfig: typedRuntimeConfig(),
+      ...typedAuthoritySlices(),
       replayEvidence,
       pool: mocks.pool,
       verifier: { prepareRequest: vi.fn() },
@@ -259,7 +268,7 @@ describe("Slice 005 production worker configuration", () => {
     const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     createProductionWorker({
-      runtimeConfig: typedRuntimeConfig(),
+      ...typedAuthoritySlices(),
       replayEvidence,
       pool: mocks.pool,
       verifier: { prepareRequest: vi.fn() },
@@ -442,6 +451,36 @@ describe("Slice 005 production worker process lifecycle", () => {
       endpoint: "https://verifier.invalid",
       apiKey: "verifier-key",
     });
+    const liveInput = mocks.createPipelinePorts.mock.calls.at(-1)?.[0] as any;
+    expect(Object.keys(liveInput).sort()).toEqual(["runtimeConfig", "verifier"]);
+    expect(Object.keys(liveInput.runtimeConfig).sort()).toEqual([
+      "chainId",
+      "daEndpoint",
+      "daTimeoutMs",
+      "receiptPollTimeoutMs",
+      "registryAddress",
+      "relayerAccount",
+      "relayerPolicy",
+      "rpcUrl",
+      "safeConsumerAddress",
+    ]);
+    expect(Object.isFrozen(liveInput.runtimeConfig)).toBe(true);
+    expect(Object.isFrozen(liveInput.runtimeConfig.relayerPolicy)).toBe(true);
+    const downstream = serializeForRedaction({
+      repository: mocks.createRepository.mock.calls.at(-1)?.[0],
+      live: liveInput,
+      worker: mocks.createRunWorker.mock.calls.at(-1)?.[0],
+    });
+    for (const forbidden of [
+      "worker-password",
+      "verifier-key",
+      replayBundlePath,
+      replayPreflightReportPath,
+      `deployment_${"a".repeat(64)}`,
+      "b".repeat(40),
+    ]) {
+      expect(downstream).not.toContain(forbidden);
+    }
     const databaseSql = [
       ...mocks.pool.query.mock.calls,
       ...mocks.client.query.mock.calls,

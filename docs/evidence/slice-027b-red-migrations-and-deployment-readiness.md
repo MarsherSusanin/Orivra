@@ -413,3 +413,50 @@ and 23 controls PASS. That is six worker/runtime/DSN compatibility files plus
 the retained deployment-heartbeat boundary file; an interim six-file label was
 not used because the executable report confirms seven. The 30-case deployment
 static split remains 3 RED / 27 PASS and typecheck remains PASS.
+
+## Third corrective RED — one parser and runtime least authority
+
+Both independent read-only verifiers rejected production-author candidate
+`01bbc9ef9c1fe825498378d066e420c278f6b627` / tree
+`be04bf763761bbd39fd108f5900eecc9af882260`. Core found that
+`createLiveCoston2PipelinePorts` still accepted a production `Environment`
+alternative and delegated to exported `parseLegacyLiveCoston2RuntimeConfig`;
+Product independently confirmed the same bypass. This skipped exact DSN,
+deployment, quota, strict endpoint and replay authority. Core also found that
+the primary startup path removed only replay paths from its parsed object and
+then passed the remaining database URL/password, verifier API key and
+deployment identity into live composition under a structurally narrower type.
+The candidate's 124 focused tests and 30 deployment static tests passed, which
+demonstrated missing contract coverage rather than acceptance. Both verifiers
+stopped before coverage, PostgreSQL, Docker, build or Sites gates and issued
+formal FAIL on the same exact clean tree.
+
+The refrozen test boundary deletes the legacy names and helpers from the full
+production source/import graph and fresh worker artifact. A compiled fixture
+uses `// @ts-expect-error` to require `{environment}` rejection while retaining
+one valid explicit `LiveCoston2RuntimeConfig` call. Retained adapter, ports,
+recovery and Slice 022 tests now construct only a test-local typed value; no
+test environment parser becomes production-callable.
+
+Executable composition tests freeze copied immutable slices with exact keys.
+Startup alone owns the database URL/pool sizing and verifier endpoint/key;
+heartbeat identity alone owns deployment ID/tree; repository policy owns only
+relayer policy; worker-loop configuration owns only attempts and lease timing;
+live ports own only derived account, fixed network addresses, RPC/DA endpoints,
+safe consumer, live timeouts and policy; replay ports own only cached canonical
+strings and digests. Captured downstream inputs must be frozen and must not
+contain the database password, verifier key, replay paths, deployment identity
+or raw private key. Metafile and import-graph checks retain the strict parser as
+the only production private-key derivation owner.
+
+This wave changes tests and documentation only. Typecheck is PASS. The frozen
+worker focus is 9 files / 103 cases: exactly 12 intentional RED and 91 controls
+PASS. Seven failures are retained callers requiring the split worker-composition
+input, one executable lifecycle capture exposes the over-wide live object, one
+compiled fixture proves `{environment}` is still accepted, one full-source
+case finds the legacy parser, and fresh artifact/import-graph checks account for
+the remaining two. The four migrated typed adapter/ports/recovery/022 files are
+controls PASS. The unchanged nearest API/worker baseline is 12 files / 140
+PASS, deployment static is 30/30 PASS and Sites compatibility is 36/36 PASS.
+No Docker, PostgreSQL, coverage, build, provider or network action is part of
+this corrective freeze.

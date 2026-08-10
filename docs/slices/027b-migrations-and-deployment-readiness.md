@@ -15,7 +15,7 @@ refining [ADR 0029](../adr/0029-digitalocean-vds-deployment.md) and
 Risk: high persistence, database-role, startup-order and release-path change;
 no provider credential, live Coston2 effect, backup, restore or hosted claim.
 
-Implementation status: corrective RED is frozen after two rejected production
+Implementation status: corrective RED is frozen after three rejected production
 candidates. `4ac66f9693d1b8ae16a01d839923cdcdfad044eb` / tree
 `477f67988e63645da32c4a98fc307302a872d19b` inserted heartbeat before worker
 composition. Its corrective candidate
@@ -23,8 +23,13 @@ composition. Its corrective candidate
 `2a1dfc837f5e11a66464c6c71a5e5931bc9bbd3b` still left replay-file and
 safe-consumer validation inside post-heartbeat command closures, and its fixed
 Compose runtime omitted the required worker policy/safe/replay configuration.
-Both independent verifiers rejected that tree. No Docker, build, hosted or
-deployment acceptance follows from the rejected candidate.
+Both independent verifiers rejected that tree. The later exhaustive candidate
+`01bbc9ef9c1fe825498378d066e420c278f6b627` / tree
+`be04bf763761bbd39fd108f5900eecc9af882260` kept a production-callable legacy
+Environment parser and passed a structurally narrowed object containing raw
+database/verifier authority downstream. Its focused tests were false-negative;
+both independent verifiers rejected it before broad acceptance. No Docker,
+build, hosted or deployment acceptance follows from any rejected candidate.
 
 ## Delivery split
 
@@ -52,6 +57,11 @@ deployment acceptance follows from the rejected candidate.
   and the first heartbeat insert;
 - downstream worker/live-port factories receive immutable typed slices and no
   environment or filesystem authority;
+- the live factory has one compile-time input form and no legacy Environment
+  parser/export; test-only typed fixtures preserve adapter/recovery coverage;
+- startup DB/verifier authority, deployment identity, repository policy,
+  worker-loop tuning, live Coston2 configuration and cached replay evidence are
+  copied into distinct frozen slices with exact keys;
 - heartbeat uses PostgreSQL time, 10-second refresh, 30-second staleness,
   startup UUID and explicit stopped state;
 - heartbeat loss stops new claims and leads to nonzero exit after any current
@@ -103,7 +113,9 @@ The Contract/Test Designer freezes, before production implementation:
 3. API contracts for exact `/healthz` and `/readyz` grammar, dependency calls,
    response redaction and schema-before-listen startup;
 4. worker contracts for config/schema/heartbeat/claim order, refresh/stopped/
-   failure behavior and new-startup identity;
+   failure behavior, new-startup identity, compile-time rejection of
+   `{environment}`, production-graph legacy-parser absence and executable
+   downstream least-authority captures;
 5. rendered Compose/image contracts for exact one-shot services, secrets,
    start order, no host ports and removal of the 027A profile block;
 6. a bounded credential-free Docker lifecycle contract for fresh migration,
