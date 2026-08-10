@@ -265,6 +265,59 @@ RED cases while its other nine historical assertions PASS. The nearest
 deployment/roadmap controls remain 45/45 PASS and Sites compatibility remains
 36/36 PASS.
 
+### Security-review corrective RED
+
+The canonical security report at
+`/private/var/folders/m4/6p__vxf95w520v3b1t2cr5vr0000gn/T/codex-security-scans/Proofline/5bd1922_20260810T114116Z/report.md`
+was read in full and independently matched SHA-256
+`70654829ba15c05da5646ecdaa325066e7f25172c841d30638d3353af52193d0`.
+The reviewed candidate was inspected read-only from stash object
+`ca3fc7b469be6a122698a83e0cc9cdf36aba0b09` / tree
+`c319a57aef485354b0c553ff093162a40936b7db` and untracked parent
+`91c0148adf3f3c2ea5c0f1474348eed73a1c49ff`; it was never applied. The
+candidate is rejected and provides no recovery/release evidence.
+
+All three high-confidence reportable findings reproduce in source:
+
+1. **CWE-367/CWE-494, medium:** prefetch verifies WAL-G and writes an ignored,
+   owner-replaceable pathname, while the later build neither loads the lock nor
+   hashes the exact bytes BuildKit copies.
+2. **CWE-697/CWE-754, medium:** `pitr-verify` receives the same configured
+   backup-evidence digest as both observed and expected inventory; no MinIO
+   ciphertext object is independently enumerated or hashed.
+3. **CWE-693/CWE-754, low:** six mandatory negative cases derive expected codes
+   from local random-file, timestamp or path predicates and never invoke the
+   named recovery path. The runtime forwards those driver-owned values.
+
+Corrective RED freezes malicious and legitimate controls through the same
+boundaries. WAL-G use-time verification requires an open-descriptor regular
+file check, exact mode/receipt size/frozen digest, private byte capture before
+any Docker call and an in-image copied-binary hash; a safe same-owner inode
+replacement, symlink, wrong type/mode/size or empty input fails before build.
+Inventory verification uses reader-only listing plus downloads to reconstruct
+canonical sorted ciphertext `{key,size,sha256}` entries; changed, added and
+removed objects fail against immutable backup evidence. Negative runtime
+results require actual prepare/execute/observe phases, nonzero child exit,
+child-output digest, matching case identity and causal mutation/sink
+observations; the legacy synthetic four-field result is now explicitly RED.
+
+The report's retention issue was non-reportable because no lower-authority
+delete caller survived attack-path analysis. ADR functional safety is still
+strict: canonical `BackupEvidenceV1`, separate evidence hash, active prefix,
+derived encryption-key identifier and valid inventory keys must pass before
+the fixed retain-eight delete. Tests prove every invalid variant performs zero
+delete effects. No finding is called fixed until production GREEN, the original
+PoCs and change-aware bypass review pass on one frozen tree.
+
+Corrective RED was demonstrated on the clean base
+`d988919e0b4b2ba8a598fb822c903dd1ac6850ce` / tree
+`418d7bae89c28f7941a86bebd070f7017330bf5e`: syntax check and typecheck PASS;
+the focused recovery/security set is 46 cases with 44 intentional RED and two
+controls PASS. The complete Docker static set is 99 cases with 47 intentional
+RED and 52 controls PASS. The unchanged 027A/027B/027R neighbor set is 45/45
+PASS and Sites compatibility is 36/36 PASS. No Docker daemon, network,
+production, dependency or lockfile operation was run.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;

@@ -30,8 +30,13 @@ const VERIFIED = Object.freeze({
 });
 
 const FAILED_RESULT = (definition) => ({
+  caseId: definition.id,
   status: "failed",
   failureCode: definition.expectedFailureCode,
+  childExitCode: 64,
+  childOutputSha256: `sha256:${"c".repeat(64)}`,
+  mutationApplied: true,
+  sinkObserved: true,
   passEvidenceCount: 0,
   promotionCount: 0,
 });
@@ -176,6 +181,23 @@ test("rejects case-name strings as non-executable negative evidence", async () =
     orchestration: passingOrchestration({
       async runCase(definition) {
         return definition.id;
+      },
+    }),
+    caseTimeoutMs: 100,
+  }), expectBypass);
+});
+
+test("rejects the legacy synthetic four-field driver result", async () => {
+  const module = await core();
+  await assert.rejects(module.runRecoveryNegativeControls({
+    orchestration: passingOrchestration({
+      async runCase(definition) {
+        return {
+          status: "failed",
+          failureCode: definition.expectedFailureCode,
+          passEvidenceCount: 0,
+          promotionCount: 0,
+        };
       },
     }),
     caseTimeoutMs: 100,

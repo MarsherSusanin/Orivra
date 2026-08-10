@@ -34,6 +34,8 @@ recovery change. No public HTTP or Web contract changes.
 - lock official PostgreSQL 17.6 Debian, MinIO and MinIO-client index and
   Linux/amd64 manifest digests;
 - extend controlled no-auth prefetch and named local build-context handling;
+- bind the verified WAL-G descriptor bytes through a private captured context
+  and an in-image copied-binary digest check across both offline builds;
 - freeze strict Spaces/MinIO configuration and bounded secret-file loading.
 
 The WAL-G URL, size and hashes are frozen exact inputs. Only exact new OCI
@@ -49,6 +51,8 @@ missing or placeholder values and does not invent them.
 - add one-shot base-backup, backup-status and retention services;
 - serialize backup with the fixed advisory lock, retain eight full chains and
   keep application health/readiness unchanged.
+- validate strict canonical backup evidence, separate evidence hash, active
+  prefix and derived encryption-key identity before destructive retention.
 
 ### 027C3 — encrypted MinIO recovery drill
 
@@ -64,6 +68,11 @@ missing or placeholder values and does not invent them.
   exact cleanup after each case;
 - derive restore-state and cut/inventory evidence only from machine-readable
   `pitr-verify` results, never literal success booleans;
+- independently enumerate and download every selected ciphertext object using
+  restore-reader authority, then compare its canonical sorted inventory to the
+  immutable completed backup evidence;
+- require each negative result to bind a real case-scoped child execution and
+  sink observation; driver-authored codes and local synthetic mutations fail;
 - clean exact project resources.
 
 ## Frozen contracts
@@ -75,6 +84,9 @@ missing or placeholder values and does not invent them.
 - Prefix is constructed as
   `s3://bucket/proofline/v1/<slot>/<systemIdentifier>`.
 - `LATEST`, mutable tags, caller-owned prefixes and ETag-as-SHA are forbidden.
+- A use-time open-descriptor check, private captured context and in-image hash
+  bind the ignored WAL-G input to the frozen binary digest; pathname mode alone
+  is insufficient.
 - Writer, restore-reader and retention credentials are distinct; client-side
   encryption key is separate from all of them.
 - Primary PostgreSQL is the only continuous archive owner and returns archive
@@ -106,17 +118,21 @@ non-following, nonblocking, regular, nonempty and bounded.
 1. pure strict recovery schemas, canonical serialization/checksum, no extra
    keys and immutable defensive output;
 2. real digest/asset locks, controlled credential-isolated prefetch and two
-   offline named-context builds;
+   offline named-context builds, including same-owner replacement, symlink,
+   type, exact mode/size/digest and copied-byte identity negatives;
 3. strict endpoint/bucket/slot/target/prefix configuration, secret redaction
    and ambient AWS rejection;
 4. exact backup login properties, grants and denials under real PostgreSQL;
 5. production Compose services, image, archive settings, egress/secrets,
-   fixed wrapper, advisory lock and eight-full retention;
+   fixed wrapper, advisory lock and strict canonical evidence/hash/prefix/key
+   authorization before eight-full retention;
 6. MinIO identities, exact backup selection, new-volume paused restore,
-   immutable evidence and promotion authorization;
+   immutable evidence, independent downloaded ciphertext inventory and
+   promotion authorization;
 7. executable missing/corrupt-object, wrong-key, future-target,
    reused/nonempty-volume and absent/mismatched-promotion controls with exact
-   failure codes, zero PASS/promotion effects, per-case timeout and cleanup;
+   real child output, causal mutation/sink observations, fixed failure codes,
+   zero PASS/promotion effects, per-case timeout and cleanup;
 8. executable static seams plus one checked-in `test:docker:recovery` gate.
 
 ## GREEN and verification gates

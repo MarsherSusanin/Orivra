@@ -70,6 +70,19 @@ Linux/amd64 manifest digests. Actual builds repeat twice with
 `--pull=false --network none`. MinIO and its client are QA-only inputs and are
 not production release images.
 
+Prefetch and offline build form one continuous executable-identity lifetime.
+Prefetch writes a strict canonical receipt containing the extracted binary's
+exact byte size and frozen `binarySha256`. Before any Docker effect, the build
+opens the selected `wal-g` with no-follow/nonblocking semantics, verifies that
+it is a regular non-symlink file with exact `0555` mode, exact receipt size and
+the checked-in digest through the open descriptor, then captures those same
+descriptor bytes into a private bounded context. A replacement of the ignored
+workspace pathname after prefetch therefore fails before build or cannot alter
+the captured bytes. Both recovery-image build passes receive the expected
+public digest, and the Dockerfile verifies the SHA-256 of the exact copied
+`/usr/local/bin/wal-g` before the image can complete. Mode bits or a pathname
+precheck alone are not an identity.
+
 The WAL-G archive and binary identities above are frozen inputs, not a future
 discovery. Controlled 027C1 GREEN prefetch verifies them before exposing the
 named context. Only the exact new PostgreSQL/MinIO OCI index and Linux/amd64
@@ -151,6 +164,16 @@ retained backup. It never receives writer or reader credentials. An object-store
 lifecycle may be a later safety backstop but cannot delete the WAL-G prefix
 earlier than this policy.
 
+Before that destructive command, retention strictly parses
+`BackupEvidenceV1`, requires byte-for-byte canonical JSON, verifies the
+separately supplied evidence SHA-256, binds the evidence prefix to the active
+constructed `WALG_S3_PREFIX`, derives the encryption-key identifier from the
+mounted key bytes and validates every inventory key and aggregate. Missing,
+stale, noncanonical, wrong-hash, wrong-prefix, wrong-key or invalid-key
+evidence aborts before one `wal-g delete` effect. The security review did not
+classify the earlier existence-only guard as exploitable across a lower
+authority boundary, but strict validation remains required functional safety.
+
 Design objectives are RPO at most five minutes and production RTO at most 60
 minutes. Archive timeout is 60 seconds; operational evidence is degraded when
 archive failure/pending age reaches five minutes or the last completed base
@@ -182,6 +205,16 @@ limited to relative `basebackups_005/` or `wal_005/` keys. Their count and byte
 sum must equal the declared aggregates. ETag is never described as SHA-256.
 Canonical UTF-8 serialization has its own SHA-256 and contains no credentials,
 database URL, local path or object bytes.
+
+Expected inventory comes only from canonical completed `BackupEvidenceV1`.
+Observed inventory comes from a fresh restore-reader-only enumeration of the
+exact selected prefix after writer authority is removed. The verifier downloads
+every bounded ciphertext object, computes its byte SHA-256, reconstructs the
+UTF-8-key-sorted `{key,size,sha256}` entries and independently canonicalizes
+`{entries,objectCount,totalBytes}`. Missing, changed or extra objects, duplicate
+or out-of-prefix keys, truncated pagination and exceeded count/byte bounds fail
+before PASS. The two digest operands may never be the same environment value,
+`backup-list` output or provider ETag.
 
 `RestoreDrillEvidenceV1` contains producer identity, exact source backup
 evidence SHA-256, UTC target, `inclusive: true`, exact timeline, distinct source
@@ -246,6 +279,16 @@ and performs exact scoped cleanup before the next case. A success exit, wrong
 code, string-only result, timeout, PASS write, promotion attempt or any leftover
 container/network/volume/temporary path fails the entire gate. Promotion cases
 must prove `pg_promote` was never called.
+
+For the first six recovery cases, the case driver may prepare only the adverse
+state. A separate runtime must invoke the actual case-scoped MinIO,
+`pitr-fetch`, PostgreSQL restore or production volume-preflight path, capture
+the real child exit and complete output, normalize the fixed code from that
+output and independently observe that the mutation reached its sink. A result
+also binds case ID, nonzero child exit, child-output SHA-256, mutation/sink
+observations and zero PASS/promotion counts. A driver-supplied expected code,
+local random-file comparison, timestamp tautology or path alias is rejected.
+The two promotion cases continue to execute the real authorization helper.
 
 The positive restore evidence is constructed only from machine-readable actual
 `pitr-verify` fields: recovery and replay-paused state, system identifier,
