@@ -24,14 +24,61 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-const lockedDigestOutput = [
-  "sha256:1c18d9ab3af4585870b92e4dbc5cac5a0dc77dd13df1a5905cea89fc720eb05b",
-  "sha256:745403dc46b5ab4c998502b07a12cbf020cf2c30645427a68ec0718f02d647de",
-  "sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d",
-  "sha256:d8c17a862962def15cde69863a3a463f25a2664942eafd7bdbf050e9c3116b83",
-  "sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
-  "sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be",
-].join("\\n");
+const lockedImages = Object.freeze([
+  {
+    name: "node",
+    repository: "node",
+    tag: "22.14.0-bookworm-slim",
+    indexDigest: "sha256:1c18d9ab3af4585870b92e4dbc5cac5a0dc77dd13df1a5905cea89fc720eb05b",
+    linuxAmd64Digest: "sha256:745403dc46b5ab4c998502b07a12cbf020cf2c30645427a68ec0718f02d647de",
+  },
+  {
+    name: "caddy",
+    repository: "caddy",
+    tag: "2.10.2-alpine",
+    indexDigest: "sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d",
+    linuxAmd64Digest: "sha256:d8c17a862962def15cde69863a3a463f25a2664942eafd7bdbf050e9c3116b83",
+  },
+  {
+    name: "postgres",
+    repository: "postgres",
+    tag: "17.6-alpine",
+    indexDigest: "sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
+    linuxAmd64Digest: "sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be",
+  },
+  {
+    name: "postgresRecovery",
+    repository: "postgres",
+    tag: "17.6-bookworm",
+    indexDigest: "sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3",
+    linuxAmd64Digest: "sha256:45cd22f8d32e189d245403954882f88e7a8714301fda80dab6da90f1265b25a3",
+  },
+  {
+    name: "minio",
+    repository: "minio/minio",
+    tag: "RELEASE.2025-09-07T16-13-09Z",
+    indexDigest: "sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e",
+    linuxAmd64Digest: "sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2",
+  },
+  {
+    name: "minioClient",
+    repository: "minio/mc",
+    tag: "RELEASE.2025-08-13T08-35-41Z",
+    indexDigest: "sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727",
+    linuxAmd64Digest: "sha256:eb4ea9884b77704230e2423e9004d2fa738dc272876b9cc41a297d29443b8780",
+  },
+]);
+
+const lockedImageLock = Object.freeze({
+  version: "1",
+  platform: "linux/amd64",
+  images: Object.fromEntries(lockedImages.map(({ name, ...image }) => [name, image])),
+});
+
+const lockedDigestOutput = lockedImages.flatMap(({ indexDigest, linuxAmd64Digest }) => [
+  indexDigest,
+  linuxAmd64Digest,
+]).join("\\n");
 
 async function importOptional(path) {
   return import(`${pathToFileURL(resolve(root, path)).href}?contract=${Date.now()}`)
@@ -119,14 +166,16 @@ test("exposes separate static, controlled-prefetch and real Docker gates", async
   assert.equal(packageJson.scripts?.["compose:production"], "node scripts/compose-production.mjs");
 });
 
-test("prefetches and validates only the three exact locked official identities", async () => {
+test("prefetches and validates only the six exact locked official identities", async () => {
   const script = await source("scripts/docker-prefetch.mjs");
+  const lock = JSON.parse(await source("docker/base-images.json"));
   assert.notEqual(script, "", "scripts/docker-prefetch.mjs must exist");
+  assert.deepEqual(lock, lockedImageLock);
   assert.match(script, /docker\/base-images\.json/);
   assert.match(script, /linux\/amd64/);
   assert.match(script, /buildx["',\s]+imagetools["',\s]+inspect|manifest["',\s]+inspect/i);
   assert.match(script, /sha256:/);
-  assert.match(script, /node|caddy|postgres/);
+  for (const { name } of lockedImages) assert.match(script, new RegExp(`\\b${name}\\b`));
   assert.doesNotMatch(script, /docker["',\s]+login|ghcr|credential|PROOFLINE_.*(?:TOKEN|KEY)/i);
   assert.doesNotMatch(script, /latest|:\s*22\b|:\s*2\.10\b|:\s*17\b/);
 });
@@ -145,13 +194,30 @@ test("isolates every registry-capable prefetch child from ambient Docker credent
     await orchestration.runDockerPrefetch({
       dockerExecutable: fake.executable,
       environment,
+      lock: lockedImageLock,
     });
 
     const records = await readJsonLines(fake.log);
+    const inspections = records.filter(({ args }) =>
+      args[0] === "buildx" && args[1] === "imagetools" && args[2] === "inspect");
+    assert.deepEqual(
+      inspections.map(({ args }) => args[3]),
+      lockedImages.map(({ repository, tag }) => `${repository}:${tag}`),
+    );
+    const pulls = records.filter(({ args }) => args[0] === "pull");
+    assert.deepEqual(
+      pulls.map(({ args }) => args),
+      lockedImages.map(({ repository, linuxAmd64Digest }) => [
+        "pull",
+        "--platform",
+        "linux/amd64",
+        `${repository}@${linuxAmd64Digest}`,
+      ]),
+    );
     const networkChildren = records.filter(({ args }) =>
       args[0] === "pull" || args[0] === "build" ||
       (args[0] === "buildx" && args[1] === "imagetools"));
-    assert.ok(networkChildren.length >= 7, "all inspect, pull and dependency-build calls must be observed");
+    assert.equal(networkChildren.length, 13, "six inspect, six pull and one dependency-build calls must be observed");
     const isolatedConfigs = new Set();
     for (const child of networkChildren) {
       isolatedConfigs.add(child.dockerConfig);
@@ -186,6 +252,7 @@ test("removes the isolated Docker CLI configuration when prefetch fails", async 
     await assert.rejects(orchestration.runDockerPrefetch({
       dockerExecutable: fake.executable,
       environment,
+      lock: lockedImageLock,
     }));
     const records = await readJsonLines(fake.log);
     assert.ok(records[0]?.dockerConfig);

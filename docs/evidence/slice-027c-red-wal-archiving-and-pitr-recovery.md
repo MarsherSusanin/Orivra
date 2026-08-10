@@ -208,6 +208,35 @@ intentional RED and 2 controls PASS. The unchanged nearest deployment/roadmap
 controls are 45/45 PASS and Sites compatibility is 36/36 PASS. No Docker,
 network, production, dependency or lockfile operation was run.
 
+### Six-image prefetch compatibility correction
+
+The next production WIP was inspected read-only from stash object
+`2ffe4679383ca6ce8c146a278ce9e15425d10eb2` / tree
+`32111521e61212cbe7001ed59b3fd9caf481ee8b`; it was never applied. Its accepted
+027C lock and prefetch orchestration extend the original `node`, `caddy` and
+`postgres` identities with exact `postgresRecovery`, `minio` and `minioClient`
+index plus Linux/amd64 digests. The retained 027A fake still emitted only the
+six digest lines for the original three images, so the correct six-image WIP
+failed with `Published image identity does not match the lock`. That was a stale
+test double, not a production identity failure.
+
+The retained contract now freezes all six accepted real locked identities,
+emits all twelve index/platform digest lines and injects the exact six-image
+lock. It semantically requires the exact ordered six `imagetools inspect`
+references, six digest-addressed Linux/amd64 pulls and one dependency build.
+The ambient-authority stripping, isolated Docker config, fail-closed identity
+comparison and cleanup assertions remain unchanged; strings alone cannot make
+the fake pass. This tests/evidence-only correction performs no Docker, network,
+production, dependency or lockfile effect.
+
+On base `a46ade4deea02c71a191eb3c50de06c31e54d51a` / tree
+`49bd121dfdf46cf6553d6f937617794bca3a32ac`, typecheck is PASS. The combined
+retained 027A and 027C deployment focus is 43 cases: 30 intentional RED and 13
+controls PASS. Exactly two retained 027A cases are RED for the missing three
+lock entries and missing three inspect/pull calls; its other 11 controls PASS.
+The nearest unchanged deployment/roadmap controls are 45/45 PASS and Sites
+compatibility is 36/36 PASS.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;
