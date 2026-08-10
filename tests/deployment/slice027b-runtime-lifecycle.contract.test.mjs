@@ -97,8 +97,11 @@ test("orders engine health, role bootstrap, migration and both application proce
     );
     assert.equal(services[name]?.depends_on?.postgres?.condition, "service_healthy");
   }
-  assert.equal(services.caddy?.depends_on?.api?.condition, "service_healthy");
-  assert.equal(services.caddy?.depends_on?.web?.condition, "service_started");
+  assert.deepEqual(services.caddy?.depends_on, {
+    api: { condition: "service_healthy", required: true },
+    web: { condition: "service_started", required: true },
+  });
+  assert.equal(services.caddy?.depends_on?.worker, undefined);
 });
 
 test("uses exact API-image one-shot commands with private hardened runtime authority", () => {

@@ -116,6 +116,7 @@ function serviceBlock(source, name) {
 }
 
 const rendered = renderCompose();
+const baseRendered = renderCompose([composePath], baseComposeEnvironment);
 const defaultServices = renderDefaultServices();
 
 test("keeps the independently renderable base limited to Caddy and Web", () => {
@@ -124,6 +125,10 @@ test("keeps the independently renderable base limited to Caddy and Web", () => {
   assert.match(baseComposeSource, /^  web:/m);
   assert.doesNotMatch(baseComposeSource, /^  (?:api|worker|postgres):/m);
   assert.doesNotMatch(baseComposeSource, /app_internal|db_internal|worker_egress|postgres_data/);
+  assert.equal(baseRendered.status, 0, baseRendered.stderr || "base Compose config must pass");
+  assert.deepEqual(baseRendered.model.services?.caddy?.depends_on ?? {}, {
+    web: { condition: "service_started", required: true },
+  });
 });
 
 test("keeps all runtime services, networks, secrets and PostgreSQL state in one overlay", () => {
@@ -198,8 +203,10 @@ test("promotes the 027B runtime without a hidden Compose profile", () => {
     assert.deepEqual(services[name]?.profiles ?? [], []);
   }
   assert.deepEqual(services.caddy?.depends_on ?? {}, {
+    api: { condition: "service_healthy", required: true },
     web: { condition: "service_started", required: true },
   });
+  assert.equal(services.caddy?.depends_on?.worker, undefined);
   assert.deepEqual(Object.keys(rendered.model.services ?? {}).sort(), [
     "api",
     "caddy",

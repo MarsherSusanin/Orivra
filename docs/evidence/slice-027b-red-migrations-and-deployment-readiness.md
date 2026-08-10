@@ -171,6 +171,25 @@ Typecheck remains PASS. The Slice 005 plus old/new heartbeat focus is 3 files /
 29 cases: 13 intentional 027B2 RED and 16 controls PASS. The nearest bootstrap,
 entry and fresh worker-purity matrix is 4 files, 23/23 PASS with zero skip.
 
+### 027B3 Compose compatibility correction
+
+After the 027B2 implementation checkpoint at commit
+`9dbc9e1d3e016f3b86118b2c7f58e3dfbd043c35` / tree
+`14a46be19de3e7297948f124685917c515dd55b0`, the retained 027A full-runtime
+assertion still expected Caddy to depend only on Web. The base Compose model
+continues to render independently with exact Caddy → Web `service_started`
+authority. The combined base/runtime model now requires both Web
+`service_started` and API `service_healthy`, with `required: true`, and
+explicitly forbids a Caddy → worker dependency. Seven-service/profile removal,
+private networks, no worker/job ports or Docker socket and all 027A hardening
+assertions remain intact.
+
+Typecheck remains PASS. The retained 027A plus frozen 027B runtime Compose
+focus is 2 files / 27 cases: 17 intentional 027B3 RED and 10 controls PASS.
+The nearest image and Docker-gate controls are 2 files / 23 cases, all PASS;
+Sites compatibility is 36/36 PASS. All runs used the clean B2 production
+checkpoint and did not build, pull, start or contact Docker or the network.
+
 ## GREEN authority still required
 
 Implementation must make the frozen contracts GREEN without adopting legacy
