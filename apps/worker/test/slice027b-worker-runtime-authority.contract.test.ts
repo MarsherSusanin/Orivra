@@ -31,6 +31,12 @@ type RuntimeModule = {
   loadWorkerReplayEvidence?: (config: any) => Promise<any>;
 };
 
+function serializeForRedaction(value: unknown): string {
+  return JSON.stringify(value, (_key, entry) =>
+    typeof entry === "bigint" ? entry.toString(10) : entry
+  );
+}
+
 const temporaryDirectories: string[] = [];
 const PRIVATE_KEY = `0x${"3".repeat(64)}`;
 const REGISTRY = "0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019";
@@ -147,7 +153,9 @@ async function expectConfigurationFailure(
     message: "Worker runtime configuration is invalid",
   });
   const exposed = `${JSON.stringify(thrown)}\n${String((thrown as Error)?.message)}`;
-  for (const marker of forbidden) expect(exposed).not.toContain(marker);
+  for (const marker of forbidden) {
+    if (marker.length > 0) expect(exposed).not.toContain(marker);
+  }
 }
 
 afterEach(async () => {
@@ -184,7 +192,7 @@ describe("Slice 027B worker runtime configuration authority", () => {
       safeConsumerAddress: "0x5555555555555555555555555555555555555555",
     });
     expect(config.relayerAccount?.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
-    expect(JSON.stringify(config)).not.toContain(PRIVATE_KEY);
+    expect(serializeForRedaction(config)).not.toContain(PRIVATE_KEY);
     expect(Object.isFrozen(config)).toBe(true);
     expect(Object.isFrozen(config.relayerPolicy)).toBe(true);
   });

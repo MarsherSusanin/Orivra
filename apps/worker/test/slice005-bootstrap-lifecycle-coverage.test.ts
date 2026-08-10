@@ -293,7 +293,9 @@ describe("Slice 005 production worker process lifecycle", () => {
       message: "Deployment secret configuration is invalid",
     });
     const publicError = `${JSON.stringify(thrown)}\n${String((thrown as Error).message)}`;
-    for (const marker of forbidden) expect(publicError).not.toContain(marker);
+    for (const marker of forbidden) {
+      if (marker.length > 0) expect(publicError).not.toContain(marker);
+    }
   }
 
   function expectNoStartupEffects() {
@@ -325,7 +327,9 @@ describe("Slice 005 production worker process lifecycle", () => {
       message: "Worker runtime configuration is invalid",
     });
     const publicError = `${JSON.stringify(thrown)}\n${String((thrown as Error)?.message)}`;
-    for (const marker of forbidden) expect(publicError).not.toContain(marker);
+    for (const marker of forbidden) {
+      if (marker.length > 0) expect(publicError).not.toContain(marker);
+    }
   }
 
   it("fails before side effects when the default process environment lacks DATABASE_URL", async () => {

@@ -37,13 +37,14 @@ async function expectRedactedRejection(
 }
 
 const exact = {
-  api: "postgres://proofline_api_login:api-secret@postgres:5432/proofline",
-  worker: "postgres://proofline_worker_login:worker-secret@postgres:5432/proofline",
+  api: "postgres://proofline_api_login:R7nQ4vZ8mK2p@postgres:5432/proofline",
+  worker: "postgres://proofline_worker_login:R7nQ4vZ8mK2p@postgres:5432/proofline",
   importer:
-    "postgres://proofline_recording_importer_login:importer-secret@postgres:5432/proofline",
+    "postgres://proofline_recording_importer_login:R7nQ4vZ8mK2p@postgres:5432/proofline",
   migrator:
-    "postgres://proofline_migrator_login:migrator-secret@postgres:5432/proofline",
+    "postgres://proofline_migrator_login:R7nQ4vZ8mK2p@postgres:5432/proofline",
 } as const;
+const PASSWORD_SENTINEL = "R7nQ4vZ8mK2p";
 
 describe("Slice 027B exact application database authority", () => {
   it.each([
@@ -53,7 +54,7 @@ describe("Slice 027B exact application database authority", () => {
     ["migration runner", exact.migrator, "proofline_migrator_login"],
     [
       "percent-decoded API",
-      "postgres://proofline%5Fapi%5Flogin:api-secret@postgres:5432/proofline",
+      "postgres://proofline%5Fapi%5Flogin:R7nQ4vZ8mK2p@postgres:5432/proofline",
       "proofline_api_login",
     ],
   ])("accepts only the exact %s login on the private deployment database", async (
@@ -70,22 +71,22 @@ describe("Slice 027B exact application database authority", () => {
     ["swapped API/worker login", exact.worker, "proofline_api_login"],
     [
       "admin login",
-      "postgres://proofline:admin-secret@postgres:5432/proofline",
+      "postgres://proofline:R7nQ4vZ8mK2p@postgres:5432/proofline",
       "proofline_api_login",
     ],
     [
       "wrong host",
-      "postgres://proofline_api_login:secret@db.invalid:5432/proofline",
+      "postgres://proofline_api_login:R7nQ4vZ8mK2p@db.invalid:5432/proofline",
       "proofline_api_login",
     ],
     [
       "wrong port",
-      "postgres://proofline_api_login:secret@postgres:5433/proofline",
+      "postgres://proofline_api_login:R7nQ4vZ8mK2p@postgres:5433/proofline",
       "proofline_api_login",
     ],
     [
       "wrong database",
-      "postgres://proofline_api_login:secret@postgres:5432/other",
+      "postgres://proofline_api_login:R7nQ4vZ8mK2p@postgres:5432/other",
       "proofline_api_login",
     ],
     [
@@ -95,17 +96,17 @@ describe("Slice 027B exact application database authority", () => {
     ],
     [
       "query",
-      "postgres://proofline_api_login:secret@postgres:5432/proofline?ssl=true",
+      "postgres://proofline_api_login:R7nQ4vZ8mK2p@postgres:5432/proofline?ssl=true",
       "proofline_api_login",
     ],
     [
       "fragment",
-      "postgres://proofline_api_login:secret@postgres:5432/proofline#private",
+      "postgres://proofline_api_login:R7nQ4vZ8mK2p@postgres:5432/proofline#private",
       "proofline_api_login",
     ],
     [
       "alternate protocol",
-      "postgresql://proofline_api_login:secret@postgres:5432/proofline",
+      "postgresql://proofline_api_login:R7nQ4vZ8mK2p@postgres:5432/proofline",
       "proofline_api_login",
     ],
   ])("rejects %s with one fixed non-leaking error", async (_label, value, login) => {
@@ -113,7 +114,7 @@ describe("Slice 027B exact application database authority", () => {
     expect(module.parseExactApplicationDatabaseUrl).toBeTypeOf("function");
     await expectRedactedRejection(
       () => module.parseExactApplicationDatabaseUrl!(value, login),
-      [value, "secret", "admin-secret"],
+      [value, PASSWORD_SENTINEL],
     );
   });
 

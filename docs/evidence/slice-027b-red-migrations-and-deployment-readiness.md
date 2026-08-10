@@ -373,3 +373,16 @@ Docker calls. The combined deployment static focus is now 30 cases: 3
 intentional RED and 27 controls PASS. Typecheck, the unchanged 113-case nearest
 baseline and 36-case Sites compatibility remain PASS; no Docker process or
 network action was used.
+
+An exhaustive test-harness audit on clean commit
+`09718eddee145ccc283ceef62db4f419bf8a1f92` / tree
+`9cdb547fbde13e06e2bcec8f756bb00c61615707` removed three false failures without
+weakening a rejection. Redaction helpers now ignore only empty override markers
+while retaining every non-empty sentinel. DSN fixtures use the unique
+`R7nQ4vZ8mK2p` password marker instead of the generic word present in the fixed
+deployment-secret error. Typed runtime configuration is inspected through a
+test-local bigint-safe serializer and still excludes raw private-key, verifier
+key, database-password and replay-path sentinels; production needs no custom
+`toJSON` or non-enumerable workaround. Typecheck and the 113-case nearest
+baseline PASS, while the complete 86-case focus remains intentionally 63 RED
+and 23 controls PASS.

@@ -25,6 +25,12 @@ const replayEvidence = {
   preflightReportSha256: `sha256:${"b".repeat(64)}`,
 };
 
+function serializeForRedaction(value: unknown): string {
+  return JSON.stringify(value, (_key, entry) =>
+    typeof entry === "bigint" ? entry.toString(10) : entry
+  );
+}
+
 function composition(command: Record<string, unknown>) {
   const completeCommand = vi.fn(async () => undefined);
   const retryCommand = vi.fn(async () => undefined);
@@ -69,9 +75,17 @@ describe("production worker bootstrap coverage", () => {
         createRepository: vi.fn(() => ({ claimNextCommand: vi.fn() })) as any,
       } as any),
     ).not.toThrow();
-    expect(JSON.stringify(runtimeConfig())).not.toMatch(
-      /PROJECT_TOKEN|COSTON2_PRIVATE_KEY/,
-    );
+    const exposed = serializeForRedaction(runtimeConfig());
+    for (const marker of [
+      "PROJECT_TOKEN",
+      "COSTON2_PRIVATE_KEY",
+      `0x${"b".repeat(64)}`,
+      "verifier-key",
+      "worker-password",
+      "/run/proofline/replay",
+    ]) {
+      expect(exposed).not.toContain(marker);
+    }
   });
 
   it("never registers the synthetic live command, even in test environment", async () => {
