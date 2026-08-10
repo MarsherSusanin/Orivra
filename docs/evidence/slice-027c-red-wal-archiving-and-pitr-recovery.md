@@ -456,6 +456,34 @@ async helper is intentionally absent on the clean RED base; the three prefetch
 tests executed only a checked-in fake child. No Docker daemon, network,
 production, dependency or lockfile operation was run.
 
+### Wave-3 prefetch sentinel harness correction
+
+On exact clean base `453782e0fdec72194dd24dc9e96c3c064c22d892` /
+tree `682838ecfe63e2de6221883493ee6dd69d8610de`, the production candidate was
+inspected read-only from stash `6de3b213a6ca7623d4ba5969894fe89d141501b0` /
+tree `a6941dfc670e8d36449f8d86b98c5296868358a9`; it was never applied. Review
+found a test-harness causality defect, not a closed production finding: the
+ambient `DOCKER_TLS_VERIFY` sentinel was the common literal `1`, so a substring
+scan could reject an otherwise isolated child merely because `1` appeared in
+the preserved `PATH` or macOS-injected environment metadata.
+
+The corrected harness makes forbidden environment-key absence the authority
+check and uses unique, field-specific high-entropy sentinel values only as
+defence in depth. It compares the supplied child environment against the same
+frozen eight-name allowlist after removing only the explicitly enumerated
+macOS-injected `__CF_USER_TEXT_ENCODING`; no OS-injected key becomes part of
+the accepted application allowlist. The three inspect/pull/build fake-child
+cases now fail causally on the leaked Docker TLS/transport, SSH, BuildKit and
+proxy keys rather than on an overlapping sentinel value.
+
+Syntax check and typecheck PASS. The exact wave-3 file remains 23/23
+intentional RED with no harness exception; the combined recovery-negative and
+security focus remains 68/68 intentional RED. The complete Docker static set
+remains 135 cases with 83 intentional RED and 52 controls PASS. The unchanged
+027A/027B/027R neighbor set is 45/45 PASS and Sites compatibility is 36/36
+PASS. No Docker daemon, network, production, dependency or lockfile operation
+was run.
+
 This wave does not claim any production finding fixed. GREEN must rerun the
 original five validation triggers and a change-aware bypass review on one
 frozen tree before any recovery PASS, promotion or release evidence exists.

@@ -358,36 +358,67 @@ const PREFETCH_CHILD_ENV_NAMES = Object.freeze([
   "XDG_CONFIG_HOME",
 ]);
 
+const PREFETCH_OS_INJECTED_ENV_NAMES = Object.freeze([
+  "__CF_USER_TEXT_ENCODING",
+]);
+
+const PREFETCH_FORBIDDEN_ENV_NAMES = Object.freeze([
+  "ALL_PROXY",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "BUILDKIT_HOST",
+  "BUILDX_CONFIG",
+  "DIGITALOCEAN_TOKEN",
+  "DOCKER_AUTH_CONFIG",
+  "DOCKER_CERT_PATH",
+  "DOCKER_CONTEXT",
+  "DOCKER_HOST",
+  "DOCKER_TLS_VERIFY",
+  "EXTRA_SECRET",
+  "EXTRA_TOKEN",
+  "GHCR_TOKEN",
+  "GITHUB_TOKEN",
+  "GH_TOKEN",
+  "HTTPS_PROXY",
+  "HTTP_PROXY",
+  "NO_PROXY",
+  "PROOFLINE_COSTON2_PRIVATE_KEY",
+  "PROOFLINE_VERIFIER_API_KEY",
+  "REGISTRY_AUTH_FILE",
+  "SSH_AGENT_PID",
+  "SSH_AUTH_SOCK",
+]);
+
 const PREFETCH_SENTINELS = Object.freeze({
   PATH: process.env.PATH ?? "/usr/bin:/bin",
-  TMPDIR: "/ambient/tmp",
-  LANG: "ambient_LANG",
-  LC_ALL: "ambient_LC_ALL",
-  TZ: "ambient/TZ",
-  DOCKER_HOST: "tcp://ambient-docker.invalid:2376",
-  DOCKER_CONTEXT: "ambient-context",
-  DOCKER_TLS_VERIFY: "1",
-  DOCKER_CERT_PATH: "/ambient/docker-certs",
-  DOCKER_AUTH_CONFIG: "ambient-docker-auth",
-  REGISTRY_AUTH_FILE: "/ambient/registry-auth.json",
-  SSH_AUTH_SOCK: "/ambient/ssh-agent.sock",
-  SSH_AGENT_PID: "4242",
-  BUILDKIT_HOST: "tcp://ambient-buildkit.invalid:1234",
-  BUILDX_CONFIG: "/ambient/buildx",
-  HTTP_PROXY: "http://ambient-proxy.invalid",
-  HTTPS_PROXY: "http://ambient-proxy.invalid",
-  ALL_PROXY: "socks5://ambient-proxy.invalid",
-  NO_PROXY: "*",
-  AWS_ACCESS_KEY_ID: "ambient-aws-id",
-  AWS_SECRET_ACCESS_KEY: "ambient-aws-secret",
-  GITHUB_TOKEN: "ambient-github-token",
-  GH_TOKEN: "ambient-gh-token",
-  GHCR_TOKEN: "ambient-ghcr-token",
-  DIGITALOCEAN_TOKEN: "ambient-do-token",
-  PROOFLINE_COSTON2_PRIVATE_KEY: "ambient-private-key",
-  PROOFLINE_VERIFIER_API_KEY: "ambient-api-key",
-  EXTRA_TOKEN: "ambient-token",
-  EXTRA_SECRET: "ambient-secret",
+  TMPDIR: "/proofline-wave3-sentinel-tmpdir-7c91c807",
+  LANG: "proofline-wave3-sentinel-lang-6c202afd",
+  LC_ALL: "proofline-wave3-sentinel-lc-all-2fe58bde",
+  TZ: "proofline-wave3-sentinel-tz-d3a97f10",
+  DOCKER_HOST: "tcp://proofline-wave3-docker-host-0340d2ac.invalid:2376",
+  DOCKER_CONTEXT: "proofline-wave3-sentinel-docker-context-98e3ac74",
+  DOCKER_TLS_VERIFY: "proofline-wave3-sentinel-docker-tls-6b4cd811",
+  DOCKER_CERT_PATH: "/proofline-wave3-sentinel-docker-certs-cb9fd520",
+  DOCKER_AUTH_CONFIG: "proofline-wave3-sentinel-docker-auth-3d6fa707",
+  REGISTRY_AUTH_FILE: "/proofline-wave3-sentinel-registry-auth-ff79aab1.json",
+  SSH_AUTH_SOCK: "/proofline-wave3-sentinel-ssh-agent-53602bbc.sock",
+  SSH_AGENT_PID: "proofline-wave3-sentinel-ssh-pid-a2f9081e",
+  BUILDKIT_HOST: "tcp://proofline-wave3-buildkit-host-2965cb18.invalid:1234",
+  BUILDX_CONFIG: "/proofline-wave3-sentinel-buildx-569be238",
+  HTTP_PROXY: "http://proofline-wave3-http-proxy-b129fd84.invalid",
+  HTTPS_PROXY: "http://proofline-wave3-https-proxy-cfa70639.invalid",
+  ALL_PROXY: "socks5://proofline-wave3-all-proxy-e3d2a057.invalid",
+  NO_PROXY: "proofline-wave3-sentinel-no-proxy-0d45bd98.invalid",
+  AWS_ACCESS_KEY_ID: "proofline-wave3-sentinel-aws-id-d9bef413",
+  AWS_SECRET_ACCESS_KEY: "proofline-wave3-sentinel-aws-secret-848c0fe6",
+  GITHUB_TOKEN: "proofline-wave3-sentinel-github-token-75a003bd",
+  GH_TOKEN: "proofline-wave3-sentinel-gh-token-55b174f9",
+  GHCR_TOKEN: "proofline-wave3-sentinel-ghcr-token-79c4f52a",
+  DIGITALOCEAN_TOKEN: "proofline-wave3-sentinel-do-token-c24a691f",
+  PROOFLINE_COSTON2_PRIVATE_KEY: "proofline-wave3-sentinel-private-key-bb8345c9",
+  PROOFLINE_VERIFIER_API_KEY: "proofline-wave3-sentinel-api-key-e8427af3",
+  EXTRA_TOKEN: "proofline-wave3-sentinel-extra-token-1f6eec38",
+  EXTRA_SECRET: "proofline-wave3-sentinel-extra-secret-472cc513",
 });
 
 const PREFETCH_IMAGE = Object.freeze({
@@ -448,7 +479,16 @@ async function prefetchPhaseRecord(phase) {
     });
     assert.ok(record, `${phase} child must execute through the fake runtime`);
     const suppliedEnvironment = { ...record.environment };
-    delete suppliedEnvironment.__CF_USER_TEXT_ENCODING;
+    const injectedNames = Object.keys(suppliedEnvironment)
+      .filter((name) => !PREFETCH_CHILD_ENV_NAMES.includes(name));
+    assert.equal(
+      injectedNames.every((name) => PREFETCH_OS_INJECTED_ENV_NAMES.includes(name)),
+      true,
+      `unexpected child environment names: ${injectedNames.join(",")}`,
+    );
+    for (const name of PREFETCH_OS_INJECTED_ENV_NAMES) {
+      delete suppliedEnvironment[name];
+    }
     assert.deepEqual(Object.keys(suppliedEnvironment), PREFETCH_CHILD_ENV_NAMES);
     assert.equal(record.environment.PATH, PREFETCH_SENTINELS.PATH);
     assert.equal(record.environment.LANG, "C");
@@ -496,9 +536,12 @@ for (const phase of ["inspect", "pull", "build"]) {
   test(`strips ambient authority from the fake prefetch ${phase} child`, async () => {
     const record = await prefetchPhaseRecord(phase);
     const serialized = JSON.stringify(record.environment);
-    for (const sentinel of Object.values(PREFETCH_SENTINELS)) {
-      if (sentinel === PREFETCH_SENTINELS.PATH) continue;
-      assert.equal(serialized.includes(sentinel), false, sentinel);
+    for (const name of PREFETCH_FORBIDDEN_ENV_NAMES) {
+      assert.equal(Object.hasOwn(record.environment, name), false, name);
+    }
+    for (const [name, sentinel] of Object.entries(PREFETCH_SENTINELS)) {
+      if (name === "PATH") continue;
+      assert.equal(serialized.includes(sentinel), false, `${name}:${sentinel}`);
     }
   });
 }
