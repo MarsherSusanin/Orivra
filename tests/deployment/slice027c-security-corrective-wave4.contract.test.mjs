@@ -7,6 +7,7 @@ import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const temporaryRoots = [];
+const frozenSnapshotRoots = new Set();
 const COMMIT_SHA = "1".repeat(40);
 const TREE_SHA = "2".repeat(40);
 
@@ -26,9 +27,54 @@ async function absent(path) {
   return access(path).then(() => false, () => true);
 }
 
+function trackFrozenSnapshot(path) {
+  frozenSnapshotRoots.add(path);
+}
+
+async function makeWritableAndRemoveFrozenSnapshot(path) {
+  let metadata;
+  try {
+    metadata = await lstat(path);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+  if (metadata.isSymbolicLink()) {
+    await rm(path, { force: true });
+    return;
+  }
+  if (!metadata.isDirectory()) {
+    await chmod(path, 0o600);
+    await rm(path, { force: true });
+    return;
+  }
+  await chmod(path, 0o700);
+  for (const entry of await readdir(path)) {
+    await makeWritableAndRemoveFrozenSnapshot(join(path, entry));
+  }
+  await rm(path, { recursive: true, force: true });
+}
+
 test.afterEach(async () => {
-  await Promise.all(temporaryRoots.splice(0).map((directory) =>
-    rm(directory, { recursive: true, force: true })));
+  const cleanupFailures = [];
+  for (const snapshotRoot of frozenSnapshotRoots) {
+    try {
+      await makeWritableAndRemoveFrozenSnapshot(snapshotRoot);
+    } catch (error) {
+      cleanupFailures.push(error);
+    }
+  }
+  frozenSnapshotRoots.clear();
+  for (const directory of temporaryRoots.splice(0)) {
+    try {
+      await rm(directory, { recursive: true, force: true });
+    } catch (error) {
+      cleanupFailures.push(error);
+    }
+  }
+  if (cleanupFailures.length > 0) {
+    throw new AggregateError(cleanupFailures, "Wave-4 fixture cleanup failed");
+  }
 });
 
 test("captures one commit, derives its tree and materializes the only drill source privately", async () => {
@@ -51,13 +97,15 @@ test("captures one commit, derives its tree and materializes the only drill sour
       return { exitCode: 64, stdout: "" };
     },
     materializeSnapshot: async ({ sourceRoot, commitSha, treeSha, mode }) => {
+      trackFrozenSnapshot(sourceRoot);
       assert.equal(commitSha, COMMIT_SHA);
       assert.equal(treeSha, TREE_SHA);
       assert.equal(mode, "commit");
       await mkdir(sourceRoot, { mode: 0o700 });
-      await mkdir(join(sourceRoot, "scripts"), { mode: 0o500 });
+      await mkdir(join(sourceRoot, "scripts"), { mode: 0o700 });
       await writeFile(join(sourceRoot, "compose.yaml"), "trusted-candidate\n", { mode: 0o400 });
       await writeFile(join(sourceRoot, "scripts", "gate.mjs"), "trusted\n", { mode: 0o400 });
+      await chmod(join(sourceRoot, "scripts"), 0o500);
       await chmod(sourceRoot, 0o500);
       return { materializedTreeSha: TREE_SHA };
     },
@@ -77,8 +125,6 @@ test("captures one commit, derives its tree and materializes the only drill sour
   assert.equal((await lstat(join(snapshot.sourceRoot, "scripts", "gate.mjs"))).mode & 0o777, 0o400);
   await writeFile(join(repositoryRoot, "compose.yaml"), "transient-writer-change\n");
   assert.equal(await readFile(join(snapshot.sourceRoot, "compose.yaml"), "utf8"), "trusted-candidate\n");
-  await chmod(join(snapshot.sourceRoot, "scripts"), 0o700);
-  await chmod(snapshot.sourceRoot, 0o700);
 
   await assert.rejects(module.captureRecoveryProducerSnapshot({
     repositoryRoot,
@@ -91,7 +137,9 @@ test("captures one commit, derives its tree and materializes the only drill sour
       return { exitCode: 0, stdout: "" };
     },
     materializeSnapshot: async ({ sourceRoot }) => {
+      trackFrozenSnapshot(sourceRoot);
       await mkdir(sourceRoot, { mode: 0o700 });
+      await chmod(sourceRoot, 0o500);
       return { materializedTreeSha: "3".repeat(40) };
     },
   }), /Recovery producer snapshot tree does not match/);
@@ -105,6 +153,7 @@ test("captures one commit, derives its tree and materializes the only drill sour
       stdout: arguments_.join("\0") === "status\0--porcelain" ? "" : `${COMMIT_SHA}\n`,
     }),
     materializeSnapshot: async ({ sourceRoot }) => {
+      trackFrozenSnapshot(sourceRoot);
       await mkdir(sourceRoot, { mode: 0o500 });
       return { materializedTreeSha: COMMIT_SHA };
     },
@@ -121,6 +170,7 @@ test("captures one commit, derives its tree and materializes the only drill sour
       return { exitCode: 0, stdout: "" };
     },
     materializeSnapshot: async ({ sourceRoot }) => {
+      trackFrozenSnapshot(sourceRoot);
       await mkdir(sourceRoot, { mode: 0o700 });
       await symlink(repositoryRoot, join(sourceRoot, "mutable-source"));
       await chmod(sourceRoot, 0o500);
@@ -149,9 +199,11 @@ test("captures dirty author bytes into a private draft snapshot but never upgrad
           : " M candidate.txt\n",
     }),
     materializeSnapshot: async ({ sourceRoot, mode }) => {
+      trackFrozenSnapshot(sourceRoot);
       assert.equal(mode, "working-tree-draft");
       await mkdir(sourceRoot, { mode: 0o700 });
       await writeFile(join(sourceRoot, "candidate.txt"), "dirty-candidate-bytes\n", { mode: 0o400 });
+      await chmod(sourceRoot, 0o500);
       return { candidateManifestSha256: `sha256:${"4".repeat(64)}` };
     },
   });
@@ -330,6 +382,7 @@ test("publishes only after stage, real negatives, exact cleanup and final source
   assert.equal(typeof module.runRecoveryEvidencePublication, "function");
   const outputRoot = await temporaryRoot("publication-success");
   const snapshotRoot = join(outputRoot, ".source-snapshot");
+  trackFrozenSnapshot(snapshotRoot);
   await mkdir(snapshotRoot, { mode: 0o500 });
   const calls = [];
   const result = await module.runRecoveryEvidencePublication({
@@ -381,6 +434,7 @@ test("every negative, diagnostic, finalizer, final-source or atomic-publish fail
     const snapshotRoot = join(outputRoot, ".source-snapshot");
     const stageRoot = join(outputRoot, ".recovery-evidence.staging");
     const finalRoot = join(outputRoot, "recovery-evidence.v1");
+    trackFrozenSnapshot(snapshotRoot);
     await mkdir(snapshotRoot, { mode: 0o500 });
     const calls = [];
     await assert.rejects(module.runRecoveryEvidencePublication({

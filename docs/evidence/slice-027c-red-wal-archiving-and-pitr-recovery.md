@@ -695,6 +695,37 @@ contract controls are 30/30 PASS; unchanged 027A/027B/027R deployment controls
 are 45/45 PASS; Sites compatibility is 36/36 PASS. These checks did not invoke
 Docker, build artifacts, network or credentials.
 
+### Wave-4 immutable-snapshot fixture compatibility correction
+
+The follow-up starts from exact clean commit
+`a551817ca4a41e8599fc949dce0df23d25e96714` / tree
+`1e89b5c92a3dd81c9663e9a66de69ee7c4a63f26`. Production work-in-progress
+stash `71ff58fc858781a92e0f2544077b7afb6c1fb9cd` was inspected read-only and was
+never applied. Its execution exposed a RED-harness ordering defect: the fixture
+froze the nested `scripts` directory to mode 0500 before writing its mode-0400
+gate file, so the test could stop with `EACCES` before reaching the production
+contract. That execution is rejected as neither causal RED nor GREEN evidence.
+
+The compatibility correction creates snapshot directories at mode 0700,
+writes files at mode 0400, and only then freezes nested directories and the
+root at mode 0500. Every verified, draft, mismatched and symlink-bearing
+snapshot is registered for explicit symlink-safe cleanup: directories and
+regular files are made owner-writable, symlinks are removed without following
+them, and the snapshot is removed before the global temporary-root cleanup.
+The immutable-snapshot invariant remains unchanged. Only the wave-4 test and
+this chronology are affected; production, dependencies, Docker, network and
+the remaining canonical documentation are untouched.
+
+Post-correction syntax and typecheck PASS. The focused 37-case classification
+is unchanged at 18 retained controls PASS / 19 causal intentional RED (Node
+13/9 and Vitest 5/10), with no fixture exception. The full 146-case deployment
+static suite, run serially after a narrow 26/26 retained process-group control,
+is 137 retained controls PASS / nine intentional RED. An earlier concurrent
+static attempt hit the retained process-group probe's transient macOS
+`kill EPERM`; its isolated rerun was 26/26 and it is not counted as contract
+evidence. Nearest controls remain 30/30 and 45/45 PASS; Sites remains 36/36
+PASS.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;
