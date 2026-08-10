@@ -62,13 +62,14 @@ blockchain-операций.
   выбран в [ADR 0029](docs/adr/0029-digitalocean-vds-deployment.md): один
   DigitalOcean Droplet/VDS с Docker Compose, Caddy, Web, API, worker и
   PostgreSQL. Он ещё не provisioned и не deployed.
-- Slice 027A is implemented as a production-author candidate under
-  [ADR 0035](docs/adr/0035-credential-free-container-runtime-boundary.md) as
-  three credential-free waves: pinned Linux/amd64 images and Docker-secret
-  files, private Compose/Caddy routing, then a controlled offline-repeat local
-  smoke. The local Docker gate is GREEN, starts no live worker and cannot claim
-  migrations, readiness, hosting or deployment; those authorities remain with
-  027B–029B. Independent verification is still pending.
+- Slice 027A corrective RED is frozen under
+  [ADR 0035](docs/adr/0035-credential-free-container-runtime-boundary.md).
+  The first production-author candidate `20e8d998` was rejected by independent
+  Core and Product verification; its local Docker run is historical evidence,
+  not a GREEN gate. The corrected contract requires CLI-isolated prefetch,
+  immutable-image validation, split base/runtime Compose files, exact
+  `https://127.0.0.1` same-origin QA, bounded FIFO rejection and read-only
+  Caddy. No live worker, migration, readiness, hosting or deployment is claimed.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
@@ -132,11 +133,12 @@ public ingress и даёт Web same-origin `/api`. Публичны только
 ограничивается administrator allowlist или VPN. PostgreSQL 5432, API/worker
 ports и Docker socket не публикуются.
 
-Репозиторий теперь содержит credential-free 027A image/Compose/Caddy boundary
-и локальный bounded smoke, но это ещё не deployment-ready VDS composition:
-027B должен добавить migration/readiness/heartbeat, а 027C–029B — recovery,
-release и promotion. DNS, SSH, GHCR/Spaces credentials, hosted staging и
-production deployment не provisioned. Sites сохраняется только как
+Репозиторий содержит rejected 027A реализацию и corrective RED;
+принятого credential-free image/Compose/Caddy gate пока нет.
+После нового 027A GREEN срез 027B должен добавить
+migration/readiness/heartbeat, а 027C–029B — recovery, release и promotion.
+DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment
+не provisioned. Sites сохраняется только как
 compatibility artifact; это больше не выбранный production host.
 
 Credentials разрешены только после credential-free slices 022–029A, одного

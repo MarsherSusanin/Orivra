@@ -27,16 +27,20 @@ credential, provider or live Coston2 effect.
   external `pg` and `solc`; Web contains only fresh client output and its
   dependency-free static server;
 - API, worker and importer use the single strict profile-based secret-file
-  adapter before any Pool, listen, verifier or network composition;
+  adapter before any Pool, listen, verifier or network composition; secret
+  files use nonblocking/no-follow open before `fstat`, so a FIFO cannot hang
+  startup;
 - `.dockerignore` excludes host artifacts and credentials; `.gitignore`
   excludes `.env` and `.env.*` while allowing only an explicit secret-free
   example.
 
 ### 027A2 — topology and routing
 
-- `compose.yaml`, `deploy/compose.qa.yaml`, `deploy/caddy/Caddyfile` and the Web
-  static server implement the exact five-service/five-network contract from
-  ADR 0035;
+- base `compose.yaml` contains only independently renderable Caddy/Web
+  authority; `deploy/compose.runtime.yaml` adds the gated API/worker/PostgreSQL
+  services, networks, secrets and PostgreSQL volume; `deploy/compose.qa.yaml`,
+  `deploy/caddy/Caddyfile` and the Web static server complete the exact
+  five-service/five-network contract from ADR 0035;
 - Caddy alone publishes 80/443; no API, worker or PostgreSQL host port exists;
 - exact `/api` and `/api/*` strip once and never fall back to Web;
 - Web returns the SPA shell only for application routes and returns 404 for a
@@ -47,12 +51,15 @@ credential, provider or live Coston2 effect.
 ### 027A3 — real Docker evidence
 
 - a controlled prefetch validates every official locked identity before any
-  build;
+  build while every registry-capable Docker child receives a fresh empty
+  mode-0700 CLI configuration and no ambient auth/token/key authority;
 - fresh application/Caddy targets build for Linux/amd64, then repeat from the
   prepared dependency cache with BuildKit `--network=none` and npm offline;
-- production image inputs require immutable digest references with pull never;
-  the QA override uses local tags with pull never;
-- a unique temporary Compose project runs the bounded loopback smoke, inspects
+- the sole production Compose wrapper rejects non-immutable image references
+  before Docker; QA local tags remain exact runner-owned constants with pull
+  never;
+- a unique temporary Compose project runs the exact
+  `https://127.0.0.1:443` same-origin smoke, inspects
   live ports/networks/mounts/users, records every runner HTTP request and
   removes only its own resources and secret files;
 - Sites compatibility files remain byte-identical.
@@ -71,15 +78,19 @@ digests and mismatched Docker references fail.
 `resolveDeploymentEnvironment(profile, environment)` is async and supports
 only `api`, `worker`, `recording-importer`. The exact allowlists, XOR rule,
 file-only 4096-byte bound, UTF-8/NUL/regular/no-symlink checks and fixed
-non-leaking error are those in ADR 0035. Direct values retain current
+non-leaking error are those in ADR 0035. File open is also nonblocking, and the
+bounded FIFO regression must complete 30 times. Direct values retain current
 trim/nonempty compatibility and remain supported for existing non-Compose
 operators, but production Compose mounts only secret files.
 
 ### Compose and Caddy
 
 Service names, profiles, networks and published ports are exact, not examples.
-Compose configuration must parse semantically through `docker compose config
---format json`; source regex alone is insufficient. Caddy configuration is
+Base and runtime-overlay Compose configuration must parse semantically through
+`docker compose config --format json`; source regex alone is insufficient.
+Production operators use only `npm run compose:production -- ...`, whose pure
+validator enforces lowercase immutable image digests before Docker. Direct
+Compose invocation is an implementation detail. Caddy configuration is
 validated by the exact pinned Caddy image before smoke.
 
 `public_edge` is not a general application network. `web_internal`,
@@ -88,11 +99,14 @@ worker and no host binding. No service is privileged or receives host network,
 the Docker socket or an unbounded log.
 
 The QA `public_edge` remains non-internal so Docker Desktop can publish Caddy's
-random loopback port. Caddy is its only member and only Caddy publishes a port;
-the site address `:80` disables automatic HTTPS/ACME. This topology does not
-prove DNS or provider denial. No-external-effects acceptance additionally
-requires only Web/API Caddy upstreams, no worker or live provider credentials,
-an exact runner request ledger restricted to `127.0.0.1`, explicit forbidden
+exact `127.0.0.1:443` binding. Caddy is its only member and only Caddy publishes
+a port. One `PROOFLINE_PUBLIC_ORIGIN=https://127.0.0.1` configures Caddy
+internal TLS and API browser authority; unavailable port 443 fails before
+Compose without a skip or alternate origin. This topology does not prove DNS
+or provider denial. No-external-effects acceptance additionally requires only
+Web/API Caddy upstreams, no worker or live provider credentials, an HTTPS
+ledger restricted to that default origin, allowed and hostile wallet-auth
+preflight checks with no challenge/signature effect, explicit forbidden
 Coinbase/Open-Meteo/verifier/Coston2 RPC hosts, and live port inspection.
 
 ### Web server
@@ -103,10 +117,15 @@ GET/HEAD deep routes return `index.html`; other methods fail without SPA
 fallback. It does not proxy `/api`, read credentials, list directories or make
 outbound requests.
 
-## Production-author candidate
+## Rejected candidate and corrective RED
 
-The credential-free production surfaces are implemented and the following
-frozen contracts are GREEN:
+Production-author commit `20e8d998318168b2aaf9622b9fce453ff6d9fe42`, tree
+`9b2d7a5e10225a5e22297e2832f0a143b1016eeb`, is rejected by both independent
+verifiers. The corrective contracts now require credential-isolated prefetch,
+one exact HTTPS origin, independent base/runtime Compose files, executable
+immutable-image validation, bounded FIFO rejection and read-only Caddy. The
+following files are intentional RED until a new production candidate satisfies
+them:
 
 - `apps/api/test/slice027a-deployment-secrets.contract.test.ts`;
 - `apps/worker/test/slice027a-worker-deployment-boundary.contract.test.ts`;
@@ -114,11 +133,11 @@ frozen contracts are GREEN:
 - `tests/deployment/slice027a-compose-caddy.contract.test.mjs`;
 - `tests/deployment/slice027a-docker-gates.contract.test.mjs`.
 
-The real Docker gate validates the static contracts before controlled prefetch,
-offline-repeat builds and the bounded local smoke. Candidate evidence is
-recorded in [Slice 027A GREEN](../evidence/slice-027a-green-credential-free-container-runtime.md).
-Independent Core and Product verification still remain required on one frozen
-tree hash.
+The prior local Docker run recorded in [Slice 027A GREEN](../evidence/slice-027a-green-credential-free-container-runtime.md)
+is historical rejected-candidate evidence, not acceptance. A new GREEN must
+first satisfy this corrected RED, then rerun controlled prefetch,
+offline-repeat builds and the bounded HTTPS smoke. Independent Core and Product
+verification remain required on one new frozen tree hash.
 
 ## Acceptance
 
@@ -154,10 +173,12 @@ npm run test:docker
 ```
 
 `docker:prefetch` is separately observable and validates the locked official
-manifests. `test:docker` performs the no-network repeat and QA smoke with
-`pull_policy: never`. Neither command accepts registry credentials or contacts
-an upstream provider. The final handoff also runs affected backend/worker
-coverage, root build and Sites compatibility.
+manifests with a fresh no-auth Docker CLI configuration. This proves only
+CLI-side isolation, not daemon-global state. `test:docker` performs the
+no-network repeat and exact HTTPS QA smoke with `pull_policy: never`. Neither
+command accepts registry credentials or contacts an upstream provider. The
+final handoff also runs affected backend/worker coverage, root build and Sites
+compatibility.
 
 ## Explicit exclusions
 

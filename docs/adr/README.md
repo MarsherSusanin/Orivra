@@ -37,6 +37,6 @@ ADR фиксирует архитектурное решение, которое
 | [0032](0032-persisted-public-canonical-url-attack-demo.md) | Runtime-verified recording импортируется в immutable PostgreSQL и публикуется через bounded anonymous API/Web demo |
 | [0033](0033-static-template-catalog-boundary.md) | Статический immutable catalog связывает public template metadata с exact canonical manifest bytes без DB или source fetch |
 | [0034](0034-public-landing-and-onboarding-boundary.md) | Публичный landing независимо потребляет static templates и persisted demo без wallet, fallback authority или cache-variant CORS ошибки |
-| [0035](0035-credential-free-container-runtime-boundary.md) | Pinned credential-free images, Docker-secret files, private Compose networks and exact Caddy/Web routing without fabricated readiness |
+| [0035](0035-credential-free-container-runtime-boundary.md) | CLI-isolated pinned images, nonblocking Docker-secret files, split private Compose topology and exact HTTPS Caddy/Web routing without fabricated readiness |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

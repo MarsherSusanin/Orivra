@@ -82,7 +82,9 @@ image boundary реализованы, но эти endpoints и deployment-readi
 ### Slice 027A local container gate
 
 ADR 0035 splits the credential-free container boundary into image/secret,
-topology/routing and real-Docker waves. After GREEN the checked-in commands are:
+topology/routing and real-Docker waves. The first candidate `20e8d998` is
+rejected; the commands below are acceptance targets for the next GREEN, not a
+current PASS:
 
 ```bash
 npm run test:docker:static
@@ -91,21 +93,43 @@ npm run test:docker
 ```
 
 `docker:prefetch` validates only the exact checked-in Node 22.14.0, Caddy
-2.10.2 and PostgreSQL 17.6 official index/Linux-amd64 manifests. The build
-repeat uses BuildKit `--network=none`, npm offline cache and `pull_policy:
-never`. Production image variables accept only immutable
-`repository@sha256:<64 lowercase hex>` identities; QA accepts only local tags
-and also never pulls.
+2.10.2 and PostgreSQL 17.6 official index/Linux-amd64 manifests. Every
+registry-capable child uses a fresh mode-0700 Docker CLI directory with exact
+no-auth configuration and stripped ambient auth/token/key inputs, cleaned on
+success or failure. This is CLI-side isolation only; it cannot prove the Docker
+daemon has no global credential state. The build repeat uses BuildKit
+`--network=none`, npm offline cache and `pull_policy: never`.
 
-The QA smoke uses a unique temporary Compose project. `public_edge` remains
-non-internal so Docker Desktop can publish a random `127.0.0.1` HTTP port, but
-Caddy is its only member and only published service. QA selects Caddy site
-address `:80`, which avoids automatic HTTPS/ACME; Caddy routes only to private
-Web and API upstreams. It explicitly starts only Caddy, Web, PostgreSQL and
-API, then checks Web/deep routes plus the DB-free anonymous template endpoint
-through `/api`. It never starts worker or supplies live verifier/Coston2
-credentials. A request ledger allows only the selected loopback origin and
-rejects Coinbase, Open-Meteo, verifier and Coston2 RPC hosts. Exact `/api` and
+Production operators must use the executable policy wrapper:
+
+```bash
+npm run compose:production -- config
+npm run compose:production -- --runtime config
+```
+
+It validates lowercase `repository@sha256:<64 lowercase hex>` Caddy/Web image
+inputs for the base and API/worker inputs for the runtime overlay before any
+Docker effect. A tag, uppercase, short or arbitrary reference fails. Direct
+`docker compose` is an implementation detail, not an authorized production
+entry. QA local tags are runner-owned constants and never enter this wrapper.
+
+Base `compose.yaml` contains only Caddy/Web and renders without runtime image,
+database or secret-path configuration. `deploy/compose.runtime.yaml` adds the
+gated API/worker/PostgreSQL services; QA combines both with its exact override.
+
+The QA smoke uses a unique temporary Compose project and exact
+`PROOFLINE_PUBLIC_ORIGIN=https://127.0.0.1`. Before Compose, a bounded bind
+preflight must obtain `127.0.0.1:443`; unavailable port 443 fails without skip
+or alternate origin. `public_edge` remains non-internal for Docker Desktop,
+but Caddy is its only member and published service. Caddy internal TLS and the
+API browser origin derive from the same variable. QA explicitly starts only
+Caddy, Web, PostgreSQL and API, then checks Web/deep routes, the DB-free
+anonymous template endpoint, exact allowed-origin wallet-auth OPTIONS 204 with
+ACAO/Vary and hostile-origin denial without ACAO. It creates no challenge,
+signature, wallet or live effect. It never starts worker or supplies live
+verifier/Coston2 credentials. An HTTPS request ledger allows only the default
+loopback origin and rejects Coinbase, Open-Meteo, verifier and Coston2 RPC
+hosts. Exact `/api` and
 `/api/*` strip the prefix once and never SPA-fallback; missing asset-like paths
 remain 404. Live inspection, not Compose text, proves the Caddy host binding
 and absence of other published ports. The topology alone is not DNS/provider
@@ -118,6 +142,9 @@ Compose mounts API `DATABASE_URL_FILE` and
 `PROOFLINE_COSTON2_PRIVATE_KEY_FILE`; the importer only
 `DATABASE_URL_FILE`. Direct values remain an XOR-compatible non-Compose input,
 but Compose never embeds them. PostgreSQL uses its native password-file input.
+Secret files are opened `O_NOFOLLOW|O_NONBLOCK` and must be regular; a FIFO
+must fail with the fixed error without blocking. Caddy is non-root/read-only,
+has bounded `/tmp`, and only named `/data` and `/config` are writable.
 Do not commit `.env`, `.env.*`, dummy relayer/verifier credentials or a
 production test adapter.
 

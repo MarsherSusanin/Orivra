@@ -7,18 +7,27 @@ import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const composePath = resolve(root, "compose.yaml");
+const runtimeComposePath = resolve(root, "deploy/compose.runtime.yaml");
 const qaComposePath = resolve(root, "deploy/compose.qa.yaml");
+const [baseComposeSource, runtimeComposeSource, qaComposeSource] = await Promise.all(
+  [composePath, runtimeComposePath, qaComposePath].map((path) =>
+    readFile(path, "utf8").catch(() => "")),
+);
 const immutable = (name) => `registry.invalid/proofline/${name}@sha256:${"a".repeat(64)}`;
-const composeEnvironment = {
-  ...Object.fromEntries(
-    Object.entries(process.env).filter(([name]) => name !== "COMPOSE_PROFILES"),
-  ),
+const dockerCliEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) =>
+    name !== "COMPOSE_PROFILES" && !name.startsWith("PROOFLINE_")),
+);
+const baseComposeEnvironment = {
+  ...dockerCliEnvironment,
   PROOFLINE_CADDY_IMAGE: immutable("caddy"),
   PROOFLINE_WEB_IMAGE: immutable("web"),
+  PROOFLINE_PUBLIC_ORIGIN: "https://proofline.example",
+};
+const runtimeComposeEnvironment = {
+  ...baseComposeEnvironment,
   PROOFLINE_API_IMAGE: immutable("api"),
   PROOFLINE_WORKER_IMAGE: immutable("worker"),
-  PROOFLINE_CADDY_SITE_ADDRESS: "proofline.example",
-  PROOFLINE_WEB_ORIGIN: "https://proofline.example",
   PROOFLINE_API_DATABASE_URL_FILE: "/tmp/proofline-api-database-url",
   PROOFLINE_API_TOKEN_DIGEST_KEY_FILE: "/tmp/proofline-api-token-digest-key",
   PROOFLINE_WORKER_DATABASE_URL_FILE: "/tmp/proofline-worker-database-url",
@@ -27,7 +36,10 @@ const composeEnvironment = {
   PROOFLINE_POSTGRES_PASSWORD_FILE: "/tmp/proofline-postgres-password",
 };
 
-function renderCompose(files = [composePath], environment = composeEnvironment) {
+function renderCompose(
+  files = [composePath, runtimeComposePath],
+  environment = runtimeComposeEnvironment,
+) {
   const args = ["compose"];
   for (const path of files) args.push("-f", path);
   args.push("--profile", "runtime-after-027b", "config", "--format", "json");
@@ -45,7 +57,10 @@ function renderCompose(files = [composePath], environment = composeEnvironment) 
   return { ...result, model };
 }
 
-function renderDefaultServices(files = [composePath], environment = composeEnvironment) {
+function renderDefaultServices(
+  files = [composePath],
+  environment = baseComposeEnvironment,
+) {
   const args = ["compose"];
   for (const path of files) args.push("-f", path);
   args.push("config", "--services");
@@ -90,8 +105,67 @@ function secretTargets(service) {
   ).sort();
 }
 
+function serviceBlock(source, name) {
+  const match = source.match(
+    new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [a-z][a-z0-9_-]*:\\n|^networks:|^volumes:|^secrets:|(?![\\s\\S]))`, "m"),
+  );
+  return match?.[0] ?? "";
+}
+
 const rendered = renderCompose();
 const defaultServices = renderDefaultServices();
+
+test("keeps the independently renderable base limited to Caddy and Web", () => {
+  assert.notEqual(baseComposeSource, "");
+  assert.match(baseComposeSource, /^  caddy:/m);
+  assert.match(baseComposeSource, /^  web:/m);
+  assert.doesNotMatch(baseComposeSource, /^  (?:api|worker|postgres):/m);
+  assert.doesNotMatch(baseComposeSource, /app_internal|db_internal|worker_egress|postgres_data/);
+});
+
+test("moves all gated runtime services, networks, secrets and PostgreSQL state to one overlay", () => {
+  assert.notEqual(runtimeComposeSource, "", "deploy/compose.runtime.yaml must exist");
+  for (const service of ["api", "worker", "postgres"]) {
+    assert.match(runtimeComposeSource, new RegExp(`^  ${service}:`, "m"));
+  }
+  for (const authority of [
+    "runtime-after-027b",
+    "app_internal",
+    "db_internal",
+    "worker_egress",
+    "postgres_data",
+    "api_database_url",
+    "worker_coston2_private_key",
+  ]) {
+    assert.match(runtimeComposeSource, new RegExp(authority));
+  }
+});
+
+test("makes only named Caddy state writable and bounds its temporary filesystem", () => {
+  const caddy = serviceBlock(baseComposeSource, "caddy");
+  assert.notEqual(caddy, "");
+  assert.match(caddy, /read_only:\s*true/);
+  assert.match(caddy, /tmpfs:[\s\S]*\/tmp:[^\n]*(?:size=|size:)/);
+  assert.match(caddy, /caddy_data:\/data|caddy_data[\s\S]{0,80}target:\s*\/data/);
+  assert.match(caddy, /caddy_config:\/config|caddy_config[\s\S]{0,80}target:\s*\/config/);
+  assert.doesNotMatch(caddy, /type:\s*bind|docker\.sock/);
+});
+
+test("derives Caddy and runtime API authority from one exact public origin", () => {
+  const caddy = serviceBlock(baseComposeSource, "caddy");
+  const api = serviceBlock(runtimeComposeSource, "api");
+  assert.match(caddy, /PROOFLINE_PUBLIC_ORIGIN:\s*\$\{PROOFLINE_PUBLIC_ORIGIN:\?/);
+  assert.match(api, /PROOFLINE_WEB_ORIGIN:\s*\$\{PROOFLINE_PUBLIC_ORIGIN:\?/);
+  assert.doesNotMatch(`${baseComposeSource}\n${runtimeComposeSource}`, /PROOFLINE_CADDY_SITE_ADDRESS/);
+});
+
+test("binds QA only to exact loopback HTTPS 443 without random HTTP authority", () => {
+  const caddy = serviceBlock(qaComposeSource, "caddy");
+  assert.match(caddy, /target:\s*443/);
+  assert.match(caddy, /published:\s*443/);
+  assert.match(caddy, /host_ip:\s*127\.0\.0\.1/);
+  assert.doesNotMatch(caddy, /target:\s*80|PROOFLINE_QA_HTTP_PORT|PROOFLINE_CADDY_SITE_ADDRESS|:\s*80/);
+});
 
 test("renders one semantic production Compose model with the exact service inventory", () => {
   assert.equal(rendered.status, 0, rendered.stderr || "docker compose config must pass");
@@ -103,9 +177,14 @@ test("renders one semantic production Compose model with the exact service inven
 
 test("activates only Caddy and Web when no runtime profile is requested", () => {
   assert.equal(
-    Object.hasOwn(composeEnvironment, "COMPOSE_PROFILES"),
+    Object.hasOwn(baseComposeEnvironment, "COMPOSE_PROFILES"),
     false,
     "operator COMPOSE_PROFILES must not activate hidden services in this test",
+  );
+  assert.deepEqual(
+    Object.keys(baseComposeEnvironment).filter((name) => name.startsWith("PROOFLINE_")).sort(),
+    ["PROOFLINE_CADDY_IMAGE", "PROOFLINE_PUBLIC_ORIGIN", "PROOFLINE_WEB_IMAGE"],
+    "default composition must not require dormant runtime images or secret paths",
   );
   assert.equal(defaultServices.status, 0, defaultServices.stderr || "default Compose config must pass");
   assert.deepEqual(defaultServices.services, ["caddy", "web"]);
@@ -121,6 +200,13 @@ test("keeps Caddy and Web default while gating the application runtime until 027
   assert.deepEqual(services.caddy?.depends_on ?? {}, {
     web: { condition: "service_started", required: true },
   });
+  assert.deepEqual(Object.keys(rendered.model.services ?? {}).sort(), [
+    "api",
+    "caddy",
+    "postgres",
+    "web",
+    "worker",
+  ]);
 });
 
 test("enforces the exact five-network membership and internal boundaries", () => {
@@ -221,11 +307,21 @@ test("rejects privileged, Docker-socket, host-network and unbounded service defa
     assert.ok(service.deploy?.resources?.limits?.memory, `${name} must bound memory`);
     assert.ok(Number(service.pids_limit) > 0, `${name} must bound process count`);
   }
-  for (const name of ["web", "api", "worker"]) {
+  for (const name of ["caddy", "web", "api", "worker"]) {
     assert.equal(rendered.model.services?.[name]?.read_only, true);
     assert.ok((rendered.model.services?.[name]?.tmpfs ?? []).length > 0);
     assert.notEqual(rendered.model.services?.[name]?.user, "0");
   }
+  assert.deepEqual(
+    (rendered.model.services?.caddy?.volumes ?? []).map((mount) => mount.target).sort(),
+    ["/config", "/data"],
+    "only named Caddy state/config volumes may be writable outside bounded tmpfs",
+  );
+  assert.ok(
+    (rendered.model.services?.caddy?.tmpfs ?? []).some((entry) =>
+      String(typeof entry === "string" ? entry : entry.target).startsWith("/tmp")),
+    "Caddy must receive a bounded /tmp tmpfs",
+  );
 });
 
 test("requires immutable production application images and pull never", () => {
@@ -246,7 +342,8 @@ test("routes exact API paths before Web and strips the prefix exactly once", asy
   assert.match(caddyfile, /handle\s+@api\s*\{/);
   assert.match(caddyfile, /uri\s+strip_prefix\s+\/api/);
   assert.match(caddyfile, /reverse_proxy\s+api:8080/);
-  assert.match(caddyfile, /\{\$PROOFLINE_CADDY_SITE_ADDRESS\}/);
+  assert.match(caddyfile, /\{\$PROOFLINE_PUBLIC_ORIGIN\}/);
+  assert.match(caddyfile, /tls\s+internal/);
   assert.deepEqual(
     [...new Set(
       [...caddyfile.matchAll(/reverse_proxy\s+([^\s{]+)/g)].map((match) => match[1]),
@@ -270,16 +367,16 @@ test("keeps health, schema and worker readiness explicitly outside 027A", () => 
   assert.doesNotMatch(pgHealth, /schema|migration|heartbeat/i);
 });
 
-test("renders the bounded loopback QA override with local tags and no worker activation", () => {
+test("renders the bounded exact-origin HTTPS QA override with local tags and no worker activation", () => {
   const environment = {
-    ...composeEnvironment,
+    ...runtimeComposeEnvironment,
     PROOFLINE_CADDY_IMAGE: "proofline/caddy:027a-qa",
     PROOFLINE_WEB_IMAGE: "proofline/web:027a-qa",
     PROOFLINE_API_IMAGE: "proofline/api:027a-qa",
     PROOFLINE_WORKER_IMAGE: "proofline/worker:027a-qa",
-    PROOFLINE_QA_HTTP_PORT: "49152",
+    PROOFLINE_PUBLIC_ORIGIN: "https://127.0.0.1",
   };
-  const qa = renderCompose([composePath, qaComposePath], environment);
+  const qa = renderCompose([composePath, runtimeComposePath, qaComposePath], environment);
   assert.equal(qa.status, 0, qa.stderr || "QA Compose config must pass");
   assert.notEqual(
     qa.model.networks?.public_edge?.internal,
@@ -287,9 +384,17 @@ test("renders the bounded loopback QA override with local tags and no worker act
     "Docker Desktop requires a non-internal edge for a loopback host publish",
   );
   assert.deepEqual(networkMembers(qa.model, "public_edge"), ["caddy"]);
-  assert.equal(qa.model.services?.caddy?.environment?.PROOFLINE_CADDY_SITE_ADDRESS, ":80");
+  assert.equal(
+    qa.model.services?.caddy?.environment?.PROOFLINE_PUBLIC_ORIGIN,
+    "https://127.0.0.1",
+  );
+  assert.equal(
+    qa.model.services?.api?.environment?.PROOFLINE_WEB_ORIGIN,
+    qa.model.services?.caddy?.environment?.PROOFLINE_PUBLIC_ORIGIN,
+    "Caddy and API must derive authority from the same single public origin",
+  );
   assert.deepEqual(publishedPorts(qa.model.services?.caddy), [
-    { target: 80, published: 49152, protocol: "tcp" },
+    { target: 443, published: 443, protocol: "tcp" },
   ]);
   for (const name of ["web", "api", "worker", "postgres"]) {
     assert.deepEqual(publishedPorts(qa.model.services?.[name]), []);
@@ -301,7 +406,10 @@ test("renders the bounded loopback QA override with local tags and no worker act
 });
 
 test("contains no Redis, Helm or hidden orchestration authority", async () => {
-  const source = await readFile(composePath, "utf8").catch(() => "");
-  const aggregate = `${source}\n${JSON.stringify(rendered.model)}`;
+  const sources = await Promise.all(
+    [composePath, runtimeComposePath, qaComposePath].map((path) =>
+      readFile(path, "utf8").catch(() => "")),
+  );
+  const aggregate = `${sources.join("\n")}\n${JSON.stringify(rendered.model)}`;
   assert.doesNotMatch(aggregate, /\bredis\b|helm|kubernetes|docker\.sock|network_mode:\s*host|privileged:\s*true/i);
 });

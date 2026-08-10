@@ -3,10 +3,14 @@
 import {
   mkdtemp,
   mkdir,
+  open,
+  readFile,
   rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { constants } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +56,15 @@ async function temporaryFile(
   const path = join(directory, name);
   await writeFile(path, content);
   return { directory, path };
+}
+
+async function temporaryFifo(name: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "proofline-027a-secret-fifo-"));
+  temporaryDirectories.push(directory);
+  const path = join(directory, name);
+  const created = spawnSync("mkfifo", [path], { encoding: "utf8" });
+  expect(created.status, created.stderr || "mkfifo must create the bounded test fixture").toBe(0);
+  return path;
 }
 
 afterEach(async () => {
@@ -147,6 +160,59 @@ describe("Slice 027A deployment secret-file boundary", () => {
       })).rejects.toMatchObject({
         code: "DEPLOYMENT_SECRET_CONFIGURATION_INVALID",
         message: "Deployment secret configuration is invalid",
+      });
+    }
+  });
+
+  it("opens deployment secret paths with no-follow and nonblocking flags before fstat", async () => {
+    const source = await readFile(
+      new URL("../src/deployment-secrets.ts", import.meta.url),
+      "utf8",
+    );
+    const openCall = source.match(/open\(\s*path\s*,([\s\S]*?)\);/)?.[1] ?? "";
+    expect(openCall).toMatch(/(?:constants\.)?O_RDONLY/);
+    expect(openCall).toMatch(/(?:constants\.)?O_NOFOLLOW/);
+    expect(openCall).toMatch(/(?:constants\.)?O_NONBLOCK/);
+    expect(source.indexOf("open(path")).toBeLessThan(source.indexOf("handle.stat()"));
+  });
+
+  it("rejects a FIFO 30 times without blocking before the regular-file check", async () => {
+    for (let repetition = 0; repetition < 30; repetition += 1) {
+      const path = await temporaryFifo(`database-url-${repetition}`);
+      const startedAt = Date.now();
+      const operation = resolve("recording-importer", {
+        DATABASE_URL_FILE: path,
+      }).then(
+        (value) => ({ kind: "resolved" as const, value }),
+        (cause: unknown) => ({ kind: "rejected" as const, cause }),
+      );
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const first = await Promise.race([
+        operation,
+        new Promise<{ kind: "timeout" }>((resolveTimeout) => {
+          timer = setTimeout(() => resolveTimeout({ kind: "timeout" }), 100);
+        }),
+      ]);
+      if (timer) clearTimeout(timer);
+
+      let settled = first;
+      if (first.kind === "timeout") {
+        const writer = await open(
+          path,
+          constants.O_WRONLY | constants.O_NONBLOCK,
+        );
+        await writer.close();
+        settled = await operation;
+      }
+
+      expect(first.kind, `FIFO repetition ${repetition} exceeded 100 ms`).not.toBe("timeout");
+      expect(Date.now() - startedAt).toBeLessThan(500);
+      expect(settled).toMatchObject({
+        kind: "rejected",
+        cause: {
+          code: "DEPLOYMENT_SECRET_CONFIGURATION_INVALID",
+          message: "Deployment secret configuration is invalid",
+        },
       });
     }
   });

@@ -1,7 +1,7 @@
 # Slice 027A GREEN — credential-free container runtime
 
-Status: Production-author candidate; independent Core and Product verification
-pending.
+Status: REJECTED production-author candidate; retained as historical evidence
+only.
 
 Date: 2026-08-10 (Asia/Vladivostok)
 
@@ -14,6 +14,25 @@ Final corrected RED tree: `98442ffea24335242f837a7daa3cd2319fadd4d6`
 Architecture decision: [ADR 0035](../adr/0035-credential-free-container-runtime-boundary.md)
 
 Slice contract: [027A](../slices/027a-credential-free-container-runtime.md)
+
+Rejected candidate commit: `20e8d998318168b2aaf9622b9fce453ff6d9fe42`
+
+Rejected candidate tree: `9b2d7a5e10225a5e22297e2832f0a143b1016eeb`
+
+## Independent verification rejection
+
+Independent Core and Product verification returned formal FAIL on the exact
+candidate above. The candidate inherited ambient Docker CLI authentication in
+registry-capable prefetch children, configured QA Caddy and API with different
+origins, required inactive runtime variables to render the default base,
+accepted mutable production image references, could block on a FIFO secret path
+and left Caddy's root filesystem writable outside its named state volumes.
+
+All commands and observations below are historical production-author evidence
+for that rejected tree. They do not establish an accepted local Docker,
+credential-free, same-origin or release-path result. Corrective RED is recorded
+in [Slice 027A RED](slice-027a-red-credential-free-container-runtime.md); a new
+candidate must rerun every affected gate and both independent verifiers.
 
 ## Implementation
 
@@ -95,7 +114,8 @@ bytes are unchanged.
 
 ## Controlled Docker operations
 
-The only registry-authorized command was the credential-free cache preparation:
+The production author ran the following registry-authorized cache preparation;
+later verification proved that its CLI credential isolation was insufficient:
 
 ```sh
 npm run docker:prefetch
@@ -145,10 +165,12 @@ occurred.
 
 A diff-scoped review covered the strict file reader, startup ordering, image
 inputs, Compose/Caddy topology, static path containment, child-process argument
-construction, QA ledger and cleanup. Targeted scans found no committed secret,
-private key, credential echo, shell interpolation, public application/database
-port, host network, privileged container or Docker socket mount. No reportable
-security finding was identified.
+construction, QA ledger and cleanup. Targeted author scans found no committed
+secret, private key, credential echo, shell interpolation, public
+application/database port, host network, privileged container or Docker socket
+mount. Independent verification later identified the release-path findings
+recorded at the top of this document, so the author's earlier no-finding
+conclusion is withdrawn.
 
 This is local credential-free packaging evidence only. It is not migration,
 schema readiness, `/healthz`, `/readyz`, deployment worker heartbeat, retention,

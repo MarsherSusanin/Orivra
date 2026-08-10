@@ -59,9 +59,14 @@ tree hash before credentials authorize 028B.
 For ADR 0035 container work, a static YAML or Dockerfile regex is not sufficient
 release evidence. The Surface & Adapter Implementer must record semantic
 Compose configuration, fresh image contents, the controlled no-network repeat,
-private network/port inspection and exact Caddy/Web black-box routing. Until
-027B, neither `pg_isready`, a DB-free API response nor a running container may
-be described as application readiness; 027A QA must not start the live worker.
+private network/port inspection and exact Caddy/Web black-box routing. Prefetch
+evidence also proves fresh no-auth Docker CLI configuration and cleanup with a
+fake runner; it may not infer daemon-global credential state. Production
+Compose evidence begins at the immutable-reference validator/wrapper, not a
+direct YAML invocation. QA must prove one exact HTTPS Caddy/API origin and both
+allowed and hostile CORS preflights. Until 027B, neither `pg_isready`, a DB-free
+API response nor a running container may be described as application readiness;
+027A QA must not start the live worker.
 
 DNS, restricted SSH, DigitalOcean, GHCR pull, Spaces and live Coston2
 credentials remain unavailable during module development. They are requested

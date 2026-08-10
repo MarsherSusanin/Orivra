@@ -6,11 +6,12 @@ Status: accepted
 
 [ADR 0029](0029-digitalocean-vds-deployment.md) selects one DigitalOcean
 Droplet/VDS running Web, API, worker and PostgreSQL through Docker Compose
-behind Caddy. The repository does not yet contain a Dockerfile, Compose file,
-Caddy configuration or Docker-secret adapter. The current API and worker accept
-secrets directly from process environment variables; the worker also requires
-live Coston2 authority and a migrated database before it can perform honest
-production work.
+behind Caddy. Before 027A the repository had no Dockerfile, Compose file, Caddy
+configuration or Docker-secret adapter, and API/worker accepted secrets only
+directly from process environment variables. The first implementation now
+exists but is rejected pending the corrective boundary below. The worker still
+requires live Coston2 authority and a migrated database before it can perform
+honest production work.
 
 Slice 027A must make the container and routing boundary reviewable without
 inventing migration, readiness, worker-heartbeat, backup or hosted evidence.
@@ -64,13 +65,27 @@ image never contains `worker/index.js`, `.openai/hosting.json` or
 image from the pinned Caddy manifest.
 
 BuildKit prefetches only the checked-in locked official manifests and the
-lockfile dependency cache. The first controlled build populates that cache;
-the acceptance repeat uses `--network=none` and npm offline mode. Production
-Compose accepts application image references only as immutable
-`repository@sha256:<64 lowercase hex>` values and uses `pull_policy: never`.
-The QA override may use only locally built tags and also uses `pull_policy:
-never`. 028A later exports the built images and freezes their distinct image
-and archive digests; 027A does not anticipate those output digests.
+lockfile dependency cache. Its import-pure orchestration creates a fresh
+mode-0700 Docker CLI directory containing exact `config.json` bytes
+`{"auths":{}}`, removes ambient `DOCKER_CONFIG`, `DOCKER_AUTH_CONFIG`,
+`REGISTRY_AUTH_FILE`, home-directory auth paths and token/key variables from
+every registry-capable child, supplies explicit daemon selection when needed,
+and removes the temporary configuration on success or failure. This proves
+CLI-side credential isolation only; it does not claim visibility into or
+absence of daemon-global credentials.
+
+The first controlled build populates the dependency cache; the acceptance
+repeat uses `--network=none` and npm offline mode. The sole authorized
+production Compose entry is `npm run compose:production -- ...`. Its executable
+validator accepts only a lowercase repository path followed by
+`@sha256:<64 lowercase hex>` and rejects a tag, uppercase, short, suffixed or
+otherwise arbitrary reference before any Docker effect. It validates Caddy and
+Web for the base, plus API and worker when the runtime overlay is selected.
+Direct `docker compose` is an implementation detail, not a production operator
+entry. QA local tags exist only inside the exact smoke runner and also use
+`pull_policy: never`. 028A later exports the built images and freezes their
+distinct image and archive digests; 027A does not anticipate those output
+digests.
 
 ### Secret-file boundary
 
@@ -90,11 +105,13 @@ Every required name is supplied by exactly one of `NAME` or `NAME_FILE`.
 Supplying both or neither fails before Pool construction, listening, verifier
 composition, file mutation or network I/O. Unknown `DATABASE_URL_FILE` or
 `PROOFLINE_*_FILE` names fail closed. Direct values retain the existing
-trim-and-nonempty compatibility boundary. A file path is opened without following
-symlinks, then must be a regular file of 1–4096 raw bytes, valid UTF-8 after
-bounded reading, contain no NUL and contain a non-empty value after the same
-trim normalization as the direct environment form. The returned environment
-does not retain `_FILE` entries.
+trim-and-nonempty compatibility boundary. A file path is opened with
+`O_RDONLY | O_NOFOLLOW | O_NONBLOCK` before `fstat`, then must be a regular file
+of 1–4096 raw bytes, valid UTF-8 after bounded reading, contain no NUL and
+contain a non-empty value after the same trim normalization as the direct
+environment form. A FIFO therefore receives the same bounded fixed failure
+instead of blocking startup. The returned environment does not retain `_FILE`
+entries.
 
 All secret-boundary failures use the fixed code
 `DEPLOYMENT_SECRET_CONFIGURATION_INVALID` and fixed message
@@ -108,12 +125,18 @@ later.
 
 ### Compose topology
 
-The service set is exactly `caddy`, `web`, `api`, `worker`, `postgres`; Redis,
-the Docker socket, host networking and privileged containers are absent.
-`caddy` and `web` start by default. `api`, `worker` and `postgres` belong to the
-explicit `runtime-after-027b` profile. The bounded 027A QA smoke explicitly
-targets `caddy`, `web`, `postgres` and `api`; it never starts worker and never
-claims application readiness.
+The combined service set is exactly `caddy`, `web`, `api`, `worker`,
+`postgres`; Redis, the Docker socket, host networking and privileged containers
+are absent. Base `compose.yaml` contains only Caddy, Web, `public_edge`,
+`web_internal` and the Caddy volumes. It renders independently with only the
+Caddy/Web immutable images and one `PROOFLINE_PUBLIC_ORIGIN`.
+`deploy/compose.runtime.yaml` adds API, worker, PostgreSQL, the remaining
+networks/secrets/PostgreSQL volume and Caddy's application-network membership.
+Those three services belong to the explicit `runtime-after-027b` profile. The
+bounded QA smoke combines base, runtime and QA files and explicitly targets
+Caddy, Web, PostgreSQL and API; it never starts worker and never claims
+application readiness. Inactive runtime configuration is never required to
+render the default base.
 
 Networks have exact membership:
 
@@ -130,10 +153,11 @@ different Compose project names and therefore different networks and volumes.
 No application container receives a bind-mounted source tree, Docker socket,
 host network or public host port.
 
-App and Web runtimes are non-root, read-only and receive a bounded tmpfs. All
-services drop capabilities and set `no-new-privileges`; Caddy alone receives
-`NET_BIND_SERVICE`. Writable PostgreSQL and Caddy named volumes are explicit
-exceptions. Logging, resource bounds and stop grace periods are finite.
+App, Web and Caddy runtimes are non-root, read-only and receive a bounded
+`/tmp` tmpfs. All services drop capabilities and set `no-new-privileges`;
+Caddy alone receives `NET_BIND_SERVICE`. Writable PostgreSQL storage and exact
+Caddy `/data` and `/config` named volumes are explicit exceptions. Logging,
+resource bounds and stop grace periods are finite.
 
 ### Routing and bounded QA
 
@@ -144,20 +168,26 @@ serves existing hashed/static files, returns 404 for missing asset-like paths,
 and returns the exact client `index.html` only for non-asset application deep
 routes.
 
-QA binds a random loopback HTTP port. `public_edge` remains non-internal because
-Docker Desktop cannot publish that host port from an internal network; Caddy is
-its sole member and the sole service with a published port. The QA Caddy site
-address is `:80`, so it does not activate automatic HTTPS or ACME. Caddy has
-only the private Web and API upstreams. `web_internal`, `app_internal` and
-`db_internal` remain internal; `worker_egress` is unused because QA never starts
-worker.
+QA uses the exact single authority `PROOFLINE_PUBLIC_ORIGIN=https://127.0.0.1`.
+Both Caddy's internal-TLS site and API's `PROOFLINE_WEB_ORIGIN` derive from that
+same variable. Before Compose starts, the runner attempts an exact bounded bind
+of `127.0.0.1:443`; unavailable or unauthorized port 443 fails the gate and is
+never skipped or replaced by a different origin. `public_edge` remains
+non-internal because Docker Desktop cannot publish that loopback port from an
+internal network; Caddy is its sole member and sole published service. Caddy
+has only private Web and API upstreams. `web_internal`, `app_internal` and
+`db_internal` remain internal; `worker_egress` is unused because QA never
+starts worker.
 
 The non-internal edge is not evidence that DNS or provider access is impossible.
-The bounded no-external-effects claim instead requires the HTTP-only Caddy
-configuration, the exact internal upstream set, no live worker/provider
-credentials, and a runner request ledger that permits only the selected
-`127.0.0.1` port and explicitly rejects the Coinbase, Open-Meteo, Coston2 RPC
-and verifier hosts. QA runs with no registry access or pull. It proves the root
+The bounded no-external-effects claim instead requires Caddy internal TLS, the
+exact internal upstream set, no live worker/provider credentials, and an HTTPS
+runner request ledger that permits only `https://127.0.0.1` on default port 443
+and explicitly rejects the Coinbase, Open-Meteo, Coston2 RPC and verifier
+hosts. Exact allowed-origin `OPTIONS /api/v1/auth/wallet/challenges` returns
+204 with matching ACAO and `Vary: Origin`; a hostile Origin is denied without
+ACAO. This check creates no challenge, signature, wallet or live effect. QA runs
+with no registry access or pull. It proves the root
 and accepted deep routes, an anonymous DB-free API template response, query
 preservation (the strict template endpoint keeps rejecting a query), strip-once
 and API/asset fail-closed behavior, private-network membership, named volumes,
@@ -165,6 +195,15 @@ absence of the Docker socket and the live inspected loopback Caddy binding.
 Topology alone makes no DNS/provider-denial claim. Temporary projects,
 containers, networks, volumes and secret files are removed by exact project
 identity.
+
+### Rejected first production-author candidate
+
+Commit `20e8d998318168b2aaf9622b9fce453ff6d9fe42`, tree
+`9b2d7a5e10225a5e22297e2832f0a143b1016eeb`, is rejected. Independent Core
+and Product verification found ambient Docker CLI credential inheritance, a
+different QA/API origin, inactive-profile interpolation, unenforced immutable
+image inputs, blocking FIFO open and a writable Caddy root filesystem. Its
+historical local Docker run is not acceptance evidence for this amended ADR.
 
 The PostgreSQL engine may use `pg_isready` only as an engine-liveness signal.
 027A adds no API `/healthz`, `/readyz`, schema probe or worker heartbeat and

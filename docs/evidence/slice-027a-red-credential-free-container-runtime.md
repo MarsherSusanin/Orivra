@@ -1,6 +1,6 @@
 # Slice 027A RED — credential-free container runtime
 
-Status: Intentional RED contract; production container surfaces absent.
+Status: Corrective intentional RED; first production-author candidate rejected.
 
 Date: 2026-08-10 (Asia/Vladivostok)
 
@@ -13,6 +13,10 @@ Accepted parent tree: `dc85b763cd96c4ba0bf8b7a68ad0fd41e399c23a`
 Architecture decision: [ADR 0035](../adr/0035-credential-free-container-runtime-boundary.md)
 
 Slice contract: [027A](../slices/027a-credential-free-container-runtime.md)
+
+Rejected candidate commit: `20e8d998318168b2aaf9622b9fce453ff6d9fe42`
+
+Rejected candidate tree: `9b2d7a5e10225a5e22297e2832f0a143b1016eeb`
 
 ## Accepted prerequisite
 
@@ -154,7 +158,7 @@ QA metadata renderer uses the explicit profile, while the real smoke remains
 contractually limited to explicitly targeted Caddy, Web, PostgreSQL and API and
 never starts worker.
 
-### Docker Desktop edge correction
+### Superseded Docker Desktop edge correction
 
 The earlier RED topology incorrectly required the QA `public_edge` network to
 be internal. That prevents the required random loopback host publish on Docker
@@ -164,6 +168,9 @@ evidence from the HTTP-only `:80` site, exact Web/API upstreams, absence of live
 worker credentials, a loopback-only runner request ledger with explicit
 provider-host denials, and live port inspection. It makes no DNS/provider claim
 from network topology alone; production `public_edge` egress remains intact.
+The later independent-verifier corrective RED below supersedes this random
+HTTP-port authority with exact `https://127.0.0.1:443`; this paragraph remains
+only as chronology for the earlier RED iteration.
 
 All invalid iterations through this correction were tests/documentation-only.
 No Docker build, pull, Compose start, container, network, volume or secret file
@@ -207,6 +214,75 @@ npx vitest run \
 
 Result: isolated deadline `30/30 PASS`; full Slice 023D2 `31/31 PASS`. No
 production source changed for this correction.
+
+## Corrective RED after independent verifier FAIL
+
+Core and Product independently inspected the same stopped production-author
+candidate `20e8d998318168b2aaf9622b9fce453ff6d9fe42`, tree
+`9b2d7a5e10225a5e22297e2832f0a143b1016eeb`, and returned formal FAIL. The
+candidate and its earlier GREEN evidence are rejected. The corrective RED
+freezes all confirmed release-boundary findings without changing production,
+dependencies, migrations, Docker files or protected Sites sources:
+
+1. `scripts/docker-prefetch-orchestration.mjs` must be import-pure and expose
+   injectable `runDockerPrefetch`. Fake-Docker tests seed ambient auth/helper,
+   Docker config, registry auth, home config and token/key sentinels. Every
+   registry-capable child must instead observe one fresh mode-0700 Docker CLI
+   directory with exact no-auth config, explicit daemon selection and no
+   sentinels; success and failure both remove it. The resulting claim is only
+   CLI-side isolation, never daemon-global credential absence.
+2. QA uses one exact `PROOFLINE_PUBLIC_ORIGIN=https://127.0.0.1` for Caddy
+   internal TLS and API browser authority. It binds only `127.0.0.1:443`, fails
+   before Compose if unavailable, and makes default-port HTTPS requests. Exact
+   allowed wallet-auth OPTIONS must return 204 with ACAO/Vary; hostile Origin
+   is denied without ACAO. No challenge, signature, wallet or live effect is
+   created.
+3. Base `compose.yaml` contains only independently renderable Caddy/Web plus
+   edge/Web networks and Caddy volumes. `deploy/compose.runtime.yaml` owns all
+   API/worker/PostgreSQL services, profiles, networks, secrets and PostgreSQL
+   state. QA combines all three exact files and still never starts worker.
+4. Import-pure `scripts/compose-production.mjs` is the sole production Compose
+   entry. It rejects tag, uppercase, short, suffixed and arbitrary image refs
+   before Docker and accepts only lowercase repository paths with an exact
+   lowercase SHA-256 digest. Base validates Caddy/Web; runtime also validates
+   API/worker. QA local tags remain inaccessible from production mode.
+5. Deployment secret files use `O_RDONLY | O_NOFOLLOW | O_NONBLOCK` before
+   `fstat`. A real FIFO fixture must reject with the fixed redacted error within
+   the bound 30 consecutive times instead of hanging.
+6. Caddy is non-root and read-only with bounded `/tmp`; only named `/data` and
+   `/config` are writable. Existing capabilities, ports, routes, worker absence,
+   offline double-build and scoped cleanup remain unchanged.
+
+The first bounded corrective runs are semantic RED, not harness failures:
+
+```sh
+npm run typecheck
+npx vitest run apps/api/test/slice027a-deployment-secrets.contract.test.ts \
+  --reporter=dot --maxWorkers=1
+node --test tests/deployment/slice027a-docker-gates.contract.test.mjs
+node --test tests/deployment/slice027a-compose-caddy.contract.test.mjs
+```
+
+- typecheck: PASS;
+- exact secret/worker matrix: 2 files and 22 cases, 2 intentional RED and 20
+  controls PASS; the 19-case secret file contributes both RED cases, and the
+  runtime FIFO case times out at the frozen 100 ms, is safely released and
+  leaves no blocked operation;
+- Docker-gate source/fake-runner contract: 10 cases, 5 intentional RED and 5
+  controls PASS;
+- Compose/Caddy contract: 17 cases, 16 intentional RED and 1 control PASS.
+
+The combined deployment static suite is 37 cases: 21 intentional RED and 16
+controls PASS, including all 10 unchanged image-boundary controls. The nearest
+API/worker baseline is 4 files and 34/34 PASS; the legacy worker lifecycle is
+14/14 PASS; the deployment-roadmap contract is 15/15 PASS; Sites compatibility
+is 36/36 PASS. There are zero skipped cases. Root build is deliberately not
+rerun because this corrective wave changes tests/documentation only.
+
+No Docker build, pull, service start or external network operation ran. The
+only Docker CLI use was semantic `docker compose config`, which starts no
+daemon resource. There was no container, network, volume, image or temporary
+secret cleanup to perform.
 
 ## RED interpretation
 
