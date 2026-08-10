@@ -29,9 +29,30 @@ describe("Slice 027A worker container bootstrap boundary", () => {
     );
   });
 
-  it("does not invent worker HTTP health or readiness before Slice 027B", async () => {
-    const source = await readFile(new URL("../src/bootstrap.ts", import.meta.url), "utf8");
+  it("keeps worker HTTP authority absent and requires the worker-owned 027B heartbeat after live config and schema", async () => {
+    const [source, apiBootstrap, entry] = await Promise.all([
+      readFile(new URL("../src/bootstrap.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../api/src/bootstrap.ts", import.meta.url), "utf8"),
+      readFile(new URL("../src/entry.ts", import.meta.url), "utf8"),
+    ]);
     expect(source).not.toMatch(/createServer|\.listen\(|\/healthz|\/readyz/);
-    expect(source).not.toMatch(/deployment[_-]?heartbeat/i);
+
+    const secrets = source.indexOf("resolveDeploymentEnvironment");
+    const verifier = source.indexOf("createWeb2JsonVerifierClient");
+    const schema = source.indexOf("verifyDeploymentSchema");
+    const heartbeat = source.indexOf("createPostgresDeploymentHeartbeatStore");
+    const worker = source.indexOf("createProductionWorker");
+    expect(secrets).toBeGreaterThanOrEqual(0);
+    expect(verifier).toBeGreaterThan(secrets);
+    expect(schema).toBeGreaterThan(verifier);
+    expect(heartbeat).toBeGreaterThan(schema);
+    expect(worker).toBeGreaterThan(heartbeat);
+
+    expect(apiBootstrap).not.toMatch(
+      /createPostgresDeploymentHeartbeatStore|refreshAndCleanup|deploymentHeartbeat\.start/i,
+    );
+    expect(`${source}\n${entry}`).not.toMatch(
+      /heartbeat-only|heartbeat.?sidecar|NODE_ENV\s*===?\s*["']test["']|test.?adapter/i,
+    );
   });
 });

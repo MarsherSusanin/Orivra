@@ -118,6 +118,25 @@ completed deterministically as 11 intentional RED and 1 control PASS. A missing
 one-shot service is likewise asserted explicitly instead of dereferencing an
 undefined rendered service. Neither correction weakens production behavior.
 
+### 027B2 compatibility correction
+
+After the 027B1 implementation checkpoint at commit
+`c25197c6ae09642707e1c4c74572247c6c468734` / tree
+`2fb7006cd30e75d07123145abb3e051c68c9496d`, the historical 027A worker test
+still prohibited any deployment-heartbeat reference in the production worker
+bootstrap. That absence was deliberate in 027A but contradicts ADR 0036.
+The corrected compatibility contract continues to forbid worker HTTP health,
+dummy credentials, sidecars, test adapters and API-owned heartbeat writes. It
+now requires the real worker heartbeat only after strict deployment-secret,
+live-verifier and exact-schema validation and before worker command claims.
+This is an intentional 027B2 RED, not a weakening of 027A secret custody or
+artifact purity.
+
+The correction is structurally GREEN under `npm run typecheck`. Its focused
+worker boundary is 2 files / 15 cases: 12 intentional 027B2 RED and 3 accepted
+controls PASS. The nearest worker bootstrap/lifecycle baseline remains 3 files,
+21/21 PASS with zero skip.
+
 ## GREEN authority still required
 
 Implementation must make the frozen contracts GREEN without adopting legacy
