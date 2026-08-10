@@ -40,6 +40,24 @@ const expectedLock = {
       indexDigest: "sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
       linuxAmd64Digest: "sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be",
     },
+    postgresRecovery: {
+      repository: "postgres",
+      tag: "17.6-bookworm",
+      indexDigest: "sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3",
+      linuxAmd64Digest: "sha256:45cd22f8d32e189d245403954882f88e7a8714301fda80dab6da90f1265b25a3",
+    },
+    minio: {
+      repository: "minio/minio",
+      tag: "RELEASE.2025-09-07T16-13-09Z",
+      indexDigest: "sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e",
+      linuxAmd64Digest: "sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2",
+    },
+    minioClient: {
+      repository: "minio/mc",
+      tag: "RELEASE.2025-08-13T08-35-41Z",
+      indexDigest: "sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727",
+      linuxAmd64Digest: "sha256:eb4ea9884b77704230e2423e9004d2fa738dc272876b9cc41a297d29443b8780",
+    },
   },
 };
 

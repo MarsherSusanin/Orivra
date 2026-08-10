@@ -237,6 +237,34 @@ lock entries and missing three inspect/pull calls; its other 11 controls PASS.
 The nearest unchanged deployment/roadmap controls are 45/45 PASS and Sites
 compatibility is 36/36 PASS.
 
+### Retained image-boundary inventory correction
+
+The subsequent production WIP was inspected read-only from stash object
+`b65e39e0bec98344e46ea9529f94eea7c8d0f7de` / tree
+`15ccb0d7e00e0c58d5e9a0c1c0d73c11db8f9d9f`; it was never applied. A second
+retained 027A contract still deep-compared `docker/base-images.json` with only
+the original three entries. The test now extends that exact value with the
+accepted real `postgresRecovery`, `minio` and `minioClient` tag, index-digest
+and Linux/amd64 manifest-digest identities. Its application `FROM`, immutable
+digest, official registry, no mutable tag, fresh-copy, secret exclusion and
+worker-no-port assertions are unchanged.
+
+A repository-wide scan of exact base-image inventory assertions found no other
+genuine three-entry cap: the six-image prefetch contract was already corrected,
+and the 027C deployment contract already requires the three added identities.
+Historical ADR 0035/027A descriptions of the original foundation remain true
+and are extended by ADR 0037; they are not executable caps and were not
+rewritten. This tests/evidence-only correction performs no Docker, network,
+production, dependency or lockfile effect.
+
+On base `877bd101e0c5f689982430d7c864b04f774bff68` / tree
+`2bbfb6a99e2957df7179d940fdf0401e0acf7a31`, typecheck is PASS. The complete
+Docker static suite is 83 cases: 31 intentional RED for absent 027C production
+and 52 controls PASS. The corrected image-boundary inventory is one of those
+RED cases while its other nine historical assertions PASS. The nearest
+deployment/roadmap controls remain 45/45 PASS and Sites compatibility remains
+36/36 PASS.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;
