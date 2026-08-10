@@ -121,6 +121,38 @@ statement ordering. The recovery gate may mention worker only to prove it was
 not started; the QA Compose file itself must contain neither a worker service
 nor its private-key input.
 
+### Slice 009 package-boundary compatibility correction
+
+After the initial RED freeze at commit
+`bef57561458c980405ba1bb97a616c22e842d1e5` / tree
+`11c389950fbd760158137e43102f19413161eeba`, the unchanged accepted Slice 009
+worker-purity test still required the pre-027C contracts export map to contain
+exactly five entries. That historical absence contradicts ADR 0037 and would
+reject the frozen sixth exact feature entry `./recovery: ./src/recovery.ts` even
+after correct implementation.
+
+The compatibility correction preserves all five prior entries byte-for-byte,
+adds only the exact sixth entry, requires recovery feature/root runtime identity
+and a cycle-free/effect-free feature module, and proves a fresh worker bundle
+and esbuild metafile contain neither recovery schema strings nor recovery input
+bytes. Existing wallet, manifest, template, deployment, custody, side-effect and
+worker-artifact exclusions remain unchanged. This is intentional 027C RED, not
+a package-boundary or worker-custody weakening.
+
+The first focused attempt used a literal dynamic deep import, which Vite tried
+to resolve before test execution while the intentionally absent package export
+was still RED. The harness now follows the adjacent accepted pattern and passes
+the specifier through a variable, allowing all purity controls to execute
+without changing the production contract.
+
+Typecheck remains PASS. The corrected Slice 009 plus recovery-contract focus is
+2 files / 23 cases: 8 intentional RED and 15 controls PASS. The fresh worker
+bundle/metafile case is among the PASS controls and proves zero recovery input
+bytes. The nearest worker bootstrap/entry/lifecycle matrix is 4 files, 21/21
+PASS with zero skip; Sites compatibility remains 36/36 PASS. No production
+source, package metadata, build artifact, Docker resource or network state was
+changed.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;

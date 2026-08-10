@@ -61,6 +61,16 @@ const deploymentContractRuntimeExports = [
   "DeploymentReadinessV1Schema",
 ] as const;
 
+const recoveryContractRuntimeExports = [
+  "BackupEvidenceV1Schema",
+  "RestoreDrillEvidenceV1Schema",
+  "RestorePromotionAuthorizationV1Schema",
+  "canonicalSerializeBackupEvidence",
+  "canonicalSerializeRestoreDrillEvidence",
+  "checksumBackupEvidence",
+  "checksumRestoreDrillEvidence",
+] as const;
+
 const templateDomainRuntimeExports = [
   "getWeb2JsonTemplateCatalog",
   "getWeb2JsonTemplateDetail",
@@ -148,7 +158,7 @@ function expectNoPreflightTestBridge(candidate: string, label: string) {
 }
 
 describe("Slice 009 production worker purity", () => {
-  it("declares pure package metadata and exact custody/template feature subpaths", () => {
+  it("declares pure package metadata and exact custody/template/recovery feature subpaths", () => {
     const contracts = JSON.parse(readFileSync(contractsPackage, "utf8"));
     const domain = JSON.parse(readFileSync(domainPackage, "utf8"));
 
@@ -160,6 +170,7 @@ describe("Slice 009 production worker purity", () => {
       "./wallet-auth": "./src/wallet-auth.ts",
       "./manifest": "./src/web2json-manifest.ts",
       "./templates": "./src/web2json-templates.ts",
+      "./recovery": "./src/recovery.ts",
     });
     expect(domain.exports).toEqual({
       ".": "./src/index.ts",
@@ -260,6 +271,30 @@ describe("Slice 009 production worker purity", () => {
     expect(source).not.toMatch(
       /from\s*["']\.\/index["']|from\s*["']@proofline\/contracts["']/,
     );
+  });
+
+  it("keeps the cycle-free recovery runtime export identical through the root entry", async () => {
+    const recoveryFeature = resolve(root, "packages/contracts/src/recovery.ts");
+    expect(existsSync(recoveryFeature)).toBe(true);
+    if (!existsSync(recoveryFeature)) return;
+    const rootSpecifier = "@proofline/contracts";
+    const recoverySpecifier = "@proofline/contracts/recovery";
+    const [rootContracts, recoveryContracts, source] = await Promise.all([
+      import(/* @vite-ignore */ rootSpecifier),
+      import(/* @vite-ignore */ recoverySpecifier),
+      readFile(recoveryFeature, "utf8"),
+    ]);
+
+    expect(Object.keys(recoveryContracts).sort()).toEqual(
+      [...recoveryContractRuntimeExports].sort(),
+    );
+    for (const name of recoveryContractRuntimeExports) {
+      expect(recoveryContracts[name]).toBe(rootContracts[name]);
+    }
+    expect(source).not.toMatch(
+      /from\s*["']\.\/index["']|from\s*["']@proofline\/contracts["']/,
+    );
+    expect(moduleLoadEffectViolations(recoveryFeature)).toEqual([]);
   });
 
   it("keeps manifest and template feature imports cycle-free", () => {
@@ -379,10 +414,17 @@ describe("Slice 009 production worker purity", () => {
         bytesForSuffix("packages/contracts/src/web2json-manifest.ts"),
         "manifest feature runtime",
       ).toBeGreaterThan(0);
+      expect(
+        bytesForSuffix("packages/contracts/src/recovery.ts"),
+        "recovery feature runtime",
+      ).toBe(0);
       expect(freshArtifact).toMatch(/await startProductionWorker\(\)/);
       expect(freshArtifact).toMatch(/PROOFLINE_COSTON2_PRIVATE_KEY/);
       expect(freshArtifact).not.toMatch(
         /parseLegacyLiveCoston2RuntimeConfig|\bLiveRuntimeFactoryInput\b|\bLiveEnvironment\b/,
+      );
+      expect(freshArtifact).not.toMatch(
+        /BackupEvidenceV1Schema|RestoreDrillEvidenceV1Schema|RestorePromotionAuthorizationV1Schema|canonicalSerializeBackupEvidence|canonicalSerializeRestoreDrillEvidence|checksumBackupEvidence|checksumRestoreDrillEvidence/,
       );
       const artifactFindings = matchingLabels(
         freshArtifact,
@@ -392,7 +434,7 @@ describe("Slice 009 production worker purity", () => {
         .filter(
           ({ input, bytesInOutput }) =>
             bytesInOutput > 0 &&
-            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$/.test(
+            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$|(?:^|\/)recovery(?:-schema)?\.ts$/.test(
               input,
             ),
         )
