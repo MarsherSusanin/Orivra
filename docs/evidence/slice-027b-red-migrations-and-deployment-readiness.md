@@ -396,3 +396,20 @@ from Compose. The wrapper's executable missing/relative/empty/directory/
 symlink/FIFO preflight remains unchanged. Typecheck, 113 nearest controls and
 36 Sites controls PASS; the combined deployment static focus remains exactly
 3 intentional RED and 27 controls PASS without Docker or network activity.
+
+The Slice 009 custody-purity compatibility audit on clean commit
+`40ddaec1fa24d1ae58e754e7db2282e5840acf5b` / tree
+`2cf5592e95e411f39cfaccfc28b242bfe1d487d8` removed its stale requirement that
+live ports themselves read and derive `PROOFLINE_COSTON2_PRIVATE_KEY`. The
+refrozen source graph permits that environment name and `privateKeyToAccount`
+only in the pre-authority runtime configuration parser; typed live ports have
+no Environment, required/env/file read or raw-key field. Existing fresh
+metafile, project-token, custody-field and synthetic-handler bundle rules remain
+unchanged. Purity is intentionally 1 RED and 14 controls PASS. Nearest controls
+excluding that now-refrozen purity file are 98/98 PASS.
+
+The exact corrective focus remains 7 Vitest-reported files / 86 cases: 63 RED
+and 23 controls PASS. That is six worker/runtime/DSN compatibility files plus
+the retained deployment-heartbeat boundary file; an interim six-file label was
+not used because the executable report confirms seven. The 30-case deployment
+static split remains 3 RED / 27 PASS and typecheck remains PASS.

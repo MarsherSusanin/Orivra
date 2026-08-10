@@ -14,6 +14,10 @@ const root = fileURLToPath(new URL("../../../", import.meta.url));
 const entry = resolve(root, "apps/worker/src/entry.ts");
 const bootstrap = resolve(root, "apps/worker/src/bootstrap.ts");
 const liveRuntime = resolve(root, "apps/worker/src/live-runtime.ts");
+const workerRuntimeConfiguration = resolve(
+  root,
+  "apps/worker/src/worker-runtime-configuration.ts",
+);
 const commandHandlers = resolve(root, "apps/worker/src/worker.ts");
 const obsoleteDirectGate = resolve(root, "apps/worker/src/live-gate.ts");
 const workerArtifact = resolve(root, "apps/worker/dist/worker.js");
@@ -441,7 +445,7 @@ describe("Slice 009 production worker purity", () => {
     expectNoPreflightTestBridge(artifact, "built worker artifact");
   });
 
-  it("allows the worker-owned relayer key only inside the persisted live pipeline", () => {
+  it("derives the worker-owned account once before typed live-pipeline composition", () => {
     const source = readFileSync(liveRuntime, "utf8");
     const pipelineStart = source.indexOf(
       "export function createLiveCoston2PipelinePorts",
@@ -456,14 +460,33 @@ describe("Slice 009 production worker purity", () => {
     );
 
     expect(pipeline).toMatch(
-      /required\(environment,\s*["']PROOFLINE_COSTON2_PRIVATE_KEY["']\)/,
+      /createLiveCoston2PipelinePorts[\s\S]{0,600}\bruntimeConfig\b/,
     );
-    expect(pipeline).not.toMatch(/PROJECT_TOKEN|projectToken|execution\.privateKey/);
+    expect(pipeline).not.toMatch(
+      /\bEnvironment\b|\bLiveEnvironment\b|process\.env|required\(|readFile(?:Sync)?\(|PROOFLINE_COSTON2_PRIVATE_KEY|PROJECT_TOKEN|projectToken|execution\.privateKey|\[\s*["']privateKey["']\s*\]/,
+    );
+
+    const graph = sourceImportGraph(entry);
+    const keyAuthorityOwners = [...graph.entries()]
+      .filter(([, candidate]) =>
+        candidate.includes("PROOFLINE_COSTON2_PRIVATE_KEY"),
+      )
+      .map(([file]) => relative(root, file));
+    expect(keyAuthorityOwners).toEqual([
+      "apps/worker/src/worker-runtime-configuration.ts",
+    ]);
+
+    expect(existsSync(workerRuntimeConfiguration)).toBe(true);
+    if (!existsSync(workerRuntimeConfiguration)) return;
+    const configurationSource = readFileSync(workerRuntimeConfiguration, "utf8");
+    expect(configurationSource).toMatch(/parseWorkerRuntimeConfig/);
+    expect(configurationSource).toMatch(/PROOFLINE_COSTON2_PRIVATE_KEY/);
+    expect(configurationSource).toMatch(/privateKeyToAccount/);
+    expect(configurationSource).not.toMatch(/\b(?:privateKey|rawPrivateKey)\s*:/);
 
     const artifact = readFileSync(workerArtifact, "utf8");
-    expect(artifact).toMatch(
-      /required\d*\(environment,\s*["']PROOFLINE_COSTON2_PRIVATE_KEY["']\)/,
-    );
+    expect(artifact).toMatch(/PROOFLINE_COSTON2_PRIVATE_KEY/);
+    expect(matchingLabels(artifact, workerArtifactForbiddenRules)).toEqual([]);
   });
 
   it("removes the obsolete direct orchestrator from the repository and production graph", () => {
