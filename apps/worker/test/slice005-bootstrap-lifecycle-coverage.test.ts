@@ -294,6 +294,45 @@ describe("Slice 005 production worker process lifecycle", () => {
     },
   );
 
+  it("never publishes temporary readiness when post-schema live configuration is invalid", async () => {
+    const privateMarkers = [
+      "postgres://proofline.invalid/proofline",
+      "verifier-key",
+      `0x${"b".repeat(64)}`,
+    ];
+    let thrown: unknown;
+    try {
+      await startProductionWorker(environment({
+        PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "-1",
+      }));
+    } catch (cause) {
+      thrown = cause;
+    }
+
+    expect(thrown).toMatchObject({
+      message: expect.stringMatching(/unsigned/i),
+    });
+    const publicError = `${JSON.stringify(thrown)}\n${String((thrown as Error).message)}`;
+    for (const marker of privateMarkers) expect(publicError).not.toContain(marker);
+
+    expect(mocks.Pool).toHaveBeenCalledOnce();
+    expect(mocks.createVerifier).toHaveBeenCalledOnce();
+    expect(mocks.createRepository).not.toHaveBeenCalled();
+    expect(mocks.createPipelinePorts).not.toHaveBeenCalled();
+    expect(mocks.createHandlers).not.toHaveBeenCalled();
+    expect(mocks.createRunWorker).not.toHaveBeenCalled();
+    expect(mocks.worker.processOne).not.toHaveBeenCalled();
+    expect(mocks.pool.end).toHaveBeenCalledOnce();
+
+    const databaseSql = mocks.pool.query.mock.calls
+      .map(([sql]) => String(sql))
+      .join("\n");
+    expect(databaseSql).toMatch(/migration_checksums/);
+    expect(databaseSql).not.toMatch(
+      /INSERT INTO proofline_private\.deployment_worker_heartbeats|UPDATE proofline_private\.deployment_worker_heartbeats[\s\S]*SET stopped_at/i,
+    );
+  });
+
   it("registers shutdown signals, processes once, and closes the production pool", async () => {
     const signals = new Map<string, () => void>();
     vi.spyOn(process, "on").mockImplementation(((signal: string, listener: () => void) => {

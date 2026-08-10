@@ -15,11 +15,14 @@ refining [ADR 0029](../adr/0029-digitalocean-vds-deployment.md) and
 Risk: high persistence, database-role, startup-order and release-path change;
 no provider credential, live Coston2 effect, backup, restore or hosted claim.
 
-Implementation status: the B1–B3 production-author candidate is locally GREEN
-for typecheck, frozen contracts, coverage, real PostgreSQL and bounded
-credential-free Docker lifecycle. Independent Core/Product verification on one
-exact commit/tree remains pending. The test-only SQL heartbeat fixture is not
-actual worker readiness or deployment evidence.
+Implementation status: corrective RED is frozen after both independent
+verifiers rejected production-author candidate
+`4ac66f9693d1b8ae16a01d839923cdcdfad044eb` / tree
+`477f67988e63645da32c4a98fc307302a872d19b`. That candidate inserted a current
+heartbeat before late live-worker composition could fail, creating temporary
+false readiness. A corrected candidate and two new independent PASS reports are
+required. The test-only SQL heartbeat fixture is not actual worker readiness or
+deployment evidence.
 
 ## Delivery split
 
@@ -42,6 +45,8 @@ actual worker readiness or deployment evidence.
   authority and the current deployment/tree heartbeat;
 - actual production worker validates live config and schema before its first
   heartbeat or claim;
+- worker construction validates the repository, relayer policy and live
+  pipeline before lifecycle coordination and the first heartbeat insert;
 - heartbeat uses PostgreSQL time, 10-second refresh, 30-second staleness,
   startup UUID and explicit stopped state;
 - heartbeat loss stops new claims and leads to nonzero exit after any current

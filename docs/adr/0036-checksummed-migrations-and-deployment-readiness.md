@@ -174,6 +174,15 @@ worker_instance_id)`. The actual production worker alone writes
 its heartbeat, and only after live configuration and schema verification have
 passed. Timestamps come from the PostgreSQL clock.
 
+The startup order is exact: resolve every deployment secret and basic process
+input, create the Pool and verify the exact schema, fully construct and validate
+the production repository, relayer policy and live pipeline, install shutdown
+coordination, then insert the heartbeat immediately before entering the claim
+loop. Merely passing the schema gate is not heartbeat authority. If any
+post-schema composition step fails, the worker closes the Pool without inserting
+a heartbeat; shutdown may mark a row stopped only when heartbeat start actually
+succeeded.
+
 The worker refreshes every 10 seconds. Readiness requires a non-stopped row for
 the exact configured deployment and release tree whose database age is no more
 than 30 seconds. A row for another deployment/tree, a future timestamp, a

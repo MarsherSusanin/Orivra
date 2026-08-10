@@ -75,11 +75,13 @@ worker не выполняют migration при собственном стар�
 
 `/healthz` является process-only liveness. `/readyz` проверяет database,
 verified schema version и worker heartbeat; stale heartbeat возвращает
-`503 not-ready`, даже если containers продолжают работать. 027A Compose и
-image boundary независимо проверены. 027B production-author candidate
-реализует эти endpoint/migration/heartbeat contracts; его локальные static,
-real-PostgreSQL и bounded runtime gates GREEN, но independent verification ещё
-pending. Этот раздел не является actual-worker, hosted или deployed PASS.
+`503 not-ready`, даже если containers продолжают работать. Heartbeat authority
+starts only after exact schema verification and full repository, relayer-policy
+and live-pipeline construction, immediately before the claim loop. Exact 027B
+candidate `4ac66f9` / tree `477f679` is rejected by both verifiers because it
+inserted the heartbeat before that late composition could fail. Corrective RED
+is frozen; there is no current 027B PASS. Этот раздел не является actual-worker,
+hosted или deployed PASS.
 
 ### Slice 027A local container gate
 

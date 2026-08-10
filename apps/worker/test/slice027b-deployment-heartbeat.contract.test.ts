@@ -147,18 +147,27 @@ describe("Slice 027B persisted production worker deployment heartbeat", () => {
       .toEqual([]);
   });
 
-  it("starts only after live configuration and exact schema, then refreshes every 10 seconds", async () => {
+  it("starts only after full worker composition and lifecycle coordination, then refreshes every 10 seconds", async () => {
     const source = await readFile(new URL("../src/bootstrap.ts", import.meta.url), "utf8");
-    const secrets = source.indexOf("resolveDeploymentEnvironment");
-    const verifier = source.indexOf("createWeb2JsonVerifierClient");
-    const schema = source.indexOf("verifyDeploymentSchema");
-    const heartbeat = source.indexOf("createPostgresDeploymentHeartbeatStore");
-    const worker = source.indexOf("createProductionWorker");
+    const start = source.indexOf("export async function startProductionWorker");
+    const body = source.slice(start);
+    const secrets = body.indexOf("resolveDeploymentEnvironment");
+    const verifier = body.indexOf("createWeb2JsonVerifierClient");
+    const schema = body.indexOf("verifyDeploymentSchema");
+    const worker = body.indexOf("createProductionWorker");
+    const lifecycle = body.indexOf('for (const signal of ["SIGINT", "SIGTERM"]');
+    const heartbeatStart = body.indexOf("heartbeatStore.start");
+    const claimLoop = body.indexOf("runWorkerLoop");
+    const heartbeatStop = body.indexOf("heartbeatStore.stop");
     expect(secrets).toBeGreaterThanOrEqual(0);
     expect(verifier).toBeGreaterThan(secrets);
     expect(schema).toBeGreaterThan(verifier);
-    expect(heartbeat).toBeGreaterThan(schema);
-    expect(worker).toBeGreaterThan(heartbeat);
+    expect(worker).toBeGreaterThan(schema);
+    expect(lifecycle).toBeGreaterThan(worker);
+    expect(heartbeatStart).toBeGreaterThan(lifecycle);
+    expect(claimLoop).toBeGreaterThan(heartbeatStart);
+    expect(heartbeatStop).toBeGreaterThan(claimLoop);
+    expect(body).toMatch(/await heartbeatStore\.start\([^;]+;\s*await runWorkerLoop\(/s);
     expect(source).toMatch(/10_000|10000/);
     expect(source).not.toMatch(/renewLease[^\n]*deployment|command[^\n]*heartbeat[^\n]*deployment/i);
   });

@@ -29,7 +29,7 @@ describe("Slice 027A worker container bootstrap boundary", () => {
     );
   });
 
-  it("keeps worker HTTP authority absent and requires the worker-owned 027B heartbeat after live config and schema", async () => {
+  it("keeps worker HTTP authority absent and starts the worker-owned 027B heartbeat only after full composition", async () => {
     const [source, apiBootstrap, entry] = await Promise.all([
       readFile(new URL("../src/bootstrap.ts", import.meta.url), "utf8"),
       readFile(new URL("../../api/src/bootstrap.ts", import.meta.url), "utf8"),
@@ -37,16 +37,23 @@ describe("Slice 027A worker container bootstrap boundary", () => {
     ]);
     expect(source).not.toMatch(/createServer|\.listen\(|\/healthz|\/readyz/);
 
-    const secrets = source.indexOf("resolveDeploymentEnvironment");
-    const verifier = source.indexOf("createWeb2JsonVerifierClient");
-    const schema = source.indexOf("verifyDeploymentSchema");
-    const heartbeat = source.indexOf("createPostgresDeploymentHeartbeatStore");
-    const worker = source.indexOf("createProductionWorker");
+    const start = source.indexOf("export async function startProductionWorker");
+    const body = source.slice(start);
+    const secrets = body.indexOf("resolveDeploymentEnvironment");
+    const verifier = body.indexOf("createWeb2JsonVerifierClient");
+    const schema = body.indexOf("verifyDeploymentSchema");
+    const worker = body.indexOf("createProductionWorker");
+    const lifecycle = body.indexOf('for (const signal of ["SIGINT", "SIGTERM"]');
+    const heartbeatStart = body.indexOf("heartbeatStore.start");
+    const claimLoop = body.indexOf("runWorkerLoop");
     expect(secrets).toBeGreaterThanOrEqual(0);
     expect(verifier).toBeGreaterThan(secrets);
     expect(schema).toBeGreaterThan(verifier);
-    expect(heartbeat).toBeGreaterThan(schema);
-    expect(worker).toBeGreaterThan(heartbeat);
+    expect(worker).toBeGreaterThan(schema);
+    expect(lifecycle).toBeGreaterThan(worker);
+    expect(heartbeatStart).toBeGreaterThan(lifecycle);
+    expect(claimLoop).toBeGreaterThan(heartbeatStart);
+    expect(body).toMatch(/await heartbeatStore\.start\([^;]+;\s*await runWorkerLoop\(/s);
 
     expect(apiBootstrap).not.toMatch(
       /createPostgresDeploymentHeartbeatStore|refreshAndCleanup|deploymentHeartbeat\.start/i,

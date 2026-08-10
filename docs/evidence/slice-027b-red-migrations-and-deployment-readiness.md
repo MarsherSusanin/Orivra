@@ -240,6 +240,36 @@ boundary and worker entry controls are 18/18 PASS. The repository-wide scan
 found no second retained assertion for the obsolete live-worker database error.
 No Compose or Docker gate ran.
 
+## Corrective RED — heartbeat must follow full worker composition
+
+Both independent read-only verifiers rejected production-author candidate
+`4ac66f9693d1b8ae16a01d839923cdcdfad044eb` / tree
+`477f67988e63645da32c4a98fc307302a872d19b` with the same P1. The worker passed
+its secret and schema gates, inserted a current heartbeat, and only then called
+`createProductionWorker`. Missing or invalid relayer/live-pipeline configuration
+could therefore abort before any claim loop existed while `/readyz` treated the
+un-stopped row as ready for up to 30 seconds. Core stopped coverage,
+real-PostgreSQL, Docker and build gates after independently confirming the
+ordering; Product likewise made no acceptance claim for the candidate.
+
+The corrective contract freezes exact startup order: secrets/basic config →
+Pool and exact schema → complete production-worker/repository/relayer/live-port
+composition → shutdown coordination → heartbeat start → claim loop. The two
+historical source-order assertions no longer require heartbeat creation before
+`createProductionWorker`. An executable lifecycle regression reaches a valid
+Pool and schema, then rejects invalid relayer configuration while requiring no
+heartbeat INSERT, no repository/live-port/claim effect, redacted failure values
+and an exactly closed Pool. Heartbeat stop remains legal only after start
+succeeded. No sidecar, dummy credential or test adapter is introduced.
+
+Typecheck is PASS. The corrective worker focus is 3 files / 30 cases: exactly
+3 intentional RED and 27 controls PASS. The failures are the forbidden
+heartbeat INSERT after successful schema but failed relayer validation, plus
+the two retained source-order assertions observing heartbeat start before
+lifecycle coordination. Nearest worker bootstrap/entry/purity controls are
+23/23 PASS, rendered 027A/027B deployment controls are 27/27 PASS and Sites is
+36/36 PASS. No coverage, PostgreSQL, Docker, build, provider or network gate ran.
+
 ## GREEN authority still required
 
 Implementation must make the frozen contracts GREEN without adopting legacy
