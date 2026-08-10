@@ -223,6 +223,23 @@ run produced 23 controls PASS and 4 gated integration skips, which are not
 claimed as integration evidence. No image was pulled, no Compose/runtime Docker
 gate ran, and post-run label inspection found no Testcontainers resource.
 
+### Worker runtime-artifact compatibility correction
+
+The retained clean-built worker artifact test now expects the accepted bounded
+failure code `DEPLOYMENT_SECRET_CONFIGURATION_INVALID` and message `Deployment
+secret configuration is invalid` when production starts without deployment
+configuration. It still requires a non-zero exit and now explicitly rejects
+deployment secret names, secret mount paths, raw database/key/verifier values,
+connection failures and live-worker markers in process output. The Slice 005
+unit boundary remains the authority proving Pool, verifier and live ports are
+never constructed before all deployment secrets resolve.
+
+Typecheck is PASS. The clean-built worker plus unchanged Action artifact focus
+is 2/2 PASS, and the nearest Slice 005 deployment-secret, retained 027A worker
+boundary and worker entry controls are 18/18 PASS. The repository-wide scan
+found no second retained assertion for the obsolete live-worker database error.
+No Compose or Docker gate ran.
+
 ## GREEN authority still required
 
 Implementation must make the frozen contracts GREEN without adopting legacy

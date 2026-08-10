@@ -43,7 +43,14 @@ describe("clean-built executable package artifacts", () => {
     const output = `${execution.stdout}\n${execution.stderr}`;
 
     expect(execution.status).not.toBe(0);
-    expect(output).toMatch(/DATABASE_URL is required by the live worker/i);
+    expect(output).toContain("DEPLOYMENT_SECRET_CONFIGURATION_INVALID");
+    expect(output).toContain("Deployment secret configuration is invalid");
+    expect(output).not.toMatch(
+      /DATABASE_URL|PROOFLINE_(?:VERIFIER|COSTON2|WORKER)|\/run\/secrets|postgres(?:ql)?:\/\/|private.?key|verifier.?api.?key/i,
+    );
+    expect(output).not.toMatch(
+      /\b(?:ECONNREFUSED|ENOTFOUND|ETIMEDOUT)\b|fdc-verifiers|createWeb2JsonVerifierClient|new Pool|WORKER_READY|RUN_LIVE_COSTON2/i,
+    );
     expect(output).not.toMatch(/Dynamic require of/i);
   });
 
