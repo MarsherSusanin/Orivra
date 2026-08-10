@@ -83,8 +83,9 @@ image boundary реализованы, но эти endpoints и deployment-readi
 
 ADR 0035 splits the credential-free container boundary into image/secret,
 topology/routing and real-Docker waves. The first candidate `20e8d998` is
-rejected; the commands below are acceptance targets for the next GREEN, not a
-current PASS:
+rejected. Its corrective replacement has production-author PASS evidence for
+the commands below and still requires two independent reviews of one exact
+tree before module acceptance:
 
 ```bash
 npm run test:docker:static

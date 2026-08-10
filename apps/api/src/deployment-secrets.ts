@@ -41,7 +41,10 @@ function isDeploymentFileVariable(name: string): boolean {
 async function readSecretFile(path: string): Promise<string> {
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await open(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
     const stat = await handle.stat();
     if (!stat.isFile() || stat.size > MAX_SECRET_FILE_BYTES) {
       invalidConfiguration();

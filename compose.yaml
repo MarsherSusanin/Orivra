@@ -23,8 +23,12 @@ services:
   caddy:
     <<: *service-defaults
     image: ${PROOFLINE_CADDY_IMAGE:?PROOFLINE_CADDY_IMAGE is required}
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
     environment:
-      PROOFLINE_CADDY_SITE_ADDRESS: ${PROOFLINE_CADDY_SITE_ADDRESS:?PROOFLINE_CADDY_SITE_ADDRESS is required}
+      PROOFLINE_PUBLIC_ORIGIN: ${PROOFLINE_PUBLIC_ORIGIN:?PROOFLINE_PUBLIC_ORIGIN is required}
     depends_on:
       web:
         condition: service_started
@@ -40,7 +44,6 @@ services:
     networks:
       - public_edge
       - web_internal
-      - app_internal
     volumes:
       - caddy_data:/data
       - caddy_config:/config
@@ -57,108 +60,11 @@ services:
     networks:
       - web_internal
 
-  api:
-    <<: *service-defaults
-    image: ${PROOFLINE_API_IMAGE:?PROOFLINE_API_IMAGE is required}
-    profiles:
-      - runtime-after-027b
-    user: "1000:1000"
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m,mode=1777
-    environment:
-      PORT: "8080"
-      DATABASE_URL_FILE: /run/secrets/api_database_url
-      PROOFLINE_TOKEN_DIGEST_KEY_FILE: /run/secrets/api_token_digest_key
-      PROOFLINE_WEB_ORIGIN: ${PROOFLINE_WEB_ORIGIN:?PROOFLINE_WEB_ORIGIN is required}
-    secrets:
-      - source: api_database_url
-        target: api_database_url
-      - source: api_token_digest_key
-        target: api_token_digest_key
-    expose:
-      - "8080"
-    networks:
-      - app_internal
-      - db_internal
-
-  worker:
-    <<: *service-defaults
-    image: ${PROOFLINE_WORKER_IMAGE:?PROOFLINE_WORKER_IMAGE is required}
-    profiles:
-      - runtime-after-027b
-    user: "1000:1000"
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m,mode=1777
-    environment:
-      DATABASE_URL_FILE: /run/secrets/worker_database_url
-      PROOFLINE_VERIFIER_API_KEY_FILE: /run/secrets/worker_verifier_api_key
-      PROOFLINE_COSTON2_PRIVATE_KEY_FILE: /run/secrets/worker_coston2_private_key
-    secrets:
-      - source: worker_database_url
-        target: worker_database_url
-      - source: worker_verifier_api_key
-        target: worker_verifier_api_key
-      - source: worker_coston2_private_key
-        target: worker_coston2_private_key
-    networks:
-      - db_internal
-      - worker_egress
-
-  postgres:
-    <<: *service-defaults
-    image: postgres@sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be
-    profiles:
-      - runtime-after-027b
-    user: "70:70"
-    tmpfs:
-      - /var/run/postgresql:uid=70,gid=70,mode=3775
-    environment:
-      POSTGRES_DB: proofline
-      POSTGRES_USER: proofline
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-    secrets:
-      - source: postgres_password
-        target: postgres_password
-    expose:
-      - "5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U proofline -d proofline"]
-      interval: 2s
-      timeout: 2s
-      retries: 20
-      start_period: 5s
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - db_internal
-
 networks:
   public_edge: {}
   web_internal:
     internal: true
-  app_internal:
-    internal: true
-  db_internal:
-    internal: true
-  worker_egress: {}
 
 volumes:
   caddy_data: {}
   caddy_config: {}
-  postgres_data: {}
-
-secrets:
-  api_database_url:
-    file: ${PROOFLINE_API_DATABASE_URL_FILE:?PROOFLINE_API_DATABASE_URL_FILE is required}
-  api_token_digest_key:
-    file: ${PROOFLINE_API_TOKEN_DIGEST_KEY_FILE:?PROOFLINE_API_TOKEN_DIGEST_KEY_FILE is required}
-  worker_database_url:
-    file: ${PROOFLINE_WORKER_DATABASE_URL_FILE:-/run/proofline/unconfigured-worker-database-url}
-  worker_verifier_api_key:
-    file: ${PROOFLINE_WORKER_VERIFIER_API_KEY_FILE:-/run/proofline/unconfigured-worker-verifier-api-key}
-  worker_coston2_private_key:
-    file: ${PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE:-/run/proofline/unconfigured-worker-coston2-private-key}
-  postgres_password:
-    file: ${PROOFLINE_POSTGRES_PASSWORD_FILE:?PROOFLINE_POSTGRES_PASSWORD_FILE is required}

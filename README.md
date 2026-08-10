@@ -62,14 +62,14 @@ blockchain-операций.
   выбран в [ADR 0029](docs/adr/0029-digitalocean-vds-deployment.md): один
   DigitalOcean Droplet/VDS с Docker Compose, Caddy, Web, API, worker и
   PostgreSQL. Он ещё не provisioned и не deployed.
-- Slice 027A corrective RED is frozen under
+- Slice 027A corrective production-author GREEN is implemented under
   [ADR 0035](docs/adr/0035-credential-free-container-runtime-boundary.md).
   The first production-author candidate `20e8d998` was rejected by independent
-  Core and Product verification; its local Docker run is historical evidence,
-  not a GREEN gate. The corrected contract requires CLI-isolated prefetch,
-  immutable-image validation, split base/runtime Compose files, exact
-  `https://127.0.0.1` same-origin QA, bounded FIFO rejection and read-only
-  Caddy. No live worker, migration, readiness, hosting or deployment is claimed.
+  Core and Product verification. The replacement satisfies the frozen
+  CLI-isolated prefetch, immutable-image validation, split base/runtime
+  Compose, exact `https://127.0.0.1` QA, bounded FIFO and read-only Caddy gates;
+  two independent reviews of its new exact tree are still pending. No live
+  worker, migration, readiness, hosting or deployment is claimed.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
@@ -133,9 +133,9 @@ public ingress и даёт Web same-origin `/api`. Публичны только
 ограничивается administrator allowlist или VPN. PostgreSQL 5432, API/worker
 ports и Docker socket не публикуются.
 
-Репозиторий содержит rejected 027A реализацию и corrective RED;
-принятого credential-free image/Compose/Caddy gate пока нет.
-После нового 027A GREEN срез 027B должен добавить
+Репозиторий содержит replacement 027A production-author GREEN после rejected
+первой реализации; его два независимых module review ещё не завершены.
+После принятия 027A срез 027B должен добавить
 migration/readiness/heartbeat, а 027C–029B — recovery, release и promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment
 не provisioned. Sites сохраняется только как

@@ -8,8 +8,9 @@ Status: accepted
 Droplet/VDS running Web, API, worker and PostgreSQL through Docker Compose
 behind Caddy. Before 027A the repository had no Dockerfile, Compose file, Caddy
 configuration or Docker-secret adapter, and API/worker accepted secrets only
-directly from process environment variables. The first implementation now
-exists but is rejected pending the corrective boundary below. The worker still
+directly from process environment variables. The first implementation was
+rejected; a corrective replacement now has production-author evidence and
+awaits independent review under the boundary below. The worker still
 requires live Coston2 authority and a migrated database before it can perform
 honest production work.
 
@@ -204,6 +205,8 @@ and Product verification found ambient Docker CLI credential inheritance, a
 different QA/API origin, inactive-profile interpolation, unenforced immutable
 image inputs, blocking FIFO open and a writable Caddy root filesystem. Its
 historical local Docker run is not acceptance evidence for this amended ADR.
+The corrective production-author implementation must still receive two
+independent PASS reports for its new exact tree before Slice 027A is accepted.
 
 The PostgreSQL engine may use `pg_isready` only as an engine-liveness signal.
 027A adds no API `/healthz`, `/readyz`, schema probe or worker heartbeat and

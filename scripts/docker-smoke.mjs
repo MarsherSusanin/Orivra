@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { request as httpsRequest } from "node:https";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -9,7 +10,8 @@ import { spawnSync } from "node:child_process";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const project = `proofline-027a-q${process.pid}-${randomBytes(4).toString("hex")}`;
 if (!/^proofline-027a-[a-z0-9-]+$/.test(project)) throw new Error("Invalid QA project");
-const temporaryDirectory = await mkdtemp(join(tmpdir(), `${project}-`));
+const PROOFLINE_PUBLIC_ORIGIN = "https://127.0.0.1";
+const ALLOW_ORIGIN_HEADER = "Access-Control-Allow-Origin";
 const requestLedger = [];
 const forbiddenHosts = new Set([
   "api.open-meteo.com",
@@ -39,51 +41,97 @@ function compose(arguments_, environment, capture = false) {
     "--file",
     "compose.yaml",
     "--file",
+    "deploy/compose.runtime.yaml",
+    "--file",
     "deploy/compose.qa.yaml",
     ...arguments_,
   ], environment, capture);
 }
 
-async function randomLoopbackPort() {
+async function assertTlsPortAvailable() {
   const server = createServer();
-  await new Promise((resolvePromise, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolvePromise);
-  });
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
-  await new Promise((resolvePromise, reject) =>
-    server.close((cause) => cause ? reject(cause) : resolvePromise()),
-  );
-  if (!port) throw new Error("No loopback port available");
-  return port;
+  try {
+    await new Promise((resolvePromise, reject) => {
+      server.once("error", reject);
+      server.listen(443, "127.0.0.1", resolvePromise);
+    });
+    await new Promise((resolvePromise, reject) =>
+      server.close((cause) => cause ? reject(cause) : resolvePromise()),
+    );
+  } catch (cause) {
+    if (cause?.code !== "EACCES") throw cause;
+    const reservation = `${project}-port-check`;
+    let started = false;
+    try {
+      docker([
+        "run",
+        "--detach",
+        "--rm",
+        "--pull",
+        "never",
+        "--name",
+        reservation,
+        "--publish",
+        "127.0.0.1:443:443",
+        "--entrypoint",
+        "/bin/sh",
+        "proofline/caddy:027a-qa",
+        "-c",
+        "sleep 10",
+      ], process.env, true);
+      started = true;
+    } finally {
+      if (started) docker(["rm", "--force", reservation], process.env, true);
+    }
+  }
 }
 
-async function request(port, path) {
-  const target = new URL(`http://127.0.0.1:${port}${path}`);
+async function request(path, options = {}) {
+  const target = new URL(`${PROOFLINE_PUBLIC_ORIGIN}${path}`);
   requestLedger.push({
+    protocol: target.protocol,
     hostname: target.hostname,
     port: target.port,
     pathname: target.pathname,
   });
-  const response = await fetch(target, {
-    redirect: "manual",
-    signal: AbortSignal.timeout(2_000),
+  return new Promise((resolvePromise, reject) => {
+    const operation = httpsRequest(target, {
+      method: options.method ?? "GET",
+      headers: options.headers,
+      rejectUnauthorized: false,
+      timeout: 2_000,
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => resolvePromise({
+        status: response.statusCode ?? 0,
+        headers: response.headers,
+        body: Buffer.concat(chunks).toString("utf8"),
+      }));
+    });
+    operation.once("timeout", () => operation.destroy(new Error("QA request timed out")));
+    operation.once("error", reject);
+    operation.end();
   });
-  return { status: response.status, body: await response.text() };
 }
 
-async function waitFor(port, path, expectedStatus) {
+async function waitFor(path, expectedStatus) {
+  let lastOutcome = "no response";
   for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
-      const response = await request(port, path);
+      const response = await request(path);
       if (response.status === expectedStatus) return response;
-    } catch {}
+      lastOutcome = `status ${response.status}`;
+    } catch (cause) {
+      lastOutcome = `${String(cause?.code ?? cause?.name ?? "request error")}: ${String(cause?.message ?? "")}`;
+    }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
   }
-  throw new Error(`QA route did not reach status ${expectedStatus}`);
+  throw new Error(`QA route did not reach status ${expectedStatus} (${lastOutcome})`);
 }
 
+await assertTlsPortAvailable();
+const temporaryDirectory = await mkdtemp(join(tmpdir(), `${project}-`));
 const password = randomBytes(24).toString("hex");
 const secretValues = {
   apiDatabase: `postgres://proofline:${password}@postgres:5432/proofline`,
@@ -96,16 +144,13 @@ for (const [name, value] of Object.entries(secretValues)) {
   await writeFile(path, value, { mode: 0o600 });
   secretPaths[name] = path;
 }
-const port = await randomLoopbackPort();
 const environment = {
   ...process.env,
   PROOFLINE_CADDY_IMAGE: "proofline/caddy:027a-qa",
   PROOFLINE_WEB_IMAGE: "proofline/web:027a-qa",
   PROOFLINE_API_IMAGE: "proofline/api:027a-qa",
   PROOFLINE_WORKER_IMAGE: "proofline/worker:027a-qa",
-  PROOFLINE_CADDY_SITE_ADDRESS: ":80",
-  PROOFLINE_WEB_ORIGIN: "https://proofline.invalid",
-  PROOFLINE_QA_HTTP_PORT: String(port),
+  PROOFLINE_PUBLIC_ORIGIN,
   PROOFLINE_API_DATABASE_URL_FILE: secretPaths.apiDatabase,
   PROOFLINE_API_TOKEN_DIGEST_KEY_FILE: secretPaths.apiDigest,
   PROOFLINE_POSTGRES_PASSWORD_FILE: secretPaths.postgresPassword,
@@ -156,14 +201,13 @@ try {
       throw new Error("Unexpected QA NetworkSettings");
     }
     if (service === "caddy") {
-      const caddyBindings = ports["80/tcp"] ?? [];
-      const expectedHostPort = environment.PROOFLINE_QA_HTTP_PORT;
+      const caddyBindings = ports["443/tcp"] ?? [];
       if (
         caddyBindings.length !== 1 ||
         caddyBindings[0].HostIp !== "127.0.0.1" ||
-        caddyBindings[0].HostPort !== expectedHostPort
+        caddyBindings[0].HostPort !== "443"
       ) {
-        throw new Error("QA Caddy HostPort binding is unavailable");
+        throw new Error("QA Caddy HostPort 443 binding is unavailable");
       }
     }
     if (service !== "caddy" && bindings.some((binding) => binding.HostPort)) {
@@ -174,17 +218,48 @@ try {
     }
   }
 
-  const rootResponse = await waitFor(port, "/", 200);
+  const rootResponse = await waitFor("/", 200);
   if (!/<!doctype html/i.test(rootResponse.body)) throw new Error("QA root is not the Web shell");
-  await waitFor(port, "/templates/open-meteo-current-weather", 200);
-  await waitFor(port, "/api/v1/templates", 200);
-  await waitFor(port, "/api/v1/templates?unexpected=1", 400);
-  await waitFor(port, "/api/api/v1/templates", 401);
-  await waitFor(port, "/api/not-a-route", 401);
-  await waitFor(port, "/assets/missing.js", 404);
+  await waitFor("/templates/open-meteo-current-weather", 200);
+  await waitFor("/api/v1/templates", 200);
+  await waitFor("/api/v1/templates?unexpected=1", 400);
+  await waitFor("/api/api/v1/templates", 401);
+  await waitFor("/api/not-a-route", 401);
+  await waitFor("/assets/missing.js", 404);
+
+  const allowed = await request("/api/v1/auth/wallet/challenges", {
+    method: "OPTIONS",
+    headers: {
+      Origin: PROOFLINE_PUBLIC_ORIGIN,
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "content-type",
+    },
+  });
+  if (allowed.status !== 204) throw new Error("Allowed preflight must return status 204");
+  if (allowed.headers[ALLOW_ORIGIN_HEADER.toLowerCase()] !== PROOFLINE_PUBLIC_ORIGIN) {
+    throw new Error("Allowed preflight Access-Control-Allow-Origin mismatch");
+  }
+  if (!String(allowed.headers.Vary?.toString() ?? allowed.headers.vary ?? "")
+    .split(",").some((value) => value.trim().toLowerCase() === "origin")) {
+    throw new Error("Allowed preflight Vary must include Origin");
+  }
+
+  const hostile = await request("/api/v1/auth/wallet/challenges", {
+    method: "OPTIONS",
+    headers: {
+      Origin: "https://127.0.0.1.evil.invalid",
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "content-type",
+    },
+  });
+  if (hostile.status !== 403) throw new Error("Hostile preflight must be denied");
+  if (hostile.headers[ALLOW_ORIGIN_HEADER.toLowerCase()] !== undefined) {
+    throw new Error("Hostile preflight must not receive Access-Control-Allow-Origin");
+  }
+
   for (const entry of requestLedger) {
-    if (entry.hostname !== "127.0.0.1" || entry.port !== String(port)) {
-      throw new Error("Runner request escaped the selected loopback origin");
+    if (entry.protocol !== "https:" || entry.hostname !== "127.0.0.1" || entry.port !== "") {
+      throw new Error("Runner request escaped the exact default-port HTTPS origin");
     }
     if (forbiddenHosts.has(entry.hostname)) {
       throw new Error("Runner request reached a forbidden host");
@@ -208,6 +283,12 @@ try {
 } finally {
   try {
     compose(["down", "--volumes", "--remove-orphans"], environment);
+    const leftovers = [
+      docker(["ps", "-aq", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
+      docker(["network", "ls", "-q", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
+      docker(["volume", "ls", "-q", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
+    ].join("").trim();
+    if (leftovers) throw new Error("Scoped QA Docker cleanup is incomplete");
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
   }

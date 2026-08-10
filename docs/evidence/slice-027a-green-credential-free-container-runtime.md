@@ -1,72 +1,64 @@
-# Slice 027A GREEN — credential-free container runtime
+# Slice 027A corrective GREEN — credential-free container runtime
 
-Status: REJECTED production-author candidate; retained as historical evidence
-only.
+Status: production-author PASS; two independent reviews of the new exact tree
+are pending.
 
 Date: 2026-08-10 (Asia/Vladivostok)
 
-Role: Production implementer
+Role: production implementer; this author cannot be either verifier.
 
-Final corrected RED commit: `558070f84b1eb4f151c247ca584fe0536f755e99`
+Corrective RED commit: `5707460a8dc04edfd288fad1650a6856e433751f`
 
-Final corrected RED tree: `98442ffea24335242f837a7daa3cd2319fadd4d6`
+Corrective RED tree: `7b39be7d614bfe3b1e1b9caf15e14e0a69c16f9e`
+
+The production candidate commit/tree are recorded by the coordinator after
+the stopped tree is committed. No credentialed authority is requested by this
+evidence.
 
 Architecture decision: [ADR 0035](../adr/0035-credential-free-container-runtime-boundary.md)
 
 Slice contract: [027A](../slices/027a-credential-free-container-runtime.md)
 
-Rejected candidate commit: `20e8d998318168b2aaf9622b9fce453ff6d9fe42`
+## Corrective outcome
 
-Rejected candidate tree: `9b2d7a5e10225a5e22297e2832f0a143b1016eeb`
+The replacement resolves all six findings that rejected commit `20e8d998` / tree
+`9b2d7a5`:
 
-## Independent verification rejection
+1. registry-capable prefetch children receive one fresh mode-0700 Docker CLI
+   directory with exact `{"auths":{}}`, stripped ambient config/auth/token/key
+   variables, explicit daemon selection and success/failure cleanup. The
+   system-installed Buildx executable is linked into that isolated directory;
+   no ambient Docker configuration is read by a registry child. This proves
+   CLI-side isolation only, not daemon-global state;
+2. QA derives Caddy and API authority from the single exact origin
+   `https://127.0.0.1`, publishes only `127.0.0.1:443`, uses Caddy internal TLS
+   with exact IP default SNI, and proves exact-origin plus hostile preflights;
+3. base `compose.yaml` renders and starts with Caddy/Web inputs only, while
+   `deploy/compose.runtime.yaml` owns API/worker/PostgreSQL, their profiles,
+   private networks, secrets and PostgreSQL state;
+4. `scripts/compose-production.mjs` rejects mutable, uppercase, short,
+   suffixed and arbitrary production image inputs before Docker. Base mode
+   validates Caddy/Web; runtime mode also validates API/worker. QA tags exist
+   only in the exact runner and always use pull-never;
+5. secret paths are opened with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK` before
+   `fstat`; a real FIFO receives the fixed redacted error 30 consecutive times
+   without blocking;
+6. Caddy is non-root and read-only with bounded `/tmp`; only named `/data` and
+   `/config` volumes remain writable.
 
-Independent Core and Product verification returned formal FAIL on the exact
-candidate above. The candidate inherited ambient Docker CLI authentication in
-registry-capable prefetch children, configured QA Caddy and API with different
-origins, required inactive runtime variables to render the default base,
-accepted mutable production image references, could block on a FIFO secret path
-and left Caddy's root filesystem writable outside its named state volumes.
+The Caddy/Web base and the runtime overlay semantically compose to exactly five
+services and five networks. QA explicitly starts only Caddy, Web, PostgreSQL
+and API. Worker authority remains blocked until 027B.
 
-All commands and observations below are historical production-author evidence
-for that rejected tree. They do not establish an accepted local Docker,
-credential-free, same-origin or release-path result. Corrective RED is recorded
-in [Slice 027A RED](slice-027a-red-credential-free-container-runtime.md); a new
-candidate must rerun every affected gate and both independent verifiers.
-
-## Implementation
-
-One API-owned deployment adapter now resolves exact `api`, `worker` and
-`recording-importer` profiles before any Pool, listener, verifier or live-port
-composition. Direct values retain the existing trim-compatible boundary.
-Production Compose uses only the exclusive `NAME_FILE` form. File reads use
-`O_NOFOLLOW`, require one regular file, read at most 4097 bytes to enforce the
-4096-byte boundary, decode strict UTF-8, reject NUL/empty values and expose only
-the fixed `DEPLOYMENT_SECRET_CONFIGURATION_INVALID` code/message on failure.
-
-The checked-in base lock records exact Node 22.14.0, Caddy 2.10.2 and
-PostgreSQL 17.6 index plus Linux/amd64 manifest digests. Fresh Docker stages
-build Web, the ordinary API, the isolated build-only importer and worker. The
-Web final image contains only client bytes and the dependency-free static
-server. API contains migrations 001–009 and the three exact canonical Solidity
-sources; worker retains external `pg` and `solc`. No host `dist`, `node_modules`,
-Git data, environment file, test adapter or credential is copied.
-
-Compose defines exactly Caddy, Web, API, worker and PostgreSQL. Only Caddy
-publishes ports; Web/API/PostgreSQL remain on bounded internal networks and
-worker alone receives the egress network. Application containers are non-root,
-read-only and capability-reduced. Caddy strips same-origin `/api` exactly once
-before the Web fallback. The QA override keeps `public_edge` non-internal for
-Docker Desktop loopback publication, puts only Caddy on that edge and selects
-the HTTP-only `:80` site without ACME.
-
-## Semantic, coverage and PostgreSQL evidence
+## Frozen contracts and affected regressions
 
 ```sh
 npm run typecheck
 npx vitest run \
   apps/api/test/slice027a-deployment-secrets.contract.test.ts \
-  apps/worker/test/slice027a-worker-deployment-boundary.contract.test.ts
+  apps/worker/test/slice027a-worker-deployment-boundary.contract.test.ts \
+  --reporter=dot --maxWorkers=1
+npm run test:docker:static
 npx vitest run \
   apps/api/test/slice027a-deployment-secrets.contract.test.ts \
   apps/worker/test/slice027a-worker-deployment-boundary.contract.test.ts \
@@ -76,105 +68,107 @@ npx vitest run \
   apps/worker/test/bootstrap-coverage.test.ts \
   apps/worker/test/slice005-bootstrap-lifecycle-coverage.test.ts \
   apps/worker/test/entry-coverage.test.ts \
-  apps/worker/test/slice009-production-worker-purity.contract.test.ts
+  apps/worker/test/slice009-production-worker-purity.contract.test.ts \
+  --reporter=dot --maxWorkers=1
+```
+
+- typecheck: PASS;
+- exact secret/worker contract: 2 files, 22/22 PASS;
+- deployment image/Compose/Caddy/runner contract: 37/37 PASS;
+- affected API/importer/worker matrix: 9 files, 79/79 PASS;
+- zero skipped or pending cases in these focused gates.
+
+The deployment-secret focused coverage is 98.14% lines and 94.44% branches,
+above the API 90/85 gate.
+
+## Backend and PostgreSQL evidence
+
+```sh
 npm run test:coverage:backend
 PROOFLINE_TESTCONTAINERS=1 npm run test:postgres -- --maxWorkers=1
 ```
 
-- Typecheck is PASS.
-- The exact Slice 027A secret/worker contract is 2 files and 20/20 PASS.
-- The affected API/importer/worker matrix is 9 files and 77/77 PASS.
-- Deployment-secret coverage is 98.14% lines and 94.44% branches, above the
-  API 90/85 gate.
-- Backend coverage is 110 active files and 1069 tests PASS; overall coverage is
-  92.30% lines and 87.33% branches. API is 91.10% lines and 86.36% branches;
-  worker is 90.54% lines and 86.27% branches. The four PostgreSQL files and 37
-  cases skipped by this coverage configuration are not integration evidence.
-- Real Testcontainers PostgreSQL is 20 files and 151/151 PASS with zero skips.
+Backend coverage ran outside the filesystem sandbox because its accepted raw
+socket tests require local loopback bind. It passed 110 files and 1071 tests;
+the 37 cases skipped by this unit-coverage configuration remain explicitly not
+PostgreSQL evidence. Overall coverage is 92.30% lines / 87.33% branches; API is
+91.10% / 86.36%, and worker is 90.54% / 86.27%.
 
-The first final backend attempt exposed a pre-existing raw-socket close race in
-one frozen absolute-body-deadline test. A tests-only correction waited for the
-received response before treating the subsequent connection close as failure;
-production transport code did not change. On corrected RED commit/tree above,
-the full backend gate passed with the recorded counts.
+Real Testcontainers PostgreSQL passed 20 files and 151/151 tests with zero
+skips. This is integration evidence only; it is not a 027B migration, schema or
+application-readiness claim.
 
-## Static, build and Sites evidence
+## Static, build and Sites compatibility evidence
 
 ```sh
-npm run test:docker:static
 npm run build
 npm run test:sites
 ```
 
-The semantic image/Compose/Caddy/runner matrix is 29/29 PASS. The root Web build
-and Sites compatibility are PASS; Sites is 36/36 and emits
-`dist/client/index.html`, `dist/server/index.js` and
-`dist/.openai/hosting.json`. Protected Sites source and `package-lock.json`
-bytes are unchanged.
+Build passed and emitted `dist/client/index.html`, `dist/server/index.js` and
+`dist/.openai/hosting.json`. Sites compatibility passed 36/36 with zero skips.
+Protected Sites sources and `package-lock.json` remain byte-identical to the
+frozen contract.
 
-## Controlled Docker operations
-
-The production author ran the following registry-authorized cache preparation;
-later verification proved that its CLI credential isolation was insufficient:
+## Controlled prefetch and offline Docker evidence
 
 ```sh
 npm run docker:prefetch
-```
-
-It inspected the exact three official tag/index identities, verified the locked
-Linux/amd64 child digests, pulled those exact child digests and prepared the
-npm dependency cache. An early Dockerfile revision also caused BuildKit to
-resolve an unpinned `docker/dockerfile:1.7` frontend. That attempt was rejected,
-the syntax frontend directive was removed, and no fourth base identity remains
-in production. This diagnostic is not counted as the accepted three-image
-prefetch boundary.
-
-After the locked images and npm cache existed locally, the accepted command was:
-
-```sh
 npm run test:docker
 ```
 
-Its two consecutive Linux/amd64 Web/API/worker/Caddy passes used
-`--network=none`, npm offline and `--pull=false`; they performed no new pull or
-registry request. The final unique project `proofline-027a-q38347-3ec872f7`
-started exactly Caddy, Web, PostgreSQL and API. Worker was absent. Live inspect
-confirmed Caddy as the sole exact `127.0.0.1` published binding, no other host
-port, exact service users and network memberships, named volumes and no Docker
-socket mount.
+The accepted prefetch verified the exact three locked official tag/index and
+Linux/amd64 child identities, pulled only those child digests and prepared the
+lockfile dependency cache. Every registry-capable child used the isolated CLI
+configuration exercised by the fake-runner success and failure tests. A first
+diagnostic stopped before registry inspection because the isolated HOME hid
+Docker Desktop's user-scoped Buildx plugin; the final implementation links only
+the trusted system-installed plugin executable into the fresh CLI directory.
+All temporary CLI directories were removed.
 
-The local request ledger contained only the selected loopback origin. Root and
-the accepted Web deep route returned the Web shell; anonymous
-`/api/v1/templates` returned 200; its unexpected query returned 400; the
-double-prefix and unknown protected API paths returned 401 from API rather than
-falling back to Web; the missing asset returned 404. The ledger explicitly
-rejects Coinbase, Open-Meteo, verifier and Coston2 RPC hosts. Caddy logs
-confirmed the QA site listened on HTTP only without automatic HTTPS/ACME.
+The final `test:docker` performed two consecutive Linux/amd64 Web, API, worker
+and Caddy builds with BuildKit `--network=none`, npm offline and `--pull=false`.
+It then used unique project `proofline-027a-q80526-d01f4703` for the exact local
+HTTPS smoke. No registry access or pull occurred in this gate.
 
-Every failed diagnostic and the accepted smoke used a unique validated project
-name and completed exact `down --volumes --remove-orphans` plus temporary secret
-directory removal. Final Docker queries found zero `proofline-027a-*`
-containers, networks or volumes. The final corrected RED changed only one
-frozen socket test and RED evidence; a hash comparison proved all 19
-production/Docker/runner files byte-identical to the object used by the
-accepted Docker run. Static 29/29 was repeated on the corrected base, so the
-expensive Docker operation was not repeated and no new external network access
-occurred.
+Ordinary macOS Node cannot reserve privileged host port 443 directly. The
+runner still attempts exact `listen(443, "127.0.0.1")`; on that single EACCES
+case it asks the same Docker daemon that will publish Compose to reserve exact
+`127.0.0.1:443`, using the already-built Caddy image, `--pull never` and an
+exact disposable name. An occupied or Docker-denied binding fails; the
+reservation is always removed before Compose. Other bind errors never fall
+back. Caddy's exact IP `default_sni` lets an ordinary HTTPS client use the IP
+origin without a deprecated IP-SNI override.
 
-## Security and deployment truth
+Live inspection proved:
 
-A diff-scoped review covered the strict file reader, startup ordering, image
-inputs, Compose/Caddy topology, static path containment, child-process argument
-construction, QA ledger and cleanup. Targeted author scans found no committed
-secret, private key, credential echo, shell interpolation, public
-application/database port, host network, privileged container or Docker socket
-mount. Independent verification later identified the release-path findings
-recorded at the top of this document, so the author's earlier no-finding
-conclusion is withdrawn.
+- exactly Caddy, Web, PostgreSQL and API ran; worker was absent;
+- Caddy alone published `127.0.0.1:443`; no Web/API/PostgreSQL host port
+  existed;
+- exact non-root users, private memberships, named state volumes and no Docker
+  socket mount;
+- root and the accepted deep route returned the Web shell;
+- anonymous `/api/v1/templates` returned 200 and the query variant 400;
+- double-prefix and unknown protected API routes returned API 401 rather than
+  SPA fallback; the missing asset returned 404;
+- exact-origin `OPTIONS /api/v1/auth/wallet/challenges` returned 204 with ACAO
+  and `Vary: Origin`; hostile origin returned 403 with no ACAO;
+- the HTTPS ledger contained only default-port `https://127.0.0.1` and rejected
+  Coinbase, Open-Meteo, verifier and Coston2 RPC hosts.
 
-This is local credential-free packaging evidence only. It is not migration,
-schema readiness, `/healthz`, `/readyz`, deployment worker heartbeat, retention,
-PITR, OCI archive, registry publication, VDS staging, hosted production or live
-Coston2 evidence. No DNS, SSH, DigitalOcean, GHCR or Spaces credential was
-requested or used. 027B–029B retain those authorities. This production author
-cannot serve as either independent verifier.
+The final `down --volumes --remove-orphans` removed four containers, four
+networks, three volumes and the temporary secret directory. Project-label
+queries found zero remaining containers, networks or volumes. Failed
+diagnostic iterations used separate project identities and received the same
+scoped cleanup; one empty preflight directory created before the first port
+failure was explicitly removed and the runner ordering was corrected.
+
+## Deployment truth
+
+This is credential-free local packaging and same-origin routing evidence from
+the production author. It is not an independent module PASS and not a unified
+MLP candidate freeze. It does not prove migration, schema readiness,
+`/healthz`, `/readyz`, deployment worker heartbeat, retention, PITR, OCI
+archives, registry publication, VDS staging, hosting, production deployment or
+live Coston2. No DNS, SSH, DigitalOcean, GHCR, Spaces, verifier or relayer
+credential was requested or used. Slices 027B–029B retain those authorities.

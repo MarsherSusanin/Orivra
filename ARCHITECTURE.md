@@ -256,8 +256,9 @@ independent Core and Product verification remain pending.
   private `web_internal`, `app_internal` and `db_internal` separate Web, API and
   PostgreSQL reachability, while worker alone joins `worker_egress`. Corrective
   QA uses one exact `https://127.0.0.1` authority for Caddy and API and omits
-  worker. The first 027A candidate is rejected; no schema, readiness or accepted
-  container evidence exists yet.
+  worker. The first 027A candidate is rejected; its corrective replacement has
+  production-author local evidence and awaits two independent reviews. No
+  schema, readiness or hosted container evidence exists.
 
 028A локально exports и verifies OCI archives. Frozen manifest раздельно хранит
 `archiveSha256` архивных bytes и `imageManifestDigest` registry identity, а его
@@ -285,9 +286,9 @@ private S3-compatible DigitalOcean Spaces. Credential-free acceptance должн
 database backup или PITR plan.
 
 Эти release paths реализованы и герметично проверяются локально только в своей
-текущей executable части. 027A сейчас находится в corrective RED:
-первый image/Compose/Caddy candidate отклонён и его Docker smoke не
-является acceptance. Тем более нет migration/readiness, release-ready
+текущей executable части. Первый 027A image/Compose/Caddy candidate отклонён;
+corrective production-author GREEN прошёл локальные gates и ожидает два
+независимых review одного нового tree. Тем более нет migration/readiness, release-ready
 VDS composition или production deployment. В репозитории нет
 `.github/workflows` или настроенного merge queue. Hosting is not yet
 provisioned; ADR 0029 выбирает target, но не доказывает его доступность.

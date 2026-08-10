@@ -117,15 +117,15 @@ GET/HEAD deep routes return `index.html`; other methods fail without SPA
 fallback. It does not proxy `/api`, read credentials, list directories or make
 outbound requests.
 
-## Rejected candidate and corrective RED
+## Rejected candidate and corrective GREEN
 
 Production-author commit `20e8d998318168b2aaf9622b9fce453ff6d9fe42`, tree
 `9b2d7a5e10225a5e22297e2832f0a143b1016eeb`, is rejected by both independent
-verifiers. The corrective contracts now require credential-isolated prefetch,
+verifiers. The frozen corrective contracts require credential-isolated prefetch,
 one exact HTTPS origin, independent base/runtime Compose files, executable
 immutable-image validation, bounded FIFO rejection and read-only Caddy. The
-following files are intentional RED until a new production candidate satisfies
-them:
+replacement production-author implementation now satisfies these unchanged
+contract files:
 
 - `apps/api/test/slice027a-deployment-secrets.contract.test.ts`;
 - `apps/worker/test/slice027a-worker-deployment-boundary.contract.test.ts`;
@@ -133,11 +133,11 @@ them:
 - `tests/deployment/slice027a-compose-caddy.contract.test.mjs`;
 - `tests/deployment/slice027a-docker-gates.contract.test.mjs`.
 
-The prior local Docker run recorded in [Slice 027A GREEN](../evidence/slice-027a-green-credential-free-container-runtime.md)
-is historical rejected-candidate evidence, not acceptance. A new GREEN must
-first satisfy this corrected RED, then rerun controlled prefetch,
-offline-repeat builds and the bounded HTTPS smoke. Independent Core and Product
-verification remain required on one new frozen tree hash.
+The prior candidate's local Docker run remains historical rejected evidence.
+The replacement evidence in [Slice 027A GREEN](../evidence/slice-027a-green-credential-free-container-runtime.md)
+records a new controlled prefetch, offline-repeat build and bounded HTTPS
+smoke. Independent Core and Product verification remain required on one new
+frozen tree hash.
 
 ## Acceptance
 
@@ -161,8 +161,9 @@ npm run build
 npm run test:sites
 ```
 
-The historical RED failures remain in the RED evidence. Candidate commands
-above must now pass without weakening the frozen contracts.
+The historical RED failures remain in the RED evidence. The corrective
+production-author candidate passes the commands above without weakening those
+frozen contracts; independent reviews remain pending.
 
 ### GREEN image and Docker gates
 
