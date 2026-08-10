@@ -242,7 +242,9 @@ The runtime gate uses fresh random file secrets and an explicit test-only SQL
 heartbeat fixture; it never starts worker. It proves missing → ready → stale,
 database stop/restart, persistent volume identity and idempotent one-shot jobs.
 Production remains additive/roll-forward only; no down-migration command exists.
-Hosting is not provisioned and independent verification is pending.
+Core and Product independently verified exact commit `527c561` / tree
+`ebdf648`; the SQL heartbeat remains an explicit test fixture, not actual
+worker readiness. Hosting is not provisioned.
 
 Первичный browser project token выпускают только публичные wallet-auth routes:
 сервер создаёт пятиминутный EIP-4361 challenge, а валидная локально проверенная
@@ -623,7 +625,9 @@ distributed traces, alerting и централизованное log storage н�
 
 027B разделяет `/healthz`, `/readyz` и persisted worker heartbeat.
 Container-running state сам по себе не доказывает readiness. До GREEN этих
-сигналов их нельзя описывать как действующий monitoring.
+сигналов их нельзя было описывать как действующий monitoring. Accepted local
+027B проверяет их как deployment lifecycle evidence, но не заменяет production
+monitoring и не доказывает запуск настоящего worker.
 Worker получает heartbeat authority только после единственного strict runtime
 parser, одноразовой canonical replay load и schema gate. Production live ports
 не принимают Environment: DB URL/password, verifier API key, replay paths и
@@ -673,6 +677,20 @@ Upstream Coston2 outage блокирует release. Override возможен т
   volume, проверяйте его и только затем выполняйте явное переключение.
 - 027C должен доказать MinIO restore drill локально. Droplet backup не считается
   database restore evidence.
+- ADR 0037 замораживает WAL-G v3.0.8, custom official PostgreSQL 17.6 Debian
+  image, encrypted prefix
+  `s3://<bucket>/proofline/v1/<slot>/<systemIdentifier>`, daily 02:00 UTC base
+  backup, eight retained FULL chains and paused exact-time recovery. До 027C
+  GREEN этих image/asset locks, archive services и recovery evidence нет.
+- Production restore authority — только exact completed backup evidence,
+  backup ID, UTC target и numeric timeline; `LATEST` запрещён. Restore всегда
+  пишет в новый пустой volume и остаётся paused/in-recovery. `pg_promote`
+  требует отдельный неистёкший `RestorePromotionAuthorizationV1`, связанный с
+  SHA-256 точного restore evidence.
+- Credential-free 027C acceptance использует только private MinIO без host
+  ports и отдельные ephemeral writer/reader/retention identities. Spaces
+  credentials, actual VDS PITR, фактические RPO/RTO и production promotion в
+  этот gate не входят.
 - 028B получает credentials только после credential-free 022–029A, unified
   full matrix и двух independent PASS на одном tree hash. 029B затем выполняет
   production promotion и canary без rebuild candidate images, only after 028B.

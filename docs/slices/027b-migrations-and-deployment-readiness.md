@@ -15,8 +15,10 @@ refining [ADR 0029](../adr/0029-digitalocean-vds-deployment.md) and
 Risk: high persistence, database-role, startup-order and release-path change;
 no provider credential, live Coston2 effect, backup, restore or hosted claim.
 
-Implementation status: corrective RED is frozen after three rejected production
-candidates. `4ac66f9693d1b8ae16a01d839923cdcdfad044eb` / tree
+Implementation status: complete and independently verified by Core and Product
+on exact commit `527c561ec37b1a6a0b0c45b2c9abe8a41107f1bf` / tree
+`ebdf6484b0f9d755dbd55906c3a121fd9f3d2c64`. Earlier corrective RED followed
+three rejected production candidates. `4ac66f9693d1b8ae16a01d839923cdcdfad044eb` / tree
 `477f67988e63645da32c4a98fc307302a872d19b` inserted heartbeat before worker
 composition. Its corrective candidate
 `a6fb72975440320421b0867f83fb9f7912294947` / tree
@@ -30,6 +32,9 @@ Environment parser and passed a structurally narrowed object containing raw
 database/verifier authority downstream. Its focused tests were false-negative;
 both independent verifiers rejected it before broad acceptance. No Docker,
 build, hosted or deployment acceptance follows from any rejected candidate.
+The accepted final tree passes local coverage, real PostgreSQL, offline Docker,
+runtime lifecycle, build and Sites gates; its SQL heartbeat fixture remains
+test-only and proves no actual worker or hosted readiness.
 
 ## Delivery split
 

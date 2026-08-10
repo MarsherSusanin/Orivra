@@ -28,10 +28,10 @@ The product journey is delivered as independently frozen vertical slices:
 | 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | Complete; independently verified, credential-free |
 | 027A2 | Split private Compose topology, production ACME Caddy and QA-only internal TLS | Complete; independently verified, credential-free |
 | 027A3 | CLI-isolated prefetch, offline-repeat build and exact HTTPS local smoke | Complete; independently verified, credential-free |
-| 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Corrective RED refrozen after rejected candidate `01bbc9e` |
-| 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Corrective RED refrozen: one eager parser and exact frozen least-authority slices |
-| 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Corrective RED refrozen: complete fixed worker configuration/mount wiring required |
-| 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |
+| 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Complete; independently verified on `527c561` / `ebdf648` |
+| 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Complete; independently verified on `527c561` / `ebdf648` |
+| 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Complete; independently verified on `527c561` / `ebdf648` |
+| 027C | WAL/base-backup PITR and local MinIO restore drill | Intentional RED frozen, credential-free |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
 | 029A | Local MLP validation and candidate freeze | Planned, credential-free |
@@ -100,14 +100,17 @@ Credential-free delivery covers 022–029A:
   counts as actual worker readiness. Both verifiers rejected exact candidate
   `4ac66f9` / tree `477f679`: it inserted a current heartbeat before late
   repository/relayer/live-pipeline composition completed, so a failed worker
-  could make readiness temporarily green. The corrective production-author
-  candidate now completes that composition and installs lifecycle coordination
-  before heartbeat start; its local static, coverage, real-PostgreSQL and
-  bounded runtime lifecycle gates pass. Two independent PASS reports on one
-  exact tree are still required.
+  could make readiness temporarily green. The corrective implementation
+  completes that composition and installs lifecycle coordination before
+  heartbeat start. Core and Product both PASS exact commit `527c561` / tree
+  `ebdf648`, including coverage, real PostgreSQL, offline Docker and runtime
+  lifecycle evidence. This remains credential-free local evidence; no actual
+  worker, hosting or deployment is claimed.
 - **027C** adds off-host WAL archiving plus base backup for PITR and proves a
-  credential-free MinIO restore drill. A Droplet backup is secondary host
-  recovery, not database/PITR evidence.
+  credential-free encrypted MinIO restore drill under
+  [ADR 0037](../adr/0037-wal-archiving-and-pitr-recovery.md). Its C1/C2/C3 RED
+  contract is frozen; production implementation is absent. A Droplet backup is
+  secondary host recovery, not database/PITR evidence.
 - **028A local release truth** builds and exports OCI archives, then must verify them.
   The frozen release manifest stores per-image `archiveSha256`,
   `imageManifestDigest`, `platform` and `repository`/`reference` fields.

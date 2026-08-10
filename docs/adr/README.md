@@ -39,5 +39,6 @@ ADR фиксирует архитектурное решение, которое
 | [0034](0034-public-landing-and-onboarding-boundary.md) | Публичный landing независимо потребляет static templates и persisted demo без wallet, fallback authority или cache-variant CORS ошибки |
 | [0035](0035-credential-free-container-runtime-boundary.md) | CLI-isolated pinned images, nonblocking Docker-secret files, split private Compose topology and exact HTTPS Caddy/Web routing without fabricated readiness |
 | [0036](0036-checksummed-migrations-and-deployment-readiness.md) | Immutable migration checksums, least-privilege deployment roles and persisted worker heartbeat separate process health from application readiness |
+| [0037](0037-wal-archiving-and-pitr-recovery.md) | Encrypted WAL-G archive, evidence-bound base backup and paused new-volume PITR are proved locally against private MinIO |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

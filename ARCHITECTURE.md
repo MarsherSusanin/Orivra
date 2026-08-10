@@ -295,8 +295,10 @@ database backup или PITR plan.
 Эти release paths реализованы и герметично проверяются локально только в своей
 текущей executable части. Первый 027A image/Compose/Caddy candidate отклонён;
 его second corrective replacement независимо проверен на одном exact tree.
-027B migration/readiness boundary реализован как локальный production-author
-candidate, но ещё не имеет двух независимых PASS для одного exact tree. Нет
+027B migration/readiness boundary независимо проверен Core и Product на exact
+commit `527c561` / tree `ebdf648`. ADR 0037 замораживает следующий encrypted
+WAL/base-backup/PITR boundary, но его implementation и MinIO restore evidence
+ещё отсутствуют. Нет
 release-ready VDS composition или production deployment. В репозитории нет
 `.github/workflows` или настроенного merge queue. Hosting is not yet
 provisioned; ADR 0029 выбирает target, но не доказывает его доступность.
