@@ -547,6 +547,33 @@ reasons remain unchanged: wave 3 is 26/26 RED, the combined security focus is
 and Sites is 36/36 PASS. Syntax and typecheck PASS. No Docker daemon, network,
 production, dependency or lockfile operation ran.
 
+### Local-author GREEN documentation-status compatibility correction
+
+On exact clean base `cc5a2296f90cee02608c46e77f2ec46ed5673512` /
+tree `b8b11ffa349dfed668f44de50b6a85067365a73d`, the candidate and canonical
+documentation were inspected read-only from stash
+`16e051149251f9a6fae40bf155dc309673cccc38` / tree
+`d7b0ad7595555e7be239f5539b69e10fe0d18f38`; the stash was never applied.
+The retained backup/recovery contract still required the roadmap to describe
+027C as `Intentional RED`. That historical status is superseded once the
+production author has completed the credential-free local GREEN gates, while
+both independent verification waves remain pending.
+
+The existing docs-status test now requires the exact roadmap status
+`Production-author GREEN locally; two independent verifiers pending`, the
+matching local-GREEN detail and the explicit statement that this is not hosted
+or live Spaces/production evidence. It does not claim independent verification,
+deployment, production credentials, actual RPO/RTO or SLA. All recovery,
+security, package, Compose and evidence contracts remain byte-for-byte
+unchanged. Security-focused counts on the clean base remain unchanged: wave 3
+is 26/26 and the combined security focus is 71/71. The focused backup/recovery
+file is now 13 intentional RED plus one retained 027B control PASS: its former
+docs-status control is intentionally RED until the local-author GREEN roadmap
+from the candidate is applied. Docker static is therefore 87 intentional RED
+plus 51 controls. Neighbors remain 45/45 PASS and Sites remains 36/36 PASS.
+Syntax and typecheck PASS. No Docker daemon, network, production, dependency
+or lockfile operation ran.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;
