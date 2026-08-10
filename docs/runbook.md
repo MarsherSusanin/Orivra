@@ -76,8 +76,10 @@ worker не выполняют migration при собственном стар�
 `/healthz` является process-only liveness. `/readyz` проверяет database,
 verified schema version и worker heartbeat; stale heartbeat должен возвращать
 degraded readiness, даже если containers продолжают работать. 027A Compose и
-image boundary реализованы, но эти endpoints и deployment-readiness contract
-ещё не реализованы, поэтому этот раздел не является hosted или deployed PASS.
+image boundary независимо проверены. ADR 0036 и Slice 027B заморозили эти
+endpoint/migration/heartbeat contracts как intentional RED; production
+implementation ещё отсутствует, поэтому этот раздел не является hosted или
+deployed PASS.
 
 ### Slice 027A local container gate
 
@@ -86,9 +88,9 @@ topology/routing and real-Docker waves. The first candidate `20e8d998` is
 rejected. Its corrective replacement `464e797` is also rejected: production
 selected QA-only internal TLS instead of automatic public ACME, and setup
 failures could bypass temporary-secret or port-probe cleanup. The second
-corrective production-author result makes the focused contracts and local
-Docker gates GREEN, but still requires two independent reviews of one exact
-tree before module acceptance:
+corrective production-author result and two independent reviews make the
+focused contracts and local Docker gates PASS on exact commit `820f61dd` / tree
+`ea13cf179`:
 
 ```bash
 npm run test:docker:static
@@ -158,12 +160,13 @@ has bounded `/tmp`, and only named `/data` and `/config` are writable.
 Do not commit `.env`, `.env.*`, dummy relayer/verifier credentials or a
 production test adapter.
 
-The `runtime-after-027b` profile is an explicit block, not a feature flag for
-readiness. `pg_isready` is only PostgreSQL engine liveness. Until 027B provides
-the locked checksummed migration, login roles, `/healthz`, `/readyz` and a
-persisted deployment worker heartbeat, a full Compose runtime/readiness PASS is
-forbidden. The existing worker command-lease heartbeat is not deployment
-readiness.
+The accepted `runtime-after-027b` profile remains a deliberate historical 027A
+block, not a readiness feature flag. ADR 0036 freezes its replacement as
+intentional RED: exact role-bootstrap and migrator jobs, immutable checksum
+history, `/healthz`, `/readyz` and a persisted deployment-worker heartbeat.
+Until that RED is implemented and independently verified, a full Compose
+runtime/readiness PASS is forbidden. `pg_isready` is engine liveness only, and
+the existing command-lease heartbeat is not deployment readiness.
 
 Database recovery contract использует continuous WAL archive и base backup для
 PITR в private S3-compatible DigitalOcean Spaces. До получения
@@ -196,9 +199,11 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/db/migrations/009_canonical_
 ```
 
 Автоматизированного production migration runner и down migrations в репозитории
-нет. ADR 0029 уже выбирает one-shot checksummed/advisory-lock runner как будущего
-владельца миграций, но его реализация относится к 027B. До его GREEN безопасная
-стратегия изменения схемы — additive migration и roll-forward; hosting is not
+нет. [ADR 0036](adr/0036-checksummed-migrations-and-deployment-readiness.md)
+замораживает one-shot runner, exact manifest, advisory lock, role bootstrap и
+migration 010 как intentional RED. До его GREEN безопасная стратегия изменения
+схемы — additive migration и roll-forward; команды `db:bootstrap-roles` и
+`db:migrate` ещё не являются executable operator instructions. Hosting is not
 yet provisioned.
 
 Первичный browser project token выпускают только публичные wallet-auth routes:

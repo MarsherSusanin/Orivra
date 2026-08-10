@@ -62,13 +62,17 @@ blockchain-операций.
   выбран в [ADR 0029](docs/adr/0029-digitalocean-vds-deployment.md): один
   DigitalOcean Droplet/VDS с Docker Compose, Caddy, Web, API, worker и
   PostgreSQL. Он ещё не provisioned и не deployed.
-- Slice 027A corrective production-author GREEN is implemented under
+- Slice 027A is complete and independently verified under
   [ADR 0035](docs/adr/0035-credential-free-container-runtime-boundary.md).
   The first production-author candidate `20e8d998` was rejected by independent
   Core and Product verification. The replacement satisfies the frozen
   CLI-isolated prefetch, immutable-image validation, split base/runtime
   Compose, exact `https://127.0.0.1` QA, bounded FIFO and read-only Caddy gates;
-  two independent reviews of its new exact tree are still pending. No live
+  two independent reviews PASS exact commit `820f61dd` / tree `ea13cf179`.
+  Slice 027B now has intentional RED contracts under
+  [ADR 0036](docs/adr/0036-checksummed-migrations-and-deployment-readiness.md)
+  for checksummed migrations, deployment roles, health/readiness and a real
+  production-worker heartbeat. No live
   worker, migration, readiness, hosting or deployment is claimed.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
@@ -133,10 +137,10 @@ public ingress и даёт Web same-origin `/api`. Публичны только
 ограничивается administrator allowlist или VPN. PostgreSQL 5432, API/worker
 ports и Docker socket не публикуются.
 
-Репозиторий содержит replacement 027A production-author GREEN после rejected
-первой реализации; его два независимых module review ещё не завершены.
-После принятия 027A срез 027B должен добавить
-migration/readiness/heartbeat, а 027C–029B — recovery, release и promotion.
+Репозиторий содержит независимо проверенный replacement 027A после rejected
+первой реализации. Для 027B заморожены intentional RED contracts на
+migration/readiness/heartbeat; production implementation ещё отсутствует.
+027C–029B по-прежнему владеют recovery, release и promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment
 не provisioned. Sites сохраняется только как
 compatibility artifact; это больше не выбранный production host.

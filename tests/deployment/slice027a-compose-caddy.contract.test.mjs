@@ -33,6 +33,9 @@ const runtimeComposeEnvironment = {
   PROOFLINE_WORKER_DATABASE_URL_FILE: "/tmp/proofline-worker-database-url",
   PROOFLINE_WORKER_VERIFIER_API_KEY_FILE: "/tmp/proofline-worker-verifier-key",
   PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE: "/tmp/proofline-worker-private-key",
+  PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE: "/tmp/proofline-postgres-admin-database-url",
+  PROOFLINE_MIGRATOR_DATABASE_URL_FILE: "/tmp/proofline-migrator-database-url",
+  PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE: "/tmp/proofline-recording-importer-database-url",
   PROOFLINE_POSTGRES_PASSWORD_FILE: "/tmp/proofline-postgres-password",
 };
 
@@ -42,7 +45,7 @@ function renderCompose(
 ) {
   const args = ["compose"];
   for (const path of files) args.push("-f", path);
-  args.push("--profile", "runtime-after-027b", "config", "--format", "json");
+  args.push("config", "--format", "json");
   const result = spawnSync("docker", args, {
     cwd: root,
     encoding: "utf8",
@@ -123,13 +126,12 @@ test("keeps the independently renderable base limited to Caddy and Web", () => {
   assert.doesNotMatch(baseComposeSource, /app_internal|db_internal|worker_egress|postgres_data/);
 });
 
-test("moves all gated runtime services, networks, secrets and PostgreSQL state to one overlay", () => {
+test("keeps all runtime services, networks, secrets and PostgreSQL state in one overlay", () => {
   assert.notEqual(runtimeComposeSource, "", "deploy/compose.runtime.yaml must exist");
   for (const service of ["api", "worker", "postgres"]) {
     assert.match(runtimeComposeSource, new RegExp(`^  ${service}:`, "m"));
   }
   for (const authority of [
-    "runtime-after-027b",
     "app_internal",
     "db_internal",
     "worker_egress",
@@ -167,11 +169,11 @@ test("binds QA only to exact loopback HTTPS 443 without random HTTP authority", 
   assert.doesNotMatch(caddy, /target:\s*80|PROOFLINE_QA_HTTP_PORT|PROOFLINE_CADDY_SITE_ADDRESS|:\s*80/);
 });
 
-test("renders one semantic production Compose model with the exact service inventory", () => {
+test("renders one semantic production Compose model with the exact 027B service inventory", () => {
   assert.equal(rendered.status, 0, rendered.stderr || "docker compose config must pass");
   assert.deepEqual(
     Object.keys(rendered.model.services ?? {}).sort(),
-    ["api", "caddy", "postgres", "web", "worker"],
+    ["api", "caddy", "db-role-bootstrap", "migrator", "postgres", "web", "worker"],
   );
 });
 
@@ -190,12 +192,10 @@ test("activates only Caddy and Web when no runtime profile is requested", () => 
   assert.deepEqual(defaultServices.services, ["caddy", "web"]);
 });
 
-test("keeps Caddy and Web default while gating the application runtime until 027B", () => {
+test("promotes the 027B runtime without a hidden Compose profile", () => {
   const services = rendered.model.services ?? {};
-  assert.deepEqual(services.caddy?.profiles ?? [], []);
-  assert.deepEqual(services.web?.profiles ?? [], []);
-  for (const name of ["api", "worker", "postgres"]) {
-    assert.deepEqual(services[name]?.profiles, ["runtime-after-027b"]);
+  for (const name of ["caddy", "web", "postgres", "db-role-bootstrap", "migrator", "api", "worker"]) {
+    assert.deepEqual(services[name]?.profiles ?? [], []);
   }
   assert.deepEqual(services.caddy?.depends_on ?? {}, {
     web: { condition: "service_started", required: true },
@@ -203,6 +203,8 @@ test("keeps Caddy and Web default while gating the application runtime until 027
   assert.deepEqual(Object.keys(rendered.model.services ?? {}).sort(), [
     "api",
     "caddy",
+    "db-role-bootstrap",
+    "migrator",
     "postgres",
     "web",
     "worker",
@@ -236,7 +238,7 @@ test("publishes only Caddy TCP 80 and 443 and gives no host authority to other s
     { target: 80, published: 80, protocol: "tcp" },
     { target: 443, published: 443, protocol: "tcp" },
   ]);
-  for (const name of ["web", "api", "worker", "postgres"]) {
+  for (const name of ["web", "api", "worker", "postgres", "db-role-bootstrap", "migrator"]) {
     assert.deepEqual(publishedPorts(services[name]), [], `${name} must have no host port`);
     assert.notEqual(services[name]?.network_mode, "host");
   }
@@ -280,7 +282,10 @@ test("uses exact named PostgreSQL/Caddy volumes and mounted secret files only", 
   assert.deepEqual(Object.keys(rendered.model.secrets ?? {}).sort(), [
     "api_database_url",
     "api_token_digest_key",
+    "migrator_database_url",
+    "postgres_admin_database_url",
     "postgres_password",
+    "recording_importer_database_url",
     "worker_coston2_private_key",
     "worker_database_url",
     "worker_verifier_api_key",
@@ -307,7 +312,7 @@ test("rejects privileged, Docker-socket, host-network and unbounded service defa
     assert.ok(service.deploy?.resources?.limits?.memory, `${name} must bound memory`);
     assert.ok(Number(service.pids_limit) > 0, `${name} must bound process count`);
   }
-  for (const name of ["caddy", "web", "api", "worker"]) {
+  for (const name of ["caddy", "web", "api", "worker", "db-role-bootstrap", "migrator"]) {
     assert.equal(rendered.model.services?.[name]?.read_only, true);
     assert.ok((rendered.model.services?.[name]?.tmpfs ?? []).length > 0);
     assert.notEqual(rendered.model.services?.[name]?.user, "0");
@@ -369,11 +374,12 @@ test("routes exact API paths before Web and strips the prefix exactly once", asy
   assert.doesNotMatch(caddyfile, /handle_errors[\s\S]*web:8080/i);
 });
 
-test("keeps health, schema and worker readiness explicitly outside 027A", () => {
+test("uses process-only API health while keeping readiness out of container health", () => {
   const services = rendered.model.services ?? {};
-  assert.equal(services.api?.healthcheck, undefined);
+  const apiHealth = JSON.stringify(services.api?.healthcheck ?? {});
+  assert.match(apiHealth, /\/healthz/);
+  assert.doesNotMatch(apiHealth, /\/readyz|schema|migration|heartbeat/i);
   assert.equal(services.worker?.healthcheck, undefined);
-  assert.doesNotMatch(JSON.stringify({ api: services.api, worker: services.worker }), /healthz|readyz|migration|deployment[_-]?heartbeat/i);
   const pgHealth = JSON.stringify(services.postgres?.healthcheck ?? {});
   assert.match(pgHealth, /pg_isready/);
   assert.doesNotMatch(pgHealth, /schema|migration|heartbeat/i);

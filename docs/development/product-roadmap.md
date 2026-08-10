@@ -25,10 +25,12 @@ The product journey is delivered as independently frozen vertical slices:
 | 024B3 | Token-free canonical URL demo Web route and Sites deep route | Complete; independently verified, credential-free |
 | 025 | Template-led Composer | Complete; independently verified, credential-free |
 | 026 | Public product surface | Complete; independently verified, credential-free |
-| 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | Production-author GREEN; independent verification pending |
-| 027A2 | Split private Compose topology, production ACME Caddy and QA-only internal TLS | Production-author GREEN; independent verification pending |
-| 027A3 | CLI-isolated prefetch, offline-repeat build and exact HTTPS local smoke | Production-author GREEN; independent verification pending |
-| 027B | One-shot migrations, health/readiness, worker heartbeat and retention | Planned, credential-free |
+| 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | Complete; independently verified, credential-free |
+| 027A2 | Split private Compose topology, production ACME Caddy and QA-only internal TLS | Complete; independently verified, credential-free |
+| 027A3 | CLI-isolated prefetch, offline-repeat build and exact HTTPS local smoke | Complete; independently verified, credential-free |
+| 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Intentional RED frozen; implementation pending |
+| 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Intentional RED frozen; implementation pending |
+| 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Intentional RED frozen; implementation pending |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
@@ -80,16 +82,22 @@ Credential-free delivery covers 022–029A:
   prefetch, an offline/no-network build repeat and exact
   `https://127.0.0.1:443` same-origin smoke. Public exposure is
   limited to Caddy 80/443; PostgreSQL 5432, API/worker host ports and the Docker
-  socket remain private. Worker runtime and application readiness stay blocked
-  until 027B; the 027A smoke starts no worker and makes no readiness claim. The
+  socket remain private. The accepted 027A smoke starts no worker and makes no
+  readiness claim. The
   first candidate `20e8d998` and replacement `464e797` are rejected; their
   historical Docker runs are not GREEN evidence. The second corrective
   production-author result separates production automatic ACME from QA-only
   internal TLS and closes the pre-Compose cleanup gaps. It remains a local
-  author result until two independent reviews PASS one exact frozen tree.
-- **027B** adds a one-shot checksummed migration runner under a PostgreSQL
-  advisory lock, exact schema verification, `/healthz`, `/readyz`, a worker
-  heartbeat and retention behavior.
+  author result was independently verified on exact commit `820f61dd` / tree
+  `ea13cf179`; this is local credential-free container evidence, not hosting or
+  deployment evidence.
+- **027B1→B2→B3**, under
+  [ADR 0036](../adr/0036-checksummed-migrations-and-deployment-readiness.md),
+  freezes a one-shot checksummed migration runner under a PostgreSQL advisory
+  lock, least-privilege login-role bootstrap, exact schema verification,
+  `/healthz`, `/readyz`, a persisted real-worker heartbeat and an ordered
+  credential-free PostgreSQL/API lifecycle. Its SQL heartbeat fixture never
+  counts as actual worker readiness.
 - **027C** adds off-host WAL archiving plus base backup for PITR and proves a
   credential-free MinIO restore drill. A Droplet backup is secondary host
   recovery, not database/PITR evidence.

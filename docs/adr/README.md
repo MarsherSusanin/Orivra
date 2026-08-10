@@ -38,5 +38,6 @@ ADR фиксирует архитектурное решение, которое
 | [0033](0033-static-template-catalog-boundary.md) | Статический immutable catalog связывает public template metadata с exact canonical manifest bytes без DB или source fetch |
 | [0034](0034-public-landing-and-onboarding-boundary.md) | Публичный landing независимо потребляет static templates и persisted demo без wallet, fallback authority или cache-variant CORS ошибки |
 | [0035](0035-credential-free-container-runtime-boundary.md) | CLI-isolated pinned images, nonblocking Docker-secret files, split private Compose topology and exact HTTPS Caddy/Web routing without fabricated readiness |
+| [0036](0036-checksummed-migrations-and-deployment-readiness.md) | Immutable migration checksums, least-privilege deployment roles and persisted worker heartbeat separate process health from application readiness |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

@@ -16,7 +16,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-type DeploymentProfile = "api" | "worker" | "recording-importer";
+type DeploymentProfile =
+  | "api"
+  | "worker"
+  | "recording-importer"
+  | "db-role-bootstrap"
+  | "migration-runner";
 type Environment = Record<string, string | undefined>;
 type DeploymentSecretsModule = {
   resolveDeploymentEnvironment?: (
@@ -100,6 +105,16 @@ describe("Slice 027A deployment secret-file boundary", () => {
     }],
     ["recording-importer", {
       DATABASE_URL: "postgres://importer.invalid/proofline",
+    }],
+    ["migration-runner", {
+      DATABASE_URL: "postgres://proofline_migrator_login:secret@postgres:5432/proofline",
+    }],
+    ["db-role-bootstrap", {
+      DATABASE_URL: "postgres://postgres:secret@postgres:5432/proofline",
+      PROOFLINE_MIGRATOR_DATABASE_URL: "postgres://proofline_migrator_login:secret@postgres:5432/proofline",
+      PROOFLINE_API_DATABASE_URL: "postgres://proofline_api_login:secret@postgres:5432/proofline",
+      PROOFLINE_WORKER_DATABASE_URL: "postgres://proofline_worker_login:secret@postgres:5432/proofline",
+      PROOFLINE_RECORDING_IMPORTER_DATABASE_URL: "postgres://proofline_recording_importer_login:secret@postgres:5432/proofline",
     }],
   ] as const)(
     "reads only the exact %s profile files and removes _FILE indirection",
