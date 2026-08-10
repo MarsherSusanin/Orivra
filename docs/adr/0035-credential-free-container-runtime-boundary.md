@@ -8,9 +8,10 @@ Status: accepted
 Droplet/VDS running Web, API, worker and PostgreSQL through Docker Compose
 behind Caddy. Before 027A the repository had no Dockerfile, Compose file, Caddy
 configuration or Docker-secret adapter, and API/worker accepted secrets only
-directly from process environment variables. The first implementation was
-rejected; a corrective replacement now has production-author evidence and
-awaits independent review under the boundary below. The worker still
+directly from process environment variables. The first implementation and its
+corrective replacement were both rejected by independent review. A second
+corrective contract now freezes the remaining public-TLS and cleanup defects
+under the boundary below. The worker still
 requires live Coston2 authority and a migrated database before it can perform
 honest production work.
 
@@ -169,11 +170,19 @@ serves existing hashed/static files, returns 404 for missing asset-like paths,
 and returns the exact client `index.html` only for non-asset application deep
 routes.
 
+Production `deploy/caddy/Caddyfile` owns the public routing configuration. It
+contains neither `tls internal` nor loopback `default_sni`; Caddy automatic
+HTTPS and ACME remain the only production certificate path. The exact
+`deploy/caddy/Caddyfile.qa` is a QA-only configuration which owns
+`default_sni 127.0.0.1` and `tls internal`. Only `deploy/compose.qa.yaml` may
+select it through one read-only bind override. Base or runtime production
+composition must never select or copy the QA certificate configuration.
+
 QA uses the exact single authority `PROOFLINE_PUBLIC_ORIGIN=https://127.0.0.1`.
-Both Caddy's internal-TLS site and API's `PROOFLINE_WEB_ORIGIN` derive from that
-same variable. Before Compose starts, the runner attempts an exact bounded bind
-of `127.0.0.1:443`; unavailable or unauthorized port 443 fails the gate and is
-never skipped or replaced by a different origin. `public_edge` remains
+The QA-only Caddy internal-TLS site and API's `PROOFLINE_WEB_ORIGIN` derive from
+that same variable. Before Compose starts, the runner attempts an exact bounded
+bind of `127.0.0.1:443`; unavailable or unauthorized port 443 fails the gate
+and is never skipped or replaced by a different origin. `public_edge` remains
 non-internal because Docker Desktop cannot publish that loopback port from an
 internal network; Caddy is its sole member and sole published service. Caddy
 has only private Web and API upstreams. `web_internal`, `app_internal` and
@@ -195,7 +204,12 @@ and API/asset fail-closed behavior, private-network membership, named volumes,
 absence of the Docker socket and the live inspected loopback Caddy binding.
 Topology alone makes no DNS/provider-denial claim. Temporary projects,
 containers, networks, volumes and secret files are removed by exact project
-identity.
+identity. The temporary secret-directory cleanup boundary begins immediately
+after `mkdtemp`, before any secret write or Compose setup. Success, secret-write
+failure, pre-Compose failure and smoke failure all remove it. The EACCES-only
+Docker port probe attempts exact named-resource removal unconditionally after
+the reservation command, including an ambiguous Docker CLI failure; not-found
+cleanup is harmless, while the original probe failure remains authoritative.
 
 ### Rejected first production-author candidate
 
@@ -205,8 +219,22 @@ and Product verification found ambient Docker CLI credential inheritance, a
 different QA/API origin, inactive-profile interpolation, unenforced immutable
 image inputs, blocking FIFO open and a writable Caddy root filesystem. Its
 historical local Docker run is not acceptance evidence for this amended ADR.
-The corrective production-author implementation must still receive two
-independent PASS reports for its new exact tree before Slice 027A is accepted.
+That candidate therefore required a corrective production tree and two
+independent reports; the resulting replacement is rejected below.
+
+### Rejected corrective production-author candidate
+
+Commit `464e797ed630a8dfff87e867ff42daf5f0d19624`, tree
+`80a63b91838ac9ba8270c3eda845e7313047ec9c`, is also rejected. Independent
+Core and Product verification found the same blocking public-TLS defect: the
+shared production Caddyfile unconditionally selected loopback internal TLS, so
+a VDS hostname could not receive a publicly trusted ACME certificate. Core
+also found that the smoke created its temporary secret directory before the
+only cleanup `try/finally`, and that an ambiguous Docker reservation failure
+could bypass probe removal. The prior GREEN evidence remains historical
+production-author output, not acceptance evidence. A new production tree must
+satisfy the production/QA Caddy split and executable cleanup contracts, then
+receive two new independent PASS reports on that exact tree.
 
 The PostgreSQL engine may use `pg_isready` only as an engine-liveness signal.
 027A adds no API `/healthz`, `/readyz`, schema probe or worker heartbeat and

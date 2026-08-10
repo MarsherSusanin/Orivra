@@ -83,9 +83,12 @@ image boundary реализованы, но эти endpoints и deployment-readi
 
 ADR 0035 splits the credential-free container boundary into image/secret,
 topology/routing and real-Docker waves. The first candidate `20e8d998` is
-rejected. Its corrective replacement has production-author PASS evidence for
-the commands below and still requires two independent reviews of one exact
-tree before module acceptance:
+rejected. Its corrective replacement `464e797` is also rejected: production
+selected QA-only internal TLS instead of automatic public ACME, and setup
+failures could bypass temporary-secret or port-probe cleanup. The commands
+below remain the required gates only after the second corrective RED is GREEN
+and still require two independent reviews of one exact tree before module
+acceptance:
 
 ```bash
 npm run test:docker:static
@@ -117,20 +120,26 @@ entry. QA local tags are runner-owned constants and never enter this wrapper.
 Base `compose.yaml` contains only Caddy/Web and renders without runtime image,
 database or secret-path configuration. `deploy/compose.runtime.yaml` adds the
 gated API/worker/PostgreSQL services; QA combines both with its exact override.
+Production `deploy/caddy/Caddyfile` contains neither `tls internal` nor
+loopback `default_sni`; automatic HTTPS/ACME is authoritative. Exact
+`deploy/caddy/Caddyfile.qa` owns those loopback-only directives and only
+`deploy/compose.qa.yaml` selects it through a read-only bind override.
 
 The QA smoke uses a unique temporary Compose project and exact
 `PROOFLINE_PUBLIC_ORIGIN=https://127.0.0.1`. Before Compose, a bounded bind
 preflight must obtain `127.0.0.1:443`; unavailable port 443 fails without skip
 or alternate origin. `public_edge` remains non-internal for Docker Desktop,
-but Caddy is its only member and published service. Caddy internal TLS and the
-API browser origin derive from the same variable. QA explicitly starts only
-Caddy, Web, PostgreSQL and API, then checks Web/deep routes, the DB-free
+but Caddy is its only member and published service. Caddy QA-only internal TLS
+and the API browser origin derive from the same variable. QA explicitly starts
+only Caddy, Web, PostgreSQL and API, then checks Web/deep routes, the DB-free
 anonymous template endpoint, exact allowed-origin wallet-auth OPTIONS 204 with
 ACAO/Vary and hostile-origin denial without ACAO. It creates no challenge,
 signature, wallet or live effect. It never starts worker or supplies live
 verifier/Coston2 credentials. An HTTPS request ledger allows only the default
 loopback origin and rejects Coinbase, Open-Meteo, verifier and Coston2 RPC
-hosts. Exact `/api` and
+hosts. Temporary secret-directory cleanup begins immediately after creation,
+before any write or Compose setup, and exact port-probe removal is attempted
+after successful and ambiguous Docker reservation outcomes. Exact `/api` and
 `/api/*` strip the prefix once and never SPA-fallback; missing asset-like paths
 remain 404. Live inspection, not Compose text, proves the Caddy host binding
 and absence of other published ports. The topology alone is not DNS/provider

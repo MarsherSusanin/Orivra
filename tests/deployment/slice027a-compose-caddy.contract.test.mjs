@@ -337,13 +337,25 @@ test("requires immutable production application images and pull never", () => {
 });
 
 test("routes exact API paths before Web and strips the prefix exactly once", async () => {
-  const caddyfile = await readFile(resolve(root, "deploy/caddy/Caddyfile"), "utf8").catch(() => "");
+  const [caddyfile, qaCaddyfile] = await Promise.all([
+    readFile(resolve(root, "deploy/caddy/Caddyfile"), "utf8").catch(() => ""),
+    readFile(resolve(root, "deploy/caddy/Caddyfile.qa"), "utf8").catch(() => ""),
+  ]);
   assert.match(caddyfile, /@api\s+path\s+\/api\s+\/api\/\*/);
   assert.match(caddyfile, /handle\s+@api\s*\{/);
   assert.match(caddyfile, /uri\s+strip_prefix\s+\/api/);
   assert.match(caddyfile, /reverse_proxy\s+api:8080/);
   assert.match(caddyfile, /\{\$PROOFLINE_PUBLIC_ORIGIN\}/);
-  assert.match(caddyfile, /tls\s+internal/);
+  assert.doesNotMatch(
+    caddyfile,
+    /tls\s+internal|default_sni\s+127\.0\.0\.1/,
+    "production ingress must retain Caddy automatic public HTTPS/ACME",
+  );
+  assert.notEqual(qaCaddyfile, "", "deploy/caddy/Caddyfile.qa must exist");
+  assert.match(qaCaddyfile, /default_sni\s+127\.0\.0\.1/);
+  assert.match(qaCaddyfile, /tls\s+internal/);
+  assert.match(qaCaddyfile, /@api\s+path\s+\/api\s+\/api\/\*/);
+  assert.match(qaCaddyfile, /uri\s+strip_prefix\s+\/api/);
   assert.deepEqual(
     [...new Set(
       [...caddyfile.matchAll(/reverse_proxy\s+([^\s{]+)/g)].map((match) => match[1]),
@@ -392,6 +404,20 @@ test("renders the bounded exact-origin HTTPS QA override with local tags and no 
     qa.model.services?.api?.environment?.PROOFLINE_WEB_ORIGIN,
     qa.model.services?.caddy?.environment?.PROOFLINE_PUBLIC_ORIGIN,
     "Caddy and API must derive authority from the same single public origin",
+  );
+  const qaCaddyConfigMounts = (qa.model.services?.caddy?.volumes ?? []).filter((mount) =>
+    mount.type === "bind" && mount.target === "/etc/caddy/Caddyfile");
+  assert.equal(qaCaddyConfigMounts.length, 1, "QA must select exactly one QA-only Caddyfile");
+  assert.ok(
+    String(qaCaddyConfigMounts[0]?.source ?? "").endsWith("/deploy/caddy/Caddyfile.qa"),
+    "QA must bind the exact deploy/caddy/Caddyfile.qa source",
+  );
+  assert.equal(qaCaddyConfigMounts[0]?.read_only, true);
+  assert.equal(
+    (rendered.model.services?.caddy?.volumes ?? []).some((mount) =>
+      mount.type === "bind" && mount.target === "/etc/caddy/Caddyfile"),
+    false,
+    "production composition must not select the QA-only TLS configuration",
   );
   assert.deepEqual(publishedPorts(qa.model.services?.caddy), [
     { target: 443, published: 443, protocol: "tcp" },

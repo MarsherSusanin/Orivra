@@ -1,7 +1,6 @@
 # Slice 027A corrective GREEN — credential-free container runtime
 
-Status: production-author PASS; two independent reviews of the new exact tree
-are pending.
+Status: rejected production-author evidence; both independent verifiers FAIL.
 
 Date: 2026-08-10 (Asia/Vladivostok)
 
@@ -11,15 +10,29 @@ Corrective RED commit: `5707460a8dc04edfd288fad1650a6856e433751f`
 
 Corrective RED tree: `7b39be7d614bfe3b1e1b9caf15e14e0a69c16f9e`
 
-The production candidate commit/tree are recorded by the coordinator after
-the stopped tree is committed. No credentialed authority is requested by this
-evidence.
+Rejected production candidate commit:
+`464e797ed630a8dfff87e867ff42daf5f0d19624`
+
+Rejected production candidate tree:
+`80a63b91838ac9ba8270c3eda845e7313047ec9c`
+
+No credentialed authority was requested by this evidence.
 
 Architecture decision: [ADR 0035](../adr/0035-credential-free-container-runtime-boundary.md)
 
 Slice contract: [027A](../slices/027a-credential-free-container-runtime.md)
 
 ## Corrective outcome
+
+This section records historical production-author results, not accepted GREEN.
+Core and Product independently returned FAIL on the exact candidate above.
+Both found that the shared production `deploy/caddy/Caddyfile` unconditionally
+set `default_sni 127.0.0.1` and `tls internal`, preventing a VDS hostname from
+using Caddy automatic public ACME. Core additionally found that smoke secret
+files were created before the only cleanup `try/finally`, and port-probe
+cleanup was conditional on an unambiguous Docker start result. Product found
+no additional blocker before the coordinator rejected the candidate. No
+Docker/build/coverage gate from either verifier is claimed after that blocker.
 
 The replacement resolves all six findings that rejected commit `20e8d998` / tree
 `9b2d7a5`:
@@ -165,8 +178,9 @@ failure was explicitly removed and the runner ordering was corrected.
 
 ## Deployment truth
 
-This is credential-free local packaging and same-origin routing evidence from
-the production author. It is not an independent module PASS and not a unified
+This is rejected historical credential-free local packaging and same-origin
+routing evidence from the production author. It is not an independent module
+PASS and not a unified
 MLP candidate freeze. It does not prove migration, schema readiness,
 `/healthz`, `/readyz`, deployment worker heartbeat, retention, PITR, OCI
 archives, registry publication, VDS staging, hosting, production deployment or

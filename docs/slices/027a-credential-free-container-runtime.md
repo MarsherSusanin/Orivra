@@ -38,8 +38,10 @@ credential, provider or live Coston2 effect.
 
 - base `compose.yaml` contains only independently renderable Caddy/Web
   authority; `deploy/compose.runtime.yaml` adds the gated API/worker/PostgreSQL
-  services, networks, secrets and PostgreSQL volume; `deploy/compose.qa.yaml`,
-  `deploy/caddy/Caddyfile` and the Web static server complete the exact
+  services, networks, secrets and PostgreSQL volume; production
+  `deploy/caddy/Caddyfile` retains automatic public HTTPS/ACME, while exact
+  `deploy/caddy/Caddyfile.qa` owns loopback internal TLS and is selected only by
+  the read-only QA override; the Web static server completes the exact
   five-service/five-network contract from ADR 0035;
 - Caddy alone publishes 80/443; no API, worker or PostgreSQL host port exists;
 - exact `/api` and `/api/*` strip once and never fall back to Web;
@@ -61,7 +63,10 @@ credential, provider or live Coston2 effect.
 - a unique temporary Compose project runs the exact
   `https://127.0.0.1:443` same-origin smoke, inspects
   live ports/networks/mounts/users, records every runner HTTP request and
-  removes only its own resources and secret files;
+  removes only its own resources and secret files. Temporary-directory cleanup
+  starts immediately after creation, before secret writes or Compose setup;
+  exact port-probe removal is attempted after both successful and ambiguous
+  Docker reservation outcomes;
 - Sites compatibility files remain byte-identical.
 
 ## Frozen public contracts
@@ -93,6 +98,13 @@ validator enforces lowercase immutable image digests before Docker. Direct
 Compose invocation is an implementation detail. Caddy configuration is
 validated by the exact pinned Caddy image before smoke.
 
+Production Caddy routing contains neither `tls internal` nor loopback
+`default_sni`; Caddy automatic HTTPS/ACME remains authoritative for the VDS.
+The exact QA-only `deploy/caddy/Caddyfile.qa` contains both directives and the
+same private Web/API routing contract. Only `deploy/compose.qa.yaml` may mount
+it read-only over the Caddy runtime configuration; neither base nor runtime
+production composition may select it.
+
 `public_edge` is not a general application network. `web_internal`,
 `app_internal` and `db_internal` are Docker-internal. `worker_egress` has only
 worker and no host binding. No service is privileged or receives host network,
@@ -117,15 +129,22 @@ GET/HEAD deep routes return `index.html`; other methods fail without SPA
 fallback. It does not proxy `/api`, read credentials, list directories or make
 outbound requests.
 
-## Rejected candidate and corrective GREEN
+## Rejected candidates and second corrective RED
 
 Production-author commit `20e8d998318168b2aaf9622b9fce453ff6d9fe42`, tree
 `9b2d7a5e10225a5e22297e2832f0a143b1016eeb`, is rejected by both independent
 verifiers. The frozen corrective contracts require credential-isolated prefetch,
 one exact HTTPS origin, independent base/runtime Compose files, executable
 immutable-image validation, bounded FIFO rejection and read-only Caddy. The
-replacement production-author implementation now satisfies these unchanged
-contract files:
+first replacement production-author implementation satisfied those files but
+is also rejected: commit
+`464e797ed630a8dfff87e867ff42daf5f0d19624`, tree
+`80a63b91838ac9ba8270c3eda845e7313047ec9c`. Both independent verifiers found
+that its production Caddyfile unconditionally used QA-only loopback internal
+TLS, blocking public ACME certificates. Core additionally found pre-Compose
+temporary secret and ambiguous port-probe cleanup gaps. Product confirmed no
+additional finding before the candidate was rejected. The second corrective
+contracts extend these files without weakening the accepted six boundaries:
 
 - `apps/api/test/slice027a-deployment-secrets.contract.test.ts`;
 - `apps/worker/test/slice027a-worker-deployment-boundary.contract.test.ts`;
@@ -133,11 +152,11 @@ contract files:
 - `tests/deployment/slice027a-compose-caddy.contract.test.mjs`;
 - `tests/deployment/slice027a-docker-gates.contract.test.mjs`.
 
-The prior candidate's local Docker run remains historical rejected evidence.
-The replacement evidence in [Slice 027A GREEN](../evidence/slice-027a-green-credential-free-container-runtime.md)
-records a new controlled prefetch, offline-repeat build and bounded HTTPS
-smoke. Independent Core and Product verification remain required on one new
-frozen tree hash.
+Both prior candidates' local Docker runs remain historical rejected evidence.
+The rejected [Slice 027A GREEN](../evidence/slice-027a-green-credential-free-container-runtime.md)
+records only what the production author ran on `464e797`; it is not a module
+PASS. A new production-author tree must make the frozen second corrective RED
+GREEN before Core and Product independently verify one new frozen tree hash.
 
 ## Acceptance
 
@@ -161,9 +180,9 @@ npm run build
 npm run test:sites
 ```
 
-The historical RED failures remain in the RED evidence. The corrective
-production-author candidate passes the commands above without weakening those
-frozen contracts; independent reviews remain pending.
+The historical and second corrective RED failures remain in the RED evidence.
+A new production-author candidate must pass the commands above without
+weakening those frozen contracts before independent reviews begin.
 
 ### GREEN image and Docker gates
 

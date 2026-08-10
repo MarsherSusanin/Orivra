@@ -284,6 +284,63 @@ only Docker CLI use was semantic `docker compose config`, which starts no
 daemon resource. There was no container, network, volume, image or temporary
 secret cleanup to perform.
 
+## Second corrective RED after replacement verifier FAIL
+
+Core and Product independently inspected replacement commit
+`464e797ed630a8dfff87e867ff42daf5f0d19624`, tree
+`80a63b91838ac9ba8270c3eda845e7313047ec9c`, and both returned formal FAIL.
+Both confirmed the blocking production-TLS defect: the shared production
+Caddyfile unconditionally set loopback `default_sni` and `tls internal`, so a
+VDS hostname could not use Caddy automatic public ACME. Core also confirmed
+that temporary secret files were created before the only cleanup `try/finally`
+and that an ambiguous Docker reservation failure could bypass port-probe
+removal. Product reported no additional blocker before the coordinator stopped
+all Docker/build/coverage work. The replacement and its GREEN evidence are
+rejected.
+
+The second corrective tests freeze two narrow changes without touching
+production, dependencies, Docker/Compose inputs or protected Sites files:
+
+1. Production `deploy/caddy/Caddyfile` contains neither `tls internal` nor
+   loopback `default_sni`, preserving automatic HTTPS/ACME. Exact
+   `deploy/caddy/Caddyfile.qa` owns both loopback directives and the same
+   private routing boundary. Only `deploy/compose.qa.yaml` selects it through
+   one read-only bind override; production base/runtime rendering does not.
+2. Import-pure smoke orchestration exposes executable lifecycle seams. Its
+   outer temporary-directory cleanup begins immediately after creation and
+   runs after setup/write, pre-Compose, smoke and success outcomes. The
+   EACCES-only exact-port reservation attempts scoped removal after both a
+   successful start and an ambiguous Docker CLI failure; EADDRINUSE never uses
+   the Docker fallback. The main smoke must consume those tested seams.
+
+The first focused execution is intentional semantic RED:
+
+```sh
+node --test --test-reporter=spec \
+  tests/deployment/slice027a-docker-gates.contract.test.mjs \
+  tests/deployment/slice027a-compose-caddy.contract.test.mjs
+```
+
+Result: 30 cases, 6 intentional RED and 24 controls PASS, zero skipped. The two
+Caddy failures are exactly the still-shared production internal-TLS file and
+missing QA-only read-only override. The four smoke failures are the absent
+import-pure lifecycle usage plus three executable success/failure cleanup
+cases. No Docker build, pull, service start or external network operation ran;
+the only Docker CLI use was semantic `docker compose config`.
+
+The complete bounded RED handoff is:
+
+- typecheck: PASS;
+- deployment static suite: 40 cases, the same 6 intentional RED and 34
+  controls PASS, zero skipped; all 10 unchanged image-boundary controls PASS;
+- nearest API/worker baseline: 4 files and 34/34 PASS;
+- deployment-roadmap contract: 15/15 PASS;
+- Sites compatibility: 36/36 PASS.
+
+No Docker build, pull, service start, registry access or external network ran.
+No production, dependency, lockfile, Docker/Compose or protected Sites source
+was changed by this second corrective freeze.
+
 ## RED interpretation
 
 Only absent 027A production surfaces are accepted failures. A TypeScript

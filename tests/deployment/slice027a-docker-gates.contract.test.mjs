@@ -302,6 +302,8 @@ test("runs only the bounded exact-origin HTTPS Caddy/Web/PostgreSQL/API smoke", 
   const script = await source("scripts/docker-smoke.mjs");
   assert.notEqual(script, "", "scripts/docker-smoke.mjs must exist");
   assert.match(script, /mkdtemp/);
+  assert.match(script, /runQaSmokeLifecycle/);
+  assert.match(script, /assertExactTlsPortAvailable/);
   assert.match(script, /PROOFLINE_PUBLIC_ORIGIN/);
   assert.match(script, /https:\/\/127\.0\.0\.1/);
   assert.doesNotMatch(script, /https:\/\/proofline\.invalid|http:\/\/127\.0\.0\.1/);
@@ -386,6 +388,101 @@ test("runs only the bounded exact-origin HTTPS Caddy/Web/PostgreSQL/API smoke", 
   );
   assert.doesNotMatch(script, /signMessage|personal_sign|eth_sign|wallet\.connect/i);
   assert.doesNotMatch(script, /healthz|readyz|live Coston2|deployed|hosted/i);
+});
+
+test("removes the QA temporary directory when secret setup fails before Compose", async () => {
+  const orchestration = await importOptional("scripts/docker-smoke-orchestration.mjs");
+  assert.equal(typeof orchestration.runQaSmokeLifecycle, "function");
+  const directory = "/tmp/proofline-027a-setup-failure-sentinel";
+  const setupFailure = new Error("injected secret write failure");
+  const removed = [];
+  let smokeCalls = 0;
+
+  await assert.rejects(
+    orchestration.runQaSmokeLifecycle({
+      createTemporaryDirectory: async () => directory,
+      prepareTemporaryDirectory: async (received) => {
+        assert.equal(received, directory);
+        throw setupFailure;
+      },
+      runSmoke: async () => {
+        smokeCalls += 1;
+      },
+      removeTemporaryDirectory: async (received) => {
+        removed.push(received);
+      },
+    }),
+    (cause) => cause === setupFailure,
+  );
+  assert.equal(smokeCalls, 0, "Compose smoke must not start after secret setup fails");
+  assert.deepEqual(removed, [directory]);
+});
+
+test("removes the QA temporary directory after success and after a smoke failure", async () => {
+  const orchestration = await importOptional("scripts/docker-smoke-orchestration.mjs");
+  assert.equal(typeof orchestration.runQaSmokeLifecycle, "function");
+  const removed = [];
+  const run = async (name, runSmoke) => orchestration.runQaSmokeLifecycle({
+    createTemporaryDirectory: async () => `/tmp/${name}`,
+    prepareTemporaryDirectory: async (directory) => ({ directory, prepared: true }),
+    runSmoke,
+    removeTemporaryDirectory: async (directory) => {
+      removed.push(directory);
+    },
+  });
+
+  assert.equal(await run("proofline-027a-success", async ({ directory, prepared }) => {
+    assert.equal(directory, "/tmp/proofline-027a-success");
+    assert.equal(prepared, true);
+    return "complete";
+  }), "complete");
+  const smokeFailure = new Error("injected pre-compose failure");
+  await assert.rejects(
+    run("proofline-027a-smoke-failure", async () => { throw smokeFailure; }),
+    (cause) => cause === smokeFailure,
+  );
+  assert.deepEqual(removed, [
+    "/tmp/proofline-027a-success",
+    "/tmp/proofline-027a-smoke-failure",
+  ]);
+});
+
+test("attempts exact TLS port-probe removal after success and ambiguous Docker failure", async () => {
+  const orchestration = await importOptional("scripts/docker-smoke-orchestration.mjs");
+  assert.equal(typeof orchestration.assertExactTlsPortAvailable, "function");
+  const eacces = Object.assign(new Error("privileged bind denied"), { code: "EACCES" });
+  const removed = [];
+  await orchestration.assertExactTlsPortAvailable({
+    bindExactTlsPort: async () => { throw eacces; },
+    startDockerReservation: async () => undefined,
+    removeDockerReservation: async () => { removed.push("success"); },
+  });
+
+  const ambiguousFailure = new Error("Docker CLI lost the daemon response");
+  await assert.rejects(
+    orchestration.assertExactTlsPortAvailable({
+      bindExactTlsPort: async () => { throw eacces; },
+      startDockerReservation: async () => { throw ambiguousFailure; },
+      removeDockerReservation: async () => {
+        removed.push("failure");
+        throw Object.assign(new Error("reservation already absent"), { code: "ENOENT" });
+      },
+    }),
+    (cause) => cause === ambiguousFailure,
+  );
+  assert.deepEqual(removed, ["success", "failure"]);
+
+  let dockerCalls = 0;
+  const occupied = Object.assign(new Error("port occupied"), { code: "EADDRINUSE" });
+  await assert.rejects(
+    orchestration.assertExactTlsPortAvailable({
+      bindExactTlsPort: async () => { throw occupied; },
+      startDockerReservation: async () => { dockerCalls += 1; },
+      removeDockerReservation: async () => { dockerCalls += 1; },
+    }),
+    (cause) => cause === occupied,
+  );
+  assert.equal(dockerCalls, 0, "only EACCES may use the Docker port reservation fallback");
 });
 
 test("binds cleanup to one validated project and removes only its temporary resources", async () => {

@@ -25,9 +25,9 @@ The product journey is delivered as independently frozen vertical slices:
 | 024B3 | Token-free canonical URL demo Web route and Sites deep route | Complete; independently verified, credential-free |
 | 025 | Template-led Composer | Complete; independently verified, credential-free |
 | 026 | Public product surface | Complete; independently verified, credential-free |
-| 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | Corrective production-author GREEN; independent review pending |
-| 027A2 | Split private Compose topology, exact Caddy `/api` routing and Web static runtime | Corrective production-author GREEN; independent review pending |
-| 027A3 | CLI-isolated prefetch, offline-repeat build and exact HTTPS local smoke | Corrective production-author GREEN; independent review pending |
+| 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | Second corrective RED frozen; replacement candidate rejected |
+| 027A2 | Split private Compose topology, production ACME Caddy and QA-only internal TLS | Second corrective RED frozen; replacement candidate rejected |
+| 027A3 | CLI-isolated prefetch, offline-repeat build and exact HTTPS local smoke | Second corrective RED frozen; cleanup correction pending GREEN |
 | 027B | One-shot migrations, health/readiness, worker heartbeat and retention | Planned, credential-free |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
@@ -82,9 +82,10 @@ Credential-free delivery covers 022–029A:
   limited to Caddy 80/443; PostgreSQL 5432, API/worker host ports and the Docker
   socket remain private. Worker runtime and application readiness stay blocked
   until 027B; the 027A smoke starts no worker and makes no readiness claim. The
-  first candidate `20e8d998` is rejected and its historical Docker run is not
-  GREEN evidence. The corrective replacement has new production-author local
-  evidence and awaits two independent reviews of one exact tree.
+  first candidate `20e8d998` and replacement `464e797` are rejected; their
+  historical Docker runs are not GREEN evidence. The next replacement must
+  separate production automatic ACME from QA-only internal TLS and close the
+  pre-Compose cleanup gaps before two independent reviews of one exact tree.
 - **027B** adds a one-shot checksummed migration runner under a PostgreSQL
   advisory lock, exact schema verification, `/healthz`, `/readyz`, a worker
   heartbeat and retention behavior.
