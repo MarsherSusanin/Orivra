@@ -72,7 +72,12 @@ missing or placeholder values and does not invent them.
   restore-reader authority, then compare its canonical sorted inventory to the
   immutable completed backup evidence;
 - require each negative result to bind a real case-scoped child execution and
-  sink observation; driver-authored codes and local synthetic mutations fail;
+  independently parent-observed mutation/sink/no-PASS/no-promotion state;
+  driver/child-authored observation JSON and local synthetic mutations fail;
+- construct exact credential-free Docker and negative-child environment
+  profiles, stripping ambient credentials, proxy and Docker-config authority;
+- run prepare/execute/parent-inspect and separately bounded cleanup through
+  killable async process trees with fixed normalized timeout semantics;
 - clean exact project resources.
 
 ## Frozen contracts
@@ -94,6 +99,12 @@ missing or placeholder values and does not invent them.
 - Restore always targets a distinct new volume, remains paused and requires a
   separate evidence-bound promotion authorization.
 - `/healthz` and `/readyz` remain byte-identical to ADR 0036.
+- Negative child output carries only failed case/code and parent-owned
+  exit/output identity; parent probes are the sole mutation, sink, PASS and
+  promotion authority.
+- The case deadline is 30 seconds, child cap 25 seconds, process-tree kill grace
+  one second, per-case cleanup deadline 15 seconds and project-finalizer
+  deadline 30 seconds.
 
 ## Exact operational inputs
 
@@ -131,8 +142,9 @@ non-following, nonblocking, regular, nonempty and bounded.
    promotion authorization;
 7. executable missing/corrupt-object, wrong-key, future-target,
    reused/nonempty-volume and absent/mismatched-promotion controls with exact
-   real child output, causal mutation/sink observations, fixed failure codes,
-   zero PASS/promotion effects, per-case timeout and cleanup;
+   real child output, independent parent probes, fixed failure codes, zero
+   PASS/promotion effects, forged-observation rejection, async process-tree
+   timeout and separately bounded cleanup;
 8. executable static seams plus one checked-in `test:docker:recovery` gate.
 
 ## GREEN and verification gates

@@ -35,10 +35,11 @@ const FAILED_RESULT = (definition) => ({
   failureCode: definition.expectedFailureCode,
   childExitCode: 64,
   childOutputSha256: `sha256:${"c".repeat(64)}`,
-  mutationApplied: true,
-  sinkObserved: true,
-  passEvidenceCount: 0,
-  promotionCount: 0,
+  parentObservationSha256: `sha256:${"d".repeat(64)}`,
+  parentMutationObserved: true,
+  parentSinkObserved: true,
+  parentPassEvidenceCount: 0,
+  parentPromotionCount: 0,
 });
 
 const CLEAN = Object.freeze({
@@ -61,13 +62,19 @@ function expectBypass(error) {
     error?.message === "Recovery negative control failed closed";
 }
 
+function expectTimeout(error) {
+  return error?.code === "RECOVERY_NEGATIVE_TIMEOUT" &&
+    error?.message === "Recovery negative control timed out";
+}
+
 function passingOrchestration(overrides = {}) {
   return {
     async runCase(definition, signal) {
       assert.equal(signal instanceof AbortSignal, true);
       return FAILED_RESULT(definition);
     },
-    async cleanupCase() {
+    async cleanupCase(_id, signal) {
+      assert.equal(signal instanceof AbortSignal, true);
       return CLEAN;
     },
     ...overrides,
@@ -130,12 +137,14 @@ test("executes all negative controls in exact order with cleanup and no PASS eff
         executed.push(definition.id);
         return FAILED_RESULT(definition);
       },
-      async cleanupCase(id) {
+      async cleanupCase(id, signal) {
+        assert.equal(signal instanceof AbortSignal, true);
         cleaned.push(id);
         return CLEAN;
       },
     }),
     caseTimeoutMs: 100,
+    cleanupTimeoutMs: 100,
   });
   assert.deepEqual(executed, CASES.map(({ id }) => id));
   assert.deepEqual(cleaned, executed);
@@ -162,12 +171,14 @@ for (const bypassed of CASES) {
               ? { ...FAILED_RESULT(definition), status: "passed" }
               : FAILED_RESULT(definition);
           },
-          async cleanupCase(id) {
+          async cleanupCase(id, signal) {
+            assert.equal(signal instanceof AbortSignal, true);
             cleaned.push(id);
             return CLEAN;
           },
         }),
         caseTimeoutMs: 100,
+        cleanupTimeoutMs: 100,
       }),
       expectBypass,
     );
@@ -184,6 +195,7 @@ test("rejects case-name strings as non-executable negative evidence", async () =
       },
     }),
     caseTimeoutMs: 100,
+    cleanupTimeoutMs: 100,
   }), expectBypass);
 });
 
@@ -195,20 +207,21 @@ test("rejects the legacy synthetic four-field driver result", async () => {
         return {
           status: "failed",
           failureCode: definition.expectedFailureCode,
-          passEvidenceCount: 0,
-          promotionCount: 0,
+          parentPassEvidenceCount: 0,
+          parentPromotionCount: 0,
         };
       },
     }),
     caseTimeoutMs: 100,
+    cleanupTimeoutMs: 100,
   }), expectBypass);
 });
 
 test("rejects any negative path that writes PASS evidence or attempts promotion", async () => {
   const module = await core();
   for (const effect of [
-    { passEvidenceCount: 1 },
-    { promotionCount: 1 },
+    { parentPassEvidenceCount: 1 },
+    { parentPromotionCount: 1 },
   ]) {
     await assert.rejects(module.runRecoveryNegativeControls({
       orchestration: passingOrchestration({
@@ -217,6 +230,7 @@ test("rejects any negative path that writes PASS evidence or attempts promotion"
         },
       }),
       caseTimeoutMs: 100,
+      cleanupTimeoutMs: 100,
     }), expectBypass);
   }
 });
@@ -225,16 +239,18 @@ test("requires zero exact scoped leftovers after every negative case", async () 
   const module = await core();
   await assert.rejects(module.runRecoveryNegativeControls({
     orchestration: passingOrchestration({
-      async cleanupCase() {
+      async cleanupCase(_id, signal) {
+        assert.equal(signal instanceof AbortSignal, true);
         return { ...CLEAN, volumes: 1 };
       },
     }),
     caseTimeoutMs: 100,
+    cleanupTimeoutMs: 100,
   }), (error) => error?.code === "RECOVERY_NEGATIVE_CLEANUP_FAILED" &&
     error?.message === "Recovery negative cleanup failed");
 });
 
-test("bounds each negative case and still performs cleanup after timeout", async () => {
+test("normalizes each negative timeout and still performs bounded cleanup", async () => {
   const module = await core();
   const cleaned = [];
   await assert.rejects(module.runRecoveryNegativeControls({
@@ -242,12 +258,14 @@ test("bounds each negative case and still performs cleanup after timeout", async
       async runCase() {
         return new Promise(() => undefined);
       },
-      async cleanupCase(id) {
+      async cleanupCase(id, signal) {
+        assert.equal(signal instanceof AbortSignal, true);
         cleaned.push(id);
         return CLEAN;
       },
     }),
     caseTimeoutMs: 5,
-  }), expectBypass);
+    cleanupTimeoutMs: 100,
+  }), expectTimeout);
   assert.deepEqual(cleaned, [CASES[0].id]);
 });

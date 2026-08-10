@@ -337,6 +337,66 @@ with 47 intentional RED and 52 controls PASS; the unchanged 027A/027B/027R
 neighbor set is 45/45 PASS and Sites compatibility is 36/36 PASS. No Docker
 daemon, network, production, dependency or lockfile operation was run.
 
+### Security-review corrective RED wave 2
+
+The discovery report at
+`/private/var/folders/m4/6p__vxf95w520v3b1t2cr5vr0000gn/T/codex-security-scans/Proofline/72263e4_20260810T142444Z/artifacts/02_discovery/finding_discovery_report.md`
+was read in full and independently matched SHA-256
+`64dab1929d0b6466d9cf7b6ffff67cddc514e88802613d1ad6c122180f6916e8`.
+Its sealed candidate snapshot is
+`codex-security-snapshot/v1:sha256:4d30d4b85a64f1ac38aa5c3e0b2e2dfa343af1bd21cd4b7efc05186a068e5794`.
+The candidate was inspected read-only from stash object
+`9f3fede15e67b39e61dc9e466489b7d13cf386db` / tree
+`88a06ac5f496898d19489712290649b026c89ae6` and untracked tree
+`4c78d90fcbc04e1ac2e598051fe2eda4db7b653b`; it was never applied. The
+candidate is rejected and provides no recovery/release evidence.
+
+All three high-confidence findings reproduce in the candidate source:
+
+1. `PL-027C-NEGATIVE-OBSERVATION-SELF-ASSERTED` (`CWE-693`, `CWE-754`): the
+   child writes successful mutation/sink/no-PASS/no-promotion claims that the
+   parent later accepts without case-specific Docker, database or object-state
+   probes.
+2. `PL-027C-RECOVERY-GATE-AMBIENT-AUTH` (`CWE-200`, `CWE-250`, `CWE-668`):
+   the gate spreads `process.env` into every Docker command and the negative
+   child, which then forwards that authority to its own Docker commands.
+3. `PL-027C-NEGATIVE-TIMEOUT-SYNC-BYPASS` (`CWE-400`, `CWE-754`): the core's
+   Promise timer cannot interrupt blocking `spawnSync` preparation/inspection,
+   while case and project cleanup contain separately unbounded sync effects.
+
+Wave-2 RED replaces ambiguous result fields with exact parent-owned evidence
+fields and uses a forged matching child record against disagreeing parent
+probes as the malicious control. It freezes an import-safe extracted negative
+runtime whose parent independently probes object/hash, target/key/volume,
+Docker/log, PostgreSQL recovery, PASS and promotion state; child observation
+files have no authority. The legitimate control reaches the same boundary and
+passes only when every parent probe agrees.
+
+Two exact environment profiles are frozen: the Docker/Compose profile accepts
+only the enumerated run-scoped QA file paths/nonsecrets, while the negative
+child receives only the selected PostgreSQL image and three reader/encryption
+secret-file paths plus an isolated execution base. Ambient Docker/registry,
+AWS, GitHub/GHCR, npm, DigitalOcean/Spaces, proxy and generic secret/token/key
+sentinels are absent; unknown scoped names and direct secrets fail closed.
+
+Finally, the negative import graph must use the `recovery-async-child` seam,
+with no sync child/process wait. Executable controls cover a normal child, a
+hung process tree, hung prepare/execute/parent-inspect and hung cleanup. Timeout
+must be normalized, abort must terminate/reap the process tree, cleanup has its
+own deadline, and every fixture proves zero residual process/resource state.
+
+Wave-2 RED was demonstrated on the clean base
+`72263e4ed194ad02c23b5095dc846ad4b6c44a74` / tree
+`638dc024ec53e3083597471d2e3880a0641c7299`: syntax check and typecheck PASS;
+the exact new file is 13/13 intentional RED and the combined negative/security
+focus is 45/45 intentional RED. The complete Docker static set is 112 cases
+with 60 intentional RED and 52 controls PASS. The unchanged 027A/027B/027R
+neighbor set is 45/45 PASS and Sites compatibility is 36/36 PASS. No Docker
+daemon, network, production, dependency or lockfile operation was run.
+
+No finding is called fixed until production GREEN, the discovery triggers and
+change-aware bypass review pass on one frozen tree.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;

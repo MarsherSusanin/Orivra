@@ -235,6 +235,19 @@ only in the ephemeral init job, which creates distinct writer, reader and
 retention identities. Application containers and production wrappers cannot
 import this QA authority.
 
+The recovery gate constructs two credential-free environments through the
+import-safe `recovery-gate-environment` boundary: one complete Docker/Compose
+profile containing only the exact checked-in run-scoped QA file paths and
+nonsecret inputs, and one negative-child profile containing only the selected
+PostgreSQL image plus reader-access-key, reader-secret and encryption-key file
+paths. `PATH` is the only ambient value retained. `DOCKER_HOST`, a new empty
+`DOCKER_CONFIG`, `HOME`, `XDG_CONFIG_HOME` and `TMPDIR` are explicit validated
+gate inputs; locale and timezone are fixed. Ambient Docker/registry auth, AWS,
+GitHub/GHCR, npm, DigitalOcean/Spaces, proxy, token, secret, API-key and
+private-key variables are stripped. An unknown scoped name, direct secret,
+empty value or NUL fails with `RECOVERY_GATE_ENV_INVALID`. Neither inventory
+digest operand is an allowed environment input.
+
 The source database applies exact schema 10/10 and inserts a base sentinel. A
 base backup completes. Transaction A then commits; the harness records an
 exact PostgreSQL-clock UTC target between A and later transaction B, forces WAL
@@ -289,6 +302,30 @@ also binds case ID, nonzero child exit, child-output SHA-256, mutation/sink
 observations and zero PASS/promotion counts. A driver-supplied expected code,
 local random-file comparison, timestamp tautology or path alias is rejected.
 The two promotion cases continue to execute the real authorization helper.
+
+Child output is authority only for the exact failed case/code and parent-owned
+exit/output digest. It can never author mutation, sink, PASS or promotion
+observations. After the child exits, the parent independently inspects the
+case-specific MinIO object/hash, mounted key/target/volume state, Docker
+container/log sink, PostgreSQL recovery state, PASS path and promotion state.
+The accepted result names these fields `parentObservationSha256`,
+`parentMutationObserved`, `parentSinkObserved`, `parentPassEvidenceCount` and
+`parentPromotionCount`. A matching forged child JSON record or observation
+file is ignored and must fail whenever any parent probe disagrees.
+
+All negative prepare, execute, parent-inspect and cleanup effects use
+non-shell asynchronous children in their own process group. `spawnSync`, sync
+exec, blocking filesystem waits and advisory-only aborts are forbidden from
+the negative import graph. Each child receives the remaining part of the exact
+30-second case deadline, capped at 25 seconds, with 32 MiB combined output;
+deadline or outer abort sends `SIGTERM` to the process tree, waits exactly one
+second, sends `SIGKILL`, and reaps it before returning. Per-case cleanup runs in
+a separate 15-second `finally` deadline and the whole-project finalizer has a
+separate 30-second deadline. A hung prepare, execute, inspect or cleanup returns
+fixed `RECOVERY_NEGATIVE_TIMEOUT` / `Recovery negative control timed out`,
+writes no PASS/promotion evidence and cannot leave a child, container, network,
+volume or temporary path. Residual resources still use the distinct cleanup
+failure contract.
 
 The positive restore evidence is constructed only from machine-readable actual
 `pitr-verify` fields: recovery and replay-paused state, system identifier,

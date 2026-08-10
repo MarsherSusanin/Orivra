@@ -394,7 +394,7 @@ const NEGATIVE_CASES = Object.freeze([
   ["promotion-authorization-mismatch", "RESTORE_PROMOTION_EVIDENCE_MISMATCH"],
 ]);
 
-test("derives every negative result from case-scoped child execution and observation", async () => {
+test("derives every negative result from child execution and independent parent observation", async () => {
   const module = await optionalImport("scripts/docker-recovery-gate-runtime.mjs");
   const calls = [];
   const orchestration = module.createDockerRecoveryOrchestration({
@@ -422,17 +422,19 @@ test("derives every negative result from case-scoped child execution and observa
         })}\n`,
       };
     },
-    async observeRecoveryCase(fixture, execution) {
-      calls.push([fixture.caseId, "observe", execution.exitCode]);
+    async inspectRecoveryCase(fixture, execution) {
+      calls.push([fixture.caseId, "inspect", execution.exitCode]);
       return {
         caseId: fixture.caseId,
-        mutationApplied: true,
+        observationSha256: `sha256:${"b".repeat(64)}`,
+        mutationObserved: true,
         sinkObserved: true,
         passEvidenceCount: 0,
         promotionCount: 0,
       };
     },
-    async cleanupCase() {
+    async cleanupCase(_id, signal) {
+      assert.equal(signal instanceof AbortSignal, true);
       return { containers: 0, networks: 0, volumes: 0, temporaryPaths: 0 };
     },
   });
@@ -443,16 +445,17 @@ test("derives every negative result from case-scoped child execution and observa
     assert.equal(result.failureCode, expectedFailureCode);
     assert.equal(result.childExitCode, 64);
     assert.match(result.childOutputSha256, /^sha256:[a-f0-9]{64}$/);
-    assert.equal(result.mutationApplied, true);
-    assert.equal(result.sinkObserved, true);
-    assert.equal(result.passEvidenceCount, 0);
-    assert.equal(result.promotionCount, 0);
+    assert.match(result.parentObservationSha256, /^sha256:[a-f0-9]{64}$/);
+    assert.equal(result.parentMutationObserved, true);
+    assert.equal(result.parentSinkObserved, true);
+    assert.equal(result.parentPassEvidenceCount, 0);
+    assert.equal(result.parentPromotionCount, 0);
   }
   for (const [id] of NEGATIVE_CASES) {
     assert.deepEqual(calls.filter(([caseId]) => caseId === id).map(([, phase]) => phase), [
       "prepare",
       "execute",
-      "observe",
+      "inspect",
     ]);
   }
 });
@@ -481,11 +484,12 @@ test("production negative cases mutate and invoke the actual recovery paths", as
   ]);
   assert.match(runtime, /prepareCase/);
   assert.match(runtime, /executeRecoveryCase/);
-  assert.match(runtime, /observeRecoveryCase/);
+  assert.match(runtime, /inspectRecoveryCase/);
   assert.match(runtime, /exitCode/);
   assert.match(runtime, /stdout/);
   assert.match(runtime, /stderr/);
   assert.doesNotMatch(runtime, /observation\?\.failureCode/);
+  assert.doesNotMatch(runtime, /observationPath|childObservation/);
   for (const token of [
     "pitr-fetch",
     "pitr-postgres",
