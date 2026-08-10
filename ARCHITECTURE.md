@@ -296,14 +296,14 @@ database backup или PITR plan.
 текущей executable части. Первый 027A image/Compose/Caddy candidate отклонён;
 его second corrective replacement независимо проверен на одном exact tree.
 027B migration/readiness boundary независимо проверен Core и Product на exact
-commit `527c561` / tree `ebdf648`. Для ADR 0037 локальный credential-free
-production-author candidate теперь реализует encrypted WAL/base-backup/PITR
-boundary и exact MinIO restore drill: два offline no-pull build, 027A/027B
-Docker regressions, paused target-time recovery, все восемь real negative cases
-и scoped cleanup PASS. Final author security diff scan сообщает zero reportable
-findings; immutable Dockerfile frontend identity и WAL-G retention object-set
-binding остаются двумя deferred follow-up. Две независимые проверки stopped
-candidate ещё pending. Нет release-ready VDS composition или production
+commit `527c561` / tree `ebdf648`. ADR 0037 candidate `1218e589` / tree
+`f0d6e325` rejected by both independent verifiers: positive recovery не
+материализовал canonical `RestoreDrillEvidenceV1`, promotion negatives были
+связаны с synthetic restore fixture, а producer commit/tree получили одно
+случайное значение. Corrective RED замораживает atomic canonical handoff,
+distinct exact repository identities и actual-evidence promotion boundary;
+replacement production GREEN и два новых verifier PASS pending. Нет
+release-ready VDS composition или production
 deployment. В репозитории нет
 `.github/workflows` или настроенного merge queue. Hosting is not yet
 provisioned; ADR 0029 выбирает target, но не доказывает его доступность.

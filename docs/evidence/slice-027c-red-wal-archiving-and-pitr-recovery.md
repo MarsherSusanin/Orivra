@@ -574,6 +574,59 @@ plus 51 controls. Neighbors remain 45/45 PASS and Sites remains 36/36 PASS.
 Syntax and typecheck PASS. No Docker daemon, network, production, dependency
 or lockfile operation ran.
 
+### Positive evidence and producer-identity corrective RED
+
+Both independent verification roles rejected exact candidate
+`1218e589517c32af3cc45291d02a8b147b483760` / tree
+`f0d6e325702338ed89c57d7160944eef8481f2a8`. The Core verifier found that the
+positive recovery gate returned only an internal object, never emitted strict
+canonical `RestoreDrillEvidenceV1`, and exercised promotion negatives against a
+synthetic restore fixture instead of the real positive result. The Product
+verifier independently confirmed the missing immutable backup/restore handoff
+and promotion binding. Both also rejected producer provenance: the gate created
+one random tree-shaped value and wrote it as both `commitSha` and `treeSha`.
+Those are P1 release-evidence failures, so the earlier local-author GREEN and
+security-scan chronology does not establish accepted 027C evidence.
+
+The corrective tests/docs-only wave freezes an import-safe positive evidence
+handoff. It independently reads `git rev-parse HEAD`,
+`git rev-parse HEAD^{tree}` and `git status --porcelain`; verified evidence
+requires a clean tree and distinct exact lowercase 40-hex repository
+identities. A dirty author run is either rejected or explicitly labelled
+`draft` with `releaseClaim: false`, while retaining truthful distinct schema
+identity.
+
+Only after actual `pitr-verify`, direct recovery-state and independent
+ciphertext-inventory observations agree may the gate schema-parse and
+canonicalize `BackupEvidenceV1` and `RestoreDrillEvidenceV1` through
+`@proofline/contracts/recovery`. The backup artifact has status `completed`;
+the restore artifact has frozen status `passed`, exact target/timeline,
+`paused: true`, `inRecovery: true`, `promoted: false`, distinct source/restore
+volume identities, and `sourceBackupEvidenceSha256` computed from the exact
+canonical backup bytes. No secret, host path or extra property is admissible.
+
+The caller owns one absolute mode-0700 output root outside secret-temporary
+state. Exact mode-0600 UTF-8 files `backup-evidence.v1.json` and
+`restore-drill-evidence.v1.json` are first written to a private staging
+directory, validated and hashed, then atomically published together as
+`recovery-evidence.v1`. Failure publishes neither artifact. PASS preserves the
+directory for the caller; explicit cleanup removes only that scoped final
+directory. Promotion-authorization absent/mismatch cases consume those actual
+restore bytes and digest and must stop before any promotion effect. The
+credential-free gate never creates a valid authorization or calls
+`pg_promote`.
+
+On the rejected production candidate the new focused file is intentionally RED
+for exactly seven missing production seams: module/export boundary, independent
+repository identity, dirty-draft labelling, canonical atomic positive handoff,
+actual-observation failure atomicity, scoped persistence/cleanup and real
+promotion-negative binding. Its combined run is 7 intentional RED plus 17
+contracts/API controls PASS. The retained recovery/security focus is 85/85
+PASS, Docker static is 138/138 PASS, unchanged 027A/027B/027R neighbors are
+45/45 PASS, Sites is 36/36 PASS and typecheck PASS. No Docker daemon, network,
+production, dependency, lockfile, coverage or build operation is part of this
+RED wave.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;

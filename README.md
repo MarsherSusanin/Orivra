@@ -74,12 +74,12 @@ blockchain-операций.
   for checksummed migrations, deployment roles, health/readiness and the real
   production-worker heartbeat path. Core and Product both PASS exact commit
   `527c561` / tree `ebdf648`; the SQL heartbeat fixture remains test-only, so no
-  actual worker readiness, hosting or deployment is claimed. Slice 027C now has
-  a local credential-free production-author GREEN candidate under
-  [ADR 0037](docs/adr/0037-wal-archiving-and-pitr-recovery.md): two offline
-  no-pull builds, the 027A/027B Docker regressions and the exact encrypted
-  MinIO PITR gate PASS with all eight negative cases and scoped cleanup. Two
-  independent verifiers have not yet reviewed the stopped candidate.
+  actual worker readiness, hosting or deployment is claimed. Slice 027C exact
+  candidate `1218e589` / tree `f0d6e325` was rejected by both independent
+  verifiers: it emitted no canonical positive restore evidence, used synthetic
+  evidence for promotion negatives and reused one random identity as commit and
+  tree. Corrective tests/docs-only RED now freezes the exact atomic evidence
+  handoff; replacement production GREEN and two new reviews are pending.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
@@ -146,13 +146,11 @@ ports и Docker socket не публикуются.
 Репозиторий содержит независимо проверенные replacement 027A и Slice 027B.
 027B Core и Product verification PASS exact commit `527c561` / tree
 `ebdf648`; это локальное credential-free evidence, не actual-worker или hosted
-evidence. ADR 0037 и Slice 027C теперь имеют локальный credential-free
-production-author GREEN для encrypted WAL/base-backup/PITR и MinIO restore
-drill; две независимые verification waves ещё pending. Финальный author
-security diff scan не оставил reportable findings. Два follow-up остаются
-deferred: immutable Dockerfile frontend identity и WAL-G retention object-set
-binding under writer-only prefix mutation. 028A–029B по-прежнему владеют
-release и production promotion.
+evidence. ADR 0037 и Slice 027C имеют frozen corrective RED после того, как оба
+verifier отклонили exact `1218e589` / `f0d6e325` из-за отсутствующего positive
+restore-evidence handoff и ложной producer identity. До replacement GREEN и
+двух новых PASS это не accepted recovery evidence. 028A–029B по-прежнему
+владеют release и production promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment
 не provisioned. Sites сохраняется только как
 compatibility artifact; это больше не выбранный production host.

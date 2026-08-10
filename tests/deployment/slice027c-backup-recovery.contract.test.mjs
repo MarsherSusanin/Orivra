@@ -34,11 +34,11 @@ test("accepts ADR 0037 and freezes Slice 027C C1/C2/C3 without a hosted claim", 
   for (const wave of ["027C1", "027C2", "027C3"]) assert.match(slice, new RegExp(wave));
   assert.match(
     roadmap,
-    /\| 027C \| WAL\/base-backup PITR and local MinIO restore drill \| Production-author GREEN locally; two independent verifiers pending \|/,
+    /\| 027C \| WAL\/base-backup PITR and local MinIO restore drill \| Corrective RED frozen after two verifier P1 findings; production correction pending \|/,
   );
   const roadmap027c = roadmap.match(/- \*\*027C\*\*[\s\S]*?(?=\n- \*\*028A)/)?.[0] ?? "";
-  assert.match(roadmap027c, /production-author candidate is locally GREEN/i);
-  assert.match(roadmap027c, /Two independent verifiers remain pending/);
+  assert.match(roadmap027c, /exact candidate\s+`1218e589` \/ tree `f0d6e325` is rejected/i);
+  assert.match(roadmap027c, /corrective RED\s+is frozen/i);
   assert.match(roadmap027c, /not hosted, live Spaces\/production/i);
   assert.match(readme, /527c561[\s\S]{0,80}ebdf648/);
   assert.doesNotMatch(`${adr}\n${slice}`, /hosting is deployed|hosted PASS|production PITR PASS/i);

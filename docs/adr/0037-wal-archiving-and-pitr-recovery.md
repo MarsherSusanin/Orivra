@@ -41,6 +41,48 @@ all-in-one database image would weaken the accepted image authority.
 No wave may claim a Droplet snapshot, running container, `pg_dump`, copied
 volume or successful base-backup command as PITR evidence.
 
+### Rejected candidate and positive evidence correction
+
+Both independent verifiers reject exact implementation candidate
+`1218e589517c32af3cc45291d02a8b147b483760` / tree
+`f0d6e325702338ed89c57d7160944eef8481f2a8`. Its positive drill returned an
+internal object and printed only the negative-case report; it never created
+canonical `RestoreDrillEvidenceV1` for the promotion boundary. Promotion
+negatives instead created a synthetic restore fixture. Its canonical backup
+evidence also assigned one random tree-shaped value to both producer commit and
+tree. Runtime checks without exact immutable handoff and truthful provenance
+are not 027C acceptance evidence.
+
+The corrective boundary independently resolves and validates exact repository
+commit, tree and clean state before the drill. Verified evidence requires a
+clean tree and distinct lowercase 40-hex `commitSha` and `treeSha` equal to
+`git rev-parse HEAD` and `git rev-parse HEAD^{tree}`. A dirty local author run
+may remain schema-valid only when the handoff is explicitly `draft` with
+`releaseClaim: false`; it cannot be verifier or release evidence.
+
+After actual `pitr-verify`, direct recovery-state and reader-only ciphertext
+inventory checks agree, the gate parses and canonicalizes both positive
+artifacts through `@proofline/contracts/recovery`. It computes
+`sourceBackupEvidenceSha256` from the exact canonical backup bytes and derives
+the restore target, paused/in-recovery/unpromoted state, system/schema/checksum,
+cut and inventory results from actual observations. Backup status remains
+`completed`; restore status remains the frozen `passed`.
+
+The caller supplies one absolute mode-0700 evidence output root outside the
+gate's temporary secret directory. A private staging directory receives exact
+mode-0600 canonical UTF-8 `backup-evidence.v1.json` and
+`restore-drill-evidence.v1.json`; only after both validate and their SHA-256
+values are known is the directory atomically renamed to
+`recovery-evidence.v1`. Failure removes staging and publishes neither file.
+Success preserves the exact directory for the caller. An explicit cleanup
+operation may remove only that final directory and never the caller root or
+unrelated files.
+
+Absent and mismatched promotion-authorization negatives consume the actual
+emitted restore bytes and digest and vary only the authorization input. They
+must fail before `pg_promote`; a valid matching authorization is never created
+or executed automatically by the credential-free drill.
+
 ### Tool and image identity
 
 WAL-G `v3.0.8` is the only backup tool. The controlled asset is the official

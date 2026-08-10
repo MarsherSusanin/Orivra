@@ -211,16 +211,13 @@ node scripts/docker-build.mjs
 npm run test:docker:recovery
 ```
 
-The stopped production-author candidate is locally GREEN and still awaits two
-independent verifiers. Its exact credential-free evidence includes two offline
-no-pull/network-none builds, the 027A HTTPS and 027B runtime regressions, and
-`test:docker:recovery` with a paused exact-time restore, A-present/B-absent,
-all eight fixed real negative outcomes, worker never started and zero scoped
-container/network/volume/secret/temp residue. The final author security diff
-scan reports zero reportable findings. Two follow-ups remain deferred rather
-than silently closed: immutable `docker/dockerfile` frontend identity and a
-bounded WAL-G v3.0.8 proof that writer-only prefix mutations cannot change the
-authorized `retain FULL 8` deletion object set.
+Exact production candidate `1218e589` / tree `f0d6e325` is rejected by both
+independent verifiers. Its positive recovery checks did not create canonical
+`RestoreDrillEvidenceV1`, its promotion negatives substituted synthetic restore
+evidence, and its backup producer used one random tree-shaped value for both
+commit and tree. The prior local gate and security scan therefore do not count
+as accepted 027C evidence. Corrective RED is frozen; production correction and
+both replacement verifier reports are pending.
 
 This is local credential-free author evidence only. It uses no production
 Spaces, GHCR, DNS, SSH or live Coston2 credential and proves no hosted/VDS
@@ -252,6 +249,18 @@ removes its project, containers, networks, volumes and temporary secrets on
 success or failure. Restore booleans and checks are derived from the final
 machine-readable `pitr-verify` record; a hard-coded success value or a mismatch
 with the direct PostgreSQL recovery-state query fails the gate.
+
+The corrected gate must receive an explicit absolute caller-owned evidence
+output root. It independently resolves the repository `HEAD`, `HEAD^{tree}` and
+clean state, then atomically preserves exact
+`recovery-evidence.v1/backup-evidence.v1.json` and
+`recovery-evidence.v1/restore-drill-evidence.v1.json`. Verify both files with
+`@proofline/contracts/recovery`, compare their SHA-256 values with the gate
+handoff record, and compare producer commit/tree with the same final
+`git rev-parse` results before treating the run as verified. Dirty author runs
+are draft-only and cannot become a release claim. Copy or consume the verified
+artifacts before invoking the explicit exact-scoped evidence cleanup; ordinary
+secret/project cleanup must not delete a successful handoff.
 
 The same gate then executes, in order, missing WAL, corrupt backup, wrong key,
 future target, reused volume, nonempty volume, absent promotion authorization
@@ -748,15 +757,17 @@ Upstream Coston2 outage блокирует release. Override возможен т
   откатывайте journal или migration destructive SQL вручную. При ошибке схемы
   восстанавливайте подтверждённый WAL/base-backup PITR в новый PostgreSQL
   volume, проверяйте его и только затем выполняйте явное переключение.
-- 027C production-author candidate локально доказывает credential-free MinIO
-  restore drill; две independent verification waves ещё pending. Droplet backup
-  не считается database restore evidence.
+- 027C candidate `1218e589` / `f0d6e325` rejected by both verifiers and is not
+  recovery evidence. Corrective positive-evidence RED is frozen; replacement
+  production implementation, local MinIO gate and two independent verification
+  waves remain pending. Droplet backup не считается database restore evidence.
 - ADR 0037 замораживает WAL-G v3.0.8, custom official PostgreSQL 17.6 Debian
   image, encrypted prefix
   `s3://<bucket>/proofline/v1/<slot>/<systemIdentifier>`, daily 02:00 UTC base
   backup, eight retained FULL chains and paused exact-time recovery. Эти
-  image/asset locks, archive services и local recovery evidence входят в
-  production-author GREEN; это ещё не independently verified или hosted PASS.
+  image/asset locks and archive services remain implemented, but local recovery
+  evidence is rejected until the corrective handoff reaches GREEN and both
+  independent verifiers PASS; это не hosted evidence.
 - Production restore authority — только exact completed backup evidence,
   backup ID, UTC target и numeric timeline; `LATEST` запрещён. Restore всегда
   пишет в новый пустой volume и остаётся paused/in-recovery. `pg_promote`

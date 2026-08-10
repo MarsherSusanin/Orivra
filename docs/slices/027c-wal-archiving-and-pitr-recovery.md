@@ -22,18 +22,21 @@ recovery change. No public HTTP or Web contract changes.
 
 ## Status
 
-The production-author candidate is locally GREEN and awaits two independent
-verifiers on one stopped tree. Exact author evidence includes two offline
-no-pull/network-none builds, the 027A HTTPS and 027B runtime regressions, and
-the credential-free encrypted MinIO recovery gate with paused exact-time
-restore, A-present/B-absent, all eight executable negative cases, worker absent
-and exact project/container/network/volume/secret/temp cleanup.
+Exact production candidate `1218e589517c32af3cc45291d02a8b147b483760` /
+tree `f0d6e325702338ed89c57d7160944eef8481f2a8` is rejected by both independent
+verifiers. The runtime checks ran, but the positive path never emitted strict
+canonical `RestoreDrillEvidenceV1`, promotion negatives used synthetic restore
+evidence, and `BackupEvidenceV1.producer` reused one random value as both commit
+and tree. Those P1 failures invalidate its local GREEN and security-scan status
+as module acceptance evidence.
 
-The final author security diff scan reports zero reportable findings. Two
-follow-ups remain deferred: immutable `docker/dockerfile` frontend identity and
-a bounded WAL-G v3.0.8 retention object-set proof under writer-only prefix
-mutation. This status is not hosted/VDS or production Spaces evidence, uses no
-live Coston2 or deployment credential, and makes no actual RPO/RTO or SLA claim.
+Corrective tests/docs-only RED now freezes an atomic positive evidence handoff,
+distinct exact repository commit/tree identity and promotion negatives bound to
+the actual positive restore bytes and digest. Production correction, affected
+coverage, real PostgreSQL, offline Docker recovery and two new independent
+reviews remain pending. This status is not hosted/VDS or production Spaces
+evidence, uses no live Coston2 or deployment credential, and makes no actual
+RPO/RTO or SLA claim.
 
 ## Delivery split
 
@@ -142,6 +145,23 @@ missing or placeholder values and does not invent them.
   exactly `PATH`, isolated `DOCKER_CONFIG`/`HOME`/`XDG_CONFIG_HOME`/`TMPDIR`
   and fixed `LANG`/`LC_ALL`/`TZ`; all transport, builder and credential
   authority is absent.
+- The positive gate resolves `git rev-parse HEAD`, `git rev-parse HEAD^{tree}`
+  and `git status --porcelain` independently. A verified handoff requires a
+  clean tree and two distinct exact lowercase 40-hex identities. A dirty local
+  author run may write schema-valid evidence only as explicit `draft` with
+  `releaseClaim: false`; random, reused or substituted identity is forbidden.
+- Positive evidence is atomically published under the caller-owned mode-0700
+  output root as exact directory `recovery-evidence.v1` containing only
+  `backup-evidence.v1.json` and `restore-drill-evidence.v1.json`, both mode
+  0600, strict canonical UTF-8 and parsed by `@proofline/contracts/recovery`.
+  The backup has `status: "completed"`; restore has the frozen
+  `status: "passed"`, exact source-backup digest and only actual-derived paused,
+  recovery, target, inventory, system, migration and volume evidence.
+- A successful handoff is preserved for the caller and removed only through an
+  explicit exact-scoped cleanup operation. Failed publication removes its
+  private staging directory and leaves neither final artifact nor unrelated
+  caller files. Promotion negatives consume the emitted restore bytes/digest;
+  no synthetic restore fixture and no automatic valid promotion is allowed.
 
 ## Exact operational inputs
 
