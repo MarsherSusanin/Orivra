@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { readFile } from "node:fs/promises";
 import { createPostgresCommandRepository } from "@proofline/api/src/postgres";
+import { resolveDeploymentEnvironment } from "@proofline/api/src/deployment-secrets";
 import { isCanonicalUint256Decimal } from "@proofline/contracts";
 import { createWeb2JsonVerifierClient } from "@proofline/fdc-coston2";
 import { createLiveCoston2PipelinePorts } from "./live-runtime";
@@ -166,19 +167,23 @@ export async function runWorkerLoop(input: {
 export async function startProductionWorker(
   environment: Environment = process.env,
 ): Promise<void> {
+  const resolvedEnvironment = await resolveDeploymentEnvironment(
+    "worker",
+    environment,
+  );
   const pool = new Pool({
-    connectionString: required(environment, "DATABASE_URL"),
-    max: Number(environment.PROOFLINE_WORKER_DB_POOL_SIZE ?? 4),
+    connectionString: required(resolvedEnvironment, "DATABASE_URL"),
+    max: Number(resolvedEnvironment.PROOFLINE_WORKER_DB_POOL_SIZE ?? 4),
     idleTimeoutMillis: 30_000,
   });
   const verifier = createWeb2JsonVerifierClient({
     endpoint:
-      environment.PROOFLINE_VERIFIER_URL ??
+      resolvedEnvironment.PROOFLINE_VERIFIER_URL ??
       "https://fdc-verifiers-testnet.flare.network",
-    apiKey: required(environment, "PROOFLINE_VERIFIER_API_KEY"),
+    apiKey: required(resolvedEnvironment, "PROOFLINE_VERIFIER_API_KEY"),
   });
   const worker = createProductionWorker({
-    environment,
+    environment: resolvedEnvironment,
     pool,
     verifier,
   });

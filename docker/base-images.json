@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "platform": "linux/amd64",
+  "images": {
+    "node": {
+      "repository": "node",
+      "tag": "22.14.0-bookworm-slim",
+      "indexDigest": "sha256:1c18d9ab3af4585870b92e4dbc5cac5a0dc77dd13df1a5905cea89fc720eb05b",
+      "linuxAmd64Digest": "sha256:745403dc46b5ab4c998502b07a12cbf020cf2c30645427a68ec0718f02d647de"
+    },
+    "caddy": {
+      "repository": "caddy",
+      "tag": "2.10.2-alpine",
+      "indexDigest": "sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d",
+      "linuxAmd64Digest": "sha256:d8c17a862962def15cde69863a3a463f25a2664942eafd7bdbf050e9c3116b83"
+    },
+    "postgres": {
+      "repository": "postgres",
+      "tag": "17.6-alpine",
+      "indexDigest": "sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
+      "linuxAmd64Digest": "sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be"
+    }
+  }
+}

@@ -282,9 +282,11 @@ private S3-compatible DigitalOcean Spaces. Credential-free acceptance должн
 database backup или PITR plan.
 
 Эти release paths реализованы и герметично проверяются локально только в своей
-текущей executable части. В репозитории нет `.github/workflows`, настроенного
-merge queue, Docker VDS composition или production deployment. Hosting is not
-yet provisioned; ADR 0029 выбирает target, но не доказывает его доступность.
+текущей executable части. 027A добавляет credential-free base images,
+Compose/Caddy topology и bounded local smoke, но ещё не migration/readiness,
+release-ready VDS composition или production deployment. В репозитории нет
+`.github/workflows` или настроенного merge queue. Hosting is not yet
+provisioned; ADR 0029 выбирает target, но не доказывает его доступность.
 Credentials выдаются только после завершения credential-free 022–029A,
 единого full matrix и двух независимых PASS на одном tree hash. До этого hosted
 или deployed live Coston2 PASS не заявляется.

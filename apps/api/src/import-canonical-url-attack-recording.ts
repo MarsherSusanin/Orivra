@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { importCanonicalUrlAttackRecording } from "./canonical-url-attack-importer";
+import { resolveDeploymentEnvironment } from "./deployment-secrets";
 
 function recordingArgument(argv: readonly string[]): string {
   if (
@@ -15,15 +16,13 @@ function recordingArgument(argv: readonly string[]): string {
   return argv[1];
 }
 
-function requiredDatabaseUrl(environment: NodeJS.ProcessEnv): string {
-  const value = environment.DATABASE_URL?.trim();
-  if (!value) throw new Error("DATABASE_URL is required");
-  return value;
-}
-
-const pool = new Pool({ connectionString: requiredDatabaseUrl(process.env) });
-
+let pool: Pool | undefined;
 try {
+  const environment = await resolveDeploymentEnvironment(
+    "recording-importer",
+    process.env,
+  );
+  pool = new Pool({ connectionString: environment.DATABASE_URL });
   const result = await importCanonicalUrlAttackRecording({
     recordingPath: recordingArgument(process.argv.slice(2)),
     pool,
@@ -34,5 +33,5 @@ try {
   console.error("Canonical URL attack recording import failed");
   process.exitCode = 2;
 } finally {
-  await pool.end();
+  await pool?.end();
 }

@@ -1,0 +1,9 @@
+services:
+  caddy:
+    environment:
+      PROOFLINE_CADDY_SITE_ADDRESS: ":80"
+    ports: !override
+      - target: 80
+        published: ${PROOFLINE_QA_HTTP_PORT:?PROOFLINE_QA_HTTP_PORT is required}
+        host_ip: 127.0.0.1
+        protocol: tcp

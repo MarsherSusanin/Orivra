@@ -103,11 +103,10 @@ GET/HEAD deep routes return `index.html`; other methods fail without SPA
 fallback. It does not proxy `/api`, read credentials, list directories or make
 outbound requests.
 
-## Intentional RED
+## Production-author candidate
 
-The accepted parent has none of the deployment files, package scripts or
-secret adapter. Frozen tests therefore fail only because the following
-production surfaces are absent:
+The credential-free production surfaces are implemented and the following
+frozen contracts are GREEN:
 
 - `apps/api/test/slice027a-deployment-secrets.contract.test.ts`;
 - `apps/worker/test/slice027a-worker-deployment-boundary.contract.test.ts`;
@@ -115,13 +114,15 @@ production surfaces are absent:
 - `tests/deployment/slice027a-compose-caddy.contract.test.mjs`;
 - `tests/deployment/slice027a-docker-gates.contract.test.mjs`.
 
-The tests must not pull or build during RED. 027A3 tests freeze commands and
-scripts statically first; their real execution begins only after the GREEN
-implementation and controlled prefetch.
+The real Docker gate validates the static contracts before controlled prefetch,
+offline-repeat builds and the bounded local smoke. Candidate evidence is
+recorded in [Slice 027A GREEN](../evidence/slice-027a-green-credential-free-container-runtime.md).
+Independent Core and Product verification still remain required on one frozen
+tree hash.
 
 ## Acceptance
 
-### RED and nearest controls
+### Focused and nearest controls
 
 ```bash
 npm run typecheck
@@ -141,8 +142,8 @@ npm run build
 npm run test:sites
 ```
 
-RED records exact failures; a Docker build, pull or Compose start is forbidden
-in the RED wave.
+The historical RED failures remain in the RED evidence. Candidate commands
+above must now pass without weakening the frozen contracts.
 
 ### GREEN image and Docker gates
 

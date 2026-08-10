@@ -21,13 +21,14 @@ npm run dev
 
 По умолчанию Web обращается к `/api`. Для отдельного backend задайте `VITE_PROOFLINE_API_BASE_URL` в локальном окружении. Не коммитьте `.env` с credentials.
 
-Эта команда поднимает только Vite Web. Slice 027A freezes the future Docker
-files and gates under [ADR 0035](adr/0035-credential-free-container-runtime-boundary.md),
-but its RED parent still has no Docker Compose or one full-stack command.
-Persisted journey требует отдельно запущенных PostgreSQL, API и worker. Без API
-интерфейс обязан показывать честное configuration/network state, а не demo run.
+Эта команда поднимает только Vite Web. Slice 027A implements the credential-free
+Docker files and gates under [ADR 0035](adr/0035-credential-free-container-runtime-boundary.md),
+but its bounded QA command is not a full-stack readiness command: it starts no
+worker and performs no migration. Persisted journey требует отдельно запущенных
+PostgreSQL, API и worker. Без API интерфейс обязан показывать честное
+configuration/network state, а не demo run.
 
-### Выбранная VDS topology, ещё не реализованная
+### Выбранная VDS topology, частично реализованная локально
 
 [ADR 0029](adr/0029-digitalocean-vds-deployment.md) выбирает один
 DigitalOcean Droplet/VDS. Docker Compose должен запускать Web, API, worker и
@@ -74,9 +75,9 @@ worker не выполняют migration при собственном стар�
 
 `/healthz` является process-only liveness. `/readyz` проверяет database,
 verified schema version и worker heartbeat; stale heartbeat должен возвращать
-degraded readiness, даже если containers продолжают работать. Эти endpoints,
-Compose files и Docker images ещё не реализованы, поэтому этот раздел не
-является Docker, hosted или deployed PASS.
+degraded readiness, даже если containers продолжают работать. 027A Compose и
+image boundary реализованы, но эти endpoints и deployment-readiness contract
+ещё не реализованы, поэтому этот раздел не является hosted или deployed PASS.
 
 ### Slice 027A local container gate
 

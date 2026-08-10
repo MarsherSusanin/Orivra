@@ -6,7 +6,8 @@
   "main": "./dist/server.js",
   "scripts": {
     "build": "../../node_modules/.bin/esbuild src/server.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/server.js --external:pg",
-    "import:canonical-url-attack": "../../node_modules/.bin/esbuild src/import-canonical-url-attack-recording.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:solc --external:undici --external:@ethereumjs/common --external:@ethereumjs/util --external:@ethereumjs/vm --outfile=dist/import-canonical-url-attack-recording.js && node dist/import-canonical-url-attack-recording.js",
+    "build:import-canonical-url-attack": "../../node_modules/.bin/esbuild src/import-canonical-url-attack-recording.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:solc --external:undici --external:@ethereumjs/common --external:@ethereumjs/util --external:@ethereumjs/vm --outfile=dist/import-canonical-url-attack-recording.js",
+    "import:canonical-url-attack": "npm run build:import-canonical-url-attack && node dist/import-canonical-url-attack-recording.js",
     "start": "node dist/server.js"
   },
   "engines": {

@@ -16,6 +16,7 @@ import {
   replayCanonicalUrlAttackRecording,
 } from "@proofline/domain";
 import { Pool } from "pg";
+import { resolveDeploymentEnvironment } from "./deployment-secrets";
 import {
   createProoflineApi,
   type CanonicalUrlAttackDemoCache,
@@ -630,14 +631,20 @@ export function createProductionNodeServer(input: {
 export async function startProductionApi(
   environment: Environment = process.env,
 ): Promise<void> {
-  const recordingSha256 = parseCanonicalUrlAttackRecordingSelector(environment);
-  const initial = createProductionApi({ environment });
+  const resolvedEnvironment = await resolveDeploymentEnvironment(
+    "api",
+    environment,
+  );
+  const recordingSha256 = parseCanonicalUrlAttackRecordingSelector(
+    resolvedEnvironment,
+  );
+  const initial = createProductionApi({ environment: resolvedEnvironment });
   const canonicalUrlAttackDemo = await loadCanonicalUrlAttackDemoCache({
     pool: initial.pool,
     recordingSha256,
   });
   const production = createProductionApi({
-    environment,
+    environment: resolvedEnvironment,
     pool: initial.pool,
     canonicalUrlAttackDemo,
   });

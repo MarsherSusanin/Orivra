@@ -25,9 +25,9 @@ The product journey is delivered as independently frozen vertical slices:
 | 024B3 | Token-free canonical URL demo Web route and Sites deep route | Complete; independently verified, credential-free |
 | 025 | Template-led Composer | Complete; independently verified, credential-free |
 | 026 | Public product surface | Complete; independently verified, credential-free |
-| 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | RED frozen, credential-free |
-| 027A2 | Private Compose topology, exact Caddy `/api` routing and Web static runtime | RED frozen, credential-free |
-| 027A3 | Controlled offline-repeat image build and bounded local Docker smoke | RED frozen, credential-free |
+| 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | Production-author candidate, credential-free |
+| 027A2 | Private Compose topology, exact Caddy `/api` routing and Web static runtime | Production-author candidate, credential-free |
+| 027A3 | Controlled offline-repeat image build and bounded local Docker smoke | Production-author candidate, credential-free |
 | 027B | One-shot migrations, health/readiness, worker heartbeat and retention | Planned, credential-free |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
