@@ -153,10 +153,11 @@ contracts extend these files without weakening the accepted six boundaries:
 - `tests/deployment/slice027a-docker-gates.contract.test.mjs`.
 
 Both prior candidates' local Docker runs remain historical rejected evidence.
-The rejected [Slice 027A GREEN](../evidence/slice-027a-green-credential-free-container-runtime.md)
-records only what the production author ran on `464e797`; it is not a module
-PASS. A new production-author tree must make the frozen second corrective RED
-GREEN before Core and Product independently verify one new frozen tree hash.
+The [Slice 027A GREEN](../evidence/slice-027a-green-credential-free-container-runtime.md)
+preserves that rejection history and separately records the second corrective
+production-author result. Its frozen contracts are GREEN, but this is still not
+a module PASS before Core and Product independently verify one new frozen tree
+hash.
 
 ## Acceptance
 

@@ -85,10 +85,10 @@ ADR 0035 splits the credential-free container boundary into image/secret,
 topology/routing and real-Docker waves. The first candidate `20e8d998` is
 rejected. Its corrective replacement `464e797` is also rejected: production
 selected QA-only internal TLS instead of automatic public ACME, and setup
-failures could bypass temporary-secret or port-probe cleanup. The commands
-below remain the required gates only after the second corrective RED is GREEN
-and still require two independent reviews of one exact tree before module
-acceptance:
+failures could bypass temporary-secret or port-probe cleanup. The second
+corrective production-author result makes the focused contracts and local
+Docker gates GREEN, but still requires two independent reviews of one exact
+tree before module acceptance:
 
 ```bash
 npm run test:docker:static

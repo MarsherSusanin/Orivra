@@ -6,10 +6,15 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import {
+  assertExactTlsPortAvailable,
+  runQaSmokeLifecycle,
+} from "./docker-smoke-orchestration.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const project = `proofline-027a-q${process.pid}-${randomBytes(4).toString("hex")}`;
 if (!/^proofline-027a-[a-z0-9-]+$/.test(project)) throw new Error("Invalid QA project");
+const portReservation = `${project}-port-check`;
 const PROOFLINE_PUBLIC_ORIGIN = "https://127.0.0.1";
 const ALLOW_ORIGIN_HEADER = "Access-Control-Allow-Origin";
 const requestLedger = [];
@@ -48,41 +53,44 @@ function compose(arguments_, environment, capture = false) {
   ], environment, capture);
 }
 
-async function assertTlsPortAvailable() {
+function bindExactTlsPort() {
   const server = createServer();
-  try {
-    await new Promise((resolvePromise, reject) => {
-      server.once("error", reject);
-      server.listen(443, "127.0.0.1", resolvePromise);
+  return new Promise((resolvePromise, reject) => {
+    server.once("error", reject);
+    server.listen(443, "127.0.0.1", () => {
+      server.close((cause) => cause ? reject(cause) : resolvePromise());
     });
-    await new Promise((resolvePromise, reject) =>
-      server.close((cause) => cause ? reject(cause) : resolvePromise()),
-    );
-  } catch (cause) {
-    if (cause?.code !== "EACCES") throw cause;
-    const reservation = `${project}-port-check`;
-    let started = false;
-    try {
-      docker([
-        "run",
-        "--detach",
-        "--rm",
-        "--pull",
-        "never",
-        "--name",
-        reservation,
-        "--publish",
-        "127.0.0.1:443:443",
-        "--entrypoint",
-        "/bin/sh",
-        "proofline/caddy:027a-qa",
-        "-c",
-        "sleep 10",
-      ], process.env, true);
-      started = true;
-    } finally {
-      if (started) docker(["rm", "--force", reservation], process.env, true);
-    }
+  });
+}
+
+function startDockerReservation() {
+  docker([
+    "run",
+    "--detach",
+    "--rm",
+    "--pull",
+    "never",
+    "--name",
+    portReservation,
+    "--publish",
+    "127.0.0.1:443:443",
+    "--entrypoint",
+    "/bin/sh",
+    "proofline/caddy:027a-qa",
+    "-c",
+    "sleep 10",
+  ], process.env, true);
+}
+
+function removeDockerReservation() {
+  const result = spawnSync("docker", ["rm", "--force", portReservation], {
+    cwd: root,
+    encoding: "utf8",
+    env: process.env,
+    stdio: "pipe",
+  });
+  if (result.status !== 0 && !/no such container/i.test(result.stderr ?? "")) {
+    throw new Error("QA Docker port reservation removal failed");
   }
 }
 
@@ -130,33 +138,36 @@ async function waitFor(path, expectedStatus) {
   throw new Error(`QA route did not reach status ${expectedStatus} (${lastOutcome})`);
 }
 
-await assertTlsPortAvailable();
-const temporaryDirectory = await mkdtemp(join(tmpdir(), `${project}-`));
-const password = randomBytes(24).toString("hex");
-const secretValues = {
-  apiDatabase: `postgres://proofline:${password}@postgres:5432/proofline`,
-  apiDigest: randomBytes(32).toString("hex"),
-  postgresPassword: password,
-};
-const secretPaths = {};
-for (const [name, value] of Object.entries(secretValues)) {
-  const path = join(temporaryDirectory, name);
-  await writeFile(path, value, { mode: 0o600 });
-  secretPaths[name] = path;
+async function prepareTemporaryDirectory(temporaryDirectory) {
+  const password = randomBytes(24).toString("hex");
+  const secretValues = {
+    apiDatabase: `postgres://proofline:${password}@postgres:5432/proofline`,
+    apiDigest: randomBytes(32).toString("hex"),
+    postgresPassword: password,
+  };
+  const secretPaths = {};
+  for (const [name, value] of Object.entries(secretValues)) {
+    const path = join(temporaryDirectory, name);
+    await writeFile(path, value, { mode: 0o600 });
+    secretPaths[name] = path;
+  }
+  return {
+    environment: {
+      ...process.env,
+      PROOFLINE_CADDY_IMAGE: "proofline/caddy:027a-qa",
+      PROOFLINE_WEB_IMAGE: "proofline/web:027a-qa",
+      PROOFLINE_API_IMAGE: "proofline/api:027a-qa",
+      PROOFLINE_WORKER_IMAGE: "proofline/worker:027a-qa",
+      PROOFLINE_PUBLIC_ORIGIN,
+      PROOFLINE_API_DATABASE_URL_FILE: secretPaths.apiDatabase,
+      PROOFLINE_API_TOKEN_DIGEST_KEY_FILE: secretPaths.apiDigest,
+      PROOFLINE_POSTGRES_PASSWORD_FILE: secretPaths.postgresPassword,
+    },
+  };
 }
-const environment = {
-  ...process.env,
-  PROOFLINE_CADDY_IMAGE: "proofline/caddy:027a-qa",
-  PROOFLINE_WEB_IMAGE: "proofline/web:027a-qa",
-  PROOFLINE_API_IMAGE: "proofline/api:027a-qa",
-  PROOFLINE_WORKER_IMAGE: "proofline/worker:027a-qa",
-  PROOFLINE_PUBLIC_ORIGIN,
-  PROOFLINE_API_DATABASE_URL_FILE: secretPaths.apiDatabase,
-  PROOFLINE_API_TOKEN_DIGEST_KEY_FILE: secretPaths.apiDigest,
-  PROOFLINE_POSTGRES_PASSWORD_FILE: secretPaths.postgresPassword,
-};
 
-try {
+async function runSmoke({ environment }) {
+  try {
   compose(["up", "--detach", "--pull", "never", "--no-build", "caddy", "web", "postgres", "api"], environment);
   const ps = compose(["ps", "--format", "json"], environment, true);
   const entries = ps.trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
@@ -265,23 +276,22 @@ try {
       throw new Error("Runner request reached a forbidden host");
     }
   }
-} catch (cause) {
-  try {
-    compose(["ps"], environment);
-    compose([
-      "logs",
-      "--no-color",
-      "--tail",
-      "80",
-      "caddy",
-      "web",
-      "postgres",
-      "api",
-    ], environment);
-  } catch {}
-  throw cause;
-} finally {
-  try {
+  } catch (cause) {
+    try {
+      compose(["ps"], environment);
+      compose([
+        "logs",
+        "--no-color",
+        "--tail",
+        "80",
+        "caddy",
+        "web",
+        "postgres",
+        "api",
+      ], environment);
+    } catch {}
+    throw cause;
+  } finally {
     compose(["down", "--volumes", "--remove-orphans"], environment);
     const leftovers = [
       docker(["ps", "-aq", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
@@ -289,7 +299,18 @@ try {
       docker(["volume", "ls", "-q", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
     ].join("").trim();
     if (leftovers) throw new Error("Scoped QA Docker cleanup is incomplete");
-  } finally {
-    await rm(temporaryDirectory, { recursive: true, force: true });
   }
 }
+
+await assertExactTlsPortAvailable({
+  bindExactTlsPort,
+  startDockerReservation,
+  removeDockerReservation,
+});
+await runQaSmokeLifecycle({
+  createTemporaryDirectory: () => mkdtemp(join(tmpdir(), `${project}-`)),
+  prepareTemporaryDirectory,
+  runSmoke,
+  removeTemporaryDirectory: (temporaryDirectory) =>
+    rm(temporaryDirectory, { recursive: true, force: true }),
+});

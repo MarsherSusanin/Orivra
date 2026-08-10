@@ -1,14 +1,14 @@
-# Slice 027A corrective GREEN — credential-free container runtime
+# Slice 027A second corrective GREEN — credential-free container runtime
 
-Status: rejected production-author evidence; both independent verifiers FAIL.
+Status: production-author GREEN; independent Core and Product verification pending.
 
 Date: 2026-08-10 (Asia/Vladivostok)
 
 Role: production implementer; this author cannot be either verifier.
 
-Corrective RED commit: `5707460a8dc04edfd288fad1650a6856e433751f`
+Second corrective RED commit: `489f0d7dc6996b94f980e91c797b068837170ded`
 
-Corrective RED tree: `7b39be7d614bfe3b1e1b9caf15e14e0a69c16f9e`
+Second corrective RED tree: `2a57ae053061750ecc36caee3eaff5dde6ef648e`
 
 Rejected production candidate commit:
 `464e797ed630a8dfff87e867ff42daf5f0d19624`
@@ -22,17 +22,23 @@ Architecture decision: [ADR 0035](../adr/0035-credential-free-container-runtime-
 
 Slice contract: [027A](../slices/027a-credential-free-container-runtime.md)
 
-## Corrective outcome
+## Second corrective outcome
 
-This section records historical production-author results, not accepted GREEN.
-Core and Product independently returned FAIL on the exact candidate above.
-Both found that the shared production `deploy/caddy/Caddyfile` unconditionally
-set `default_sni 127.0.0.1` and `tls internal`, preventing a VDS hostname from
-using Caddy automatic public ACME. Core additionally found that smoke secret
-files were created before the only cleanup `try/finally`, and port-probe
-cleanup was conditional on an unambiguous Docker start result. Product found
-no additional blocker before the coordinator rejected the candidate. No
-Docker/build/coverage gate from either verifier is claimed after that blocker.
+The production author made the six frozen second-corrective RED failures GREEN
+without changing any frozen test. Production `deploy/caddy/Caddyfile` now
+contains only the public routing site and leaves certificate issuance to Caddy
+automatic HTTPS/ACME. Exact `deploy/caddy/Caddyfile.qa` alone owns loopback
+`default_sni` and internal TLS; the QA overlay selects it through one read-only
+bind mount while production base/runtime composition does not.
+
+The import-pure `scripts/docker-smoke-orchestration.mjs` owns the executable
+temporary-directory and port-probe lifecycle. Its cleanup boundary begins as
+soon as `mkdtemp` resolves, before any secret write or Compose setup, and runs
+after setup failure, pre-Compose failure, smoke failure and success. The exact
+EACCES-only Docker port reservation always attempts named removal after both a
+successful start and an ambiguous Docker failure. Not-found cleanup is
+harmless, the original start failure remains authoritative and EADDRINUSE
+never reaches Docker fallback. The main smoke consumes these tested seams.
 
 The replacement resolves all six findings that rejected commit `20e8d998` / tree
 `9b2d7a5`:
@@ -87,7 +93,7 @@ npx vitest run \
 
 - typecheck: PASS;
 - exact secret/worker contract: 2 files, 22/22 PASS;
-- deployment image/Compose/Caddy/runner contract: 37/37 PASS;
+- deployment image/Compose/Caddy/runner contract: 40/40 PASS;
 - affected API/importer/worker matrix: 9 files, 79/79 PASS;
 - zero skipped or pending cases in these focused gates.
 
@@ -126,32 +132,42 @@ frozen contract.
 ## Controlled prefetch and offline Docker evidence
 
 ```sh
-npm run docker:prefetch
 npm run test:docker
+docker run --rm --pull never --network none --platform linux/amd64 \
+  --env PROOFLINE_PUBLIC_ORIGIN=https://proofline.example \
+  proofline/caddy:027a-qa \
+  caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
 
-The accepted prefetch verified the exact three locked official tag/index and
-Linux/amd64 child identities, pulled only those child digests and prepared the
-lockfile dependency cache. Every registry-capable child used the isolated CLI
-configuration exercised by the fake-runner success and failure tests. A first
-diagnostic stopped before registry inspection because the isolated HOME hid
-Docker Desktop's user-scoped Buildx plugin; the final implementation links only
-the trusted system-installed plugin executable into the fresh CLI directory.
-All temporary CLI directories were removed.
+Controlled prefetch was deliberately not repeated in this second corrective
+wave: the base-image lock, Dockerfiles, package lock and dependency inputs were
+unchanged, and the previously prepared local cache remained available. The
+40/40 static gate re-exercised the import-pure fake-runner success/failure
+contracts for fresh empty-auth Docker CLI configuration and cleanup. No
+controlled prefetch or explicit Docker pull command ran in this wave.
 
 The final `test:docker` performed two consecutive Linux/amd64 Web, API, worker
 and Caddy builds with BuildKit `--network=none`, npm offline and `--pull=false`.
-It then used unique project `proofline-027a-q80526-d01f4703` for the exact local
-HTTPS smoke. No registry access or pull occurred in this gate.
+It then used unique project `proofline-027a-q9875-18274ca3` for the exact local
+HTTPS smoke. Every build used `--pull=false`; the smoke used only exact
+runner-owned local tags.
 
 Ordinary macOS Node cannot reserve privileged host port 443 directly. The
 runner still attempts exact `listen(443, "127.0.0.1")`; on that single EACCES
 case it asks the same Docker daemon that will publish Compose to reserve exact
 `127.0.0.1:443`, using the already-built Caddy image, `--pull never` and an
 exact disposable name. An occupied or Docker-denied binding fails; the
-reservation is always removed before Compose. Other bind errors never fall
-back. Caddy's exact IP `default_sni` lets an ordinary HTTPS client use the IP
-origin without a deprecated IP-SNI override.
+reservation removal is attempted before Compose even when the Docker start
+result is ambiguous. Other bind errors never fall back. The QA-only Caddyfile's
+exact IP `default_sni` lets an ordinary HTTPS client use the IP origin without
+a deprecated IP-SNI override.
+
+The already-built pinned Caddy image also validated the production Caddyfile
+under `--network none`, `--pull never` and the public
+`https://proofline.example` origin. Caddy reported valid configuration,
+automatic HTTPS and HTTP-to-HTTPS redirects. One diagnostic invocation omitted
+the `caddy` executable and failed before configuration evaluation; the corrected
+command passed and its disposable container was removed.
 
 Live inspection proved:
 
@@ -171,16 +187,13 @@ Live inspection proved:
 
 The final `down --volumes --remove-orphans` removed four containers, four
 networks, three volumes and the temporary secret directory. Project-label
-queries found zero remaining containers, networks or volumes. Failed
-diagnostic iterations used separate project identities and received the same
-scoped cleanup; one empty preflight directory created before the first port
-failure was explicitly removed and the runner ordering was corrected.
+queries found zero remaining containers, port reservations, networks, volumes
+or matching temporary directories for the exact project.
 
 ## Deployment truth
 
-This is rejected historical credential-free local packaging and same-origin
-routing evidence from the production author. It is not an independent module
-PASS and not a unified
+This is credential-free local packaging and same-origin routing evidence from
+the production author. It is not an independent module PASS and not a unified
 MLP candidate freeze. It does not prove migration, schema readiness,
 `/healthz`, `/readyz`, deployment worker heartbeat, retention, PITR, OCI
 archives, registry publication, VDS staging, hosting, production deployment or

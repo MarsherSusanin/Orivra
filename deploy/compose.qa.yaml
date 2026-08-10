@@ -1,5 +1,10 @@
 services:
   caddy:
+    volumes:
+      - type: bind
+        source: ./deploy/caddy/Caddyfile.qa
+        target: /etc/caddy/Caddyfile
+        read_only: true
     ports: !override
       - target: 443
         published: 443

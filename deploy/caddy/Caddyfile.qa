@@ -1,8 +1,11 @@
 {
 	admin off
+	default_sni 127.0.0.1
 }
 
 {$PROOFLINE_PUBLIC_ORIGIN} {
+	tls internal
+
 	@api path /api /api/*
 	handle @api {
 		uri strip_prefix /api
