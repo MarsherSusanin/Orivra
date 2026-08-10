@@ -318,6 +318,25 @@ RED and 52 controls PASS. The unchanged 027A/027B/027R neighbor set is 45/45
 PASS and Sites compatibility is 36/36 PASS. No Docker daemon, network,
 production, dependency or lockfile operation was run.
 
+### Receipt-size harness correction
+
+On base `e12ebcdc9c0482a41a7ed629cb031581550d5180` / tree
+`85f54db81528ade390c3cc1a8b5b190aac03caf2`, review found that the security
+fixture created `receipt.v1.json` with mode `0444` and then attempted to mutate
+it in place for the receipt-size negative. On an enforcing filesystem that
+short-circuits with `EACCES` before the production boundary, so it is not valid
+security evidence. The fixture now explicitly grants its owner temporary write
+permission, writes the mismatched size, restores exact `0444` mode and only
+then invokes the production orchestration. The negative therefore remains
+causal and must fail with `RECOVERY_WAL_G_INPUT_INVALID` before one Docker call;
+all other WAL-G security contracts are unchanged.
+
+The corrected exact security file is 15/15 intentional RED with no harness
+exception, and typecheck PASS. The complete Docker static set remains 99 cases
+with 47 intentional RED and 52 controls PASS; the unchanged 027A/027B/027R
+neighbor set is 45/45 PASS and Sites compatibility is 36/36 PASS. No Docker
+daemon, network, production, dependency or lockfile operation was run.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;

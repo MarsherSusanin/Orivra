@@ -247,11 +247,14 @@ test("rejects symlink, non-regular, wrong-mode, empty and receipt-size WAL-G inp
         await writeFile(binaryPath, Buffer.alloc(0));
         await chmod(binaryPath, 0o555);
       } else {
-        await writeFile(join(context, "receipt.v1.json"), canonicalJson({
+        const receiptPath = join(context, "receipt.v1.json");
+        await chmod(receiptPath, 0o600);
+        await writeFile(receiptPath, canonicalJson({
           version: "1",
           binarySize: trusted.length + 1,
           binarySha256: sha256(trusted),
-        }), { mode: 0o444 });
+        }));
+        await chmod(receiptPath, 0o444);
       }
       let dockerCalls = 0;
       await assert.rejects(module.runOfflineDockerBuilds({
