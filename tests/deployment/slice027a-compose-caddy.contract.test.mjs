@@ -28,6 +28,8 @@ const runtimeComposeEnvironment = {
   ...baseComposeEnvironment,
   PROOFLINE_API_IMAGE: immutable("api"),
   PROOFLINE_WORKER_IMAGE: immutable("worker"),
+  PROOFLINE_DEPLOYMENT_ID: `deployment_${"b".repeat(64)}`,
+  PROOFLINE_RELEASE_TREE_SHA: "c".repeat(40),
   PROOFLINE_API_DATABASE_URL_FILE: "/tmp/proofline-api-database-url",
   PROOFLINE_API_TOKEN_DIGEST_KEY_FILE: "/tmp/proofline-api-token-digest-key",
   PROOFLINE_WORKER_DATABASE_URL_FILE: "/tmp/proofline-worker-database-url",

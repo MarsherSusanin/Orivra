@@ -190,6 +190,18 @@ The nearest image and Docker-gate controls are 2 files / 23 cases, all PASS;
 Sites compatibility is 36/36 PASS. All runs used the clean B2 production
 checkpoint and did not build, pull, start or contact Docker or the network.
 
+The follow-up renderer correction supplies exact valid non-secret
+`PROOFLINE_DEPLOYMENT_ID` and `PROOFLINE_RELEASE_TREE_SHA` values to the retained
+027A combined-runtime environment. It keeps the new production interpolation
+fail closed with no default while allowing the compatibility test to reach the
+frozen topology assertions. The separate 027B runtime renderer already supplied
+the same bounded identities and needed no correction.
+
+After that correction, typecheck remains PASS; the two-file Compose focus
+remains exactly 17 intentional RED and 10 controls PASS, the nearest deployment
+controls remain 23/23 PASS and Sites remains 36/36 PASS. No Docker process,
+build, pull or network operation was used.
+
 ## GREEN authority still required
 
 Implementation must make the frozen contracts GREEN without adopting legacy
