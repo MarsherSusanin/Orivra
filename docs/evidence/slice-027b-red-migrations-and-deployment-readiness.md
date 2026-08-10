@@ -282,3 +282,72 @@ commit/tree.
 
 027C PITR/MinIO, 028 release publication and 029 deployment/product gates are
 outside this evidence.
+
+## Second corrective RED — all live authority must be eager and deployable
+
+Both independent verifiers rejected corrective production-author candidate
+`a6fb72975440320421b0867f83fb9f7912294947` / tree
+`2a1dfc837f5e11a66464c6c71a5e5931bc9bbd3b`. The candidate moved heartbeat
+after the visible `createProductionWorker` call, but retained three command-time
+configuration authorities after the heartbeat: replay bundle path/open,
+preflight-report path/open, and safe-consumer address parsing. A worker could
+therefore publish a current row and fail its first replay or safe-consumer
+command. Its fixed production Compose overlay also supplied only the three
+worker secret files plus deployment identity; it omitted the required relayer
+policy, safe-consumer and replay-file wiring, so the selected immutable runtime
+could not start an actual worker.
+
+Product found both P1s during source verification and stopped before Docker or
+build. Core independently reproduced both from the exact source and fixed
+Compose wrapper, then issued formal FAIL on the same clean commit/tree. Before
+the findings were confirmed, Core had completed typecheck, 119 focused controls
+with four explicitly PostgreSQL-gated skips, 53 nearest controls, 27 deployment
+static controls, contracts/domain 524 cases at 100% statements/branches/
+functions/lines, backend 1,151 cases with 41 expected skips at 91.62% lines and
+86.78% branches, and real PostgreSQL 161/161 with zero skip. Those local results
+do not override the P1s. Core and Product intentionally made no Docker, build,
+Sites, hosted, deployed or live-worker acceptance claim for the rejected tree.
+
+The refrozen boundary is two-stage and entirely pre-authority. Pure
+`parseWorkerRuntimeConfig` resolves exact database/login, deployment/tree,
+policy, non-zero safe consumer, strict endpoints and bounded tuning, derives an
+account without retaining the raw key, and returns a frozen typed configuration.
+Async `loadWorkerReplayEvidence` opens the two absolute files once with
+read-only/no-follow/nonblocking flags, applies the 2,200,000/65,536 byte limits,
+fatal UTF-8, canonical/checksum/terminal-PASS validation and exact public-report
+binding, then freezes canonical strings and their digests. Both complete before
+Pool creation and schema verification. Repository, live ports and command
+handlers receive typed immutable slices only and have no environment or
+filesystem authority. Every failure is the fixed non-leaking
+`WORKER_RUNTIME_CONFIGURATION_INVALID` error and creates no Pool, heartbeat,
+claim or network effect.
+
+Database URL authority is deliberately separate from the accepted generic
+secret XOR/file reader. Shared pure `parseExactApplicationDatabaseUrl` runs
+after secret resolution and before Pool construction for API, worker,
+recording importer and migrator. It requires the exact decoded application
+login on `postgres:5432/proofline`, a non-empty password and no query/fragment;
+swapped, administrator or malformed authority returns only the existing fixed
+deployment-secret configuration error. The role-bootstrap full-set validation
+remains unchanged.
+
+Production Compose must require the fee cap, balance floor, daily quota,
+non-zero safe-consumer address and both host replay paths. It fixes container
+paths below `/run/proofline/replay`, uses long read-only binds with
+`create_host_path: false`, and retains exactly three Docker secrets. Optional
+strict endpoints and numeric tuning use the frozen defaults. QA may provide
+accepted recorded fixtures but still does not start worker.
+
+This corrective run is intentionally RED on the rejected production
+tree. Typecheck is PASS. The expanded worker/DSN/downstream compatibility focus
+is 7 files / 86 cases: 62 semantic RED and 24 controls PASS. The rendered
+deployment focus is 29 cases: exactly 2 semantic RED and 27 controls PASS. The
+REDs identify the absent typed parser/loader/shared URL parser, post-authority
+environment/filesystem reads, incomplete Compose configuration/mounts, and the
+retained downstream tests now requiring typed immutable input. A directory
+fixture initially targeted a child of the bundle file and produced `ENOTDIR`;
+it was corrected before evidence to use a sibling directory and thereafter
+failed only on the intended missing loader. Nine unchanged nearest API/worker
+files remain 113/113 PASS, and Sites compatibility remains 36/36 PASS. No
+production, dependency, migration, Docker, provider or network change is part
+of this RED wave.

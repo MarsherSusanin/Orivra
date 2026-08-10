@@ -24,15 +24,26 @@ describe("Slice 004 production worker bootstrap", () => {
     const repository = { claimNextCommand: vi.fn() };
     const createPipelinePorts = vi.fn(() => pipelinePorts);
     const createRepository = vi.fn(() => repository);
-    const environment = {
-      NODE_ENV: "production",
-      DATABASE_URL: "postgres://proofline.invalid/proofline",
-      PROOFLINE_VERIFIER_API_KEY: "verifier-test-key",
+    const runtimeConfig = {
+      maxAttempts: 8,
+      leaseHeartbeatMs: 10_000,
+      relayerPolicy: {
+        globalFeeCapWei: 20_000n,
+        balanceFloorWei: 1_000n,
+        dailyProjectQuota: 4,
+      },
+    };
+    const replayEvidence = {
+      bundleCanonicalJson: '{"version":"1"}',
+      bundleSha256: `sha256:${"a".repeat(64)}`,
+      preflightReportCanonicalJson: '{"version":"1"}',
+      preflightReportSha256: `sha256:${"b".repeat(64)}`,
     };
     const verifier = { prepareRequest: vi.fn() };
 
     const worker = createProductionWorker({
-      environment,
+      runtimeConfig,
+      replayEvidence,
       pool: { end: vi.fn() },
       verifier,
       createPipelinePorts,
@@ -43,7 +54,7 @@ describe("Slice 004 production worker bootstrap", () => {
 
     expect(worker).toEqual(expect.objectContaining({ processOne: expect.any(Function) }));
     expect(createPipelinePorts).toHaveBeenCalledExactlyOnceWith({
-      environment,
+      runtimeConfig,
       verifier,
     });
     expect(createRepository).toHaveBeenCalledOnce();

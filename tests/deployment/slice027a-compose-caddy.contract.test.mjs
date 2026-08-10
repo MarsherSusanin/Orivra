@@ -35,6 +35,13 @@ const runtimeComposeEnvironment = {
   PROOFLINE_WORKER_DATABASE_URL_FILE: "/tmp/proofline-worker-database-url",
   PROOFLINE_WORKER_VERIFIER_API_KEY_FILE: "/tmp/proofline-worker-verifier-key",
   PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE: "/tmp/proofline-worker-private-key",
+  PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
+  PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
+  PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
+  PROOFLINE_SAFE_CONSUMER_ADDRESS: "0x5555555555555555555555555555555555555555",
+  PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/proofline-worker-replay-bundle.json",
+  PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
+    "/tmp/proofline-worker-replay-preflight-report.json",
   PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE: "/tmp/proofline-postgres-admin-database-url",
   PROOFLINE_MIGRATOR_DATABASE_URL_FILE: "/tmp/proofline-migrator-database-url",
   PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE: "/tmp/proofline-recording-importer-database-url",

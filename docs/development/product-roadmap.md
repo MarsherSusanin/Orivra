@@ -28,9 +28,9 @@ The product journey is delivered as independently frozen vertical slices:
 | 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | Complete; independently verified, credential-free |
 | 027A2 | Split private Compose topology, production ACME Caddy and QA-only internal TLS | Complete; independently verified, credential-free |
 | 027A3 | CLI-isolated prefetch, offline-repeat build and exact HTTPS local smoke | Complete; independently verified, credential-free |
-| 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Corrective production-author candidate GREEN; independent verification pending |
-| 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Corrective production-author candidate GREEN; independent verification pending |
-| 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Corrective production-author candidate GREEN; independent verification pending |
+| 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Corrective RED refrozen after rejected candidate `a6fb729` |
+| 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Corrective RED refrozen: all config/replay authority must precede Pool and heartbeat |
+| 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Corrective RED refrozen: complete fixed worker configuration/mount wiring required |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |

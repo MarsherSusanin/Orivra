@@ -27,6 +27,13 @@ const environment = {
   PROOFLINE_WORKER_DATABASE_URL_FILE: "/tmp/worker-database-url",
   PROOFLINE_WORKER_VERIFIER_API_KEY_FILE: "/tmp/worker-verifier-key",
   PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE: "/tmp/worker-private-key",
+  PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
+  PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
+  PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
+  PROOFLINE_SAFE_CONSUMER_ADDRESS: "0x5555555555555555555555555555555555555555",
+  PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/worker-replay-bundle.json",
+  PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
+    "/tmp/worker-replay-preflight-report.json",
   PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE: "/tmp/importer-database-url",
   PROOFLINE_POSTGRES_PASSWORD_FILE: "/tmp/postgres-password",
 };
@@ -156,6 +163,87 @@ test("passes exact nonsecret deployment/tree identity to API and worker only", (
   }
   for (const name of ["caddy", "web", "postgres", "db-role-bootstrap", "migrator"]) {
     assert.equal(services[name]?.environment?.PROOFLINE_DEPLOYMENT_ID, undefined);
+  }
+});
+
+test("passes one complete typed worker configuration and two read-only replay inputs", () => {
+  const worker = rendered.model.services?.worker;
+  assert.ok(worker);
+  assert.deepEqual(worker.environment, {
+    DATABASE_URL_FILE: "/run/secrets/worker_database_url",
+    PROOFLINE_COSTON2_DA_URL: "https://ctn2-data-availability.flare.network",
+    PROOFLINE_COSTON2_PRIVATE_KEY_FILE: "/run/secrets/worker_coston2_private_key",
+    PROOFLINE_COSTON2_RPC_URL: "https://coston2-api.flare.network/ext/C/rpc",
+    PROOFLINE_DA_TIMEOUT_MS: "15000",
+    PROOFLINE_DEPLOYMENT_ID: environment.PROOFLINE_DEPLOYMENT_ID,
+    PROOFLINE_RECEIPT_POLL_TIMEOUT_MS: "25000",
+    PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: environment.PROOFLINE_RELAYER_BALANCE_FLOOR_WEI,
+    PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: environment.PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA,
+    PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: environment.PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI,
+    PROOFLINE_RELEASE_TREE_SHA: environment.PROOFLINE_RELEASE_TREE_SHA,
+    PROOFLINE_REPLAY_BUNDLE_PATH: "/run/proofline/replay/bundle.json",
+    PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH:
+      "/run/proofline/replay/preflight-report.json",
+    PROOFLINE_SAFE_CONSUMER_ADDRESS: environment.PROOFLINE_SAFE_CONSUMER_ADDRESS,
+    PROOFLINE_VERIFIER_API_KEY_FILE: "/run/secrets/worker_verifier_api_key",
+    PROOFLINE_VERIFIER_URL: "https://fdc-verifiers-testnet.flare.network",
+    PROOFLINE_WORKER_DB_POOL_SIZE: "4",
+    PROOFLINE_WORKER_LEASE_HEARTBEAT_MS: "10000",
+    PROOFLINE_WORKER_MAX_ATTEMPTS: "8",
+  });
+  const replayMounts = (worker.volumes ?? [])
+    .filter((mount) => mount.type === "bind")
+    .sort((left, right) => String(left.target).localeCompare(String(right.target)));
+  assert.deepEqual(replayMounts, [
+    {
+      type: "bind",
+      source: environment.PROOFLINE_WORKER_REPLAY_BUNDLE_FILE,
+      target: "/run/proofline/replay/bundle.json",
+      read_only: true,
+      bind: { create_host_path: false },
+    },
+    {
+      type: "bind",
+      source: environment.PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE,
+      target: "/run/proofline/replay/preflight-report.json",
+      read_only: true,
+      bind: { create_host_path: false },
+    },
+  ]);
+  assert.deepEqual(secretTargets(worker), [
+    "worker_coston2_private_key",
+    "worker_database_url",
+    "worker_verifier_api_key",
+  ]);
+});
+
+test("fails render when any required worker policy, address or host replay file is absent", () => {
+  for (const name of [
+    "PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI",
+    "PROOFLINE_RELAYER_BALANCE_FLOOR_WEI",
+    "PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA",
+    "PROOFLINE_SAFE_CONSUMER_ADDRESS",
+    "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
+    "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",
+  ]) {
+    const candidate = { ...environment };
+    delete candidate[name];
+    const result = spawnSync(
+      "docker",
+      [
+        "compose",
+        "--file",
+        resolve(root, "compose.yaml"),
+        "--file",
+        runtimePath,
+        "config",
+        "--format",
+        "json",
+      ],
+      { cwd: root, encoding: "utf8", env: candidate },
+    );
+    assert.notEqual(result.status, 0, `${name} must fail before Compose effects`);
+    assert.match(result.stderr, new RegExp(name));
   }
 });
 

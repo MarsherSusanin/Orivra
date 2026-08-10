@@ -122,6 +122,19 @@ application token/key. Public access remains revoked. Role bootstrap is
 idempotent, password rotation is explicit, and every error is bounded and
 redacted.
 
+Secret-file resolution remains a bounded XOR/file-byte reader and does not
+turn an arbitrary database string into application authority. Immediately
+after resolution, the shared pure `parseExactApplicationDatabaseUrl` requires
+`postgres://`, a decoded exact application login, a non-empty password, host
+`postgres`, port `5432`, database `/proofline`, and no query or fragment. API,
+worker, recording importer and migration runner respectively require
+`proofline_api_login`, `proofline_worker_login`,
+`proofline_recording_importer_login` and `proofline_migrator_login` before a
+Pool or other effect. Swapped, administrator or other application credentials
+fail with the fixed redacted deployment-configuration error. Role bootstrap
+retains its existing validation of the administrator plus all four application
+URLs.
+
 The order is PostgreSQL engine healthy → role bootstrap completed successfully
 → migration completed successfully → API and worker startup. API and worker
 never apply migrations implicitly.
@@ -130,8 +143,10 @@ never apply migrations implicitly.
 
 Both application processes verify exact schema version 10 and exact migration
 ledger before ordinary work. API performs this gate before binding its socket.
-Worker performs it after all live deployment secrets/configuration have been
-validated but before creating a deployment heartbeat or claiming a command.
+Before the worker creates even its Pool, it resolves deployment secrets, parses
+the complete typed runtime configuration and loads the exact replay evidence.
+Only then does it create the Pool and perform the schema gate; heartbeat and
+claims remain later still.
 Mismatch, unreachable database or unverified history fails startup with a
 bounded configuration error and no listen, claim or external effect.
 
@@ -174,13 +189,38 @@ worker_instance_id)`. The actual production worker alone writes
 its heartbeat, and only after live configuration and schema verification have
 passed. Timestamps come from the PostgreSQL clock.
 
-The startup order is exact: resolve every deployment secret and basic process
-input, create the Pool and verify the exact schema, fully construct and validate
-the production repository, relayer policy and live pipeline, install shutdown
-coordination, then insert the heartbeat immediately before entering the claim
-loop. Merely passing the schema gate is not heartbeat authority. If any
-post-schema composition step fails, the worker closes the Pool without inserting
-a heartbeat; shutdown may mark a row stopped only when heartbeat start actually
+The startup order is exact: resolve every deployment secret; call pure
+`parseWorkerRuntimeConfig`; call async `loadWorkerReplayEvidence`; create the
+Pool and verify the exact schema; construct the production repository and live
+pipeline only from immutable typed configuration slices; install shutdown
+coordination; then insert the heartbeat immediately before entering the claim
+loop. Downstream worker and live-port factories receive no `Environment`, token
+map or filesystem path authority.
+
+The parser requires the exact worker database role, deployment/tree identity,
+canonical uint256 fee cap and balance floor, positive daily quota, non-zero
+safe-consumer address and absolute replay paths. It derives the relayer account
+eagerly and discards the raw private key. Optional verifier, RPC and DA URLs are
+strict HTTPS authorities on default port 443 with no userinfo, query or
+fragment; verifier and DA are root-only while RPC may have a path. Defaults are
+the official verifier, Coston2 RPC and Coston2 DA endpoints. Exact bounded
+defaults/ranges are receipt timeout `25000` and DA timeout `15000` with maximum
+`30000`, Pool size `4` in `1..32`, attempts `8` in `1..100`, and command-lease
+heartbeat `10000` in `1000..29000`. Chain `114` and registry
+`0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019` are fixed. Every parse/load error
+is only `WORKER_RUNTIME_CONFIGURATION_INVALID` / `Worker runtime configuration
+is invalid`, with no value, path or cause.
+
+Replay files are opened once before Pool creation with
+`O_RDONLY|O_NOFOLLOW|O_NONBLOCK`. They must be absolute regular non-empty fatal
+UTF-8 files. Bundle bytes are at most 2,200,000 and report bytes at most 65,536.
+The loader requires a canonical checksummed terminal-PASS ProofBundle and a
+canonical `PreflightReportV1` exactly bound to its run, URL, request identity,
+network and fee evidence. It caches only frozen canonical strings plus their
+SHA-256 digests; command handlers perform no later environment or filesystem
+read. Merely passing the schema gate or constructing lazy closures is not
+heartbeat authority. Any pre-authority or composition failure creates no
+heartbeat; shutdown may mark a row stopped only when heartbeat start actually
 succeeded.
 
 The worker refreshes every 10 seconds. Readiness requires a non-stopped row for
@@ -213,6 +253,17 @@ hardening, no host port/socket/egress, and exact entrypoints
 `pg_isready` remains engine liveness only. API health checking uses `/healthz`;
 deployment acceptance requires `/readyz` and may not be inferred from container
 state alone. Worker has no public or host port.
+
+Worker Compose supplies the required nonsecret fee cap, balance floor, daily
+quota and safe-consumer address and the strict optional endpoint/tuning values.
+Container replay paths are fixed at `/run/proofline/replay/bundle.json` and
+`/run/proofline/replay/preflight-report.json`. Required host variables
+`PROOFLINE_WORKER_REPLAY_BUNDLE_FILE` and
+`PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE` select long-syntax read-only
+binds with `create_host_path: false`. These public evidence files are not Docker
+secrets; the worker retains exactly three Docker secrets for database, verifier
+key and relayer private key. The QA environment may supply accepted recorded
+fixtures but still does not start worker.
 
 The credential-free Docker gate starts no actual live worker and supplies no
 dummy verifier key, relayer private key, test adapter or heartbeat sidecar. It

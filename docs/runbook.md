@@ -76,14 +76,13 @@ worker не выполняют migration при собственном стар�
 `/healthz` является process-only liveness. `/readyz` проверяет database,
 verified schema version и worker heartbeat; stale heartbeat возвращает
 `503 not-ready`, даже если containers продолжают работать. Heartbeat authority
-starts only after exact schema verification and full repository, relayer-policy
-and live-pipeline construction, immediately before the claim loop. Exact 027B
-candidate `4ac66f9` / tree `477f679` is rejected by both verifiers because it
-inserted the heartbeat before that late composition could fail. The corrective
-production-author candidate closes that ordering gap and its local static,
-coverage, real-PostgreSQL and bounded runtime gates pass; independent
-verification is pending. Этот раздел не является actual-worker, hosted или
-deployed PASS.
+starts only after exact secret and application-role URL resolution, pure typed
+runtime parsing, one-shot replay-evidence loading, exact schema verification
+and full repository/live-pipeline construction, immediately before the claim
+loop. Candidates `4ac66f9` / tree `477f679` and `a6fb729` / tree `2a1dfc8` are
+both rejected. The latter retained lazy safe-consumer/replay reads and an
+incomplete production Compose worker environment. Этот раздел не является
+actual-worker, hosted или deployed PASS.
 
 ### Slice 027A local container gate
 
@@ -164,6 +163,14 @@ has bounded `/tmp`, and only named `/data` and `/config` are writable.
 Do not commit `.env`, `.env.*`, dummy relayer/verifier credentials or a
 production test adapter.
 
+After this generic secret reader, each application validates its exact private
+database authority before Pool creation: API `proofline_api_login`, worker
+`proofline_worker_login`, recording importer
+`proofline_recording_importer_login`, and migration runner
+`proofline_migrator_login`, all at `postgres:5432/proofline` with non-empty
+password and no query/fragment. Swapping roles or using the administrator URL
+fails with the same fixed redacted deployment-configuration error.
+
 The historical `runtime-after-027b` profile is removed. The runtime overlay now
 owns exact API-image `db-role-bootstrap` and `migrator` one-shot jobs, immutable
 checksum history, `/healthz`, `/readyz` and the persisted deployment-worker
@@ -173,6 +180,15 @@ wrapper, which forces one-shot recreation and rejects `start`/`restart`:
 ```bash
 npm run compose:production -- --runtime up --detach
 ```
+
+The runtime wrapper additionally requires the worker's nonsecret fee cap,
+balance floor, daily quota and non-zero safe-consumer address. Public recorded
+replay inputs come from required host paths
+`PROOFLINE_WORKER_REPLAY_BUNDLE_FILE` and
+`PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE`, mounted read-only with host-path
+creation disabled at `/run/proofline/replay/bundle.json` and
+`/run/proofline/replay/preflight-report.json`. They are not Docker secrets. QA
+may bind accepted recorded fixtures while still leaving worker stopped.
 
 `pg_isready` remains engine liveness only. Promotion still requires `/readyz`;
 the command-lease heartbeat and the test-only SQL fixture are not actual
@@ -341,30 +357,36 @@ npm run start --workspace apps/worker
 
 | Переменная | Назначение |
 |---|---|
-| `DATABASE_URL` | Та же база, что у API |
+| `DATABASE_URL` | Exact `proofline_worker_login` URL for `postgres:5432/proofline`; no query/fragment |
 | `PROOFLINE_VERIFIER_API_KEY` | Credential Web2Json verifier |
 | `PROOFLINE_COSTON2_PRIVATE_KEY` | Отдельный low-balance relayer key; только worker |
 | `PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI` | Беззнаковый глобальный fee cap |
 | `PROOFLINE_RELAYER_BALANCE_FLOOR_WEI` | Минимальный остаток relayer |
 | `PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA` | Положительный per-project daily quota |
 | `PROOFLINE_SAFE_CONSUMER_ADDRESS` | Адрес canonical safe consumer |
-| `PROOFLINE_REPLAY_BUNDLE_PATH` | Canonical local replay fixture для replay commands |
-| `PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH` | Recorded public preflight report sidecar, обязательный companion для `PROOFLINE_REPLAY_BUNDLE_PATH`; отсутствие или mismatch останавливает replay до любых live I/O |
+| `PROOFLINE_REPLAY_BUNDLE_PATH` | Absolute regular canonical terminal-PASS ProofBundle, at most 2,200,000 bytes; Compose fixes the container path |
+| `PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH` | Absolute regular canonical bound PreflightReportV1, at most 65,536 bytes; Compose fixes the container path |
 
 Дополнительная конфигурация:
 
 | Переменная | Default / назначение |
 |---|---|
-| `PROOFLINE_VERIFIER_URL` | Официальный Coston2 verifier endpoint |
-| `PROOFLINE_COSTON2_RPC_URL` | Coston2 RPC adapter default |
-| `PROOFLINE_COSTON2_DA_URL` | Coston2 DA adapter default |
-| `PROOFLINE_RECEIPT_POLL_TIMEOUT_MS` | Bounded receipt polling |
-| `PROOFLINE_DA_TIMEOUT_MS` | Bounded DA polling |
-| `PROOFLINE_WORKER_DB_POOL_SIZE` | default `4` |
-| `PROOFLINE_WORKER_MAX_ATTEMPTS` | default `8` |
-| `PROOFLINE_WORKER_LEASE_HEARTBEAT_MS` | default `10000` |
+| `PROOFLINE_VERIFIER_URL` | Strict HTTPS root, default official Coston2 verifier |
+| `PROOFLINE_COSTON2_RPC_URL` | Strict HTTPS/443, path allowed, default official Coston2 RPC |
+| `PROOFLINE_COSTON2_DA_URL` | Strict HTTPS root, default official Coston2 DA |
+| `PROOFLINE_RECEIPT_POLL_TIMEOUT_MS` | default `25000`, maximum `30000` |
+| `PROOFLINE_DA_TIMEOUT_MS` | default `15000`, maximum `30000` |
+| `PROOFLINE_WORKER_DB_POOL_SIZE` | default `4`, range `1..32` |
+| `PROOFLINE_WORKER_MAX_ATTEMPTS` | default `8`, range `1..100` |
+| `PROOFLINE_WORKER_LEASE_HEARTBEAT_MS` | default `10000`, range `1000..29000` |
 
-Worker пишет structured JSON в stdout/stderr и корректно завершает loop по `SIGINT`/`SIGTERM`.
+Worker eagerly parses all of the above, derives and retains only the relayer
+account rather than the raw key in its typed config, then opens and validates
+both replay files once before creating its Pool. Any parse, open, UTF-8,
+canonicality, checksum, terminal-status or report-binding failure is only
+`WORKER_RUNTIME_CONFIGURATION_INVALID` / `Worker runtime configuration is
+invalid`, with no value/path/cause. Worker пишет structured JSON в stdout/stderr
+и корректно завершает loop по `SIGINT`/`SIGTERM`.
 
 ## 6. CLI
 

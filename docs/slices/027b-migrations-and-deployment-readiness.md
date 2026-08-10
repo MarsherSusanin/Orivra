@@ -15,18 +15,16 @@ refining [ADR 0029](../adr/0029-digitalocean-vds-deployment.md) and
 Risk: high persistence, database-role, startup-order and release-path change;
 no provider credential, live Coston2 effect, backup, restore or hosted claim.
 
-Implementation status: corrective RED is frozen after both independent
-verifiers rejected production-author candidate
-`4ac66f9693d1b8ae16a01d839923cdcdfad044eb` / tree
-`477f67988e63645da32c4a98fc307302a872d19b`. That candidate inserted a current
-heartbeat before late live-worker composition could fail, creating temporary
-false readiness. The corrective production-author candidate completes all
-repository, relayer-policy and live-pipeline construction plus lifecycle
-coordination before heartbeat start and is locally GREEN for typecheck, frozen
-contracts, coverage, real PostgreSQL and bounded credential-free Docker
-lifecycle. Two new independent PASS reports on one exact commit/tree are still
-required. The test-only SQL heartbeat fixture is not actual worker readiness or
-deployment evidence.
+Implementation status: corrective RED is frozen after two rejected production
+candidates. `4ac66f9693d1b8ae16a01d839923cdcdfad044eb` / tree
+`477f67988e63645da32c4a98fc307302a872d19b` inserted heartbeat before worker
+composition. Its corrective candidate
+`a6fb72975440320421b0867f83fb9f7912294947` / tree
+`2a1dfc837f5e11a66464c6c71a5e5931bc9bbd3b` still left replay-file and
+safe-consumer validation inside post-heartbeat command closures, and its fixed
+Compose runtime omitted the required worker policy/safe/replay configuration.
+Both independent verifiers rejected that tree. No Docker, build, hosted or
+deployment acceptance follows from the rejected candidate.
 
 ## Delivery split
 
@@ -49,8 +47,11 @@ deployment evidence.
   authority and the current deployment/tree heartbeat;
 - actual production worker validates live config and schema before its first
   heartbeat or claim;
-- worker construction validates the repository, relayer policy and live
-  pipeline before lifecycle coordination and the first heartbeat insert;
+- pure typed worker configuration plus one-shot canonical replay-evidence load
+  complete before Pool/schema, repository, live pipeline, lifecycle coordination
+  and the first heartbeat insert;
+- downstream worker/live-port factories receive immutable typed slices and no
+  environment or filesystem authority;
 - heartbeat uses PostgreSQL time, 10-second refresh, 30-second staleness,
   startup UUID and explicit stopped state;
 - heartbeat loss stops new claims and leads to nonzero exit after any current
@@ -78,6 +79,10 @@ deployment evidence.
   outer transaction wrapper and owns the enclosing transaction and ledger row.
 - Role passwords are bind parameters loaded from bounded secret files and are
   absent from Compose environment, SQL strings, logs and errors.
+- API, worker, importer and migrator accept only their exact private PostgreSQL
+  login/host/port/database tuple after generic secret resolution.
+- Replay evidence is opened once without symlink/blocking authority, bounded,
+  canonical and exactly report-bound before the worker creates a Pool.
 - API/worker startup performs no implicit migration.
 - API never writes the worker heartbeat; worker never gains API token or
   migration-history authority.

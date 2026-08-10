@@ -1,7 +1,29 @@
 // @vitest-environment node
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import {
+  exactTrustManifest,
+  makeBundleInput,
+  validPreflightReport,
+} from "../../../packages/contracts/test/fixtures";
+import {
+  canonicalSerializePreflightReport,
+  canonicalSerializeProofBundle,
+  createProofBundle,
+} from "@proofline/domain";
 
 const mocks = vi.hoisted(() => {
   const databaseResult = () => ({
@@ -59,20 +81,82 @@ import {
   startProductionWorker,
 } from "../src/bootstrap";
 
+let replayDirectory = "";
+let replayBundlePath = "";
+let replayPreflightReportPath = "";
+
 function environment(overrides: Record<string, string | undefined> = {}) {
   return {
     NODE_ENV: "production",
-    DATABASE_URL: "postgres://proofline.invalid/proofline",
+    DATABASE_URL:
+      "postgres://proofline_worker_login:worker-password@postgres:5432/proofline",
     PROOFLINE_COSTON2_PRIVATE_KEY: `0x${"b".repeat(64)}`,
     PROOFLINE_VERIFIER_API_KEY: "verifier-key",
     PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000",
     PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
     PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
+    PROOFLINE_SAFE_CONSUMER_ADDRESS:
+      "0x5555555555555555555555555555555555555555",
+    PROOFLINE_REPLAY_BUNDLE_PATH: replayBundlePath,
+    PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: replayPreflightReportPath,
     PROOFLINE_DEPLOYMENT_ID: `deployment_${"a".repeat(64)}`,
     PROOFLINE_RELEASE_TREE_SHA: "b".repeat(40),
     ...overrides,
   };
 }
+
+beforeAll(async () => {
+  replayDirectory = await mkdtemp(join(tmpdir(), "proofline-slice005-replay-"));
+  replayBundlePath = join(replayDirectory, "bundle.json");
+  replayPreflightReportPath = join(replayDirectory, "preflight-report.json");
+  const input = makeBundleInput();
+  const manifest = {
+    ...exactTrustManifest,
+    submission: { ...exactTrustManifest.submission, mode: "replay" as const },
+  };
+  const events = input.events.map((event) =>
+    event.type === "RUN_CREATED"
+      ? { ...event, payload: { manifest } }
+      : event,
+  );
+  const bundle = createProofBundle({ ...input, manifest, events });
+  const accepted = bundle.events.find((event) => event.type === "PREFLIGHT_ACCEPTED");
+  if (accepted?.type !== "PREFLIGHT_ACCEPTED") throw new Error("fixture invalid");
+  const report = {
+    ...structuredClone(validPreflightReport),
+    runId: bundle.runId,
+    canonicalUrl: accepted.payload.canonicalUrl,
+    requestIdentitySha256: `sha256:${createHash("sha256")
+      .update(Buffer.from(bundle.requestBytes.slice(2), "hex"))
+      .digest("hex")}`,
+    registrySnapshot: {
+      ...structuredClone(validPreflightReport.registrySnapshot),
+      chainId: bundle.network.chainId,
+      blockNumber: bundle.network.blockNumber,
+      registryAddress: bundle.network.registryAddress,
+      resolvedContracts: {
+        ...structuredClone(validPreflightReport.registrySnapshot.resolvedContracts),
+        ...bundle.network.resolvedContracts,
+      },
+    },
+    fee: {
+      ...structuredClone(validPreflightReport.fee),
+      quotedWei: accepted.payload.quotedFeeWei,
+      capWei: bundle.manifest.submission.feeCapWei,
+    },
+  };
+  await Promise.all([
+    writeFile(replayBundlePath, canonicalSerializeProofBundle(bundle)),
+    writeFile(
+      replayPreflightReportPath,
+      canonicalSerializePreflightReport(report),
+    ),
+  ]);
+});
+
+afterAll(async () => {
+  if (replayDirectory) await rm(replayDirectory, { recursive: true, force: true });
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -84,91 +168,64 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+function typedRuntimeConfig() {
+  return Object.freeze({
+    chainId: 114 as const,
+    registryAddress: "0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019",
+    verifierEndpoint: "https://fdc-verifiers-testnet.flare.network",
+    rpcUrl: "https://coston2-api.flare.network/ext/C/rpc",
+    daEndpoint: "https://ctn2-data-availability.flare.network",
+    receiptPollTimeoutMs: 25_000,
+    daTimeoutMs: 15_000,
+    databasePoolSize: 4,
+    maxAttempts: 3,
+    leaseHeartbeatMs: 2_500,
+    relayerAccount: { address: "0x3333333333333333333333333333333333333333" },
+    relayerPolicy: Object.freeze({
+      globalFeeCapWei: 20_000n,
+      balanceFloorWei: 1_000n,
+      dailyProjectQuota: 4,
+    }),
+    safeConsumerAddress: "0x5555555555555555555555555555555555555555",
+  });
+}
+
+const replayEvidence = Object.freeze({
+  bundleCanonicalJson: '{"version":"1"}',
+  bundleSha256: `sha256:${"a".repeat(64)}`,
+  preflightReportCanonicalJson: '{"version":"1"}',
+  preflightReportSha256: `sha256:${"b".repeat(64)}`,
+});
+
 describe("Slice 005 production worker configuration", () => {
-  it.each([
-    ["unsigned global cap", { PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "-1" }, /unsigned/i],
-    ["required balance floor", { PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "" }, /required/i],
-    ["positive quota", { PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "0" }, /positive/i],
-    [
-      "safe quota",
-      { PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "9007199254740992" },
-      /safe integer/i,
-    ],
-  ])("rejects invalid persisted relayer policy: %s", (_label, override, error) => {
-    expect(() =>
-      createProductionWorker({
-        environment: environment(override),
-        pool: mocks.pool,
-        verifier: { prepareRequest: vi.fn() },
-        createPipelinePorts: mocks.createPipelinePorts as any,
-      }),
-    ).toThrow(error);
-    expect(mocks.createRunWorker).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ["attempts", { PROOFLINE_WORKER_MAX_ATTEMPTS: "0" }, /positive/i],
-    [
-      "heartbeat",
-      { PROOFLINE_WORKER_LEASE_HEARTBEAT_MS: "9007199254740992" },
-      /safe integer/i,
-    ],
-  ])("rejects an invalid worker %s bound", (_label, override, error) => {
-    expect(() =>
-      createProductionWorker({
-        environment: environment(override),
-        pool: mocks.pool,
-        verifier: { prepareRequest: vi.fn() },
-        createRepository: mocks.createRepository as any,
-        createPipelinePorts: mocks.createPipelinePorts as any,
-      }),
-    ).toThrow(error);
-  });
-
-  it("passes validated persisted policy to the default PostgreSQL repository", () => {
+  it("passes only immutable parsed policy and replay evidence to downstream ports", async () => {
+    const runtimeConfig = typedRuntimeConfig();
     createProductionWorker({
-      environment: environment({
-        PROOFLINE_WORKER_MAX_ATTEMPTS: "3",
-        PROOFLINE_WORKER_LEASE_HEARTBEAT_MS: "2500",
-      }),
+      runtimeConfig,
+      replayEvidence,
       pool: mocks.pool,
       verifier: { prepareRequest: vi.fn() },
       createPipelinePorts: mocks.createPipelinePorts as any,
-    });
+    } as any);
 
     expect(mocks.createRepository).toHaveBeenCalledWith({
       pool: mocks.pool,
-      relayerPolicy: {
-        globalFeeCapWei: 20_000n,
-        balanceFloorWei: 1_000n,
-        dailyProjectQuota: 4,
-      },
+      relayerPolicy: runtimeConfig.relayerPolicy,
+    });
+    expect(mocks.createPipelinePorts).toHaveBeenCalledWith({
+      runtimeConfig,
+      verifier: expect.any(Object),
     });
     expect(mocks.createRunWorker).toHaveBeenCalledWith(
       expect.objectContaining({ maxAttempts: 3, leaseHeartbeatMs: 2_500 }),
     );
-  });
-
-  it("loads configured replay evidence files and supplies a working default clock", async () => {
-    const replayFixture = resolve("packages/contracts/test/fixtures.ts");
-    createProductionWorker({
-      environment: environment({
-        PROOFLINE_REPLAY_BUNDLE_PATH: replayFixture,
-        PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: replayFixture,
-      }),
-      pool: mocks.pool,
-      verifier: { prepareRequest: vi.fn() },
-      createRepository: mocks.createRepository as any,
-      createPipelinePorts: mocks.createPipelinePorts as any,
-    });
-
     const composition = mocks.createHandlers.mock.calls.at(-1)?.[0] as any;
-    await expect(composition.ports.loadReplayBundle()).resolves.toContain(
-      "validManifest",
+    await expect(composition.ports.loadReplayBundle()).resolves.toBe(
+      replayEvidence.bundleCanonicalJson,
     );
-    await expect(
-      composition.ports.loadReplayPreflightReport(),
-    ).resolves.toContain("validPreflightReport");
+    await expect(composition.ports.loadReplayPreflightReport()).resolves.toBe(
+      replayEvidence.preflightReportCanonicalJson,
+    );
     expect(composition.clock.now()).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
@@ -176,13 +233,14 @@ describe("Slice 005 production worker configuration", () => {
     const rawHandler = vi.fn().mockResolvedValue({ nextCommands: [] });
     mocks.createHandlers.mockReturnValueOnce({ RUN_PREFLIGHT: rawHandler });
     createProductionWorker({
-      environment: environment(),
+      runtimeConfig: typedRuntimeConfig(),
+      replayEvidence,
       pool: mocks.pool,
       verifier: { prepareRequest: vi.fn() },
       createRepository: mocks.createRepository as any,
       createPipelinePorts: mocks.createPipelinePorts as any,
       logger: { info: vi.fn(), error: vi.fn() },
-    });
+    } as any);
     const workerInput = mocks.createRunWorker.mock.calls.at(-1)?.[0] as any;
     const command = {
       id: "command-preflight",
@@ -201,12 +259,13 @@ describe("Slice 005 production worker configuration", () => {
     const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     createProductionWorker({
-      environment: environment(),
+      runtimeConfig: typedRuntimeConfig(),
+      replayEvidence,
       pool: mocks.pool,
       verifier: { prepareRequest: vi.fn() },
       createRepository: mocks.createRepository as any,
       createPipelinePorts: mocks.createPipelinePorts as any,
-    });
+    } as any);
     const logger = (mocks.createRunWorker.mock.calls.at(-1)?.[0] as any).logger;
 
     logger.info({ event: "WORKER_READY" });
@@ -249,6 +308,24 @@ describe("Slice 005 production worker process lifecycle", () => {
     expect(mocks.pool.connect).not.toHaveBeenCalled();
     expect(mocks.client.query).not.toHaveBeenCalled();
     expect(mocks.client.release).not.toHaveBeenCalled();
+  }
+
+  async function expectRedactedRuntimeConfigurationError(
+    operation: () => Promise<void>,
+    forbidden: readonly string[],
+  ) {
+    let thrown: unknown;
+    try {
+      await operation();
+    } catch (cause) {
+      thrown = cause;
+    }
+    expect(thrown).toMatchObject({
+      code: "WORKER_RUNTIME_CONFIGURATION_INVALID",
+      message: "Worker runtime configuration is invalid",
+    });
+    const publicError = `${JSON.stringify(thrown)}\n${String((thrown as Error)?.message)}`;
+    for (const marker of forbidden) expect(publicError).not.toContain(marker);
   }
 
   it("fails before side effects when the default process environment lacks DATABASE_URL", async () => {
@@ -294,9 +371,33 @@ describe("Slice 005 production worker process lifecycle", () => {
     },
   );
 
+  it.each([
+    ["safe consumer", { PROOFLINE_SAFE_CONSUMER_ADDRESS: "" }],
+    ["replay bundle", { PROOFLINE_REPLAY_BUNDLE_PATH: "" }],
+    ["replay report", { PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: "" }],
+    ["verifier endpoint", { PROOFLINE_VERIFIER_URL: "http://verifier.invalid" }],
+    ["worker database role", {
+      DATABASE_URL:
+        "postgres://proofline_api_login:swapped-secret@postgres:5432/proofline",
+    }],
+  ])("rejects invalid %s before Pool, schema, heartbeat or claims", async (_label, override) => {
+    vi.spyOn(process, "on").mockImplementation(
+      ((signal: string, listener: () => void) => {
+        if (signal === "SIGINT") listener();
+        return process;
+      }) as any,
+    );
+    await expectRedactedRuntimeConfigurationError(
+      () => startProductionWorker(environment(override)),
+      Object.values(override),
+    );
+    expectNoStartupEffects();
+    expect(mocks.pool.end).not.toHaveBeenCalled();
+  });
+
   it("never publishes temporary readiness when post-schema live configuration is invalid", async () => {
     const privateMarkers = [
-      "postgres://proofline.invalid/proofline",
+      "postgres://proofline_worker_login:worker-password@postgres:5432/proofline",
       "verifier-key",
       `0x${"b".repeat(64)}`,
     ];

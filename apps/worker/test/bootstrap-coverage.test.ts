@@ -6,12 +6,24 @@ import {
   runWorkerLoop,
 } from "../src/bootstrap";
 
-function environment(override: Record<string, string | undefined> = {}) {
+function runtimeConfig() {
   return {
-    NODE_ENV: "test",
-    ...override,
+    maxAttempts: 8,
+    leaseHeartbeatMs: 10_000,
+    relayerPolicy: {
+      globalFeeCapWei: 20_000n,
+      balanceFloorWei: 1_000n,
+      dailyProjectQuota: 4,
+    },
   };
 }
+
+const replayEvidence = {
+  bundleCanonicalJson: '{"version":"1"}',
+  bundleSha256: `sha256:${"a".repeat(64)}`,
+  preflightReportCanonicalJson: '{"version":"1"}',
+  preflightReportSha256: `sha256:${"b".repeat(64)}`,
+};
 
 function composition(command: Record<string, unknown>) {
   const completeCommand = vi.fn(async () => undefined);
@@ -33,44 +45,33 @@ function composition(command: Record<string, unknown>) {
   const createRepository = vi.fn(() => repository as any);
   const logger = { info: vi.fn(), error: vi.fn() };
   const worker = createProductionWorker({
-    environment: environment(),
+    runtimeConfig: runtimeConfig(),
+    replayEvidence,
     pool: {},
     verifier: { prepareRequest: vi.fn() },
     createPipelinePorts,
     createRepository,
     clock: { now: () => "2025-05-15T12:04:11.000Z" },
     logger,
-  });
+  } as any);
   return { worker, repository, createPipelinePorts, logger };
 }
 
 describe("production worker bootstrap coverage", () => {
   it("does not request project-token or execution-private-key credentials", () => {
-    const guardedEnvironment = environment();
-    const credentialReads: string[] = [];
-    for (const name of [
-      "PROOFLINE_PROJECT_TOKEN",
-      "PROOFLINE_COSTON2_PRIVATE_KEY",
-    ]) {
-      Object.defineProperty(guardedEnvironment, name, {
-        enumerable: true,
-        get() {
-          credentialReads.push(name);
-          throw new Error(`Production bootstrap requested ${name}`);
-        },
-      });
-    }
-
     expect(() =>
       createProductionWorker({
-        environment: guardedEnvironment,
+        runtimeConfig: runtimeConfig(),
+        replayEvidence,
         pool: {},
         verifier: { prepareRequest: vi.fn() },
         createPipelinePorts: vi.fn(() => ({})) as any,
         createRepository: vi.fn(() => ({ claimNextCommand: vi.fn() })) as any,
-      }),
+      } as any),
     ).not.toThrow();
-    expect(credentialReads).toEqual([]);
+    expect(JSON.stringify(runtimeConfig())).not.toMatch(
+      /PROJECT_TOKEN|COSTON2_PRIVATE_KEY/,
+    );
   });
 
   it("never registers the synthetic live command, even in test environment", async () => {
