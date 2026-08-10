@@ -74,10 +74,19 @@ missing or placeholder values and does not invent them.
 - require each negative result to bind a real case-scoped child execution and
   independently parent-observed mutation/sink/no-PASS/no-promotion state;
   driver/child-authored observation JSON and local synthetic mutations fail;
+- bind those probes to the canonical negative project, exact service,
+  container, object target, restore volume and PASS path; positive-project or
+  child exit/status/output observations have no authority;
 - construct exact credential-free Docker and negative-child environment
-  profiles, stripping ambient credentials, proxy and Docker-config authority;
+  profiles, rejecting ambient Docker endpoint/context/TLS/certificate/auth,
+  SSH and BuildKit authority while stripping all other ambient credentials;
 - run prepare/execute/parent-inspect and separately bounded cleanup through
-  killable async process trees with fixed normalized timeout semantics;
+  killable async process trees whose timeout settles only after group close
+  and reap, with fixed normalized timeout semantics;
+- remove temporary secrets in the outermost lifecycle finalizer even when
+  project cleanup rejects or times out;
+- give prefetch inspect/pull/build children only the exact isolated eight-name
+  no-auth environment;
 - clean exact project resources.
 
 ## Frozen contracts
@@ -102,9 +111,15 @@ missing or placeholder values and does not invent them.
 - Negative child output carries only failed case/code and parent-owned
   exit/output identity; parent probes are the sole mutation, sink, PASS and
   promotion authority.
+- A canonical SHA-256 probe identity binds all case/project/service/container/
+  object/volume/PASS-path fields before execution; any cross-binding fails.
 - The case deadline is 30 seconds, child cap 25 seconds, process-tree kill grace
   one second, per-case cleanup deadline 15 seconds and project-finalizer
-  deadline 30 seconds.
+  deadline 30 seconds. Timeout rejection waits for process-group close/reap.
+- Recovery uses only the isolated local-default Docker engine. Prefetch uses
+  exactly `PATH`, isolated `DOCKER_CONFIG`/`HOME`/`XDG_CONFIG_HOME`/`TMPDIR`
+  and fixed `LANG`/`LC_ALL`/`TZ`; all transport, builder and credential
+  authority is absent.
 
 ## Exact operational inputs
 
@@ -143,8 +158,9 @@ non-following, nonblocking, regular, nonempty and bounded.
 7. executable missing/corrupt-object, wrong-key, future-target,
    reused/nonempty-volume and absent/mismatched-promotion controls with exact
    real child output, independent parent probes, fixed failure codes, zero
-   PASS/promotion effects, forged-observation rejection, async process-tree
-   timeout and separately bounded cleanup;
+   PASS/promotion effects, forged-observation and cross-project binding
+   rejection, close/reap-gated async process-tree timeout, separately bounded
+   cleanup and unconditional temporary-secret removal;
 8. executable static seams plus one checked-in `test:docker:recovery` gate.
 
 ## GREEN and verification gates

@@ -73,7 +73,6 @@ const NEGATIVE_CHILD_ENVIRONMENT_NAMES = Object.freeze([
 
 const BASE_ENVIRONMENT = Object.freeze({
   PATH: "/usr/bin:/bin",
-  DOCKER_HOST: "unix:///proofline/qa/docker.sock",
   DOCKER_CONFIG: "/proofline/qa/docker-config",
   HOME: "/proofline/qa/home",
   XDG_CONFIG_HOME: "/proofline/qa/xdg",
@@ -84,9 +83,6 @@ const BASE_ENVIRONMENT = Object.freeze({
 });
 
 const AMBIENT_SENTINELS = Object.freeze({
-  DOCKER_CONFIG: "/ambient/docker-config",
-  DOCKER_AUTH_CONFIG: "ambient-docker-auth",
-  REGISTRY_AUTH_FILE: "/ambient/registry-auth.json",
   HOME: "/ambient/home",
   XDG_CONFIG_HOME: "/ambient/xdg",
   AWS_ACCESS_KEY_ID: "ambient-aws-id",
@@ -127,7 +123,6 @@ function environmentInput(overrides = {}) {
       ...AMBIENT_SENTINELS,
     },
     scopedEnvironment: scopedEnvironment(),
-    dockerHost: BASE_ENVIRONMENT.DOCKER_HOST,
     dockerConfigDirectory: BASE_ENVIRONMENT.DOCKER_CONFIG,
     homeDirectory: BASE_ENVIRONMENT.HOME,
     xdgConfigDirectory: BASE_ENVIRONMENT.XDG_CONFIG_HOME,

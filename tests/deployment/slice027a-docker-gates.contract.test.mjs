@@ -146,7 +146,7 @@ async function ambientDockerEnvironment(directory) {
     DOCKER_CONFIG: dockerConfig,
     DOCKER_AUTH_CONFIG: sentinel,
     REGISTRY_AUTH_FILE: join(directory, "sentinel-registry-auth.json"),
-    DOCKER_HOST: "unix:///var/run/proofline-explicit-docker.sock",
+    DOCKER_HOST: "tcp://ambient-docker.invalid:2376",
     DOCKER_CONTEXT: "sentinel-context",
     GHCR_TOKEN: "sentinel-ghcr-token",
     NPM_TOKEN: "sentinel-npm-token",
@@ -228,8 +228,8 @@ test("isolates every registry-capable prefetch child from ambient Docker credent
       assert.equal(child.registryAuthFile, undefined);
       assert.notEqual(child.home, environment.HOME);
       assert.notEqual(child.xdgConfigHome, environment.XDG_CONFIG_HOME);
-      assert.equal(child.dockerHost, environment.DOCKER_HOST);
-      assert.notEqual(child.dockerContext, environment.DOCKER_CONTEXT);
+      assert.equal(child.dockerHost, undefined);
+      assert.equal(child.dockerContext, undefined);
       assert.equal(child.ghcrToken, undefined);
       assert.equal(child.npmToken, undefined);
       assert.equal(child.awsSecretAccessKey, undefined);

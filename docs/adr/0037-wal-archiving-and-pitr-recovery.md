@@ -240,13 +240,17 @@ import-safe `recovery-gate-environment` boundary: one complete Docker/Compose
 profile containing only the exact checked-in run-scoped QA file paths and
 nonsecret inputs, and one negative-child profile containing only the selected
 PostgreSQL image plus reader-access-key, reader-secret and encryption-key file
-paths. `PATH` is the only ambient value retained. `DOCKER_HOST`, a new empty
+paths. `PATH` is the only ambient value retained. A new empty
 `DOCKER_CONFIG`, `HOME`, `XDG_CONFIG_HOME` and `TMPDIR` are explicit validated
-gate inputs; locale and timezone are fixed. Ambient Docker/registry auth, AWS,
-GitHub/GHCR, npm, DigitalOcean/Spaces, proxy, token, secret, API-key and
-private-key variables are stripped. An unknown scoped name, direct secret,
-empty value or NUL fails with `RECOVERY_GATE_ENV_INVALID`. Neither inventory
-digest operand is an allowed environment input.
+gate inputs; locale and timezone are fixed. The CLI therefore selects only its
+local default Unix engine through the isolated no-auth configuration.
+`DOCKER_HOST`, `DOCKER_CONTEXT`, Docker TLS/certificate/auth configuration,
+SSH-agent and BuildKit/buildx authority in the ambient environment or as a
+direct constructor input fail with `RECOVERY_GATE_ENV_INVALID`. Other ambient
+registry/cloud credentials, proxies, tokens, secrets, API keys and private
+keys are stripped. An unknown scoped name, direct secret, empty value or NUL
+also fails with the same fixed error. Neither inventory digest operand is an
+allowed environment input.
 
 The source database applies exact schema 10/10 and inserts a base sentinel. A
 base backup completes. Transaction A then commits; the harness records an
@@ -326,6 +330,32 @@ fixed `RECOVERY_NEGATIVE_TIMEOUT` / `Recovery negative control timed out`,
 writes no PASS/promotion evidence and cannot leave a child, container, network,
 volume or temporary path. Residual resources still use the distinct cleanup
 failure contract.
+
+Every accepted parent observation is additionally bound to one canonical
+negative-case identity: case id, random negative project, exact service and
+container, object target when applicable, restore volume and case-local PASS
+path. The identity is hashed before the child runs and the parent rejects a
+fixture whose binding differs in any field. Object absence must be an exact
+not-found observation for that key; corrupt-object evidence binds key, size
+and digest; sink and promotion probes address only the negative project and
+its case service/container. The positive restore project and child
+exit/status/output are never mutation, sink, PASS or promotion evidence.
+
+Timeout settlement is close/reap-gated. For a TERM-resistant leader or
+descendant, the async helper sends `SIGTERM`, waits the frozen grace, sends
+`SIGKILL`, then waits for the whole process group to close before rejecting;
+cleanup cannot begin while a case child remains. The outer project lifecycle
+uses a nested outermost `finally`: project-finalizer rejection or normalized
+timeout remains the reported failure, but recursive removal of the temporary
+secret directory still runs before settlement.
+
+Controlled prefetch uses its own exact child environment inventory: `PATH`, a
+fresh `DOCKER_CONFIG`, `HOME`, `XDG_CONFIG_HOME`, `TMPDIR`, and fixed
+`LANG=C`, `LC_ALL=C`, `TZ=UTC`. Inspect, pull and dependency-build children
+receive no ambient Docker endpoint/context/TLS/certificate/auth, SSH,
+BuildKit/buildx, proxy, cloud/GitHub, token, secret, API-key or private-key
+authority. The fresh Docker config remains mode `0700`, contains exact
+`{"auths":{}}`, and is removed on success or failure.
 
 The positive restore evidence is constructed only from machine-readable actual
 `pitr-verify` fields: recovery and replay-paused state, system identifier,

@@ -397,6 +397,69 @@ daemon, network, production, dependency or lockfile operation was run.
 No finding is called fixed until production GREEN, the discovery triggers and
 change-aware bypass review pass on one frozen tree.
 
+### Defensive-validation corrective RED wave 3
+
+The defensive validation summary at
+`/var/folders/m4/6p__vxf95w520v3b1t2cr5vr0000gn/T/codex-security-scans/Proofline/a7a69bc_20260810T155816Z/artifacts/05_findings/validation_summary.md`
+was read in full and independently matched SHA-256
+`21d7921b814de68a6c436a377d8f6fd29b9864cfeb6e9e245a58fc8a7e1d6eb1`.
+The matching discovery report matched SHA-256
+`854f39b806708d68e1cfeea33a934af6736d2e5c543a0f505344f60304965b41`.
+The rejected candidate was inspected read-only from stash
+`753fc1384989cce14ade4ce290d57adfa340da28` / tree
+`efc46c21d1e42f6a1326b941a2c0d27574cec6d6`; its third parent
+`c10a7f2bc8eb9cf34ab7c69dc30b812ac8569a83` binds untracked tree
+`e0ae4ec9a4ca2cbfee675dd376e9b3bd588fccda`. It was never applied and
+provides no recovery/release evidence.
+
+All five validated high-confidence gaps reject that candidate:
+
+1. `FD-027C-SH01-001`: sink/promotion acceptance is not bound to the exact
+   negative project/service/container, and missing/corrupt object probes do
+   not prove the exact object semantics. Child output and the positive
+   project's recovery state can satisfy parent-labelled evidence.
+2. `FD-027C-SH01-002`: arbitrary ambient `DOCKER_HOST` selects the recovery
+   daemon despite the otherwise exact environment profile.
+3. `FD-027C-SH01-003`: timeout rejection occurs immediately after group
+   `SIGKILL`, before the TERM-resistant child group is confirmed closed/reaped.
+4. `FD-027C-SH01-004`: rejection or timeout from the project finalizer skips
+   the sole recursive temporary-secret removal.
+5. `PL-027C-PREFETCH-AMBIENT-DOCKER-AUTHORITY-001`: inspect, pull and build
+   children retain omitted Docker transport, SSH-agent and BuildKit/buildx
+   authority even though named registry/cloud variables are stripped.
+
+Wave-3 RED is defensive and uses only import-safe fakes and benign local
+TERM-resistant fixtures. It freezes a canonical parent probe identity over
+the negative case/project/service/container/object/volume/PASS path; forged
+positive-project, wrong-service, wrong-container and wrong-object bindings
+must fail before any probe. Four independent parent probes are required and
+the parent observer has no child execution/status/output input.
+
+Recovery now rejects ambient or direct Docker endpoint/context/TLS/
+certificate/auth, SSH and BuildKit/buildx authority and produces an isolated
+no-auth local-default profile. Twelve repeated process-tree controls require
+timeout settlement only after both TERM-resistant leader and descendant are
+gone. The outer lifecycle contract preserves project-finalizer rejection or
+normalized timeout while still removing real mode-0600 secret fixtures.
+Three fake prefetch phases independently require the exact eight-name child
+environment and prove that every sentinel is absent.
+
+Wave-3 RED was demonstrated on clean base
+`a7a69bc782d1456c80e37ff90dedc7eff805da2d` / tree
+`50efa42bf6d92a3bdc3cf9e675fbdb2a1ec15b57`: syntax checks and typecheck PASS;
+the exact new file is 23/23 intentional RED and the combined recovery-negative
+and security focus is 68/68 intentional RED. The complete Docker static set is
+135 cases with 83 intentional RED and 52 retained controls PASS. The unchanged
+027A/027B/027R neighbor set is 45/45 PASS and Sites compatibility is 36/36
+PASS. The repeated process tests stopped before spawning because the production
+async helper is intentionally absent on the clean RED base; the three prefetch
+tests executed only a checked-in fake child. No Docker daemon, network,
+production, dependency or lockfile operation was run.
+
+This wave does not claim any production finding fixed. GREEN must rerun the
+original five validation triggers and a change-aware bypass review on one
+frozen tree before any recovery PASS, promotion or release evidence exists.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;
