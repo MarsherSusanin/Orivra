@@ -28,9 +28,9 @@ The product journey is delivered as independently frozen vertical slices:
 | 027A1 | Pinned application/Caddy images and strict Docker-secret file boundary | Complete; independently verified, credential-free |
 | 027A2 | Split private Compose topology, production ACME Caddy and QA-only internal TLS | Complete; independently verified, credential-free |
 | 027A3 | CLI-isolated prefetch, offline-repeat build and exact HTTPS local smoke | Complete; independently verified, credential-free |
-| 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Implemented in rejected candidate; corrective verification pending |
-| 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Corrective RED frozen; candidate rejected for temporary false readiness |
-| 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Implemented in rejected candidate; corrective verification pending |
+| 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Corrective production-author candidate GREEN; independent verification pending |
+| 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Corrective production-author candidate GREEN; independent verification pending |
+| 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Corrective production-author candidate GREEN; independent verification pending |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Planned, credential-free |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
@@ -100,9 +100,11 @@ Credential-free delivery covers 022–029A:
   counts as actual worker readiness. Both verifiers rejected exact candidate
   `4ac66f9` / tree `477f679`: it inserted a current heartbeat before late
   repository/relayer/live-pipeline composition completed, so a failed worker
-  could make readiness temporarily green. Corrective RED now requires full
-  worker composition before heartbeat start, followed by a corrected candidate
-  and two independent PASS reports on one exact tree.
+  could make readiness temporarily green. The corrective production-author
+  candidate now completes that composition and installs lifecycle coordination
+  before heartbeat start; its local static, coverage, real-PostgreSQL and
+  bounded runtime lifecycle gates pass. Two independent PASS reports on one
+  exact tree are still required.
 - **027C** adds off-host WAL archiving plus base backup for PITR and proves a
   credential-free MinIO restore drill. A Droplet backup is secondary host
   recovery, not database/PITR evidence.

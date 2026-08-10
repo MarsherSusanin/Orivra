@@ -20,7 +20,11 @@ verifiers rejected production-author candidate
 `4ac66f9693d1b8ae16a01d839923cdcdfad044eb` / tree
 `477f67988e63645da32c4a98fc307302a872d19b`. That candidate inserted a current
 heartbeat before late live-worker composition could fail, creating temporary
-false readiness. A corrected candidate and two new independent PASS reports are
+false readiness. The corrective production-author candidate completes all
+repository, relayer-policy and live-pipeline construction plus lifecycle
+coordination before heartbeat start and is locally GREEN for typecheck, frozen
+contracts, coverage, real PostgreSQL and bounded credential-free Docker
+lifecycle. Two new independent PASS reports on one exact commit/tree are still
 required. The test-only SQL heartbeat fixture is not actual worker readiness or
 deployment evidence.
 

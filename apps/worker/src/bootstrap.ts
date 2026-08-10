@@ -248,19 +248,19 @@ export async function startProductionWorker(
   let stopping = false;
   try {
     await verifyDeploymentSchema({ pool });
-    const heartbeatStore = createPostgresDeploymentHeartbeatStore({ pool });
-    const heartbeatIdentity = createDeploymentWorkerIdentity(deploymentIdentity);
-    await heartbeatStore.start(heartbeatIdentity);
     const worker = createProductionWorker({
       environment: resolvedEnvironment,
       pool,
       verifier,
     });
+    const heartbeatStore = createPostgresDeploymentHeartbeatStore({ pool });
+    const heartbeatIdentity = createDeploymentWorkerIdentity(deploymentIdentity);
     for (const signal of ["SIGINT", "SIGTERM"] as const) {
       process.on(signal, () => {
         stopping = true;
       });
     }
+    await heartbeatStore.start(heartbeatIdentity);
     await runWorkerLoop({
       processOne: worker.processOne,
       shouldStop: () => stopping,
