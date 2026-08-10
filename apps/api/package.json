@@ -5,8 +5,13 @@
   "type": "module",
   "main": "./dist/server.js",
   "scripts": {
-    "build": "../../node_modules/.bin/esbuild src/server.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/server.js --external:pg",
+    "build": "npm run build:server && npm run build:migrate && npm run build:db-role-bootstrap",
+    "build:server": "../../node_modules/.bin/esbuild src/server.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/server.js --external:pg",
+    "build:migrate": "../../node_modules/.bin/esbuild src/migrate.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/migrate.js --external:pg",
+    "build:db-role-bootstrap": "../../node_modules/.bin/esbuild src/db-role-bootstrap.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/db-role-bootstrap.js --external:pg",
     "build:import-canonical-url-attack": "../../node_modules/.bin/esbuild src/import-canonical-url-attack-recording.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:solc --external:undici --external:@ethereumjs/common --external:@ethereumjs/util --external:@ethereumjs/vm --outfile=dist/import-canonical-url-attack-recording.js",
+    "db:bootstrap-roles": "node dist/db-role-bootstrap.js",
+    "db:migrate": "node dist/migrate.js",
     "import:canonical-url-attack": "npm run build:import-canonical-url-attack && node dist/import-canonical-url-attack-recording.js",
     "start": "node dist/server.js"
   },

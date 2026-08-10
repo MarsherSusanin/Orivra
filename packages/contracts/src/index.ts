@@ -166,6 +166,14 @@ export {
   WalletSessionRequestV1Schema,
   WalletSessionV1Schema,
 } from "./wallet-auth";
+export {
+  DeploymentHealthV1Schema,
+  DeploymentReadinessV1Schema,
+} from "./deployment";
+export type {
+  DeploymentHealthV1,
+  DeploymentReadinessV1,
+} from "./deployment";
 export { isCanonicalAuthTimestampV1 } from "./auth-timestamp";
 export {
   CanonicalUint256DecimalSchema,

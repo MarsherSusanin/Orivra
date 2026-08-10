@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./deployment": "./src/deployment.ts",
     "./wallet-auth": "./src/wallet-auth.ts",
     "./manifest": "./src/web2json-manifest.ts",
     "./templates": "./src/web2json-templates.ts"

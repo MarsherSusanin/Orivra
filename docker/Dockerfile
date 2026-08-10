@@ -41,8 +41,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=dependency-cache /workspace/node_modules /app/node_modules
 COPY --from=build --chown=node:node /workspace/apps/api/dist/server.js /app/apps/api/dist/server.js
+COPY --from=build --chown=node:node /workspace/apps/api/dist/migrate.js /app/apps/api/dist/migrate.js
+COPY --from=build --chown=node:node /workspace/apps/api/dist/db-role-bootstrap.js /app/apps/api/dist/db-role-bootstrap.js
 COPY --from=build --chown=node:node /workspace/apps/api/dist/import-canonical-url-attack-recording.js /app/apps/api/dist/import-canonical-url-attack-recording.js
 COPY --from=build --chown=node:node /workspace/apps/api/db/migrations /app/apps/api/db/migrations
+RUN test -f /app/apps/api/db/migrations/manifest.v1.json
 COPY --from=build --chown=node:node /workspace/contracts/CanonicalSafeWeb2JsonConsumer.sol /app/contracts/CanonicalSafeWeb2JsonConsumer.sol
 COPY --from=build --chown=node:node /workspace/contracts/CanonicalVulnerableWeb2JsonConsumer.sol /app/contracts/CanonicalVulnerableWeb2JsonConsumer.sol
 COPY --from=build --chown=node:node /workspace/contracts/ProoflineUrlInvariant.sol /app/contracts/ProoflineUrlInvariant.sol

@@ -1,7 +1,12 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 
-export type DeploymentProfile = "api" | "worker" | "recording-importer";
+export type DeploymentProfile =
+  | "api"
+  | "worker"
+  | "recording-importer"
+  | "db-role-bootstrap"
+  | "migration-runner";
 export type DeploymentEnvironment = Record<string, string | undefined>;
 
 const REQUIRED_SECRETS = {
@@ -12,6 +17,14 @@ const REQUIRED_SECRETS = {
     "PROOFLINE_COSTON2_PRIVATE_KEY",
   ],
   "recording-importer": ["DATABASE_URL"],
+  "db-role-bootstrap": [
+    "DATABASE_URL",
+    "PROOFLINE_MIGRATOR_DATABASE_URL",
+    "PROOFLINE_API_DATABASE_URL",
+    "PROOFLINE_WORKER_DATABASE_URL",
+    "PROOFLINE_RECORDING_IMPORTER_DATABASE_URL",
+  ],
+  "migration-runner": ["DATABASE_URL"],
 } as const satisfies Record<DeploymentProfile, readonly string[]>;
 
 const ERROR_CODE = "DEPLOYMENT_SECRET_CONFIGURATION_INVALID";

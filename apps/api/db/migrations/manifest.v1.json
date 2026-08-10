@@ -1,0 +1,61 @@
+{
+  "version": "1",
+  "lockKey": "-4708329426407388777",
+  "schema": {
+    "targetVersion": 10,
+    "minimumCompatibleVersion": 10,
+    "maximumCompatibleVersion": 10
+  },
+  "migrations": [
+    {
+      "version": 1,
+      "filename": "001_initial.sql",
+      "sha256": "sha256:981c89f41206efbdd3d8aaee29d2a3fd792140cbabd672ec037b498f8db45b7a"
+    },
+    {
+      "version": 2,
+      "filename": "002_one_active_submission.sql",
+      "sha256": "sha256:cc0c793c937fc7bec2ebb67d6f71f07d623161c28e5519881c42528026cab3dc"
+    },
+    {
+      "version": 3,
+      "filename": "003_run_discovery.sql",
+      "sha256": "sha256:0dce79492d46b0be5ca74bf9d0c799929d1a4f78d895ad2971e3a8bd42bfd2f3"
+    },
+    {
+      "version": 4,
+      "filename": "004_preflight_report.sql",
+      "sha256": "sha256:7a4d9417181e62c2863c9f87a4e5631d907418b40b1580b21c4403718edb018e"
+    },
+    {
+      "version": 5,
+      "filename": "005_explicit_submission_authority.sql",
+      "sha256": "sha256:9a0cb48b20f7f9a388f644951e11c3c7160eebc66822c5326e49812b5ea49282"
+    },
+    {
+      "version": 6,
+      "filename": "006_wallet_identity_sessions.sql",
+      "sha256": "sha256:dcb56f914d2817392f3d12e9781f4402c47e773c65f89988a10f2fd2f7332d17"
+    },
+    {
+      "version": 7,
+      "filename": "007_account_token_management.sql",
+      "sha256": "sha256:c83e9d98f45285bc19a66d79bb53b87f51cfc81aaa023248a7a20232a3328be9"
+    },
+    {
+      "version": 8,
+      "filename": "008_persisted_admission_quotas.sql",
+      "sha256": "sha256:38d50b679e6dfbd6460818c6155b535f9b6d47906d0ab644eb6e456034dd00be"
+    },
+    {
+      "version": 9,
+      "filename": "009_canonical_url_attack_recordings.sql",
+      "sha256": "sha256:d5e73e7541a49edf07d78b3f754f0b9df2f6ff7d0254bbc1ef5c3a87da0f1426"
+    },
+    {
+      "version": 10,
+      "filename": "010_deployment_lifecycle.sql",
+      "sha256": "sha256:8d2d4088b9421a8a575fabfff3b1e3eeadf5c4daac174f5c2fbaf05e5c73c54c"
+    }
+  ]
+}
