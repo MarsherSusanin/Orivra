@@ -135,23 +135,17 @@ export type WorkerRuntimeConfiguration = Readonly<{
   replayPreflightReportPath: string;
 }>;
 
-export type WorkerRuntimeConfig = Omit<
-  WorkerRuntimeConfiguration,
-  "replayBundlePath" | "replayPreflightReportPath"
->;
-
-export type LiveCoston2RuntimeConfig = Pick<
-  WorkerRuntimeConfig,
-  | "chainId"
-  | "registryAddress"
-  | "rpcUrl"
-  | "daEndpoint"
-  | "receiptPollTimeoutMs"
-  | "daTimeoutMs"
-  | "relayerAccount"
-  | "relayerPolicy"
-  | "safeConsumerAddress"
->;
+export type LiveCoston2RuntimeConfig = Readonly<{
+  chainId: 114;
+  registryAddress: Address;
+  rpcUrl: string;
+  daEndpoint: string;
+  receiptPollTimeoutMs: number;
+  daTimeoutMs: number;
+  relayerAccount: ReturnType<typeof privateKeyToAccount>;
+  relayerPolicy: WorkerRelayerPolicy;
+  safeConsumerAddress: Address;
+}>;
 
 export type WorkerReplayEvidence = Readonly<{
   bundleCanonicalJson: string;
@@ -159,95 +153,6 @@ export type WorkerReplayEvidence = Readonly<{
   preflightReportCanonicalJson: string;
   preflightReportSha256: string;
 }>;
-
-function legacyRequired(environment: Environment, name: string): string {
-  const value = environment[name]?.trim();
-  if (!value) {
-    throw Object.assign(
-      new Error(`Live runtime configuration is missing ${name}`),
-      { kind: "configuration" },
-    );
-  }
-  return value;
-}
-
-function legacyCanonicalUint256(
-  environment: Environment,
-  name: string,
-): bigint {
-  const value = legacyRequired(environment, name);
-  if (!isCanonicalUint256Decimal(value)) {
-    throw Object.assign(
-      new Error(`${name} must be an unsigned canonical uint256 integer`),
-      { kind: "configuration" },
-    );
-  }
-  return BigInt(value);
-}
-
-function legacyPositiveInteger(
-  environment: Environment,
-  name: string,
-  fallback: number,
-  maximum: number,
-): number {
-  const raw = environment[name]?.trim();
-  if (raw === undefined || raw === "") return fallback;
-  if (!/^[1-9][0-9]*$/.test(raw)) {
-    throw Object.assign(new Error(`${name} must be a positive integer`), {
-      kind: "configuration",
-    });
-  }
-  const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value > maximum) {
-    throw Object.assign(new Error(`${name} must not exceed ${maximum}`), {
-      kind: "configuration",
-    });
-  }
-  return value;
-}
-
-export function parseLegacyLiveCoston2RuntimeConfig(
-  environment: Environment,
-): LiveCoston2RuntimeConfig {
-  return Object.freeze({
-    chainId: CHAIN_ID,
-    registryAddress: REGISTRY_ADDRESS,
-    rpcUrl: environment.PROOFLINE_COSTON2_RPC_URL ?? DEFAULT_RPC_URL,
-    daEndpoint: environment.PROOFLINE_COSTON2_DA_URL ?? DEFAULT_DA_ENDPOINT,
-    receiptPollTimeoutMs: legacyPositiveInteger(
-      environment,
-      "PROOFLINE_RECEIPT_POLL_TIMEOUT_MS",
-      25_000,
-      30_000,
-    ),
-    daTimeoutMs: legacyPositiveInteger(
-      environment,
-      "PROOFLINE_DA_TIMEOUT_MS",
-      15_000,
-      30_000,
-    ),
-    relayerAccount: Object.freeze(
-      privateKeyToAccount(
-        legacyRequired(environment, "PROOFLINE_COSTON2_PRIVATE_KEY") as Hex,
-      ),
-    ),
-    relayerPolicy: Object.freeze({
-      globalFeeCapWei: legacyCanonicalUint256(
-        environment,
-        "PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI",
-      ),
-      balanceFloorWei: legacyCanonicalUint256(
-        environment,
-        "PROOFLINE_RELAYER_BALANCE_FLOOR_WEI",
-      ),
-      dailyProjectQuota: 1,
-    }),
-    safeConsumerAddress: getAddress(
-      legacyRequired(environment, "PROOFLINE_SAFE_CONSUMER_ADDRESS"),
-    ),
-  });
-}
 
 export function parseWorkerRuntimeConfig(
   environment: Environment,

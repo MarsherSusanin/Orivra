@@ -12,8 +12,9 @@ import { createLiveCoston2PipelinePorts } from "./live-runtime";
 import {
   loadWorkerReplayEvidence,
   parseWorkerRuntimeConfig,
+  type LiveCoston2RuntimeConfig,
+  type WorkerRelayerPolicy,
   type WorkerReplayEvidence,
-  type WorkerRuntimeConfig,
   type WorkerRuntimeConfiguration,
 } from "./worker-runtime-configuration";
 import {
@@ -24,15 +25,67 @@ import {
 
 type Environment = Record<string, string | undefined>;
 
-function discardReplayPathAuthority(
+type RepositoryPolicy = Readonly<{
+  relayerPolicy: WorkerRelayerPolicy;
+}>;
+
+type WorkerLoopConfig = Readonly<{
+  maxAttempts: number;
+  leaseHeartbeatMs: number;
+}>;
+
+function copyRelayerPolicy(
+  policy: WorkerRelayerPolicy,
+): WorkerRelayerPolicy {
+  return Object.freeze({
+    globalFeeCapWei: policy.globalFeeCapWei,
+    balanceFloorWei: policy.balanceFloorWei,
+    dailyProjectQuota: policy.dailyProjectQuota,
+  });
+}
+
+function createRepositoryPolicy(
   configuration: WorkerRuntimeConfiguration,
-): WorkerRuntimeConfig {
-  const {
-    replayBundlePath: _replayBundlePath,
-    replayPreflightReportPath: _replayPreflightReportPath,
-    ...runtimeConfig
-  } = configuration;
-  return Object.freeze(runtimeConfig);
+): RepositoryPolicy {
+  return Object.freeze({
+    relayerPolicy: copyRelayerPolicy(configuration.relayerPolicy),
+  });
+}
+
+function createWorkerLoopConfig(
+  configuration: WorkerRuntimeConfiguration,
+): WorkerLoopConfig {
+  return Object.freeze({
+    maxAttempts: configuration.maxAttempts,
+    leaseHeartbeatMs: configuration.leaseHeartbeatMs,
+  });
+}
+
+function createLiveRuntimeConfig(
+  configuration: WorkerRuntimeConfiguration,
+): LiveCoston2RuntimeConfig {
+  return Object.freeze({
+    chainId: configuration.chainId,
+    registryAddress: configuration.registryAddress,
+    rpcUrl: configuration.rpcUrl,
+    daEndpoint: configuration.daEndpoint,
+    receiptPollTimeoutMs: configuration.receiptPollTimeoutMs,
+    daTimeoutMs: configuration.daTimeoutMs,
+    relayerAccount: Object.freeze({ ...configuration.relayerAccount }),
+    relayerPolicy: copyRelayerPolicy(configuration.relayerPolicy),
+    safeConsumerAddress: configuration.safeConsumerAddress,
+  });
+}
+
+function copyReplayEvidence(
+  evidence: WorkerReplayEvidence,
+): WorkerReplayEvidence {
+  return Object.freeze({
+    bundleCanonicalJson: evidence.bundleCanonicalJson,
+    bundleSha256: evidence.bundleSha256,
+    preflightReportCanonicalJson: evidence.preflightReportCanonicalJson,
+    preflightReportSha256: evidence.preflightReportSha256,
+  });
 }
 
 function parseWorkerDatabaseAuthority(environment: Environment): string {
@@ -47,7 +100,9 @@ function parseWorkerDatabaseAuthority(environment: Environment): string {
 }
 
 export function createProductionWorker(input: {
-  runtimeConfig: WorkerRuntimeConfig;
+  repositoryPolicy: RepositoryPolicy;
+  workerLoopConfig: WorkerLoopConfig;
+  liveRuntimeConfig: LiveCoston2RuntimeConfig;
   replayEvidence: WorkerReplayEvidence;
   pool: any;
   verifier: { prepareRequest(input: unknown): Promise<unknown> };
@@ -59,13 +114,13 @@ export function createProductionWorker(input: {
   const repository = (input.createRepository ?? createPostgresCommandRepository)(
     {
       pool: input.pool,
-      relayerPolicy: input.runtimeConfig.relayerPolicy,
+      relayerPolicy: input.repositoryPolicy.relayerPolicy,
     } as never,
   );
   const livePipelinePorts = (
     input.createPipelinePorts ?? createLiveCoston2PipelinePorts
   )({
-    runtimeConfig: input.runtimeConfig,
+    runtimeConfig: input.liveRuntimeConfig,
     verifier: input.verifier as never,
   });
   const pipelinePorts = {
@@ -100,8 +155,8 @@ export function createProductionWorker(input: {
     environment: "production",
     mode: "live",
     repository,
-    maxAttempts: input.runtimeConfig.maxAttempts,
-    leaseHeartbeatMs: input.runtimeConfig.leaseHeartbeatMs,
+    maxAttempts: input.workerLoopConfig.maxAttempts,
+    leaseHeartbeatMs: input.workerLoopConfig.leaseHeartbeatMs,
     adapters: {
       coston2: { kind: "live" },
       pipeline: { kind: "live" },
@@ -193,30 +248,37 @@ export async function startProductionWorker(
     PROOFLINE_VERIFIER_API_KEY:
       resolvedEnvironment.PROOFLINE_VERIFIER_API_KEY,
   });
-  const replayEvidence = await loadWorkerReplayEvidence(runtimeConfiguration);
-  const runtimeConfig = discardReplayPathAuthority(runtimeConfiguration);
+  const loadedReplayEvidence = await loadWorkerReplayEvidence(
+    runtimeConfiguration,
+  );
+  const repositoryPolicy = createRepositoryPolicy(runtimeConfiguration);
+  const workerLoopConfig = createWorkerLoopConfig(runtimeConfiguration);
+  const liveRuntimeConfig = createLiveRuntimeConfig(runtimeConfiguration);
+  const replayEvidence = copyReplayEvidence(loadedReplayEvidence);
   const pool = new Pool({
-    connectionString: runtimeConfig.databaseUrl,
-    max: runtimeConfig.databasePoolSize,
+    connectionString: runtimeConfiguration.databaseUrl,
+    max: runtimeConfiguration.databasePoolSize,
     idleTimeoutMillis: 30_000,
   });
   const verifier = createWeb2JsonVerifierClient({
-    endpoint: runtimeConfig.verifierEndpoint,
-    apiKey: runtimeConfig.verifierApiKey,
+    endpoint: runtimeConfiguration.verifierEndpoint,
+    apiKey: runtimeConfiguration.verifierApiKey,
   });
   let stopping = false;
   try {
     await verifyDeploymentSchema({ pool });
     const worker = createProductionWorker({
-      runtimeConfig,
+      repositoryPolicy,
+      workerLoopConfig,
+      liveRuntimeConfig,
       replayEvidence,
       pool,
       verifier,
     });
     const heartbeatStore = createPostgresDeploymentHeartbeatStore({ pool });
     const heartbeatIdentity = createDeploymentWorkerIdentity({
-      deploymentId: runtimeConfig.deploymentId,
-      releaseTreeSha: runtimeConfig.releaseTreeSha,
+      deploymentId: runtimeConfiguration.deploymentId,
+      releaseTreeSha: runtimeConfiguration.releaseTreeSha,
     });
     for (const signal of ["SIGINT", "SIGTERM"] as const) {
       process.on(signal, () => {

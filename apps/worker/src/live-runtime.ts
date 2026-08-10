@@ -39,10 +39,7 @@ import feeConfigurationsAbi from "@flarenetwork/flare-periphery-contract-artifac
 import flareSystemsManagerAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFlareSystemsManager.sol/IFlareSystemsManager.json";
 import registryAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFlareContractRegistry.sol/IFlareContractRegistry.json";
 import relayAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IRelay.sol/IRelay.json";
-import {
-  parseLegacyLiveCoston2RuntimeConfig,
-  type LiveCoston2RuntimeConfig,
-} from "./worker-runtime-configuration";
+import type { LiveCoston2RuntimeConfig } from "./worker-runtime-configuration";
 
 const DEFAULT_RPC = "https://coston2-api.flare.network/ext/C/rpc";
 const ONE_MIB = 1024 * 1024;
@@ -54,17 +51,11 @@ const coston2 = {
   rpcUrls: { default: { http: [DEFAULT_RPC] } },
 } as const;
 
-interface LiveEnvironment {
-  [name: string]: string | undefined;
-}
-
-type LiveRuntimeFactoryInput = {
+type LivePipelineFactoryInput = {
+  runtimeConfig: LiveCoston2RuntimeConfig;
   verifier: PreflightPorts["verifier"];
   dependencies?: Partial<LivePipelineDependencies>;
-} & (
-  | { runtimeConfig: LiveCoston2RuntimeConfig; environment?: never }
-  | { environment: LiveEnvironment; runtimeConfig?: never }
-);
+};
 
 interface LivePipelineDependencies {
   createPublicClient(input: Record<string, unknown>): any;
@@ -243,12 +234,6 @@ const PIPELINE_CONTRACT_NAMES = [
 type PipelineContractName = (typeof PIPELINE_CONTRACT_NAMES)[number];
 type PipelineContracts = Record<PipelineContractName, Address>;
 
-function liveRuntimeConfig(input: LiveRuntimeFactoryInput) {
-  return "runtimeConfig" in input && input.runtimeConfig
-    ? input.runtimeConfig
-    : parseLegacyLiveCoston2RuntimeConfig(input.environment!);
-}
-
 function recordValue(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw createFdcError(
@@ -361,8 +346,8 @@ function relayerFingerprint(value: {
  * independently reconstructible from the command plus durable run evidence;
  * no in-memory result is required by a later worker lease.
  */
-export function createLiveCoston2PipelinePorts(input: LiveRuntimeFactoryInput) {
-  const runtimeConfig = liveRuntimeConfig(input);
+export function createLiveCoston2PipelinePorts(input: LivePipelineFactoryInput) {
+  const runtimeConfig = input.runtimeConfig;
   const dependencies: LivePipelineDependencies = {
     ...defaultPipelineDependencies,
     ...input.dependencies,
