@@ -201,6 +201,25 @@ test("passes exact nonsecret deployment/tree identity to API and worker only", (
 test("passes one complete typed worker configuration and two read-only replay inputs", () => {
   const worker = rendered.model.services?.worker;
   assert.ok(worker);
+  for (const sourceContract of [
+    `      - type: bind
+        source: \${PROOFLINE_WORKER_REPLAY_BUNDLE_FILE:?PROOFLINE_WORKER_REPLAY_BUNDLE_FILE is required}
+        target: /run/proofline/replay/bundle.json
+        read_only: true
+        bind:
+          create_host_path: false`,
+    `      - type: bind
+        source: \${PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:?PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE is required}
+        target: /run/proofline/replay/preflight-report.json
+        read_only: true
+        bind:
+          create_host_path: false`,
+  ]) {
+    assert.ok(
+      runtimeSource.includes(sourceContract),
+      "runtime source must retain exact long read-only bind semantics",
+    );
+  }
   assert.deepEqual(worker.environment, {
     DATABASE_URL_FILE: "/run/secrets/worker_database_url",
     PROOFLINE_COSTON2_DA_URL: "https://ctn2-data-availability.flare.network",
@@ -232,14 +251,14 @@ test("passes one complete typed worker configuration and two read-only replay in
       source: environment.PROOFLINE_WORKER_REPLAY_BUNDLE_FILE,
       target: "/run/proofline/replay/bundle.json",
       read_only: true,
-      bind: { create_host_path: false },
+      bind: {},
     },
     {
       type: "bind",
       source: environment.PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE,
       target: "/run/proofline/replay/preflight-report.json",
       read_only: true,
-      bind: { create_host_path: false },
+      bind: {},
     },
   ]);
   assert.deepEqual(secretTargets(worker), [

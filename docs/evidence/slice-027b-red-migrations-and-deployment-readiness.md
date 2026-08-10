@@ -386,3 +386,13 @@ key, database-password and replay-path sentinels; production needs no custom
 `toJSON` or non-enumerable workaround. Typecheck and the 113-case nearest
 baseline PASS, while the complete 86-case focus remains intentionally 63 RED
 and 23 controls PASS.
+
+Docker Compose v2.38.2 normalization was then reproduced independently: an
+explicit source `bind.create_host_path: false` is emitted in semantic JSON as
+an empty `bind` object. The runtime static contract now asserts the two exact
+long read-only replay binds and `create_host_path: false` directly against
+`deploy/compose.runtime.yaml`, while expecting the normalized empty bind object
+from Compose. The wrapper's executable missing/relative/empty/directory/
+symlink/FIFO preflight remains unchanged. Typecheck, 113 nearest controls and
+36 Sites controls PASS; the combined deployment static focus remains exactly
+3 intentional RED and 27 controls PASS without Docker or network activity.
