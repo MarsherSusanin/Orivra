@@ -56,6 +56,7 @@ CMD ["node", "/app/apps/api/dist/server.js"]
 FROM --platform=linux/amd64 node@sha256:745403dc46b5ab4c998502b07a12cbf020cf2c30645427a68ec0718f02d647de AS worker
 WORKDIR /app
 ENV NODE_ENV=production
+RUN mkdir -p /run/proofline/replay && chown node:node /run/proofline/replay
 COPY --from=dependency-cache /workspace/node_modules /app/node_modules
 # The bundle keeps the pg and solc runtime packages external.
 COPY --from=build --chown=node:node /workspace/apps/worker/dist/worker.js /app/apps/worker/dist/worker.js

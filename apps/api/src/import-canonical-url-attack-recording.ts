@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import { importCanonicalUrlAttackRecording } from "./canonical-url-attack-importer";
 import { verifyDeploymentSchema } from "./deployment-lifecycle";
 import { resolveDeploymentEnvironment } from "./deployment-secrets";
+import { parseExactApplicationDatabaseUrl } from "./deployment-database-url";
 
 function recordingArgument(argv: readonly string[]): string {
   if (
@@ -23,7 +24,11 @@ try {
     "recording-importer",
     process.env,
   );
-  pool = new Pool({ connectionString: environment.DATABASE_URL });
+  const databaseUrl = parseExactApplicationDatabaseUrl(
+    environment.DATABASE_URL ?? "",
+    "proofline_recording_importer_login",
+  );
+  pool = new Pool({ connectionString: databaseUrl });
   await verifyDeploymentSchema({ pool });
   const result = await importCanonicalUrlAttackRecording({
     recordingPath: recordingArgument(process.argv.slice(2)),

@@ -22,6 +22,7 @@ import {
 } from "./deployment-lifecycle";
 import { createPostgresDeploymentReadiness } from "./deployment-readiness";
 import { resolveDeploymentEnvironment } from "./deployment-secrets";
+import { parseExactApplicationDatabaseUrl } from "./deployment-database-url";
 import {
   createProoflineApi,
   type CanonicalUrlAttackDemoCache,
@@ -642,11 +643,19 @@ export async function startProductionApi(
     "api",
     environment,
   );
-  const recordingSha256 = parseCanonicalUrlAttackRecordingSelector(
-    resolvedEnvironment,
+  const databaseUrl = parseExactApplicationDatabaseUrl(
+    required(resolvedEnvironment, "DATABASE_URL"),
+    "proofline_api_login",
   );
-  const deploymentIdentity = parseDeploymentIdentity(resolvedEnvironment);
-  const initial = createProductionApi({ environment: resolvedEnvironment });
+  const applicationEnvironment = {
+    ...resolvedEnvironment,
+    DATABASE_URL: databaseUrl,
+  };
+  const recordingSha256 = parseCanonicalUrlAttackRecordingSelector(
+    applicationEnvironment,
+  );
+  const deploymentIdentity = parseDeploymentIdentity(applicationEnvironment);
+  const initial = createProductionApi({ environment: applicationEnvironment });
   initial.pool.on("error", () => undefined);
   let listening = false;
   try {
@@ -660,7 +669,7 @@ export async function startProductionApi(
       recordingSha256,
     });
     const production = createProductionApi({
-      environment: resolvedEnvironment,
+      environment: applicationEnvironment,
       pool: initial.pool,
       canonicalUrlAttackDemo,
       deploymentReadiness,

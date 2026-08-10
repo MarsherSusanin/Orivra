@@ -72,10 +72,37 @@ services:
       - /tmp:size=64m,mode=1777
     environment:
       DATABASE_URL_FILE: /run/secrets/worker_database_url
-      PROOFLINE_VERIFIER_API_KEY_FILE: /run/secrets/worker_verifier_api_key
+      PROOFLINE_COSTON2_DA_URL: ${PROOFLINE_COSTON2_DA_URL:-https://ctn2-data-availability.flare.network}
       PROOFLINE_COSTON2_PRIVATE_KEY_FILE: /run/secrets/worker_coston2_private_key
+      PROOFLINE_COSTON2_RPC_URL: ${PROOFLINE_COSTON2_RPC_URL:-https://coston2-api.flare.network/ext/C/rpc}
+      PROOFLINE_DA_TIMEOUT_MS: "15000"
       PROOFLINE_DEPLOYMENT_ID: ${PROOFLINE_DEPLOYMENT_ID:?PROOFLINE_DEPLOYMENT_ID is required}
+      PROOFLINE_RECEIPT_POLL_TIMEOUT_MS: "25000"
+      PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: ${PROOFLINE_RELAYER_BALANCE_FLOOR_WEI:?PROOFLINE_RELAYER_BALANCE_FLOOR_WEI is required}
+      PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: ${PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA:?PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA is required}
+      PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: ${PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI:?PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI is required}
       PROOFLINE_RELEASE_TREE_SHA: ${PROOFLINE_RELEASE_TREE_SHA:?PROOFLINE_RELEASE_TREE_SHA is required}
+      PROOFLINE_REPLAY_BUNDLE_PATH: /run/proofline/replay/bundle.json
+      PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: /run/proofline/replay/preflight-report.json
+      PROOFLINE_SAFE_CONSUMER_ADDRESS: ${PROOFLINE_SAFE_CONSUMER_ADDRESS:?PROOFLINE_SAFE_CONSUMER_ADDRESS is required}
+      PROOFLINE_VERIFIER_API_KEY_FILE: /run/secrets/worker_verifier_api_key
+      PROOFLINE_VERIFIER_URL: ${PROOFLINE_VERIFIER_URL:-https://fdc-verifiers-testnet.flare.network}
+      PROOFLINE_WORKER_DB_POOL_SIZE: "4"
+      PROOFLINE_WORKER_LEASE_HEARTBEAT_MS: "10000"
+      PROOFLINE_WORKER_MAX_ATTEMPTS: "8"
+    volumes:
+      - type: bind
+        source: ${PROOFLINE_WORKER_REPLAY_BUNDLE_FILE:?PROOFLINE_WORKER_REPLAY_BUNDLE_FILE is required}
+        target: /run/proofline/replay/bundle.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:?PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE is required}
+        target: /run/proofline/replay/preflight-report.json
+        read_only: true
+        bind:
+          create_host_path: false
     secrets:
       - source: worker_database_url
         target: worker_database_url

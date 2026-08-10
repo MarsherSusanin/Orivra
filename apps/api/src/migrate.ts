@@ -9,6 +9,7 @@ import {
   resolveDeploymentEnvironment,
   type DeploymentEnvironment,
 } from "./deployment-secrets";
+import { parseExactApplicationDatabaseUrl } from "./deployment-database-url";
 
 const migrationsDirectory = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -26,8 +27,12 @@ export async function runMigrationEntry(
     "migration-runner",
     environment,
   );
+  const databaseUrl = parseExactApplicationDatabaseUrl(
+    resolvedEnvironment.DATABASE_URL ?? "",
+    "proofline_migrator_login",
+  );
   const pool = new Pool({
-    connectionString: resolvedEnvironment.DATABASE_URL,
+    connectionString: databaseUrl,
     max: 1,
   });
   try {

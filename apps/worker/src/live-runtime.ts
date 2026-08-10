@@ -33,19 +33,18 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import fdcHubAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFdcHub.sol/IFdcHub.json";
 import fdcVerificationAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFdcVerification.sol/IFdcVerification.json";
 import feeConfigurationsAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFdcRequestFeeConfigurations.sol/IFdcRequestFeeConfigurations.json";
 import flareSystemsManagerAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFlareSystemsManager.sol/IFlareSystemsManager.json";
 import registryAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IFlareContractRegistry.sol/IFlareContractRegistry.json";
 import relayAbi from "@flarenetwork/flare-periphery-contract-artifacts/coston2/artifacts/contracts/IRelay.sol/IRelay.json";
+import {
+  parseLegacyLiveCoston2RuntimeConfig,
+  type LiveCoston2RuntimeConfig,
+} from "./worker-runtime-configuration";
 
-const REGISTRY_ADDRESS =
-  "0xaD67FE66660Fb8dFE9d6b1b4240d8650e30F6019" as Address;
 const DEFAULT_RPC = "https://coston2-api.flare.network/ext/C/rpc";
-const DEFAULT_DA =
-  "https://ctn2-data-availability.flare.network";
 const ONE_MIB = 1024 * 1024;
 
 const coston2 = {
@@ -58,6 +57,14 @@ const coston2 = {
 interface LiveEnvironment {
   [name: string]: string | undefined;
 }
+
+type LiveRuntimeFactoryInput = {
+  verifier: PreflightPorts["verifier"];
+  dependencies?: Partial<LivePipelineDependencies>;
+} & (
+  | { runtimeConfig: LiveCoston2RuntimeConfig; environment?: never }
+  | { environment: LiveEnvironment; runtimeConfig?: never }
+);
 
 interface LivePipelineDependencies {
   createPublicClient(input: Record<string, unknown>): any;
@@ -99,17 +106,6 @@ const defaultPipelineDependencies: LivePipelineDependencies = {
   dispatch: httpsDispatch,
   transformJq: async (value, query) => jqFirst(value as never, query),
 };
-
-function required(environment: LiveEnvironment, name: string): string {
-  const value = environment[name]?.trim();
-  if (!value) {
-    throw Object.assign(
-      new Error(`Live runtime configuration is missing ${name}`),
-      { kind: "configuration" },
-    );
-  }
-  return value;
-}
 
 function canonicalAbiParameters(signature: string) {
   let descriptor: unknown;
@@ -247,37 +243,10 @@ const PIPELINE_CONTRACT_NAMES = [
 type PipelineContractName = (typeof PIPELINE_CONTRACT_NAMES)[number];
 type PipelineContracts = Record<PipelineContractName, Address>;
 
-function positiveBigInt(environment: LiveEnvironment, name: string): bigint {
-  const value = required(environment, name);
-  if (!isCanonicalUint256Decimal(value)) {
-    throw Object.assign(new Error(`${name} must be an unsigned canonical uint256 integer`), {
-      kind: "configuration",
-    });
-  }
-  return BigInt(value);
-}
-
-function positiveInteger(
-  environment: LiveEnvironment,
-  name: string,
-  fallback: number,
-  maximum: number,
-): number {
-  const raw = environment[name]?.trim();
-  if (raw === undefined || raw === "") return fallback;
-  if (!/^[1-9][0-9]*$/.test(raw)) {
-    throw Object.assign(new Error(`${name} must be a positive integer`), {
-      kind: "configuration",
-    });
-  }
-  const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value > maximum) {
-    throw Object.assign(
-      new Error(`${name} must not exceed ${maximum}`),
-      { kind: "configuration" },
-    );
-  }
-  return value;
+function liveRuntimeConfig(input: LiveRuntimeFactoryInput) {
+  return "runtimeConfig" in input && input.runtimeConfig
+    ? input.runtimeConfig
+    : parseLegacyLiveCoston2RuntimeConfig(input.environment!);
 }
 
 function recordValue(value: unknown, label: string): Record<string, unknown> {
@@ -392,41 +361,19 @@ function relayerFingerprint(value: {
  * independently reconstructible from the command plus durable run evidence;
  * no in-memory result is required by a later worker lease.
  */
-export function createLiveCoston2PipelinePorts(input: {
-  environment: LiveEnvironment;
-  verifier: PreflightPorts["verifier"];
-  dependencies?: Partial<LivePipelineDependencies>;
-}) {
-  const environment = input.environment;
+export function createLiveCoston2PipelinePorts(input: LiveRuntimeFactoryInput) {
+  const runtimeConfig = liveRuntimeConfig(input);
   const dependencies: LivePipelineDependencies = {
     ...defaultPipelineDependencies,
     ...input.dependencies,
   };
-  const rpcUrl = environment.PROOFLINE_COSTON2_RPC_URL ?? DEFAULT_RPC;
-  const daEndpoint = environment.PROOFLINE_COSTON2_DA_URL ?? DEFAULT_DA;
-  const account = privateKeyToAccount(
-    required(environment, "PROOFLINE_COSTON2_PRIVATE_KEY") as Hex,
-  );
-  const globalFeeCapWei = positiveBigInt(
-    environment,
-    "PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI",
-  );
-  const balanceFloorWei = positiveBigInt(
-    environment,
-    "PROOFLINE_RELAYER_BALANCE_FLOOR_WEI",
-  );
-  const receiptPollTimeoutMs = positiveInteger(
-    environment,
-    "PROOFLINE_RECEIPT_POLL_TIMEOUT_MS",
-    25_000,
-    30_000,
-  );
-  const daTimeoutMs = positiveInteger(
-    environment,
-    "PROOFLINE_DA_TIMEOUT_MS",
-    15_000,
-    30_000,
-  );
+  const rpcUrl = runtimeConfig.rpcUrl;
+  const daEndpoint = runtimeConfig.daEndpoint;
+  const account = runtimeConfig.relayerAccount;
+  const globalFeeCapWei = runtimeConfig.relayerPolicy.globalFeeCapWei;
+  const balanceFloorWei = runtimeConfig.relayerPolicy.balanceFloorWei;
+  const receiptPollTimeoutMs = runtimeConfig.receiptPollTimeoutMs;
+  const daTimeoutMs = runtimeConfig.daTimeoutMs;
   const publicClient = dependencies.createPublicClient({
     chain: coston2,
     transport: http(rpcUrl, { timeout: 30_000, retryCount: 0 }),
@@ -464,7 +411,7 @@ export function createLiveCoston2PipelinePorts(input: {
           getAddress(
             String(
               await read(
-                REGISTRY_ADDRESS,
+                runtimeConfig.registryAddress,
                 registryAbi as Abi,
                 "getContractAddressByName",
                 [name],
@@ -490,7 +437,7 @@ export function createLiveCoston2PipelinePorts(input: {
       const networkSnapshot = {
         chainId: 114 as const,
         blockNumber: blockNumber.toString(),
-        registryAddress: REGISTRY_ADDRESS,
+        registryAddress: runtimeConfig.registryAddress,
         resolvedContracts: {
           FdcHub: addresses.FdcHub,
           FdcRequestFeeConfigurations:
@@ -542,7 +489,7 @@ export function createLiveCoston2PipelinePorts(input: {
       const network = {
         chainId: 114 as const,
         blockNumber: blockNumber.toString(),
-        registryAddress: REGISTRY_ADDRESS,
+        registryAddress: runtimeConfig.registryAddress,
         resolvedContracts: {
           FdcHub: addresses.FdcHub,
           FdcRequestFeeConfigurations:
@@ -841,10 +788,12 @@ export function createLiveCoston2PipelinePorts(input: {
           ],
         };
       }
-      const safeConsumer = getAddress(
-        required(environment, "PROOFLINE_SAFE_CONSUMER_ADDRESS"),
+      await read(
+        runtimeConfig.safeConsumerAddress,
+        consumerAbi(),
+        "consume",
+        [decoded],
       );
-      await read(safeConsumer, consumerAbi(), "consume", [decoded]);
       return { passed: true, diagnostics: [], requestUrl };
     },
   };

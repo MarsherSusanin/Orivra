@@ -220,6 +220,8 @@ async function prepareTemporaryDirectory(temporaryDirectory) {
     migratorDatabase: `postgres://proofline_migrator_login:${migratorPassword}@postgres:5432/proofline`,
     recordingImporterDatabase: `postgres://proofline_recording_importer_login:${importerPassword}@postgres:5432/proofline`,
     workerDatabase: `postgres://proofline_worker_login:${workerPassword}@postgres:5432/proofline`,
+    workerReplayBundle: "{}",
+    workerReplayPreflightReport: "{}",
     apiDigest: randomBytes(32).toString("hex"),
     postgresPassword,
   };
@@ -244,6 +246,14 @@ async function prepareTemporaryDirectory(temporaryDirectory) {
       PROOFLINE_API_DATABASE_URL_FILE: secretPaths.apiDatabase,
       PROOFLINE_API_TOKEN_DIGEST_KEY_FILE: secretPaths.apiDigest,
       PROOFLINE_WORKER_DATABASE_URL_FILE: secretPaths.workerDatabase,
+      PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
+      PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
+      PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
+      PROOFLINE_SAFE_CONSUMER_ADDRESS:
+        "0x5555555555555555555555555555555555555555",
+      PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: secretPaths.workerReplayBundle,
+      PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
+        secretPaths.workerReplayPreflightReport,
       PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE: secretPaths.recordingImporterDatabase,
       PROOFLINE_POSTGRES_PASSWORD_FILE: secretPaths.postgresPassword,
     },
