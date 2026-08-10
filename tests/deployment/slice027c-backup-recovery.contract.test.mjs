@@ -55,9 +55,17 @@ test("locks the official WAL-G v3.0.8 asset and two real SHA-256 identities", as
   assert.equal(lock.platform, "linux/amd64");
   assert.equal(
     lock.assetUrl,
-    "https://github.com/wal-g/wal-g/releases/download/v3.0.8/wal-g-pg-ubuntu-22.04-amd64.tar.gz",
+    "https://github.com/wal-g/wal-g/releases/download/v3.0.8/wal-g-pg-22.04-amd64.tar.gz",
   );
-  assert.ok(Number.isSafeInteger(lock.maximumBytes) && lock.maximumBytes >= 1_000_000 && lock.maximumBytes <= 100_000_000);
+  assert.equal(lock.maximumBytes, 17_891_961);
+  assert.equal(
+    lock.assetSha256,
+    "sha256:b0df1b484035eb5f131db7bbd303d1a460391848fdcce34ba1e0a564cca493e9",
+  );
+  assert.equal(
+    lock.binarySha256,
+    "sha256:f30544c5ce93cf83b87578e3c4a2e9c0e0ffc3d160ef89ecddaf75f397d98deb",
+  );
   realSha256(lock.assetSha256, "WAL-G archive");
   realSha256(lock.binarySha256, "WAL-G binary");
   assert.notEqual(lock.assetSha256, lock.binarySha256);
@@ -99,7 +107,7 @@ test("extends credential-isolated prefetch and both offline build passes with th
   ]);
   const combined = `${prefetch}\n${orchestration}`;
   assert.match(combined, /wal-g-release\.v1\.json/);
-  assert.match(combined, /wal-g-pg-ubuntu-22\.04-amd64\.tar\.gz/);
+  assert.match(combined, /wal-g-pg-22\.04-amd64\.tar\.gz/);
   assert.match(combined, /assetSha256[\s\S]*binarySha256/);
   assert.match(combined, /maximumBytes|content-length/i);
   assert.match(combined, /wal_g_release/);

@@ -44,11 +44,14 @@ volume or successful base-backup command as PITR evidence.
 ### Tool and image identity
 
 WAL-G `v3.0.8` is the only backup tool. The controlled asset is the official
-Linux/amd64 PostgreSQL build at
-`https://github.com/wal-g/wal-g/releases/download/v3.0.8/wal-g-pg-ubuntu-22.04-amd64.tar.gz`.
-A strict checked-in release lock records the exact asset URL, maximum bytes,
-asset SHA-256 and extracted binary SHA-256. Empty, zero, repeated-placeholder,
-uppercase or malformed digests are invalid.
+Linux/amd64 PostgreSQL build, GitHub release asset id `343810769`, at
+`https://github.com/wal-g/wal-g/releases/download/v3.0.8/wal-g-pg-22.04-amd64.tar.gz`.
+Its exact size is `17,891,961` bytes, archive identity is
+`sha256:b0df1b484035eb5f131db7bbd303d1a460391848fdcce34ba1e0a564cca493e9`,
+and extracted `wal-g` binary identity is
+`sha256:f30544c5ce93cf83b87578e3c4a2e9c0e0ffc3d160ef89ecddaf75f397d98deb`.
+A strict checked-in release lock records those exact values. Empty, zero,
+repeated-placeholder, uppercase or malformed digests are invalid.
 
 The production PostgreSQL image is a Proofline-owned custom image built from
 the exact official `postgres:17.6-bookworm` Linux/amd64 manifest. It copies the
@@ -67,10 +70,12 @@ Linux/amd64 manifest digests. Actual builds repeat twice with
 `--pull=false --network none`. MinIO and its client are QA-only inputs and are
 not production release images.
 
-The exact new OCI digests and WAL-G archive/binary hashes are a controlled
-027C1 GREEN discovery because they are not present in the accepted offline
-tree. RED requires valid real values and rejects placeholders; documentation
-and tests never invent them.
+The WAL-G archive and binary identities above are frozen inputs, not a future
+discovery. Controlled 027C1 GREEN prefetch verifies them before exposing the
+named context. Only the exact new PostgreSQL/MinIO OCI index and Linux/amd64
+manifest digests remain a controlled GREEN discovery because they are absent
+from the accepted offline tree. RED rejects missing or placeholder values;
+documentation and tests never invent them.
 
 ### Continuous WAL archive and storage authority
 

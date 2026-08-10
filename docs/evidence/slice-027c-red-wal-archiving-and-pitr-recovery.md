@@ -76,8 +76,10 @@ official image digests, recovery PostgreSQL image, isolated prefetch/build,
 configuration/secrets, production backup overlay/wrapper/scripts, recovery
 gate, private MinIO drill and promotion seam.
 
-No hash or OCI digest was invented. The controlled 027C1 GREEN prefetch must
-discover and lock real upstream values before any offline build can pass.
+No hash or OCI digest was invented. WAL-G URL, exact size and both SHA-256
+values are now frozen inputs; controlled 027C1 GREEN prefetch must verify them.
+Only the absent OCI image digests remain controlled discovery before an offline
+build can pass.
 
 ## Accepted controls
 
@@ -152,6 +154,28 @@ bytes. The nearest worker bootstrap/entry/lifecycle matrix is 4 files, 21/21
 PASS with zero skip; Sites compatibility remains 36/36 PASS. No production
 source, package metadata, build artifact, Docker resource or network state was
 changed.
+
+### WAL-G release-asset identity correction
+
+The initial RED freeze inserted an extra `ubuntu-` component into the asset
+filename; that object does not exist in the official v3.0.8 release and made
+the future controlled prefetch unsatisfiable. The exact
+official Linux/amd64 asset is GitHub release asset id `343810769`, filename
+`wal-g-pg-22.04-amd64.tar.gz`, URL
+`https://github.com/wal-g/wal-g/releases/download/v3.0.8/wal-g-pg-22.04-amd64.tar.gz`,
+size `17,891,961`, archive SHA-256
+`b0df1b484035eb5f131db7bbd303d1a460391848fdcce34ba1e0a564cca493e9`
+and extracted binary SHA-256
+`f30544c5ce93cf83b87578e3c4a2e9c0e0ffc3d160ef89ecddaf75f397d98deb`.
+
+The deployment RED now requires those exact values and the prefetch source to
+name the exact asset. All no-auth, bounded-size, two-checksum, named-context and
+offline-build authority remains unchanged. This tests/docs-only correction
+performed no network, Docker, production, dependency, lock or Compose effect.
+After the correction, typecheck is PASS; focused recovery remains exactly 15
+intentional RED, 2 controls PASS and 2 real-PostgreSQL cases gated; deployment
+recovery remains 12 intentional RED and 2 controls PASS. The nearest accepted
+deployment/roadmap matrix is 45/45 PASS and Sites is 36/36 PASS.
 
 ## Required GREEN evidence
 

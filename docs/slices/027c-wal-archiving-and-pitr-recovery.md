@@ -26,14 +26,19 @@ recovery change. No public HTTP or Web contract changes.
 
 - add strict `BackupEvidenceV1`, `RestoreDrillEvidenceV1` and
   `RestorePromotionAuthorizationV1` in cycle-free pure recovery contracts;
-- lock WAL-G v3.0.8 official archive and binary SHA-256;
+- lock WAL-G v3.0.8 official release asset id `343810769`, exact archive
+  `wal-g-pg-22.04-amd64.tar.gz`, size `17,891,961`, archive SHA-256
+  `b0df1b484035eb5f131db7bbd303d1a460391848fdcce34ba1e0a564cca493e9`
+  and extracted binary SHA-256
+  `f30544c5ce93cf83b87578e3c4a2e9c0e0ffc3d160ef89ecddaf75f397d98deb`;
 - lock official PostgreSQL 17.6 Debian, MinIO and MinIO-client index and
   Linux/amd64 manifest digests;
 - extend controlled no-auth prefetch and named local build-context handling;
 - freeze strict Spaces/MinIO configuration and bounded secret-file loading.
 
-Exact new hashes/digests must be resolved from the controlled upstream during
-GREEN. RED rejects missing or placeholder values and does not invent them.
+The WAL-G URL, size and hashes are frozen exact inputs. Only exact new OCI
+digests must be resolved from the controlled upstream during GREEN. RED rejects
+missing or placeholder values and does not invent them.
 
 ### 027C2 — production archive and backup lifecycle
 
@@ -58,7 +63,8 @@ GREEN. RED rejects missing or placeholder values and does not invent them.
 
 ## Frozen contracts
 
-- WAL-G version is exactly v3.0.8; Docker builds perform no download.
+- WAL-G version is exactly v3.0.8 and its asset is exactly
+  `wal-g-pg-22.04-amd64.tar.gz`; Docker builds perform no download.
 - Production storage is strict DigitalOcean Spaces HTTPS; QA alone may use the
   exact internal MinIO origin.
 - Prefix is constructed as
