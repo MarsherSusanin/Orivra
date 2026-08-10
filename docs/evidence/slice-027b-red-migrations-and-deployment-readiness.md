@@ -202,6 +202,27 @@ remains exactly 17 intentional RED and 10 controls PASS, the nearest deployment
 controls remain 23/23 PASS and Sites remains 36/36 PASS. No Docker process,
 build, pull or network operation was used.
 
+### Real-PostgreSQL inventory compatibility correction
+
+The retained Slice 023D1 quota migration fixture and the generic empty/previous
+schema Testcontainers fixture now require the immutable ordered migration
+inventory to continue through exact `010_deployment_lifecycle.sql`. The generic
+history assertions likewise require versions 1–10 on an empty schema and 0–10
+after upgrading the historical fixture. This preserves every 001–009 ordering,
+quota, idempotency and historical-upgrade assertion while removing the stale
+nine-migration ceiling.
+
+Typecheck is PASS. The credential-free focused source run was 3 PASS with 7
+Testcontainers cases gated, so it is not PostgreSQL evidence. The first enabled
+affected real-PostgreSQL run used the already-cached `postgres:16-alpine` image:
+the generic migration test passed, while one quota assertion crossed the exact
+minute boundary at `04:05:00.012Z` and produced 9 PASS / 1 FAIL. An immediate
+unchanged serial rerun outside that boundary passed 10/10 with zero skip. The
+nearest immutable-manifest suite is 17/17 PASS; an additional lifecycle source
+run produced 23 controls PASS and 4 gated integration skips, which are not
+claimed as integration evidence. No image was pulled, no Compose/runtime Docker
+gate ran, and post-run label inspection found no Testcontainers resource.
+
 ## GREEN authority still required
 
 Implementation must make the frozen contracts GREEN without adopting legacy

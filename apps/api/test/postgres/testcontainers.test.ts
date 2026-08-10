@@ -28,6 +28,7 @@ async function loadMigrations() {
     "007_account_token_management.sql",
     "008_persisted_admission_quotas.sql",
     "009_canonical_url_attack_recordings.sql",
+    "010_deployment_lifecycle.sql",
   ]);
   return Promise.all(
     names.map(async (name) => ({
@@ -39,7 +40,7 @@ async function loadMigrations() {
 
 describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
   it(
-    "runs 001 through 008 on empty and previous schemas repeatedly",
+    "runs 001 through 010 on empty and previous schemas repeatedly",
     async () => {
       const migrations = await loadMigrations();
       const container = await new GenericContainer("postgres:16-alpine")
@@ -84,7 +85,7 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
         );
         expect(emptyVersions.rows.map(({ version }) => version)).toEqual([
-          1, 2, 3, 4, 5, 6, 7, 8, 9,
+          1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
         ]);
 
         const tables = await client.query<{ table_name: string }>(
@@ -184,7 +185,7 @@ describe.runIf(enabled)("PostgreSQL migration against a real container", () => {
           "SELECT version FROM proofline_private.schema_migrations ORDER BY version",
         );
         expect(previousVersions.rows.map(({ version }) => version)).toEqual([
-          0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
         ]);
         const upgradedTables = await client.query<{ table_name: string }>(
           "SELECT table_name FROM information_schema.tables WHERE table_schema = 'proofline_private'",

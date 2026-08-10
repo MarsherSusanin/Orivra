@@ -135,6 +135,7 @@ describe.runIf(enabled)("Slice 023D1 real PostgreSQL admission quotas", () => {
       "007_account_token_management.sql",
       expect.stringMatching(/^008_.+\.sql$/),
       "009_canonical_url_attack_recordings.sql",
+      "010_deployment_lifecycle.sql",
     ]);
     for (const migration of all) await pool.query(migration.sql);
   }, 120_000);
