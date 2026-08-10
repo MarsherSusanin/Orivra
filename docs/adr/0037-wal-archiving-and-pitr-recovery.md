@@ -41,7 +41,7 @@ all-in-one database image would weaken the accepted image authority.
 No wave may claim a Droplet snapshot, running container, `pg_dump`, copied
 volume or successful base-backup command as PITR evidence.
 
-### Rejected candidate and positive evidence correction
+### Rejected candidates and evidence-authority correction
 
 Both independent verifiers reject exact implementation candidate
 `1218e589517c32af3cc45291d02a8b147b483760` / tree
@@ -53,12 +53,32 @@ evidence also assigned one random tree-shaped value to both producer commit and
 tree. Runtime checks without exact immutable handoff and truthful provenance
 are not 027C acceptance evidence.
 
-The corrective boundary independently resolves and validates exact repository
-commit, tree and clean state before the drill. Verified evidence requires a
-clean tree and distinct lowercase 40-hex `commitSha` and `treeSha` equal to
-`git rev-parse HEAD` and `git rev-parse HEAD^{tree}`. A dirty local author run
-may remain schema-valid only when the handoff is explicitly `draft` with
-`releaseClaim: false`; it cannot be verifier or release evidence.
+The subsequent production work-in-progress captured as stash
+`ccccf5d2c2d45415ceb68e6e670a793ee22e0382` is also rejected. Codex Security
+diff scan `ae807f50-4ceb-4412-94f2-03e8e311bff3` against exact base
+`061d01d5093c9424e64bbb2b50c1f3351205e5fa` / tree
+`23fdc7720ec288a16f808c2d70d3e2703c14f290` found two reportable P2 defects:
+repository-identity TOCTOU (`CWE-367`) and synthetic backup metadata
+publication (`CWE-345`). It also validated two operator-only release-control
+defects: PASS publication before the negative/final cleanup boundary and
+draft evidence accepted by the promotion path. Scan report SHA-256 is
+`6ae28c2f1bce1bbf621e80c032cd117cfefad1f32c195091105e957510c71b95`.
+
+The corrective boundary captures one repository source before the drill. In
+verified mode it captures `commitSha`, derives `treeSha` only as
+`${commitSha}^{tree}`, requires those exact 40-hex identities to be distinct,
+proves the worktree clean and materializes a private,
+read-only snapshot from that commit. Every repository file consumed by the
+drill comes from that snapshot. After materialization every snapshot directory
+is exact mode 0500, every regular file is 0400 and symlinks are forbidden; the
+snapshot is removed before terminal publication. Immediately before
+publication it
+requires unchanged `HEAD`, derived tree and clean status. A transient/shared-
+worktree mutation therefore cannot yield verified evidence. In dirty author
+mode the gate instead captures a private copy plus manifest of the exact
+candidate bytes and labels the staged handoff `draft` with
+`releaseClaim: false`; it may support author diagnostics but can never be
+terminally published or promotion-authorized.
 
 After actual `pitr-verify`, direct recovery-state and reader-only ciphertext
 inventory checks agree, the gate parses and canonicalizes both positive
@@ -70,18 +90,22 @@ cut and inventory results from actual observations. Backup status remains
 
 The caller supplies one absolute mode-0700 evidence output root outside the
 gate's temporary secret directory. A private staging directory receives exact
-mode-0600 canonical UTF-8 `backup-evidence.v1.json` and
-`restore-drill-evidence.v1.json`; only after both validate and their SHA-256
-values are known is the directory atomically renamed to
-`recovery-evidence.v1`. Failure removes staging and publishes neither file.
-Success preserves the exact directory for the caller. An explicit cleanup
-operation may remove only that final directory and never the caller root or
-unrelated files.
+mode-0600 canonical UTF-8 `backup-evidence.v1.json`,
+`restore-drill-evidence.v1.json` and `recovery-evidence-handoff.v1.json`.
+Backup/restore schemas and canonical byte digests are cross-bound by strict
+`RecoveryEvidenceHandoffV1`. The actual negative matrix then consumes that
+staged triad, and project, secret and snapshot cleanup plus the final source
+identity recheck must all finish. Only then may verified/release-claim evidence
+be atomically renamed to terminal `recovery-evidence.v1`. Any negative,
+diagnostic, finalizer, revalidation or publication failure removes staging and
+leaves zero final PASS artifacts. Success preserves the exact three-file
+directory for the caller. An explicit cleanup operation may remove only that
+final directory and never the caller root or unrelated files.
 
 Absent and mismatched promotion-authorization negatives consume the actual
-emitted restore bytes and digest and vary only the authorization input. They
-must fail before `pg_promote`; a valid matching authorization is never created
-or executed automatically by the credential-free drill.
+staged handoff, backup and restore bytes and vary only the authorization input.
+They must fail before `pg_promote`; a valid matching authorization is never
+created or executed automatically by the credential-free drill.
 
 ### Tool and image identity
 
@@ -226,6 +250,30 @@ evidence exists.
 Backup status is operator-only strict JSON. It does not alter `/healthz` or
 `/readyz`, and the API receives no object-store credential.
 
+The selected-backup authority is one strict record from locked WAL-G v3.0.8
+`backup-list --detail --json`, selected by exact `backup_name`. The raw record
+has exactly `backup_name`, `time`, `wal_file_name`, `storage_name`,
+`start_time`, `finish_time`, `date_fmt`, `hostname`, `data_dir`, `pg_version`,
+numeric `start_lsn`, numeric `finish_lsn`, `is_permanent`, numeric
+`system_identifier`, `uncompressed_size` and `compressed_size`; duplicate,
+missing, extra or malformed selected records fail. `backup_name`, start and
+finish times/LSNs, starting WAL and system identity all come from that single
+record. A lossless raw-token parser validates unsigned 64-bit integers before
+conversion; plain `JSON.parse` is forbidden because real PostgreSQL system
+identifiers exceed JavaScript's safe integer range. The exact raw
+`system_identifier` token must equal the independently observed database
+identifier. LSN integers are normalized to PostgreSQL `X/Y` form. With
+PostgreSQL 17's fixed 16 MiB WAL segment size, the ending WAL is derived from
+`finish_lsn`, while timeline is decoded from `wal_file_name`. Wall-clock
+offsets, ambient/current PostgreSQL LSNs and post-cut WAL observations may not
+substitute any selected-backup field.
+
+WAL-G's Go JSON emits UTC RFC3339Nano timestamps with zero through six
+fractional digits after its microsecond rounding; trailing zeroes may be
+omitted. The selector accepts only that UTC form and normalizes it to the exact
+six-fractional-digit evidence timestamp. It does not require the upstream JSON
+token itself to contain `.000000`.
+
 ### Immutable recovery evidence
 
 Strict cycle-free schemas live at `@proofline/contracts/recovery` with root
@@ -264,10 +312,20 @@ and restore volume identity digests, paused/in-recovery/not-promoted state,
 system/schema/checksum/inventory results, before-cut-present and
 after-cut-absent results, timestamps and `status: "passed"`.
 
-`RestorePromotionAuthorizationV1` is a separate explicit operator artifact
-bound to the exact restore-evidence SHA-256. Missing, expired, mismatched or
-noncanonical authorization aborts before `pg_promote`. A restore PASS does not
-itself authorize cutover.
+`RecoveryEvidenceHandoffV1` is the third canonical artifact. It contains
+exactly version/kind/status, `verification: "draft" | "verified"`, the matching
+`releaseClaim` boolean, the full producer identity and fixed backup/restore
+filenames with their canonical SHA-256 values. Only `verified` with
+`releaseClaim: true` may be terminally published; draft is staging-only.
+
+`RestorePromotionAuthorizationV1` remains exported as a compatibility data
+type, but it is never sufficient promotion authority. Production
+`authorizeRestorePromotion` requires strict canonical
+`RestorePromotionAuthorizationV2`, which binds both the terminal canonical
+handoff SHA-256 and its restore-evidence SHA-256, plus operator, authorization
+and expiry times and `promote: true`. Missing V2, V1-only, expired,
+mismatched, noncanonical, draft or non-release handoff input aborts before
+`pg_promote`. A restore PASS does not itself authorize cutover.
 
 ### Exact-time MinIO PITR drill
 

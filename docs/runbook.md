@@ -219,6 +219,14 @@ commit and tree. The prior local gate and security scan therefore do not count
 as accepted 027C evidence. Corrective RED is frozen; production correction and
 both replacement verifier reports are pending.
 
+Later stash candidate `ccccf5d2c2d45415ceb68e6e670a793ee22e0382` is also
+rejected by Codex Security scan `ae807f50-4ceb-4412-94f2-03e8e311bff3`
+(report SHA-256
+`6ae28c2f1bce1bbf621e80c032cd117cfefad1f32c195091105e957510c71b95`).
+It did not bind execution to one immutable repository snapshot, derived backup
+metadata from unrelated clocks/LSNs, published before its real negative and
+final-cleanup boundary, and let draft evidence reach promotion authorization.
+
 This is local credential-free author evidence only. It uses no production
 Spaces, GHCR, DNS, SSH or live Coston2 credential and proves no hosted/VDS
 backup, production restore or promotion, actual RPO/RTO, SLA or readiness.
@@ -234,8 +242,15 @@ them. The backup login owns no application group membership or table DML.
 PostgreSQL archives exact WAL segments and backup-history files under
 `s3://<bucket>/proofline/v1/<slot>/<system_identifier>`, with client-side
 libsodium encryption and overwrite prevention. A host timer may invoke the
-fixed wrapper for `base-backup` daily at 02:00 UTC. `backup-status` is a
-read-only operator JSON command. Run `backup-retention` only with a current
+fixed wrapper for `base-backup` daily at 02:00 UTC. `backup-status` is the
+read-only operator command `wal-g backup-list --detail --json`. Select exactly
+one record by backup name. Parse its raw JSON losslessly: WAL-G emits
+`system_identifier`, `start_lsn` and `finish_lsn` as uint64 number tokens, and
+the system identifier may exceed JavaScript's safe integer range. Require its
+exact value to equal the independent DB observation. Accept strict UTC
+RFC3339 with zero through six fractional digits and normalize to six digits;
+derive both LSNs and WAL segments from that record, never from wall-clock
+offsets, current LSN or post-cut WAL. Run `backup-retention` only with a current
 verified backup-evidence file; it retains eight completed full backups and the
 WAL they require. Do not schedule a Docker-authority container.
 
@@ -251,26 +266,35 @@ machine-readable `pitr-verify` record; a hard-coded success value or a mismatch
 with the direct PostgreSQL recovery-state query fails the gate.
 
 The corrected gate must receive an explicit absolute caller-owned evidence
-output root. It independently resolves the repository `HEAD`, `HEAD^{tree}` and
-clean state, then atomically preserves exact
-`recovery-evidence.v1/backup-evidence.v1.json` and
-`recovery-evidence.v1/restore-drill-evidence.v1.json`. Verify both files with
-`@proofline/contracts/recovery`, compare their SHA-256 values with the gate
-handoff record, and compare producer commit/tree with the same final
-`git rev-parse` results before treating the run as verified. Dirty author runs
-are draft-only and cannot become a release claim. Copy or consume the verified
-artifacts before invoking the explicit exact-scoped evidence cleanup; ordinary
-secret/project cleanup must not delete a successful handoff.
+output root. It captures one commit, derives `${capturedCommit}^{tree}` and
+materializes a private read-only commit snapshot; every verified drill input
+comes from that snapshot. Snapshot directories are 0500, regular files are
+0400, symlinks are forbidden, and snapshot cleanup must finish before publish.
+Dirty author mode instead captures a private candidate-byte manifest and may
+stage only `draft`/`releaseClaim: false`.
 
-The same gate then executes, in order, missing WAL, corrupt backup, wrong key,
-future target, reused volume, nonempty volume, absent promotion authorization
-and mismatched promotion-evidence controls. Each must observe its fixed failure
+Stage the exact canonical triad `backup-evidence.v1.json`,
+`restore-drill-evidence.v1.json` and `recovery-evidence-handoff.v1.json`
+privately. Verify all three through `@proofline/contracts/recovery`; the handoff
+cross-binds producer and both artifact SHA-256 values. Run the real negative
+matrix against that staged triad, finish project, secret and snapshot cleanup,
+then recheck final HEAD/derived tree/clean identity. Only a still-verified clean
+run may atomically publish terminal `recovery-evidence.v1`. Any negative,
+diagnostic, finalizer or identity failure leaves no final PASS artifacts.
+Explicit exact-scoped evidence cleanup is the only operation that later removes
+a successful handoff.
+
+Within that prepublication matrix the gate executes, in order, missing WAL,
+corrupt backup, wrong key, future target, reused volume, nonempty volume, absent
+promotion authorization and mismatched promotion-evidence controls. Each must
+observe its fixed failure
 code within the case deadline, create zero PASS evidence, attempt zero
 promotion and leave zero case-scoped containers, networks, volumes and
 temporary paths before the next case. A drill PASS is not promotion authority:
-`scripts/restore-promotion.mjs` validates strict restore evidence plus a
-separate, unexpired, exact-digest-bound operator authorization before it can
-call `pg_promote`.
+`scripts/restore-promotion.mjs` validates the canonical terminal handoff and
+restore evidence plus separate, unexpired `RestorePromotionAuthorizationV2`
+bound to both SHA-256 values before it can call `pg_promote`. V1 authorization
+is compatibility data only and cannot authorize an effect.
 
 Negative children report only their fixed failure code. The parent separately
 probes the mutated MinIO object or volume, the reached Docker/PostgreSQL sink,
@@ -771,8 +795,9 @@ Upstream Coston2 outage блокирует release. Override возможен т
 - Production restore authority — только exact completed backup evidence,
   backup ID, UTC target и numeric timeline; `LATEST` запрещён. Restore всегда
   пишет в новый пустой volume и остаётся paused/in-recovery. `pg_promote`
-  требует отдельный неистёкший `RestorePromotionAuthorizationV1`, связанный с
-  SHA-256 точного restore evidence.
+  требует отдельный неистёкший `RestorePromotionAuthorizationV2`, связанный с
+  SHA-256 канонического terminal handoff и точного restore evidence. V1
+  сохраняется только как compatibility data type.
 - Credential-free 027C acceptance использует только private MinIO без host
   ports и отдельные ephemeral writer/reader/retention identities. Spaces
   credentials, actual VDS PITR, фактические RPO/RTO и production promotion в

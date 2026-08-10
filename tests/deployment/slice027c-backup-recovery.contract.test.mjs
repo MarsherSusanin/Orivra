@@ -34,11 +34,12 @@ test("accepts ADR 0037 and freezes Slice 027C C1/C2/C3 without a hosted claim", 
   for (const wave of ["027C1", "027C2", "027C3"]) assert.match(slice, new RegExp(wave));
   assert.match(
     roadmap,
-    /\| 027C \| WAL\/base-backup PITR and local MinIO restore drill \| Corrective RED frozen after two verifier P1 findings; production correction pending \|/,
+    /\| 027C \| WAL\/base-backup PITR and local MinIO restore drill \| Security corrective RED frozen after scan ae807f50; production correction pending \|/,
   );
   const roadmap027c = roadmap.match(/- \*\*027C\*\*[\s\S]*?(?=\n- \*\*028A)/)?.[0] ?? "";
   assert.match(roadmap027c, /exact candidate\s+`1218e589` \/ tree `f0d6e325` is rejected/i);
-  assert.match(roadmap027c, /corrective RED\s+is frozen/i);
+  assert.match(roadmap027c, /corrective RED freezes/i);
+  assert.match(roadmap027c, /stash\s+candidate `ccccf5d2` is rejected by scan `ae807f50`/i);
   assert.match(roadmap027c, /not hosted, live Spaces\/production/i);
   assert.match(readme, /527c561[\s\S]{0,80}ebdf648/);
   assert.doesNotMatch(`${adr}\n${slice}`, /hosting is deployed|hosted PASS|production PITR PASS/i);
@@ -295,11 +296,39 @@ test("fails closed for corrupt recovery inputs and promotion without exact autho
   assert.match(runtime, /pitr-verify|PitrVerify/i);
   assert.match(runtime, /passEvidenceCount/);
   assert.match(runtime, /promotionCount/);
-  assert.match(promotion, /RestorePromotionAuthorizationV1Schema/);
+  assert.match(promotion, /RestorePromotionAuthorizationV2Schema/);
+  assert.match(promotion, /RecoveryEvidenceHandoffV1Schema/);
+  assert.match(promotion, /recoveryEvidenceHandoffSha256/);
   assert.match(promotion, /restoreDrillEvidenceSha256/);
   assert.match(promotion, /pg_promote/);
   assert.match(promotion, /RESTORE_PROMOTION_FORBIDDEN/);
-  assert.ok(promotion.indexOf("RestorePromotionAuthorizationV1Schema") < promotion.indexOf("pg_promote"));
+  assert.ok(promotion.indexOf("RecoveryEvidenceHandoffV1Schema") < promotion.indexOf("pg_promote"));
+});
+
+test("uses exact WAL-G detail metadata and never substitutes process clocks or post-cut WAL", async () => {
+  const [status, gate, selected, handoff] = await Promise.all([
+    source("docker/recovery/proofline-backup-status.sh"),
+    source("scripts/docker-recovery-gate.mjs"),
+    source("scripts/recovery-selected-backup-metadata.mjs"),
+    source("scripts/recovery-evidence-handoff.mjs"),
+  ]);
+  assert.match(status, /backup-list\s+--detail\s+--json/);
+  assert.match(gate, /captureRecoveryProducerSnapshot/);
+  assert.match(gate, /snapshot\.sourceRoot/);
+  assert.match(gate, /runRecoveryEvidencePublication/);
+  assert.match(gate, /selectRecoveryBackupMetadata/);
+  assert.match(selected, /backup_name/);
+  assert.match(selected, /start_time/);
+  assert.match(selected, /finish_time/);
+  assert.match(selected, /start_lsn/);
+  assert.match(selected, /finish_lsn/);
+  assert.match(selected, /wal_file_name/);
+  assert.match(selected, /expectedSystemIdentifier/);
+  assert.match(handoff, /RecoveryEvidenceHandoffV1Schema/);
+  assert.match(handoff, /canonicalSerializeRecoveryEvidenceHandoff/);
+  assert.match(handoff, /checksumRecoveryEvidenceHandoff/);
+  assert.doesNotMatch(gate, /Date\.now\(\)\s*-\s*1_?000/);
+  assert.doesNotMatch(gate, /stopWalSegment:\s*afterWal/);
 });
 
 test("keeps application readiness and the accepted 027B runtime as GREEN controls", async () => {

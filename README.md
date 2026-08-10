@@ -78,8 +78,13 @@ blockchain-операций.
   candidate `1218e589` / tree `f0d6e325` was rejected by both independent
   verifiers: it emitted no canonical positive restore evidence, used synthetic
   evidence for promotion negatives and reused one random identity as commit and
-  tree. Corrective tests/docs-only RED now freezes the exact atomic evidence
-  handoff; replacement production GREEN and two new reviews are pending.
+  tree. Later stash candidate `ccccf5d2` is rejected by security scan
+  `ae807f50`: source identity remained mutable, selected backup metadata was
+  synthetic, PASS publication was premature and draft evidence could reach
+  promotion. Corrective tests/docs-only RED freezes private source snapshots,
+  exact WAL-G detail metadata, a terminal canonical three-file handoff and V2
+  authorization bound to handoff plus restore; replacement production GREEN
+  and two new reviews are pending.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
@@ -149,7 +154,10 @@ ports и Docker socket не публикуются.
 evidence. ADR 0037 и Slice 027C имеют frozen corrective RED после того, как оба
 verifier отклонили exact `1218e589` / `f0d6e325` из-за отсутствующего positive
 restore-evidence handoff и ложной producer identity. До replacement GREEN и
-двух новых PASS это не accepted recovery evidence. 028A–029B по-прежнему
+двух новых PASS это не accepted recovery evidence. Stash `ccccf5d2` также
+отклонён scan `ae807f50`; frozen correction требует immutable source snapshot,
+lossless WAL-G metadata, terminal `RecoveryEvidenceHandoffV1` и
+`RestorePromotionAuthorizationV2`. 028A–029B по-прежнему
 владеют release и production promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment
 не provisioned. Sites сохраняется только как
@@ -215,8 +223,9 @@ Web2JsonManifestV1
   immutable GHCR digests,
   one-shot checksummed migration под PostgreSQL advisory lock, persistent
   database volume, `/healthz`, `/readyz`, worker heartbeat и off-host
-  WAL/base-backup PITR. Локальные credential-free 027B readiness и 027C
-  backup/recovery части реализованы и проходят author gates; GHCR publication,
+  WAL/base-backup PITR. Локальная credential-free 027B readiness
+  independently verified; 027C backup/recovery остаётся corrective RED
+  после rejected candidates и не имеет accepted author gate. GHCR publication,
   VDS deployment и использование production Spaces credentials ещё не
   выполнялись. Это не hosted, live-production, фактический RPO/RTO или SLA PASS.
 - Rollback разрешён только на prior schema-compatible verified remote digest,

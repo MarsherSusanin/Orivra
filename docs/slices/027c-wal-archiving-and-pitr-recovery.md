@@ -30,9 +30,15 @@ evidence, and `BackupEvidenceV1.producer` reused one random value as both commit
 and tree. Those P1 failures invalidate its local GREEN and security-scan status
 as module acceptance evidence.
 
-Corrective tests/docs-only RED now freezes an atomic positive evidence handoff,
-distinct exact repository commit/tree identity and promotion negatives bound to
-the actual positive restore bytes and digest. Production correction, affected
+The later stash candidate `ccccf5d2c2d45415ceb68e6e670a793ee22e0382`
+is also rejected after Codex Security scan
+`ae807f50-4ceb-4412-94f2-03e8e311bff3`: it consumed mutable shared-worktree
+sources after separate Git identity reads, published synthetic backup metadata,
+published PASS before negatives/final cleanup, and let draft evidence reach the
+promotion authority boundary. Corrective tests/docs-only RED now freezes a
+private immutable source snapshot, lossless exact WAL-G selected metadata,
+terminal three-artifact publication and V2 authorization bound to the actual
+handoff and restore. Production correction, affected
 coverage, real PostgreSQL, offline Docker recovery and two new independent
 reviews remain pending. This status is not hosted/VDS or production Spaces
 evidence, uses no live Coston2 or deployment credential, and makes no actual
@@ -42,8 +48,10 @@ RPO/RTO or SLA claim.
 
 ### 027C1 — contracts, tool identity and configuration
 
-- add strict `BackupEvidenceV1`, `RestoreDrillEvidenceV1` and
-  `RestorePromotionAuthorizationV1` in cycle-free pure recovery contracts;
+- add strict `BackupEvidenceV1`, `RestoreDrillEvidenceV1`,
+  `RecoveryEvidenceHandoffV1` and `RestorePromotionAuthorizationV2` in
+  cycle-free pure recovery contracts while retaining V1 authorization only as
+  a compatibility data type;
 - lock WAL-G v3.0.8 official release asset id `343810769`, exact archive
   `wal-g-pg-22.04-amd64.tar.gz`, size `17,891,961`, archive SHA-256
   `b0df1b484035eb5f131db7bbd303d1a460391848fdcce34ba1e0a564cca493e9`
@@ -67,6 +75,9 @@ missing or placeholder values and does not invent them.
 - add exact system-identifier/slot prefix construction and encrypted WAL push;
 - add the dedicated `proofline_backup_login` role without application DML;
 - add one-shot base-backup, backup-status and retention services;
+- select exactly one WAL-G v3.0.8 `backup-list --detail --json` record through
+  lossless raw uint64 parsing and derive backup times, LSNs and WAL segments
+  solely from it;
 - serialize backup with the fixed advisory lock, retain eight full chains and
   keep application health/readiness unchanged.
 - validate strict canonical backup evidence, separate evidence hash, active
@@ -110,6 +121,9 @@ missing or placeholder values and does not invent them.
 - give prefetch inspect/pull/build children only the exact isolated eight-name
   no-auth environment;
 - clean exact project resources.
+- stage the canonical backup/restore/handoff triad before negatives, but publish
+  it atomically only after all negatives, diagnostics, project/secret/snapshot
+  cleanup and final source revalidation succeed.
 
 ## Frozen contracts
 
@@ -127,6 +141,11 @@ missing or placeholder values and does not invent them.
   encryption key is separate from all of them.
 - Primary PostgreSQL is the only continuous archive owner and returns archive
   success only after encrypted off-host upload.
+- Backup evidence metadata comes from one exact WAL-G v3.0.8
+  `backup-list --detail --json` record. Raw uint64 LSN/system-identifier tokens
+  are parsed losslessly, the system identifier equals the independent DB
+  observation, RFC3339 UTC 0–6 fractional digits normalize to exact
+  microseconds, and no wall clock/current LSN/post-cut WAL may substitute them.
 - Restore always targets a distinct new volume, remains paused and requires a
   separate evidence-bound promotion authorization.
 - `/healthz` and `/readyz` remain byte-identical to ADR 0036.
@@ -145,23 +164,27 @@ missing or placeholder values and does not invent them.
   exactly `PATH`, isolated `DOCKER_CONFIG`/`HOME`/`XDG_CONFIG_HOME`/`TMPDIR`
   and fixed `LANG`/`LC_ALL`/`TZ`; all transport, builder and credential
   authority is absent.
-- The positive gate resolves `git rev-parse HEAD`, `git rev-parse HEAD^{tree}`
-  and `git status --porcelain` independently. A verified handoff requires a
-  clean tree and two distinct exact lowercase 40-hex identities. A dirty local
-  author run may write schema-valid evidence only as explicit `draft` with
-  `releaseClaim: false`; random, reused or substituted identity is forbidden.
+- The positive gate captures one commit, derives `${capturedCommit}^{tree}` and
+  materializes a private read-only commit snapshot. Every verified drill input
+  comes only from that snapshot; directories are mode 0500, files are 0400,
+  symlinks are forbidden and snapshot cleanup precedes publication. Final
+  HEAD/tree/clean equality is checked before publication. Dirty author bytes
+  use a private captured-copy manifest only as `draft`/`releaseClaim: false`
+  and can never be terminally published.
 - Positive evidence is atomically published under the caller-owned mode-0700
   output root as exact directory `recovery-evidence.v1` containing only
-  `backup-evidence.v1.json` and `restore-drill-evidence.v1.json`, both mode
-  0600, strict canonical UTF-8 and parsed by `@proofline/contracts/recovery`.
+  `backup-evidence.v1.json`, `restore-drill-evidence.v1.json` and
+  `recovery-evidence-handoff.v1.json`, all mode 0600, strict canonical UTF-8
+  and parsed by `@proofline/contracts/recovery`.
   The backup has `status: "completed"`; restore has the frozen
   `status: "passed"`, exact source-backup digest and only actual-derived paused,
   recovery, target, inventory, system, migration and volume evidence.
 - A successful handoff is preserved for the caller and removed only through an
   explicit exact-scoped cleanup operation. Failed publication removes its
   private staging directory and leaves neither final artifact nor unrelated
-  caller files. Promotion negatives consume the emitted restore bytes/digest;
-  no synthetic restore fixture and no automatic valid promotion is allowed.
+  caller files. Promotion negatives consume the staged canonical triad and
+  vary only V2 authorization. V1-only, draft and synthetic handoffs cannot
+  authorize promotion, and no automatic valid promotion is allowed.
 
 ## Exact operational inputs
 

@@ -627,6 +627,74 @@ PASS, Docker static is 138/138 PASS, unchanged 027A/027B/027R neighbors are
 production, dependency, lockfile, coverage or build operation is part of this
 RED wave.
 
+### Security scan corrective RED wave 4
+
+This wave starts from exact clean commit
+`061d01d5093c9424e64bbb2b50c1f3351205e5fa` / tree
+`23fdc7720ec288a16f808c2d70d3e2703c14f290`. Production work-in-progress was
+inspected read-only from stash
+`ccccf5d2c2d45415ceb68e6e670a793ee22e0382`; it was never applied. Codex
+Security diff scan `ae807f50-4ceb-4412-94f2-03e8e311bff3` used snapshot
+`codex-security-snapshot/v1:sha256:6de857248d7e255bb48d1449bc4837607185f25a3895f5d157e5141ac2f8e592`.
+The canonical report SHA-256 is
+`6ae28c2f1bce1bbf621e80c032cd117cfefad1f32c195091105e957510c71b95`.
+All four discovery, validation and attack-path ledgers were read before this
+RED was authored.
+
+Two reportable P2 findings are frozen without weakening the validated
+operator-only release controls:
+
+1. `recovery-evidence.git-identity-toctou` (`CWE-367`): separate mutable
+   `HEAD`, tree and status reads did not bind the files consumed by the drill.
+   Verified mode now requires one captured commit, a tree derived only from
+   `${capturedCommit}^{tree}`, a private read-only commit snapshot used for
+   every repository input and unchanged final HEAD/tree/clean state before
+   publication. Snapshot directories are 0500, files are 0400, symlinks are
+   rejected and snapshot cleanup precedes publish. Dirty author mode captures
+   its own private candidate-byte manifest but remains
+   `draft`/`releaseClaim: false` and non-publishable.
+2. `recovery-evidence.synthetic-backup-metadata-publication` (`CWE-345`):
+   clocks, pre/post-cut LSNs and unrelated WAL observations could be published
+   as selected-base-backup metadata. The replacement must consume exactly one
+   WAL-G v3.0.8 `backup-list --detail --json` record by exact backup name.
+   `system_identifier` and both LSNs are validated from raw uint64 JSON tokens
+   with a lossless parser; plain `JSON.parse` is forbidden because the system
+   identifier exceeds `Number.MAX_SAFE_INTEGER`. Strict upstream UTC timestamps
+   accept zero through six fractional digits and normalize to six. Backup
+   times/LSNs/WAL/timeline/system identity come only from that record.
+
+The two validated but security-policy-suppressed release defects remain
+mandatory functional corrections. Canonical backup, restore and
+`RecoveryEvidenceHandoffV1` bytes are created in private staging; the actual
+negative matrix consumes that triad. Diagnostics, project/secret/snapshot
+cleanup and final source revalidation must finish before atomic terminal
+publication. A publisher that renames then fails must be exact-scoped discarded
+with zero final PASS artifacts. `RestorePromotionAuthorizationV1` remains a
+compatibility data type only. Production authorization requires canonical
+`RestorePromotionAuthorizationV2` bound to both terminal handoff and restore
+SHA-256 values; V1-only, absent, mismatched, draft and non-release input stops
+before `pg_promote`. No valid authorization is generated automatically.
+
+The corrective RED touches only tests and canonical documentation. The new
+import-safe seams are `recovery-producer-snapshot`,
+`recovery-selected-backup-metadata` and `recovery-evidence-publication`; no
+production implementation exists on this clean base. Syntax and typecheck PASS.
+The final focused executable classification is 37 cases: 18 retained controls
+PASS and 19 causal intentional RED. Node contracts are 13 PASS / 9 RED; Vitest
+contracts are 5 PASS / 10 RED. Those failures are exactly the absent V2/handoff
+contracts, immutable snapshot, lossless selected metadata, ordered publication
+and terminal promotion seams plus the frozen no-reused-commit/tree producer
+invariant; no harness exception or unrelated assertion failed. No Docker
+daemon, external network, build, coverage, dependency,
+lockfile, Compose or production effect is part of this corrective RED.
+
+The complete deployment static suite is 146 cases: 137 retained controls PASS
+and nine intentional RED, exactly the two upgraded 027C promotion/metadata
+assertions plus seven wave-4 snapshot/metadata/publication cases. Nearest 027B
+contract controls are 30/30 PASS; unchanged 027A/027B/027R deployment controls
+are 45/45 PASS; Sites compatibility is 36/36 PASS. These checks did not invoke
+Docker, build artifacts, network or credentials.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;
@@ -636,5 +704,5 @@ RED wave.
 - exact 027A, 027B and `test:docker:recovery` gates with scoped cleanup;
 - build/Sites compatibility and two independent reports on one stopped tree.
 
-Until those gates pass, Proofline has no WAL-G runtime, base backup, PITR,
-Spaces, actual RPO/RTO, hosted restore or promotion evidence.
+Until those gates pass, Proofline has no accepted 027C runtime or recovery
+evidence and no Spaces, actual RPO/RTO, hosted restore or promotion evidence.

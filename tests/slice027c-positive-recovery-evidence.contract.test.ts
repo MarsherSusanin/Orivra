@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, chmod, lstat, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -11,7 +11,6 @@ import {
   canonicalSerializeBackupEvidence,
   canonicalSerializeRestoreDrillEvidence,
   checksumBackupEvidence,
-  checksumRestoreDrillEvidence,
 } from "@proofline/contracts/recovery";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -87,9 +86,20 @@ const PITR_VERIFY = {
   expectedInventorySha256: INVENTORY_SHA,
 } as const;
 
-async function handoffModule(): Promise<Record<string, any>> {
-  const url = pathToFileURL(resolve(root, "scripts/recovery-evidence-handoff.mjs")).href;
+const PRODUCER = Object.freeze({
+  commitSha: COMMIT_SHA,
+  treeSha: TREE_SHA,
+  verification: "verified",
+  releaseClaim: true,
+});
+
+async function optionalModule(path: string): Promise<Record<string, any>> {
+  const url = pathToFileURL(resolve(root, path)).href;
   return import(`${url}?contract=${Date.now()}`).catch(() => ({}));
+}
+
+async function handoffModule(): Promise<Record<string, any>> {
+  return optionalModule("scripts/recovery-evidence-handoff.mjs");
 }
 
 async function temporaryOutput(): Promise<string> {
@@ -103,144 +113,265 @@ function sha256(bytes: Buffer | string): string {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
+function canonicalJson(value: any): string {
+  if (value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) =>
+    `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+}
+
+async function isAbsent(path: string): Promise<boolean> {
+  return access(path).then(() => false, () => true);
+}
+
+function stageInput(producerIdentity: Record<string, unknown> = PRODUCER) {
+  return {
+    producerIdentity,
+    backupEvidence: BACKUP,
+    pitrVerify: PITR_VERIFY,
+    directRecoveryState: "t",
+    targetTime: "2026-08-11T00:02:00.123456Z",
+    timeline: 1,
+    sourceVolumeIdentitySha256: SOURCE_VOLUME_SHA,
+    restoreVolumeIdentitySha256: RESTORE_VOLUME_SHA,
+    startedAt: "2026-08-11T00:03:00.000000Z",
+    completedAt: "2026-08-11T00:04:00.000000Z",
+  };
+}
+
 afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((directory) =>
     rm(directory, { recursive: true, force: true })));
 });
 
-describe("Slice 027C corrective positive recovery evidence handoff", () => {
-  it("exports one exact atomic handoff and cleanup boundary", async () => {
+describe("Slice 027C terminal recovery evidence handoff", () => {
+  it("exports separate stage, terminal publish, discard and exact-scoped cleanup boundaries", async () => {
     const module = await handoffModule();
     expect(module.RECOVERY_EVIDENCE_DIRECTORY_NAME).toBe("recovery-evidence.v1");
     expect(module.RECOVERY_EVIDENCE_FILENAMES).toEqual({
       backup: "backup-evidence.v1.json",
       restore: "restore-drill-evidence.v1.json",
+      handoff: "recovery-evidence-handoff.v1.json",
     });
-    expect(module.resolveRecoveryProducerIdentity).toBeTypeOf("function");
-    expect(module.writeRecoveryEvidenceHandoff).toBeTypeOf("function");
+    expect(module.stageRecoveryEvidenceHandoff).toBeTypeOf("function");
+    expect(module.publishRecoveryEvidenceHandoff).toBeTypeOf("function");
+    expect(module.discardRecoveryEvidenceHandoff).toBeTypeOf("function");
     expect(module.cleanupRecoveryEvidenceHandoff).toBeTypeOf("function");
+    expect(module.writeRecoveryEvidenceHandoff).toBeUndefined();
   });
 
-  it("derives distinct exact commit and tree identities from three independent repository reads", async () => {
+  it("stages the canonical triad privately and atomically publishes it only as terminal PASS", async () => {
     const module = await handoffModule();
-    const calls: string[][] = [];
-    const outputByArguments = new Map([
-      ["rev-parse\0HEAD", `${COMMIT_SHA}\n`],
-      ["rev-parse\0HEAD^{tree}", `${TREE_SHA}\n`],
-      ["status\0--porcelain", ""],
-    ]);
-    const identity = await module.resolveRecoveryProducerIdentity({
-      repositoryRoot: root,
-      runGit: async (arguments_: string[]) => {
-        calls.push(arguments_);
-        return { exitCode: 0, stdout: outputByArguments.get(arguments_.join("\0")) ?? "" };
-      },
+    const outputDirectory = await temporaryOutput();
+    const staged = await module.stageRecoveryEvidenceHandoff({
+      outputDirectory,
+      ...stageInput(),
     });
-    expect(calls).toEqual([
-      ["rev-parse", "HEAD"],
-      ["rev-parse", "HEAD^{tree}"],
-      ["status", "--porcelain"],
+    const finalDirectory = join(outputDirectory, "recovery-evidence.v1");
+    expect(await isAbsent(finalDirectory)).toBe(true);
+    expect((await lstat(staged.stageRoot)).mode & 0o777).toBe(0o700);
+    expect((await readdir(staged.stageRoot)).sort()).toEqual([
+      "backup-evidence.v1.json",
+      "recovery-evidence-handoff.v1.json",
+      "restore-drill-evidence.v1.json",
     ]);
-    expect(identity).toEqual({
-      commitSha: COMMIT_SHA,
-      treeSha: TREE_SHA,
+
+    const result = await module.publishRecoveryEvidenceHandoff({
+      outputDirectory,
+      stagedEvidence: staged,
+      finalProducerIdentity: PRODUCER,
+    });
+    const backupPath = join(finalDirectory, "backup-evidence.v1.json");
+    const restorePath = join(finalDirectory, "restore-drill-evidence.v1.json");
+    const handoffPath = join(finalDirectory, "recovery-evidence-handoff.v1.json");
+    const [backupBytes, restoreBytes, handoffBytes, names] = await Promise.all([
+      readFile(backupPath),
+      readFile(restorePath),
+      readFile(handoffPath),
+      readdir(finalDirectory),
+    ]);
+    expect(names.sort()).toEqual([
+      "backup-evidence.v1.json",
+      "recovery-evidence-handoff.v1.json",
+      "restore-drill-evidence.v1.json",
+    ]);
+    for (const path of [backupPath, restorePath, handoffPath]) {
+      expect((await lstat(path)).mode & 0o777).toBe(0o600);
+    }
+    const parsedBackup = BackupEvidenceV1Schema.parse(JSON.parse(backupBytes.toString("utf8")));
+    const parsedRestore = RestoreDrillEvidenceV1Schema.parse(JSON.parse(restoreBytes.toString("utf8")));
+    const parsedHandoff = JSON.parse(handoffBytes.toString("utf8"));
+    expect(backupBytes.toString("utf8")).toBe(canonicalSerializeBackupEvidence(parsedBackup));
+    expect(restoreBytes.toString("utf8")).toBe(canonicalSerializeRestoreDrillEvidence(parsedRestore));
+    expect(handoffBytes.toString("utf8")).toBe(canonicalJson(parsedHandoff));
+    expect(parsedRestore.sourceBackupEvidenceSha256).toBe(checksumBackupEvidence(parsedBackup));
+    expect(parsedHandoff).toEqual({
+      version: "1",
+      kind: "recovery-evidence-handoff",
+      status: "passed",
       verification: "verified",
       releaseClaim: true,
+      producer: BACKUP.producer,
+      backup: { filename: "backup-evidence.v1.json", sha256: sha256(backupBytes) },
+      restore: { filename: "restore-drill-evidence.v1.json", sha256: sha256(restoreBytes) },
     });
-
-    for (const invalid of [
-      { commit: TREE_SHA, tree: TREE_SHA, status: "" },
-      { commit: "A".repeat(40), tree: TREE_SHA, status: "" },
-      { commit: COMMIT_SHA, tree: TREE_SHA, status: " M production.ts\n" },
-    ]) {
-      await expect(module.resolveRecoveryProducerIdentity({
-        repositoryRoot: root,
-        runGit: async (arguments_: string[]) => ({
-          exitCode: 0,
-          stdout: arguments_[0] === "status"
-            ? invalid.status
-            : arguments_.at(-1) === "HEAD" ? `${invalid.commit}\n` : `${invalid.tree}\n`,
-        }),
-      })).rejects.toThrow(/Recovery producer identity is invalid/);
-    }
+    expect(result).toMatchObject({
+      status: "passed",
+      verification: "verified",
+      releaseClaim: true,
+      handoff: {
+        filename: "recovery-evidence-handoff.v1.json",
+        sha256: sha256(handoffBytes),
+      },
+    });
+    expect(`${backupBytes}${restoreBytes}${handoffBytes}`).not.toMatch(
+      /(?:DATABASE_URL|ACCESS_KEY|SECRET|PRIVATE_KEY|\/tmp\/|\/run\/secrets\/)/,
+    );
   });
 
-  it("labels a dirty local author handoff draft without reusing or omitting schema identity", async () => {
+  it("removes staging and publishes no final evidence when observations are invalid", async () => {
     const module = await handoffModule();
-    const identity = await module.resolveRecoveryProducerIdentity({
-      repositoryRoot: root,
-      allowDirtyDraft: true,
-      runGit: async (arguments_: string[]) => ({
-        exitCode: 0,
-        stdout: arguments_[0] === "status"
-          ? " M docs/runbook.md\n"
-          : arguments_.at(-1) === "HEAD" ? `${COMMIT_SHA}\n` : `${TREE_SHA}\n`,
-      }),
-    });
-    expect(identity).toEqual({
+    const outputDirectory = await temporaryOutput();
+    const callerSentinel = join(outputDirectory, "caller-owned.txt");
+    await writeFile(callerSentinel, "preserve", { mode: 0o600 });
+    await expect(module.stageRecoveryEvidenceHandoff({
+      outputDirectory,
+      ...stageInput(),
+      pitrVerify: { ...PITR_VERIFY, afterCutCount: "1" },
+    })).rejects.toThrow(/Recovery evidence handoff is invalid/);
+    expect(await readdir(outputDirectory)).toEqual(["caller-owned.txt"]);
+    expect(await readFile(callerSentinel, "utf8")).toBe("preserve");
+  });
+
+  it("allows dirty candidate bytes only in private draft staging and forbids terminal publication", async () => {
+    const module = await handoffModule();
+    const outputDirectory = await temporaryOutput();
+    const draftProducer = {
       commitSha: COMMIT_SHA,
       treeSha: TREE_SHA,
       verification: "draft",
       releaseClaim: false,
+    };
+    const staged = await module.stageRecoveryEvidenceHandoff({
+      outputDirectory,
+      ...stageInput(draftProducer),
     });
-    expect(identity.commitSha).not.toBe(identity.treeSha);
+    await expect(module.publishRecoveryEvidenceHandoff({
+      outputDirectory,
+      stagedEvidence: staged,
+      finalProducerIdentity: draftProducer,
+    })).rejects.toThrow(/Draft recovery evidence cannot be published/);
+    expect(await isAbsent(join(outputDirectory, "recovery-evidence.v1"))).toBe(true);
+    await module.discardRecoveryEvidenceHandoff({ outputDirectory, stagedEvidence: staged });
+    expect(await readdir(outputDirectory)).toEqual([]);
   });
 
-  it("writes exact canonical backup and actual-derived restore artifacts and preserves them on PASS", async () => {
-    const module = await handoffModule();
+  it("requires V2 authorization bound to a verified canonical handoff and restore before promotion", async () => {
+    const [module, promotion] = await Promise.all([
+      handoffModule(),
+      optionalModule("scripts/restore-promotion.mjs"),
+    ]);
     const outputDirectory = await temporaryOutput();
-    const result = await module.writeRecoveryEvidenceHandoff({
+    const staged = await module.stageRecoveryEvidenceHandoff({ outputDirectory, ...stageInput() });
+    await module.publishRecoveryEvidenceHandoff({
       outputDirectory,
-      producerIdentity: {
-        commitSha: COMMIT_SHA,
-        treeSha: TREE_SHA,
-        verification: "verified",
-        releaseClaim: true,
-      },
-      backupEvidence: BACKUP,
-      pitrVerify: PITR_VERIFY,
-      directRecoveryState: "t",
-      targetTime: "2026-08-11T00:02:00.123456Z",
-      timeline: 1,
-      sourceVolumeIdentitySha256: SOURCE_VOLUME_SHA,
-      restoreVolumeIdentitySha256: RESTORE_VOLUME_SHA,
-      startedAt: "2026-08-11T00:03:00.000000Z",
-      completedAt: "2026-08-11T00:04:00.000000Z",
+      stagedEvidence: staged,
+      finalProducerIdentity: PRODUCER,
     });
-
-    const artifactDirectory = join(outputDirectory, "recovery-evidence.v1");
-    const backupPath = join(artifactDirectory, "backup-evidence.v1.json");
-    const restorePath = join(artifactDirectory, "restore-drill-evidence.v1.json");
-    const [backupBytes, restoreBytes, names, backupStat, restoreStat] = await Promise.all([
-      readFile(backupPath),
-      readFile(restorePath),
-      readdir(artifactDirectory),
-      lstat(backupPath),
-      lstat(restorePath),
-    ]);
-    expect(names.sort()).toEqual([
-      "backup-evidence.v1.json",
-      "restore-drill-evidence.v1.json",
-    ]);
-    expect(backupStat.isFile()).toBe(true);
-    expect(restoreStat.isFile()).toBe(true);
-    expect(backupStat.mode & 0o777).toBe(0o600);
-    expect(restoreStat.mode & 0o777).toBe(0o600);
-
-    const parsedBackup = BackupEvidenceV1Schema.parse(JSON.parse(backupBytes.toString("utf8")));
-    const parsedRestore = RestoreDrillEvidenceV1Schema.parse(JSON.parse(restoreBytes.toString("utf8")));
-    expect(backupBytes.toString("utf8")).toBe(canonicalSerializeBackupEvidence(parsedBackup));
-    expect(restoreBytes.toString("utf8")).toBe(canonicalSerializeRestoreDrillEvidence(parsedRestore));
-    expect(parsedBackup.status).toBe("completed");
-    expect(parsedBackup.producer).toEqual(BACKUP.producer);
-    expect(parsedRestore).toMatchObject({
-      producer: BACKUP.producer,
-      sourceBackupEvidenceSha256: checksumBackupEvidence(parsedBackup),
-      target: {
-        targetTime: "2026-08-11T00:02:00.123456Z",
-        inclusive: true,
-        timeline: 1,
+    const finalDirectory = join(outputDirectory, "recovery-evidence.v1");
+    const backupEvidenceBytes = await readFile(join(finalDirectory, "backup-evidence.v1.json"));
+    const restoreEvidenceBytes = await readFile(join(finalDirectory, "restore-drill-evidence.v1.json"));
+    const handoffReceiptBytes = await readFile(join(finalDirectory, "recovery-evidence-handoff.v1.json"));
+    const authorizationV2 = Buffer.from(canonicalJson({
+      version: "2",
+      kind: "restore-promotion-authorization",
+      recoveryEvidenceHandoffSha256: sha256(handoffReceiptBytes),
+      restoreDrillEvidenceSha256: sha256(restoreEvidenceBytes),
+      operator: "operator_0123456789abcdef",
+      authorizedAt: "2026-08-11T00:05:00.000000Z",
+      expiresAt: "2026-08-11T00:15:00.000000Z",
+      promote: true,
+    }), "utf8");
+    const effects: string[][] = [];
+    await promotion.authorizeRestorePromotion({
+      handoffReceiptBytes,
+      expectedHandoffReceiptSha256: sha256(handoffReceiptBytes),
+      backupEvidenceBytes,
+      restoreEvidenceBytes,
+      authorizationBytes: authorizationV2,
+      now: "2026-08-11T00:06:00.000000Z",
+      run: async (_command: string, args: string[]) => {
+        effects.push(args);
+        return { status: 0, stdout: "t\n", stderr: "" };
       },
+    });
+    expect(effects).toHaveLength(1);
+    expect(effects[0].join(" ")).toContain("pg_promote");
+
+    const authorizationV1 = Buffer.from(canonicalJson({
+      version: "1",
+      kind: "restore-promotion-authorization",
+      restoreDrillEvidenceSha256: sha256(restoreEvidenceBytes),
+      operator: "operator_0123456789abcdef",
+      authorizedAt: "2026-08-11T00:05:00.000000Z",
+      expiresAt: "2026-08-11T00:15:00.000000Z",
+      promote: true,
+    }), "utf8");
+    effects.length = 0;
+    await expect(promotion.authorizeRestorePromotion({
+      handoffReceiptBytes,
+      expectedHandoffReceiptSha256: sha256(handoffReceiptBytes),
+      backupEvidenceBytes,
+      restoreEvidenceBytes,
+      authorizationBytes: authorizationV1,
+      now: "2026-08-11T00:06:00.000000Z",
+      run: async () => {
+        effects.push(["forbidden"]);
+        return { status: 0 };
+      },
+    })).rejects.toThrow(/Restore promotion is forbidden/);
+    expect(effects).toEqual([]);
+
+    for (const authorization of [
+      undefined,
+      Buffer.from(canonicalJson({
+        ...JSON.parse(authorizationV2.toString("utf8")),
+        recoveryEvidenceHandoffSha256: `sha256:${"a".repeat(64)}`,
+      }), "utf8"),
+      Buffer.from(canonicalJson({
+        ...JSON.parse(authorizationV2.toString("utf8")),
+        restoreDrillEvidenceSha256: `sha256:${"b".repeat(64)}`,
+      }), "utf8"),
+      Buffer.from(JSON.stringify(JSON.parse(authorizationV2.toString("utf8")), null, 2), "utf8"),
+    ]) {
+      effects.length = 0;
+      await expect(promotion.authorizeRestorePromotion({
+        handoffReceiptBytes,
+        expectedHandoffReceiptSha256: sha256(handoffReceiptBytes),
+        backupEvidenceBytes,
+        restoreEvidenceBytes,
+        authorizationBytes: authorization,
+        now: "2026-08-11T00:06:00.000000Z",
+        run: async () => {
+          effects.push(["forbidden"]);
+          return { status: 0 };
+        },
+      })).rejects.toThrow();
+      expect(effects).toEqual([]);
+    }
+  });
+
+  it("rejects draft, missing, noncanonical and digest-substituted handoffs before effect", async () => {
+    const promotion = await optionalModule("scripts/restore-promotion.mjs");
+    expect(promotion.authorizeRestorePromotion).toBeTypeOf("function");
+    const restoreEvidenceBytes = Buffer.from(canonicalSerializeRestoreDrillEvidence({
+      version: "1",
+      kind: "pitr-restore-drill",
+      producer: BACKUP.producer,
+      sourceBackupEvidenceSha256: checksumBackupEvidence(BACKUP),
+      target: { targetTime: "2026-08-11T00:02:00.123456Z", inclusive: true, timeline: 1 },
       restore: {
         sourceVolumeIdentitySha256: SOURCE_VOLUME_SHA,
         restoreVolumeIdentitySha256: RESTORE_VOLUME_SHA,
@@ -256,101 +387,67 @@ describe("Slice 027C corrective positive recovery evidence handoff", () => {
         afterCutAbsent: true,
         inventorySha256Matches: true,
       },
+      startedAt: "2026-08-11T00:03:00.000000Z",
+      completedAt: "2026-08-11T00:04:00.000000Z",
       status: "passed",
-    });
-    expect(result).toEqual({
+    }), "utf8");
+    const backupEvidenceBytes = Buffer.from(canonicalSerializeBackupEvidence(BACKUP), "utf8");
+    const baseHandoff = {
       version: "1",
       kind: "recovery-evidence-handoff",
       status: "passed",
       verification: "verified",
       releaseClaim: true,
-      producer: { commitSha: COMMIT_SHA, treeSha: TREE_SHA },
-      backup: {
-        filename: "backup-evidence.v1.json",
-        sha256: sha256(backupBytes),
-      },
-      restore: {
-        filename: "restore-drill-evidence.v1.json",
-        sha256: checksumRestoreDrillEvidence(parsedRestore),
-      },
-    });
-    expect(result.restore.sha256).toBe(sha256(restoreBytes));
-    expect(`${backupBytes}${restoreBytes}`).not.toMatch(
-      /(?:DATABASE_URL|ACCESS_KEY|SECRET|PRIVATE_KEY|\/tmp\/|\/run\/secrets\/)/,
-    );
+      producer: BACKUP.producer,
+      backup: { filename: "backup-evidence.v1.json", sha256: sha256(backupEvidenceBytes) },
+      restore: { filename: "restore-drill-evidence.v1.json", sha256: sha256(restoreEvidenceBytes) },
+    };
+    const baseHandoffBytes = Buffer.from(canonicalJson(baseHandoff), "utf8");
+    for (const handoff of [
+      undefined,
+      Buffer.from(JSON.stringify(baseHandoff, null, 2), "utf8"),
+      Buffer.from(canonicalJson({ ...baseHandoff, verification: "draft", releaseClaim: false }), "utf8"),
+      Buffer.from(canonicalJson({ ...baseHandoff, producer: { ...baseHandoff.producer, treeSha: "a".repeat(40) } }), "utf8"),
+      Buffer.from(canonicalJson({ ...baseHandoff, restore: { ...baseHandoff.restore, sha256: `sha256:${"f".repeat(64)}` } }), "utf8"),
+    ]) {
+      const effects: string[] = [];
+      const authorizationBytes = Buffer.from(canonicalJson({
+        version: "2",
+        kind: "restore-promotion-authorization",
+        recoveryEvidenceHandoffSha256: sha256(handoff ?? baseHandoffBytes),
+        restoreDrillEvidenceSha256: sha256(restoreEvidenceBytes),
+        operator: "operator_0123456789abcdef",
+        authorizedAt: "2026-08-11T00:05:00.000000Z",
+        expiresAt: "2026-08-11T00:15:00.000000Z",
+        promote: true,
+      }), "utf8");
+      await expect(promotion.authorizeRestorePromotion({
+        handoffReceiptBytes: handoff,
+        expectedHandoffReceiptSha256: handoff ? sha256(handoff) : undefined,
+        backupEvidenceBytes,
+        restoreEvidenceBytes,
+        authorizationBytes,
+        now: "2026-08-11T00:06:00.000000Z",
+        run: async () => {
+          effects.push("effect");
+          return { status: 0 };
+        },
+      })).rejects.toThrow();
+      expect(effects).toEqual([]);
+    }
   });
 
-  it("fails before publishing either artifact and removes only the exact atomic staging boundary", async () => {
+  it("removes only the terminal evidence directory after explicit caller cleanup", async () => {
     const module = await handoffModule();
     const outputDirectory = await temporaryOutput();
-    const callerSentinel = join(outputDirectory, "caller-owned.txt");
-    await writeFile(callerSentinel, "preserve", { mode: 0o600 });
-    await expect(module.writeRecoveryEvidenceHandoff({
+    const staged = await module.stageRecoveryEvidenceHandoff({ outputDirectory, ...stageInput() });
+    await module.publishRecoveryEvidenceHandoff({
       outputDirectory,
-      producerIdentity: {
-        commitSha: COMMIT_SHA,
-        treeSha: TREE_SHA,
-        verification: "verified",
-        releaseClaim: true,
-      },
-      backupEvidence: BACKUP,
-      pitrVerify: { ...PITR_VERIFY, afterCutCount: "1" },
-      directRecoveryState: "t",
-      targetTime: "2026-08-11T00:02:00.123456Z",
-      timeline: 1,
-      sourceVolumeIdentitySha256: SOURCE_VOLUME_SHA,
-      restoreVolumeIdentitySha256: RESTORE_VOLUME_SHA,
-      startedAt: "2026-08-11T00:03:00.000000Z",
-      completedAt: "2026-08-11T00:04:00.000000Z",
-    })).rejects.toThrow(/Recovery evidence handoff is invalid/);
-    expect(await readdir(outputDirectory)).toEqual(["caller-owned.txt"]);
-    expect(await readFile(callerSentinel, "utf8")).toBe("preserve");
-  });
-
-  it("requires explicit scoped cleanup after PASS without deleting the caller output root", async () => {
-    const module = await handoffModule();
-    const outputDirectory = await temporaryOutput();
-    await module.writeRecoveryEvidenceHandoff({
-      outputDirectory,
-      producerIdentity: {
-        commitSha: COMMIT_SHA,
-        treeSha: TREE_SHA,
-        verification: "draft",
-        releaseClaim: false,
-      },
-      backupEvidence: BACKUP,
-      pitrVerify: PITR_VERIFY,
-      directRecoveryState: "t",
-      targetTime: "2026-08-11T00:02:00.123456Z",
-      timeline: 1,
-      sourceVolumeIdentitySha256: SOURCE_VOLUME_SHA,
-      restoreVolumeIdentitySha256: RESTORE_VOLUME_SHA,
-      startedAt: "2026-08-11T00:03:00.000000Z",
-      completedAt: "2026-08-11T00:04:00.000000Z",
+      stagedEvidence: staged,
+      finalProducerIdentity: PRODUCER,
     });
-    expect(await readdir(outputDirectory)).toEqual(["recovery-evidence.v1"]);
     await module.cleanupRecoveryEvidenceHandoff({ outputDirectory });
     expect(await readdir(outputDirectory)).toEqual([]);
     expect((await lstat(outputDirectory)).isDirectory()).toBe(true);
-  });
-
-  it("binds the actual positive artifacts into promotion negatives and the final repository identity", async () => {
-    const [gate, negativeRuntime, handoff] = await Promise.all([
-      readFile(resolve(root, "scripts/docker-recovery-gate.mjs"), "utf8"),
-      readFile(resolve(root, "scripts/docker-recovery-negative-runtime.mjs"), "utf8"),
-      readFile(resolve(root, "scripts/recovery-evidence-handoff.mjs"), "utf8").catch(() => ""),
-    ]);
-    expect(handoff).toMatch(/rev-parse[\s\S]*HEAD[\s\S]*HEAD\^\{tree\}[\s\S]*status[\s\S]*--porcelain/);
-    expect(gate).toMatch(/resolveRecoveryProducerIdentity/);
-    expect(gate).toMatch(/writeRecoveryEvidenceHandoff/);
-    expect(gate).toMatch(/PROOFLINE_RECOVERY_EVIDENCE_OUTPUT_DIR/);
-    expect(gate).not.toMatch(/PROOFLINE_RELEASE_TREE_SHA:\s*randomBytes/);
-    expect(gate).toMatch(/commitSha:\s*producerIdentity\.commitSha/);
-    expect(gate).toMatch(/treeSha:\s*producerIdentity\.treeSha/);
-    expect(negativeRuntime).not.toMatch(/function\s+promotionEvidence\s*\(/);
-    expect(negativeRuntime).toMatch(/positive\.(?:restoreEvidencePath|restoreEvidenceBytes)/);
-    expect(negativeRuntime).toMatch(/positive\.restoreEvidenceSha256/);
-    expect(negativeRuntime).not.toMatch(/commitSha:\s*["']a["']\.repeat|treeSha:\s*["']b["']\.repeat/);
-    expect(gate).not.toMatch(/pg_promote\s*\(/);
   });
 });

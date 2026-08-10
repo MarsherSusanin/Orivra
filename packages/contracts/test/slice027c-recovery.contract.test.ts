@@ -122,10 +122,14 @@ describe("Slice 027C strict recovery evidence contracts", () => {
       "BackupEvidenceV1Schema",
       "RestoreDrillEvidenceV1Schema",
       "RestorePromotionAuthorizationV1Schema",
+      "RestorePromotionAuthorizationV2Schema",
+      "RecoveryEvidenceHandoffV1Schema",
       "canonicalSerializeBackupEvidence",
       "canonicalSerializeRestoreDrillEvidence",
+      "canonicalSerializeRecoveryEvidenceHandoff",
       "checksumBackupEvidence",
       "checksumRestoreDrillEvidence",
+      "checksumRecoveryEvidenceHandoff",
     ]) {
       expect(feature[name], name).toBeDefined();
       expect(root[name], `${name} root identity`).toBe(feature[name]);
@@ -144,6 +148,7 @@ describe("Slice 027C strict recovery evidence contracts", () => {
       { ...BACKUP, databaseUrl: "postgres://secret@postgres/proofline" },
       { ...BACKUP, storage: { ...BACKUP.storage, prefix: "s3://caller-owned" } },
       { ...BACKUP, producer: { ...BACKUP.producer, walGVersion: "latest" } },
+      { ...BACKUP, producer: { ...BACKUP.producer, commitSha: BACKUP.producer.treeSha } },
       { ...BACKUP, inventory: { ...BACKUP.inventory, canonicalSha256: `sha256:${"A".repeat(64)}` } },
     ]) expect(() => schema.parse(invalid)).toThrow();
   });
@@ -202,6 +207,7 @@ describe("Slice 027C strict recovery evidence contracts", () => {
     expect(schema).toBeDefined();
     expect(schema.parse(RESTORE)).toEqual(RESTORE);
     for (const invalid of [
+      { ...RESTORE, producer: { ...RESTORE.producer, commitSha: RESTORE.producer.treeSha } },
       { ...RESTORE, target: { ...RESTORE.target, inclusive: false } },
       { ...RESTORE, target: { ...RESTORE.target, timeline: "latest" } },
       { ...RESTORE, restore: { ...RESTORE.restore, paused: false } },
@@ -243,6 +249,67 @@ describe("Slice 027C strict recovery evidence contracts", () => {
         invalid,
       )).toThrow();
     }
+  });
+
+  it("keeps V1 as compatibility data and requires V2 to bind the terminal handoff and restore digests", async () => {
+    const module = await recoveryContracts();
+    const restoreSha = module.checksumRestoreDrillEvidence(RESTORE);
+    const handoff = {
+      version: "1",
+      kind: "recovery-evidence-handoff",
+      status: "passed",
+      verification: "verified",
+      releaseClaim: true,
+      producer: RESTORE.producer,
+      backup: {
+        filename: "backup-evidence.v1.json",
+        sha256: RESTORE.sourceBackupEvidenceSha256,
+      },
+      restore: {
+        filename: "restore-drill-evidence.v1.json",
+        sha256: restoreSha,
+      },
+    };
+    expect(module.RecoveryEvidenceHandoffV1Schema.parse(handoff)).toEqual(handoff);
+    const canonical = module.canonicalSerializeRecoveryEvidenceHandoff(handoff);
+    const handoffSha = module.checksumRecoveryEvidenceHandoff(handoff);
+    expect(JSON.parse(canonical)).toEqual(handoff);
+    expect(handoffSha).toBe(
+      `sha256:${createHash("sha256").update(canonical).digest("hex")}`,
+    );
+    expect(module.RecoveryEvidenceHandoffV1Schema.parse({
+      ...handoff,
+      verification: "draft",
+      releaseClaim: false,
+    })).toEqual({ ...handoff, verification: "draft", releaseClaim: false });
+    const authorizationV2 = {
+      version: "2",
+      kind: "restore-promotion-authorization",
+      recoveryEvidenceHandoffSha256: handoffSha,
+      restoreDrillEvidenceSha256: restoreSha,
+      operator: "operator_0123456789abcdef",
+      authorizedAt: "2026-08-10T01:05:00.000000Z",
+      expiresAt: "2026-08-10T01:15:00.000000Z",
+      promote: true,
+    };
+    expect(module.RestorePromotionAuthorizationV2Schema.parse(authorizationV2))
+      .toEqual(authorizationV2);
+    for (const invalid of [
+      { ...handoff, verification: "draft", releaseClaim: true },
+      { ...handoff, verification: "verified", releaseClaim: false },
+      { ...handoff, producer: { ...handoff.producer, commitSha: handoff.producer.treeSha } },
+      { ...handoff, restore: { ...handoff.restore, filename: "other.json" } },
+      { ...handoff, extra: true },
+      { ...authorizationV2, version: "1" },
+      { ...authorizationV2, recoveryEvidenceHandoffSha256: "sha256:abc" },
+      { ...authorizationV2, extra: true },
+    ]) {
+      const schema = "kind" in invalid && invalid.kind === "recovery-evidence-handoff"
+        ? module.RecoveryEvidenceHandoffV1Schema
+        : module.RestorePromotionAuthorizationV2Schema;
+      expect(() => schema.parse(invalid)).toThrow();
+    }
+    expect(module.RestorePromotionAuthorizationV1Schema).toBeDefined();
   });
 
   it("keeps the accepted deployment health contract unchanged as a GREEN control", async () => {

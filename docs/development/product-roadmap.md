@@ -31,7 +31,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Complete; independently verified on `527c561` / `ebdf648` |
 | 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Complete; independently verified on `527c561` / `ebdf648` |
 | 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Complete; independently verified on `527c561` / `ebdf648` |
-| 027C | WAL/base-backup PITR and local MinIO restore drill | Corrective RED frozen after two verifier P1 findings; production correction pending |
+| 027C | WAL/base-backup PITR and local MinIO restore drill | Security corrective RED frozen after scan ae807f50; production correction pending |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
 | 029A | Local MLP validation and candidate freeze | Planned, credential-free |
@@ -112,12 +112,15 @@ Credential-free delivery covers 022–029A:
   `1218e589` / tree `f0d6e325` is rejected by both independent verifiers: its
   positive gate emitted no canonical `RestoreDrillEvidenceV1`, its promotion
   negatives substituted synthetic restore evidence, and its backup producer
-  reused one random tree-shaped value as both commit and tree. Corrective RED
-  is frozen for exact repository identity, atomic canonical backup/restore
-  artifacts and real positive-evidence promotion handoff; production correction
-  is pending. This is not hosted, live Spaces/production, actual RPO/RTO or SLA
-  evidence. A Droplet backup is secondary host recovery, not database/PITR
-  evidence.
+  reused one random tree-shaped value as both commit and tree. Later stash
+  candidate `ccccf5d2` is rejected by scan `ae807f50`: mutable Git/source
+  identity, synthetic selected-backup metadata, premature PASS publication and
+  draft-to-promotion authority remain open. Corrective RED freezes private
+  commit/draft snapshots, lossless exact WAL-G detail metadata, terminal
+  canonical backup/restore/handoff publication and V2 promotion authorization
+  bound to both handoff and restore digests; production correction is pending.
+  This is not hosted, live Spaces/production, actual RPO/RTO or SLA evidence. A
+  Droplet backup is secondary host recovery, not database/PITR evidence.
 - **028A local release truth** builds and exports OCI archives, then must verify them.
   The frozen release manifest stores per-image `archiveSha256`,
   `imageManifestDigest`, `platform` and `repository`/`reference` fields.
