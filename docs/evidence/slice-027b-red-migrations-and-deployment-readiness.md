@@ -359,3 +359,17 @@ configuration error and now requires zero Pool construction or cleanup, schema,
 heartbeat, claim, verifier or external effect. The narrow Slice 005/runtime
 authority focus is intentionally 44 RED and 4 controls PASS; typecheck and the
 unchanged 113-case nearest baseline remain PASS.
+
+The runtime-wrapper compatibility audit on clean commit
+`282eae3feb0bb28ea2f3f6486e34dd28229109cc` / tree
+`f2ca63ab35621c25b41aa5b0319ce5a1ccf537b4` also corrected the fake-Docker
+success harness: it now creates and finally removes every required API,
+one-shot, PostgreSQL, worker-secret and replay host file as an absolute,
+non-empty regular file before expecting exactly one Docker call. The refrozen
+negative contract rejects every required missing file and relative, empty,
+directory, symlink or FIFO replay inputs with the fixed
+`Production runtime input file configuration is invalid` message and zero
+Docker calls. The combined deployment static focus is now 30 cases: 3
+intentional RED and 27 controls PASS. Typecheck, the unchanged 113-case nearest
+baseline and 36-case Sites compatibility remain PASS; no Docker process or
+network action was used.

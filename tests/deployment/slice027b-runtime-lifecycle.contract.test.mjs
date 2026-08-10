@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -37,6 +45,30 @@ const environment = {
   PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE: "/tmp/importer-database-url",
   PROOFLINE_POSTGRES_PASSWORD_FILE: "/tmp/postgres-password",
 };
+
+const runtimeFileVariables = [
+  "PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE",
+  "PROOFLINE_MIGRATOR_DATABASE_URL_FILE",
+  "PROOFLINE_API_DATABASE_URL_FILE",
+  "PROOFLINE_API_TOKEN_DIGEST_KEY_FILE",
+  "PROOFLINE_WORKER_DATABASE_URL_FILE",
+  "PROOFLINE_WORKER_VERIFIER_API_KEY_FILE",
+  "PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE",
+  "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
+  "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",
+  "PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE",
+  "PROOFLINE_POSTGRES_PASSWORD_FILE",
+];
+
+async function materializeRuntimeFiles(directory) {
+  const result = { ...environment };
+  for (const name of runtimeFileVariables) {
+    const path = join(directory, name.toLowerCase());
+    await writeFile(path, `fixture for ${name}\n`, { mode: 0o600 });
+    result[name] = path;
+  }
+  return result;
+}
 
 function render(files = ["compose.yaml", "deploy/compose.runtime.yaml"]) {
   const args = ["compose"];
@@ -282,12 +314,13 @@ import { appendFileSync } from "node:fs";
 appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "\\n");
 `);
     await chmod(executable, 0o700);
+    const runtimeEnvironment = await materializeRuntimeFiles(directory);
     const module = await import(`${pathToFileURL(resolve(root, "scripts/compose-production.mjs")).href}?027b=${Date.now()}`);
     await module.runProductionCompose({
       runtime: true,
       composeArguments: ["up", "--detach"],
       dockerExecutable: executable,
-      environment,
+      environment: runtimeEnvironment,
     });
     const calls = (await readFile(log, "utf8")).trim().split(/\r?\n/).map(JSON.parse);
     assert.equal(calls.length, 1);
@@ -298,10 +331,84 @@ appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "
         runtime: true,
         composeArguments: [command],
         dockerExecutable: executable,
-        environment,
+        environment: runtimeEnvironment,
       }), /one-shot|migration|runtime|up/i);
     }
     assert.equal((await readFile(log, "utf8")).trim().split(/\r?\n/).length, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("rejects every invalid runtime host input before one Docker effect", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "proofline-027b-runtime-files-"));
+  try {
+    const executable = join(directory, "docker-fake");
+    const log = join(directory, "calls.jsonl");
+    await writeFile(executable, `#!/usr/bin/env node
+import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "\\n");
+`);
+    await chmod(executable, 0o700);
+    const valid = await materializeRuntimeFiles(directory);
+    const module = await import(`${pathToFileURL(resolve(root, "scripts/compose-production.mjs")).href}?027b-files=${Date.now()}`);
+
+    const assertRejectedWithoutDocker = async (candidate, forbidden) => {
+      await assert.rejects(
+        module.runProductionCompose({
+          runtime: true,
+          composeArguments: ["up", "--detach"],
+          dockerExecutable: executable,
+          environment: candidate,
+        }),
+        (error) => {
+          assert.equal(
+            error?.message,
+            "Production runtime input file configuration is invalid",
+          );
+          for (const marker of forbidden) {
+            assert.doesNotMatch(JSON.stringify(error), new RegExp(marker));
+          }
+          return true;
+        },
+      );
+      await assert.rejects(readFile(log, "utf8"), { code: "ENOENT" });
+    };
+
+    for (const name of runtimeFileVariables) {
+      await assertRejectedWithoutDocker(
+        { ...valid, [name]: join(directory, `missing-${name}`) },
+        [name, "missing-"],
+      );
+    }
+
+    const directoryPath = join(directory, "directory-input");
+    await mkdir(directoryPath);
+    const symlinkPath = join(directory, "symlink-input");
+    await symlink(valid.PROOFLINE_WORKER_REPLAY_BUNDLE_FILE, symlinkPath);
+    const fifoPath = join(directory, "fifo-input");
+    const fifo = spawnSync("mkfifo", [fifoPath], { encoding: "utf8" });
+    assert.equal(fifo.status, 0, fifo.stderr || "mkfifo must prepare the bounded FIFO case");
+    const emptyPath = join(directory, "empty-input");
+    await writeFile(emptyPath, "");
+    for (const invalidPath of [
+      "relative-replay.json",
+      directoryPath,
+      symlinkPath,
+      fifoPath,
+      emptyPath,
+    ]) {
+      await assertRejectedWithoutDocker(
+        { ...valid, PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: invalidPath },
+        [
+          "relative-replay",
+          "directory-input",
+          "symlink-input",
+          "fifo-input",
+          "empty-input",
+        ],
+      );
+    }
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
