@@ -347,6 +347,145 @@ test("removes temporary secrets after a project-finalizer timeout", async () => 
   }
 });
 
+const FUTURE_TARGET_TERMINAL_SIGNATURE =
+  "recovery ended before configured recovery target was reached";
+const FUTURE_TARGET_IDENTITY = Object.freeze({
+  version: "1",
+  caseId: "future-recovery-target",
+  projectName: "proofline-027c-negative-future-fixture",
+  serviceName: "pitr-postgres",
+  containerName: "proofline-027c-negative-future-fixture-pitr-postgres",
+  objectTarget: null,
+  restoreVolume: "proofline-027c-negative-future-fixture_restore",
+  passEvidencePath: "/proofline/future-fixture/PASS.json",
+});
+
+function futureTargetDockerFixture({
+  status,
+  postgresExitCode,
+  logs,
+  logsCommandExitCode = 0,
+}) {
+  const calls = [];
+  return {
+    calls,
+    async runDocker(args, signal) {
+      assert.equal(signal instanceof AbortSignal, true);
+      calls.push(args);
+      if (args[0] === "inspect") {
+        assert.deepEqual(args, [
+          "inspect",
+          "--format",
+          "{{json .State}}",
+          FUTURE_TARGET_IDENTITY.containerName,
+        ]);
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({ Status: status, ExitCode: postgresExitCode }),
+          stderr: "",
+        };
+      }
+      if (args[0] === "logs") {
+        assert.deepEqual(args, ["logs", FUTURE_TARGET_IDENTITY.containerName]);
+        return { exitCode: logsCommandExitCode, stdout: logs, stderr: "" };
+      }
+      assert.fail(`unexpected parent probe command: ${args.join(" ")}`);
+    },
+  };
+}
+
+test("routes both future-target parent authorities through one terminal-only probe", async () => {
+  const [runtime, probe] = await Promise.all([
+    source("scripts/docker-recovery-negative-runtime.mjs"),
+    source("scripts/recovery-future-target-parent-probe.mjs"),
+  ]);
+  const sinkStart = runtime.indexOf("async function inspectRecoverySink");
+  const passStart = runtime.indexOf("async function inspectPassEvidence", sinkStart);
+  const promotionStart = runtime.indexOf("async function inspectPromotionState");
+  const runtimeReturn = runtime.indexOf("return Object.freeze", promotionStart);
+  assert.equal(sinkStart >= 0 && passStart > sinkStart, true);
+  assert.equal(promotionStart >= 0 && runtimeReturn > promotionStart, true);
+  const sinkSource = runtime.slice(sinkStart, passStart);
+  const promotionSource = runtime.slice(promotionStart, runtimeReturn);
+  assert.match(runtime, /recovery-future-target-parent-probe\.mjs/);
+  assert.match(sinkSource, /observeFutureTargetParentTerminalFailure/);
+  assert.match(promotionSource, /observeFutureTargetParentTerminalFailure/);
+  assert.doesNotMatch(sinkSource, /pg_is_in_recovery|===\s*"running"/);
+  assert.doesNotMatch(promotionSource, /pg_is_in_recovery|===\s*"running"/);
+  assert.match(probe, /\{\{json \.State\}\}/);
+  assert.match(probe, /recovery ended before configured recovery target was reached/);
+  assert.doesNotMatch(probe, /pg_is_in_recovery|childExit|childOutput|observation/);
+});
+
+test("rejects a premature child failure while the exact parent-bound server is nonterminal", async () => {
+  const module = await optionalImport(
+    "scripts/recovery-future-target-parent-probe.mjs",
+  );
+  for (const fixture of [
+    futureTargetDockerFixture({
+      status: "running",
+      postgresExitCode: 0,
+      logs: "database system is starting up",
+    }),
+    futureTargetDockerFixture({
+      status: "exited",
+      postgresExitCode: 0,
+      logs: FUTURE_TARGET_TERMINAL_SIGNATURE,
+    }),
+    futureTargetDockerFixture({
+      status: "exited",
+      postgresExitCode: 1,
+      logs: "database system is ready to accept read-only connections",
+    }),
+    futureTargetDockerFixture({
+      status: "exited",
+      postgresExitCode: 1,
+      logs: FUTURE_TARGET_TERMINAL_SIGNATURE,
+      logsCommandExitCode: 1,
+    }),
+  ]) {
+    const observed = await module.observeFutureTargetParentTerminalFailure({
+      identity: FUTURE_TARGET_IDENTITY,
+      signal: new AbortController().signal,
+      runDocker: fixture.runDocker,
+      childExitCode: 1,
+      childOutput: JSON.stringify({
+        status: "failed",
+        failureCode: "RECOVERY_TARGET_UNAVAILABLE",
+      }),
+      observation: { sinkObserved: true, promotionCount: 0 },
+    });
+    assert.equal(observed, false);
+    assert.deepEqual(fixture.calls.map(([command]) => command), ["inspect", "logs"]);
+  }
+});
+
+test("accepts only the exact bound terminal nonzero PostgreSQL unavailable-target state", async () => {
+  const module = await optionalImport(
+    "scripts/recovery-future-target-parent-probe.mjs",
+  );
+  const fixture = futureTargetDockerFixture({
+    status: "exited",
+    postgresExitCode: 1,
+    logs: `2026-08-10 00:00:00 UTC [1] FATAL: ${FUTURE_TARGET_TERMINAL_SIGNATURE}\n`,
+  });
+  const observed = await module.observeFutureTargetParentTerminalFailure({
+    identity: FUTURE_TARGET_IDENTITY,
+    signal: new AbortController().signal,
+    runDocker: fixture.runDocker,
+  });
+  assert.equal(observed, true);
+  assert.deepEqual(fixture.calls, [
+    [
+      "inspect",
+      "--format",
+      "{{json .State}}",
+      FUTURE_TARGET_IDENTITY.containerName,
+    ],
+    ["logs", FUTURE_TARGET_IDENTITY.containerName],
+  ]);
+});
+
 const PREFETCH_CHILD_ENV_NAMES = Object.freeze([
   "DOCKER_CONFIG",
   "HOME",

@@ -341,6 +341,18 @@ and digest; sink and promotion probes address only the negative project and
 its case service/container. The positive restore project and child
 exit/status/output are never mutation, sink, PASS or promotion evidence.
 
+For `future-recovery-target`, the parent sink and zero-promotion observations
+share one terminal-only, import-safe probe over the exact bound negative
+container. Its parent-owned bounded Docker runner reads `{{json .State}}` and
+the container logs. Acceptance requires `Status` exactly `exited`, a safe
+integer PostgreSQL process `ExitCode` greater than zero, successful bounded log
+collection and the exact case-sensitive PostgreSQL signature
+`recovery ended before configured recovery target was reached`. A running
+server, including `pg_is_in_recovery() = true`, is an ordinary intermediate
+state and is never failure or no-promotion evidence. Child exit, output or
+observation fields are not inputs to this probe and cannot substitute for the
+parent-read terminal state.
+
 Timeout settlement is close/reap-gated. For a TERM-resistant leader or
 descendant, the async helper sends `SIGTERM`, waits the frozen grace, sends
 `SIGKILL`, then waits for the whole process group to close before rejecting;

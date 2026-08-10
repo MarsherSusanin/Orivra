@@ -488,6 +488,43 @@ This wave does not claim any production finding fixed. GREEN must rerun the
 original five validation triggers and a change-aware bypass review on one
 frozen tree before any recovery PASS, promotion or release evidence exists.
 
+### Future-target terminal parent-sink corrective RED
+
+The canonical security report at
+`/private/var/folders/m4/6p__vxf95w520v3b1t2cr5vr0000gn/T/codex-security-scans/Proofline/a559884_20260810T172920Z/report.md`
+was read in full and matched SHA-256
+`28e0be7fbb67c92129c38c436190e6ebb32c0bb89933ca692fb9ca44582742c3`.
+Finding `PL-027C-FUTURE-TARGET-PARENT-SINK-001` rejects the production
+candidate inspected read-only from stash
+`335c06acd6a553311b6a3f47c033385a2101dfff` / tree
+`e0810db00301194acc6b3c55bddf96edec0b875c`; the stash was never applied.
+
+The candidate's parent sink and promotion probes accept the exact bound
+future-target PostgreSQL container while it is merely `running` and
+`pg_is_in_recovery()` returns `t`. A premature expected child failure can
+therefore combine with that nonterminal state to create mandatory negative
+evidence. The child's own exited/log check is not counterevidence because
+child exit, output and observation are deliberately outside parent authority.
+
+Corrective RED freezes one import-safe terminal-only parent probe used by both
+sink and zero-promotion observations. A benign premature fixture supplies the
+expected child failure while the parent sees running recovery and must remain
+false. Zero exit status or a missing signature must also remain false. The
+legitimate fixture becomes true only when the parent-owned bounded Docker
+runner reads the exact negative container in `exited` state, a nonzero
+PostgreSQL process exit code and the exact case-sensitive terminal signature
+`recovery ended before configured recovery target was reached`. No child field
+is an input to that probe.
+
+This corrective wave is demonstrated on exact clean base
+`a5598843b5d21dae5b6be19044b69fe9842800fb` / tree
+`f9dc7c77c360031d5cdb61fbe11281db1472f5ea`. It adds three intentional RED
+cases to the wave-3 file: the exact file is 26/26 RED, the combined security
+focus is 71/71 RED, and the complete Docker static set is 138 cases with 86
+intentional RED and 52 controls PASS. Syntax and typecheck PASS; unchanged
+027A/027B/027R neighbors remain 45/45 PASS and Sites remains 36/36 PASS. No
+Docker daemon, network, production, dependency or lockfile operation ran.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;

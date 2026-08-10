@@ -77,6 +77,10 @@ missing or placeholder values and does not invent them.
 - bind those probes to the canonical negative project, exact service,
   container, object target, restore volume and PASS path; positive-project or
   child exit/status/output observations have no authority;
+- require the future-target parent sink and zero-promotion probes to observe
+  the exact bound negative container exited with a nonzero PostgreSQL process
+  status and the exact unavailable-target terminal signature; running recovery
+  is explicitly insufficient;
 - construct exact credential-free Docker and negative-child environment
   profiles, rejecting ambient Docker endpoint/context/TLS/certificate/auth,
   SSH and BuildKit authority while stripping all other ambient credentials;
@@ -111,6 +115,9 @@ missing or placeholder values and does not invent them.
 - Negative child output carries only failed case/code and parent-owned
   exit/output identity; parent probes are the sole mutation, sink, PASS and
   promotion authority.
+- Future-target parent evidence requires exact bound `exited` state, nonzero
+  PostgreSQL process status and the exact unavailable-target terminal log
+  signature; `running` plus `pg_is_in_recovery() = true` cannot satisfy it.
 - A canonical SHA-256 probe identity binds all case/project/service/container/
   object/volume/PASS-path fields before execution; any cross-binding fails.
 - The case deadline is 30 seconds, child cap 25 seconds, process-tree kill grace
