@@ -4,9 +4,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolve } from "node:path";
 
 const mocks = vi.hoisted(() => {
-  const pool = { end: vi.fn(async () => undefined) };
+  const databaseResult = () => ({
+    rowCount: 1,
+    rows: [{
+      schema_version: 10,
+      checksum_count: 10,
+      checksum_match: true,
+      worker_state: "ready",
+    }],
+  });
+  const client = {
+    query: vi.fn(async () => databaseResult()),
+    release: vi.fn(),
+  };
+  const pool = {
+    query: vi.fn(async () => databaseResult()),
+    connect: vi.fn(async () => client),
+    end: vi.fn(async () => undefined),
+  };
   return {
     pool,
+    client,
     poolOptions: [] as unknown[],
     Pool: vi.fn(function (this: unknown, options: unknown) {
       mocks.poolOptions.push(options);
@@ -50,6 +68,8 @@ function environment(overrides: Record<string, string | undefined> = {}) {
     PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000",
     PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
     PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
+    PROOFLINE_DEPLOYMENT_ID: `deployment_${"a".repeat(64)}`,
+    PROOFLINE_RELEASE_TREE_SHA: "b".repeat(40),
     ...overrides,
   };
 }
@@ -225,6 +245,10 @@ describe("Slice 005 production worker process lifecycle", () => {
     expect(mocks.createHandlers).not.toHaveBeenCalled();
     expect(mocks.createRunWorker).not.toHaveBeenCalled();
     expect(mocks.worker.processOne).not.toHaveBeenCalled();
+    expect(mocks.pool.query).not.toHaveBeenCalled();
+    expect(mocks.pool.connect).not.toHaveBeenCalled();
+    expect(mocks.client.query).not.toHaveBeenCalled();
+    expect(mocks.client.release).not.toHaveBeenCalled();
   }
 
   it("fails before side effects when the default process environment lacks DATABASE_URL", async () => {
@@ -296,5 +320,14 @@ describe("Slice 005 production worker process lifecycle", () => {
       endpoint: "https://verifier.invalid",
       apiKey: "verifier-key",
     });
+    const databaseSql = [
+      ...mocks.pool.query.mock.calls,
+      ...mocks.client.query.mock.calls,
+    ].map(([sql]) => String(sql)).join("\n");
+    expect(databaseSql).toMatch(/migration_checksums/);
+    expect(databaseSql).toMatch(/deployment_worker_heartbeats/);
+    expect(databaseSql).toMatch(/INSERT/i);
+    expect(databaseSql).toMatch(/stopped_at/i);
+    expect(mocks.client.release.mock.calls.length).toBeLessThanOrEqual(1);
   });
 });

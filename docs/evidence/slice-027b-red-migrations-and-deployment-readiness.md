@@ -147,6 +147,30 @@ the exact enumerable/JSON-visible keys `deploymentId`, `releaseTreeSha` and
 and lease field names. Identity custody is unchanged and the rejection is no
 longer coupled to an innocent substring.
 
+### Slice 005 lifecycle compatibility correction
+
+The accepted Slice 005 successful worker-bootstrap fixture predated mandatory
+deployment identity, schema verification and the persisted heartbeat. It now
+supplies one exact `deployment_<64 lowercase hex>` identity and 40-hex release
+tree, and its Pool double exposes explicit query/connect/client-release
+lifecycle for schema and heartbeat SQL. The successful path must observe exact
+checksum-ledger and heartbeat insert/stopped activity before Pool close, while
+the existing missing-secret cases still require zero Pool, verifier, schema,
+heartbeat, claim or cleanup effect. No test-only production bypass or queued
+mock is introduced.
+
+The same compatibility audit found the accepted Slice 009 purity test still
+listed the pre-027B contracts exports exactly. It now admits only the new exact
+`./deployment` feature, proves both deployment schemas retain root/feature
+runtime identity through a cycle-free leaf, and requires the deployment leaf
+and schema implementation to contribute zero bytes to a fresh worker bundle.
+All prior `sideEffects: false`, wallet/manifest/template identities and custody
+forbidden rules remain unchanged.
+
+Typecheck remains PASS. The Slice 005 plus old/new heartbeat focus is 3 files /
+29 cases: 13 intentional 027B2 RED and 16 controls PASS. The nearest bootstrap,
+entry and fresh worker-purity matrix is 4 files, 23/23 PASS with zero skip.
+
 ## GREEN authority still required
 
 Implementation must make the frozen contracts GREEN without adopting legacy

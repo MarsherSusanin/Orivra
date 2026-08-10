@@ -52,6 +52,11 @@ const manifestContractRuntimeExports = [
   "isSafePublicUrlQueryEntry",
 ] as const;
 
+const deploymentContractRuntimeExports = [
+  "DeploymentHealthV1Schema",
+  "DeploymentReadinessV1Schema",
+] as const;
+
 const templateDomainRuntimeExports = [
   "getWeb2JsonTemplateCatalog",
   "getWeb2JsonTemplateDetail",
@@ -147,6 +152,7 @@ describe("Slice 009 production worker purity", () => {
     expect(domain.sideEffects).toBe(false);
     expect(contracts.exports).toEqual({
       ".": "./src/index.ts",
+      "./deployment": "./src/deployment.ts",
       "./wallet-auth": "./src/wallet-auth.ts",
       "./manifest": "./src/web2json-manifest.ts",
       "./templates": "./src/web2json-templates.ts",
@@ -232,6 +238,24 @@ describe("Slice 009 production worker purity", () => {
     for (const name of manifestContractRuntimeExports) {
       expect(manifestContracts[name]).toBe(rootContracts[name]);
     }
+  });
+
+  it("keeps the cycle-free deployment runtime export identical through the root entry", async () => {
+    const [rootContracts, deploymentContracts, source] = await Promise.all([
+      import(/* @vite-ignore */ "@proofline/contracts"),
+      import(/* @vite-ignore */ "@proofline/contracts/deployment"),
+      readFile(resolve(root, "packages/contracts/src/deployment.ts"), "utf8"),
+    ]);
+
+    expect(Object.keys(deploymentContracts).sort()).toEqual(
+      [...deploymentContractRuntimeExports].sort(),
+    );
+    for (const name of deploymentContractRuntimeExports) {
+      expect(deploymentContracts[name]).toBe(rootContracts[name]);
+    }
+    expect(source).not.toMatch(
+      /from\s*["']\.\/index["']|from\s*["']@proofline\/contracts["']/,
+    );
   });
 
   it("keeps manifest and template feature imports cycle-free", () => {
@@ -360,7 +384,7 @@ describe("Slice 009 production worker purity", () => {
         .filter(
           ({ input, bytesInOutput }) =>
             bytesInOutput > 0 &&
-            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$/.test(
+            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$/.test(
               input,
             ),
         )
