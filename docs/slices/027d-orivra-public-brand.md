@@ -1,7 +1,8 @@
 # Slice 027D — Orivra public display brand
 
-Status: Production-author GREEN locally; two independent verifier PASS reports
-pending on one stopped commit/tree before 028A.
+Status: Complete; Core and Product independently PASS exact commit
+`3d57840f699c6815502a19b13a5f803ef2b95cbc` / tree
+`fc7643f3ec5ab57998ba61f0ee55e1805a7e2143`.
 
 Architecture authority: [ADR 0038](../adr/0038-orivra-public-brand.md).
 
@@ -82,3 +83,12 @@ Spaces operation, Docker gate, live Coston2 effect or hosted claim is part of
 
 This is credential-free local author evidence, not a security PASS, hosted
 deployment, DNS/Spaces/GHCR/Coston2 operation or release authorization.
+
+## Independent verification
+
+Core report `core-verifier-rerun.md` SHA-256:
+`16b90f11b3ad91759b18c248f176d756b94491b0eed43c36f84787d26f096ce3`.
+Product report `product-verifier.md` SHA-256:
+`8c15ee12b3937c56984f10aa0c50af6888784774a8d63d9b3560d112e78f5137`.
+Both PASS the exact stopped identity above. Scan 8852 remains user-canceled,
+is not a security PASS, and its deferred 027C validation risk remains open.

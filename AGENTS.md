@@ -52,7 +52,12 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
 - 028A locally builds and exports verified OCI archives. Its frozen manifest
   stores distinct per-image `archiveSha256`, `imageManifestDigest`, platform and
   repository/reference fields without registry credentials, registry access,
-  external network or push. Migration is a one-shot
+  external network or push. The exact ordered Linux/amd64 inventory is Caddy,
+  Web, API, worker and the custom PostgreSQL-recovery image; MinIO and upstream
+  bases remain build/QA inputs. The command builds each image once from a clean
+  private commit snapshot, accepts only a caller-supplied use-time verified
+  private WAL-G context, and atomically publishes a canonical manifest plus a
+  non-circular checksum receipt. Migration is a one-shot
   checksummed job under a PostgreSQL advisory lock before app startup;
   `/healthz`, `/readyz`, schema verification, worker heartbeat and the
   persistent PostgreSQL volume remain separate acceptance evidence.

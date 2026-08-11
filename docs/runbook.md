@@ -255,9 +255,24 @@ minutes. Do not add a compatibility parser or brand environment variable.
 
 The 027D production-author result is locally GREEN: affected contracts and
 coverage, regenerated Action/Web artifacts, Sites compatibility and desktop/
-mobile browser acceptance passed. This is not hosted or deployed evidence and
-does not authorize 028A yet. Two different read-only verifiers must still PASS
-one exact stopped commit/tree; any production-byte change invalidates both.
+mobile browser acceptance passed. Core and Product independently PASS exact
+`3d57840f699c6815502a19b13a5f803ef2b95cbc` /
+`fc7643f3ec5ab57998ba61f0ee55e1805a7e2143`; report SHA-256 values are frozen
+in ADR 0039. This is not hosted/deployed/security evidence or release
+authorization.
+
+### Slice 028A offline OCI freeze
+
+ADR 0039 freezes intentional RED for exactly five ordered Linux/amd64 OCI
+archives: Caddy, Web, API, worker and PostgreSQL recovery. The future command
+must use one clean private commit snapshot, a caller-supplied private WAL-G
+binary/receipt validated at use time, `pull=false`, `network=none`, no
+prefetch/registry/push, and build each image once. It normalizes accepted OCI
+Image Layout directories into deterministic uncompressed ustar, keeps
+`archiveSha256` distinct from the single-platform `imageManifestDigest`, and
+publishes only a canonical manifest plus non-circular checksum receipt after
+all private resources and final Git identity pass. 029A owns the separate
+unified-matrix authorization receipt.
 
 Production runtime composition always adds `deploy/compose.backup.yaml` through
 the fixed `compose:production -- --runtime` wrapper. When the recovery

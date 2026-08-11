@@ -32,8 +32,8 @@ The product journey is delivered as independently frozen vertical slices:
 | 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Complete; independently verified on `527c561` / `ebdf648` |
 | 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Complete; independently verified on `527c561` / `ebdf648` |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Complete; Core and Product PASS `8137970` / `8c594cc`; scan 8852 user-canceled/not a security PASS; deferred evidence-integrity validation risk remains open |
-| 027D | Orivra public display brand with Proofline technical compatibility | Production-author GREEN locally; two independent verifier PASS reports pending before 028A |
-| 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
+| 027D | Orivra public display brand with Proofline technical compatibility | Complete; Core and Product PASS `3d57840` / `fc7643f` |
+| 028A | Verified local OCI archives and frozen digest manifest | Intentional RED under ADR 0039, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
 | 029A | Local MLP validation and candidate freeze | Planned, credential-free |
 | 029B | Exact-digest production promotion and seven-day canary | Blocked until 028B hosted evidence |
@@ -130,8 +130,9 @@ Credential-free delivery covers 022–029A:
   CLI and Action display copy change; the exact Proofline technical
   compatibility allowlist does not. Old signed Proofline challenges fail closed
   and users request a new five-minute challenge. Production, generated-artifact,
-  affected coverage, Sites and browser gates are locally GREEN. Two independent
-  verifier PASS reports on one stopped commit/tree remain required before 028A.
+  affected coverage, Sites and browser gates are locally GREEN. Core and
+  Product independently PASS exact `3d57840` / `fc7643f`; report checksums are
+  frozen in ADR 0039. This is local module evidence, not release authorization.
 - **028A local release truth** builds and exports OCI archives, then must verify them.
   The frozen release manifest stores per-image `archiveSha256`,
   `imageManifestDigest`, `platform` and `repository`/`reference` fields.
@@ -140,6 +141,10 @@ Credential-free delivery covers 022–029A:
   frozen release manifest binds commit and tree; its canonical JSON has its own
   SHA-256 checksum, `frozenReleaseManifestSha256`. 028A runs without registry
   or GHCR credentials and with no registry access, external network or push.
+  ADR 0039 fixes the exact ordered Caddy/Web/API/worker/PostgreSQL-recovery
+  inventory, private clean source/WAL-G inputs, deterministic OCI layout tar,
+  non-circular receipt and atomic read-only handoff. Production is intentional
+  RED; 029A remains the later unified-matrix authorization.
 
 **029A is the credential-free local MLP validation and freeze.** Product gates
 and user testing use recorded fixtures through local Docker Compose. 029A runs

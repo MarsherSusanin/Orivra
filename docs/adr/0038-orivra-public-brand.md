@@ -2,8 +2,11 @@
 
 ## Status
 
-Accepted as the Slice 027D contract. Production surfaces are locally GREEN;
-two independent verifier PASS reports on one stopped commit/tree remain pending.
+Accepted and independently verified on exact commit
+`3d57840f699c6815502a19b13a5f803ef2b95cbc` / tree
+`fc7643f3ec5ab57998ba61f0ee55e1805a7e2143`. Core and Product report
+SHA-256 values are recorded in ADR 0039. This remains credential-free local
+module evidence, not release authorization, hosting or a security PASS.
 
 ## Context
 

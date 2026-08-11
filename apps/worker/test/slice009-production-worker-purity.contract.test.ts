@@ -75,6 +75,23 @@ const recoveryContractRuntimeExports = [
   "checksumRestoreDrillEvidence",
 ] as const;
 
+const releaseContractRuntimeExports = [
+  "FrozenOciReleaseManifestV1Schema",
+  "FrozenOciReleaseReceiptV1Schema",
+  "canonicalSerializeFrozenOciReleaseManifest",
+  "canonicalSerializeFrozenOciReleaseReceipt",
+  "checksumFrozenOciReleaseManifest",
+  "checksumReleaseArtifactInventory",
+] as const;
+
+const releaseDomainRuntimeExports = [
+  "createFrozenOciReleaseManifest",
+  "createFrozenOciReleaseReceipt",
+  "deriveCanonicalOciArchiveEntries",
+  "inspectSinglePlatformOciLayout",
+  "verifyFrozenOciReleaseHandoff",
+] as const;
+
 const templateDomainRuntimeExports = [
   "getWeb2JsonTemplateCatalog",
   "getWeb2JsonTemplateDetail",
@@ -162,7 +179,7 @@ function expectNoPreflightTestBridge(candidate: string, label: string) {
 }
 
 describe("Slice 009 production worker purity", () => {
-  it("declares pure package metadata and exact custody/template/recovery feature subpaths", () => {
+  it("declares pure package metadata and exact custody/template/recovery/release feature subpaths", () => {
     const contracts = JSON.parse(readFileSync(contractsPackage, "utf8"));
     const domain = JSON.parse(readFileSync(domainPackage, "utf8"));
 
@@ -175,10 +192,12 @@ describe("Slice 009 production worker purity", () => {
       "./manifest": "./src/web2json-manifest.ts",
       "./templates": "./src/web2json-templates.ts",
       "./recovery": "./src/recovery.ts",
+      "./release": "./src/release.ts",
     });
     expect(domain.exports).toEqual({
       ".": "./src/index.ts",
       "./templates": "./src/web2json-template-catalog.ts",
+      "./release": "./src/oci-release.ts",
     });
   });
 
@@ -299,6 +318,42 @@ describe("Slice 009 production worker purity", () => {
       /from\s*["']\.\/index["']|from\s*["']@proofline\/contracts["']/,
     );
     expect(moduleLoadEffectViolations(recoveryFeature)).toEqual([]);
+  });
+
+  it("keeps cycle-free release features identical through both pure package roots", async () => {
+    const contractFeature = resolve(root, "packages/contracts/src/release.ts");
+    const domainFeature = resolve(root, "packages/domain/src/oci-release.ts");
+    expect(existsSync(contractFeature)).toBe(true);
+    expect(existsSync(domainFeature)).toBe(true);
+    if (!existsSync(contractFeature) || !existsSync(domainFeature)) return;
+    const releaseContractsSpecifier = "@proofline/contracts/release";
+    const releaseDomainSpecifier = "@proofline/domain/release";
+    const [rootContracts, releaseContracts, rootDomain, releaseDomain] =
+      await Promise.all([
+        import(/* @vite-ignore */ "@proofline/contracts"),
+        import(/* @vite-ignore */ releaseContractsSpecifier),
+        import(/* @vite-ignore */ "@proofline/domain"),
+        import(/* @vite-ignore */ releaseDomainSpecifier),
+      ]);
+    expect(Object.keys(releaseContracts).sort()).toEqual(
+      [...releaseContractRuntimeExports].sort(),
+    );
+    expect(Object.keys(releaseDomain).sort()).toEqual(
+      [...releaseDomainRuntimeExports].sort(),
+    );
+    for (const name of releaseContractRuntimeExports) {
+      expect(releaseContracts[name]).toBe(rootContracts[name]);
+    }
+    for (const name of releaseDomainRuntimeExports) {
+      expect(releaseDomain[name]).toBe(rootDomain[name]);
+    }
+    for (const feature of [contractFeature, domainFeature]) {
+      const source = readFileSync(feature, "utf8");
+      expect(source).not.toMatch(
+        /from\s*["']\.\/index["']|from\s*["']@proofline\/(?:contracts|domain)["']/,
+      );
+      expect(moduleLoadEffectViolations(feature)).toEqual([]);
+    }
   });
 
   it("keeps manifest and template feature imports cycle-free", () => {
@@ -425,6 +480,12 @@ describe("Slice 009 production worker purity", () => {
       ]) {
         expect(bytesForSuffix(recoveryInput), recoveryInput).toBe(0);
       }
+      for (const releaseInput of [
+        "packages/contracts/src/release.ts",
+        "packages/domain/src/oci-release.ts",
+      ]) {
+        expect(bytesForSuffix(releaseInput), releaseInput).toBe(0);
+      }
       expect(freshArtifact).toMatch(/await startProductionWorker\(\)/);
       expect(freshArtifact).toMatch(/PROOFLINE_COSTON2_PRIVATE_KEY/);
       expect(freshArtifact).not.toMatch(
@@ -432,6 +493,9 @@ describe("Slice 009 production worker purity", () => {
       );
       expect(freshArtifact).not.toMatch(
         /BackupEvidenceV1Schema|RestoreDrillEvidenceV1Schema|RestorePromotionAuthorizationV1Schema|RestorePromotionAuthorizationV2Schema|RecoveryEvidenceHandoffV1Schema|canonicalSerializeBackupEvidence|canonicalSerializeRecoveryEvidenceHandoff|canonicalSerializeRestoreDrillEvidence|checksumBackupEvidence|checksumRecoveryEvidenceHandoff|checksumRestoreDrillEvidence/,
+      );
+      expect(freshArtifact).not.toMatch(
+        /FrozenOciReleaseManifestV1Schema|FrozenOciReleaseReceiptV1Schema|imageManifestDigest|archiveSha256|artifactInventorySha256/,
       );
       const artifactFindings = matchingLabels(
         freshArtifact,
@@ -441,7 +505,7 @@ describe("Slice 009 production worker purity", () => {
         .filter(
           ({ input, bytesInOutput }) =>
             bytesInOutput > 0 &&
-            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$|(?:^|\/)recovery(?:-schema)?\.ts$|(?:^|\/)recovery-runtime\.mjs$/.test(
+            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$|(?:^|\/)recovery(?:-schema)?\.ts$|(?:^|\/)recovery-runtime\.mjs$|(?:^|\/)release\.ts$|(?:^|\/)oci-release\.ts$/.test(
               input,
             ),
         )

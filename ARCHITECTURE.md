@@ -250,8 +250,10 @@ accepted; an already-issued Proofline challenge is unavailable before recovery
 or session effects and the user requests a new five-minute challenge. No dual
 brand parser or client brand authority exists. Production and generated
 artifacts are locally GREEN under the affected contracts, coverage, Sites and
-real-browser acceptance. Two independent verifier reports on one stopped tree
-remain pending; 027D completes only after both PASS and before 028A.
+real-browser acceptance. Core and Product independently PASS exact commit
+`3d57840f699c6815502a19b13a5f803ef2b95cbc` / tree
+`fc7643f3ec5ab57998ba61f0ee55e1805a7e2143`; this is local module evidence,
+not release authorization. ADR 0039 owns the next offline OCI freeze.
 
 ## Release architecture and current operational status
 
@@ -307,6 +309,13 @@ remote digest из immutable publication/deployment evidence, связанног
 но не даёт pull authority; missing, mismatched, unpublished или unverified
 evidence блокирует rollback. Database repair остаётся forward repair либо
 restore в новый volume.
+
+[ADR 0039](docs/adr/0039-offline-oci-release-freeze.md) narrows 028A to the
+exact ordered Caddy/Web/API/worker/PostgreSQL-recovery Linux/amd64 archives.
+Each is built once from one clean private commit snapshot, PostgreSQL receives
+only a caller-supplied use-time verified WAL-G context, and deterministic OCI
+layout tar bytes are atomically handed off with a canonical non-circular
+receipt. No prefetch, registry, push or unified 029A authorization is implied.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

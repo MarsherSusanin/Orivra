@@ -97,11 +97,11 @@ blockchain-операций.
   `8c594cc58820670aba66e7b3cbd6f1f818420a19`; this does not close or classify
   the deferred scan risk.
 - [ADR 0038](docs/adr/0038-orivra-public-brand.md) selects **Orivra** as the
-  public display name before 028A. Slice 027D is production-author GREEN
-  locally: Web metadata and copy, the local SVG mark, fail-closed SIWE cutover,
-  CLI/Action copy and generated artifacts pass the affected contracts,
-  coverage, Sites and real-browser checks. Two independent verifier reports on
-  one stopped commit/tree are still pending, so 027D is not yet release-frozen. `@proofline/*`,
+  public display name before 028A. Slice 027D is complete: Core and Product
+  independently PASS exact `3d57840` / `fc7643f` after Web metadata/copy, the
+  local SVG mark, fail-closed SIWE cutover, CLI/Action generated artifacts,
+  affected coverage, Sites and real-browser checks passed. This is local module
+  evidence, not release authorization. `@proofline/*`,
   `PROOFLINE_*`, database/storage/evidence, CLI, Action, Solidity, Docker and S3
   identifiers remain compatibility-stable.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
@@ -181,7 +181,9 @@ deferred inventory-digest/promotion-parser validation risk remains open. Core
 and Product independently PASS exact commit `8137970` / tree `8c594cc`; scan
 8852 remains canceled and is not a security PASS. Slice 027D freezes the Orivra
 public display-name cutover before 028A; it does not migrate any Proofline
-technical identifier. 028A–029B по-прежнему владеют release и production
+technical identifier. Core and Product independently PASS exact `3d57840` /
+`fc7643f`. ADR 0039 now freezes 028A intentional RED for the five exact offline
+OCI archives and non-circular manifest receipt. 028A–029B по-прежнему владеют release и production
 promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment
 не provisioned. Sites сохраняется только как

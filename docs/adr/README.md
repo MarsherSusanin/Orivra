@@ -41,5 +41,6 @@ ADR фиксирует архитектурное решение, которое
 | [0036](0036-checksummed-migrations-and-deployment-readiness.md) | Immutable migration checksums, least-privilege deployment roles and persisted worker heartbeat separate process health from application readiness |
 | [0037](0037-wal-archiving-and-pitr-recovery.md) | Encrypted WAL-G archive, evidence-bound base backup and paused new-volume PITR are proved locally against private MinIO |
 | [0038](0038-orivra-public-brand.md) | Orivra becomes the public display name while Proofline protocol, package, persistence and deployment identifiers remain compatible |
+| [0039](0039-offline-oci-release-freeze.md) | Five exact Linux/amd64 OCI archives are built once offline and frozen under distinct archive/image digests plus a non-circular receipt |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

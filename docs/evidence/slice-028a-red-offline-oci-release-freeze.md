@@ -1,0 +1,86 @@
+# Slice 028A RED — Offline OCI release freeze
+
+Status: Intentional RED contract; production implementation absent.
+
+Date: 2026-08-11 (Asia/Vladivostok)
+
+Role: Contract & Test Designer; sole shared-tree writer for this wave.
+
+Accepted parent commit: `3d57840f699c6815502a19b13a5f803ef2b95cbc`
+
+Accepted parent tree: `fc7643f3ec5ab57998ba61f0ee55e1805a7e2143`
+
+Architecture decision: [ADR 0039](../adr/0039-offline-oci-release-freeze.md)
+
+Slice contract: [028A](../slices/028a-offline-oci-release-freeze.md)
+
+## Prerequisite truth
+
+Slice 027D independently passed Core and Product verification on the exact
+accepted identity. Core report
+`/private/tmp/proofline-027d-verifiers/3d57840/core-verifier-rerun.md` has
+SHA-256 `16b90f11b3ad91759b18c248f176d756b94491b0eed43c36f84787d26f096ce3`.
+Product report `/private/tmp/proofline-027d-verifiers/3d57840/product-verifier.md`
+has SHA-256
+`8c15ee12b3937c56984f10aa0c50af6888784774a8d63d9b3560d112e78f5137`.
+They are local targeted module PASS reports, not hosted, release, deployment,
+live-Coston2 or security evidence. Scan 8852 remains user-canceled and its
+deferred 027C validation risk remains open.
+
+The local environment reports buildx `v0.25.0-desktop.1` / BuildKit `v0.23.2`
+with Linux/amd64 support. This is capability context, not a frozen binary or
+image identity. `docker/.prefetch` is absent. RED therefore requires a caller-
+supplied private WAL-G input root and forbids a fallback prefetch. The observed
+local PostgreSQL recovery image ID is deliberately not recorded as authority.
+
+## Frozen test inventory
+
+The RED wave adds three focused executable files and amends the retained worker
+purity contract. Production, dependencies, locks, Dockerfiles, Compose and
+generated artifacts remain unchanged:
+
+- `packages/contracts/test/slice028a-frozen-oci-release.contract.test.ts` —
+  strict manifest/receipt schemas, tuple/reference/checksum binding;
+- `packages/domain/test/slice028a-oci-release.contract.test.ts` — pure OCI
+  manifest selection, canonical archive inventory and terminal receipt
+  derivation;
+- `tests/deployment/slice028a-offline-oci-release.contract.test.mjs` — private
+  source/WAL-G authority, exact offline build calls, deterministic archive and
+  atomic lifecycle seams;
+- retained `apps/worker/test/slice009-production-worker-purity.contract.test.ts`
+  freezes the new feature subpaths/root identity and zero worker contribution.
+
+## RED execution chronology
+
+All commands below ran on the same uncommitted tests/docs-only author tree. No
+Docker command, buildx, network, prefetch, root build, coverage or generated
+artifact command ran.
+
+- `node --check tests/deployment/slice028a-offline-oci-release.contract.test.mjs`
+  PASS;
+- `npm run typecheck` PASS;
+- focused contracts/domain/package command: three files, 46 cases; 31 causal
+  intentional RED and 15 retained controls PASS. The failures are exactly the
+  absent contract/domain release feature files, package exports and identities;
+- focused deployment command: 19 cases; 18 causal intentional RED and one
+  retained exact-six-input control PASS. The failures are exactly the absent
+  release source/WAL-G authority, OCI packer, orchestrator, publisher and root
+  command;
+- retained migration-manifest and Action-artifact controls: 18/18 PASS;
+- retained 027A image/prefetch/static controls: 23/23 PASS;
+- serialized `npm run test:docker:static`: 165 cases; the same 18 new 028A
+  intentional failures and all 147 retained/new controls PASS;
+- `npm run test:sites`: 36/36 PASS.
+
+The first focused import attempt produced a Vite missing-module collection
+error. The RED harness was corrected to import the optional future feature by
+runtime URL, so the final run collects every test and fails only at executable
+production seams. A schema-only receipt producer mismatch was also moved to
+the domain handoff verifier, because a strict pure schema cannot know the
+independently expected producer.
+
+## Boundaries
+
+This RED creates no OCI archive and invokes no Docker, buildx, network,
+prefetch, registry, scanner, credential or external effect. It makes no 029A
+unified-matrix or 028B publication claim.

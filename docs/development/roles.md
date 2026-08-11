@@ -76,7 +76,11 @@ be described as hosted or deployed.
 
 028A is the local release composition. It exports verified OCI archives and a
 frozen manifest with distinct per-image `archiveSha256`,
-`imageManifestDigest`, platform and repository/reference fields. 029A is the
+`imageManifestDigest`, platform and repository/reference fields. ADR 0039
+freezes exactly five ordered Linux/amd64 archives, one clean private producer
+snapshot, a caller-supplied use-time verified WAL-G context, deterministic OCI
+layout packaging and an atomic non-circular receipt. Its module gate never
+prefetches, pulls, pushes or reaches a registry. 029A is the
 credential-free local MLP validation and freeze. Product gates and user testing
 use recorded fixtures through local Docker Compose. 029A runs with no
 credentials and no external network; the whole 022–029A range remains
