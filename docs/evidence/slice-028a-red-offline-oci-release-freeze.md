@@ -91,6 +91,14 @@ attempt produced three incidental retained-control failures; the exact same
 165-case static set rerun with `--test-concurrency=1` restored all 147 controls
 and only the frozen 18 Slice 028A failures remained.
 
+The first GREEN-compatible deployment subset then exposed a teardown-only
+fixture defect: accepted source and WAL-G captures correctly returned nested
+mode-`0500` directories and mode-`0400` files, but `afterEach` made only the
+outer temporary parent writable before recursive removal. The harness now
+walks owned temporary trees with `lstat`, never follows symbolic links, makes
+each real nested directory/file removable, and then deletes only the registered
+temporary parent. Production mode and symlink assertions are unchanged.
+
 ## Boundaries
 
 This RED creates no OCI archive and invokes no Docker, buildx, network,

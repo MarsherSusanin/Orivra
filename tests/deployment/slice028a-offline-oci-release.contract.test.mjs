@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -31,9 +31,28 @@ async function temporary(prefix) {
   return directory;
 }
 
+async function makeTreeRemovable(path) {
+  let metadata;
+  try {
+    metadata = await lstat(path);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+  if (metadata.isSymbolicLink()) return;
+  if (metadata.isDirectory()) {
+    await chmod(path, 0o700);
+    for (const entry of await readdir(path, { withFileTypes: true })) {
+      await makeTreeRemovable(join(path, entry.name));
+    }
+    return;
+  }
+  await chmod(path, 0o600);
+}
+
 test.afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map(async (directory) => {
-    await chmod(directory, 0o700).catch(() => {});
+    await makeTreeRemovable(directory);
     await rm(directory, { recursive: true, force: true });
   }));
 });
