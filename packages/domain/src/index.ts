@@ -31,6 +31,11 @@ export {
   verifyCredentialFreeMlpCandidateHandoff,
 } from "./mlp-candidate";
 export {
+  createDigitalOceanStagingPlan,
+  createPublicationEvidence,
+  verifyPublicationEvidenceHandoff,
+} from "./publication";
+export {
   canonicalSerializeEvidenceReceipt,
   createEvidenceReceipt,
 } from "./evidence-receipt";

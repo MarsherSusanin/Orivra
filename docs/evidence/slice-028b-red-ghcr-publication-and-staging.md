@@ -69,6 +69,26 @@ No registry, Docker, network, credential, SSH, DigitalOcean, Spaces, live
 Coston2 or frozen-candidate write is performed. No hosted/deployed/security
 PASS or 029B authority is claimed.
 
+## Production-author GREEN continuation
+
+After the frozen RED and the fixture-only digest correction, production adds
+the exact publication contract/domain subpaths, bounded OCI ustar inspection,
+file-only credential environments, direct GHCR Distribution API adapter,
+append-only publication output and isolated staging orchestration. The direct
+adapter has a credential-free fake-HTTP digest-preservation check; an actual
+frozen Caddy archive passed the same safe ustar/OCI inspector.
+
+Final author gates on the unchanged implementation bytes: typecheck PASS;
+focused contracts/domain/purity 56/56 PASS; focused deployment/roadmap 10/10
+PASS; contracts/domain 53 files and 617 tests with exact 100% statements,
+branches, functions and lines; serialized deployment static 204/204 PASS;
+Action artifact sync 1/1 PASS; production build PASS; Sites 46/46 PASS.
+
+This is local production-author evidence only. Two independent verifiers,
+actual GHCR publication, hosted DigitalOcean staging checks and immutable live
+publication/staging records are still pending. Scan 8852 remains canceled and
+is not a security PASS; the deferred 027C integrity observation remains open.
+
 ## Fixture digest correction
 
 The initial RED fixture accidentally assigned the fifth `postgres-recovery`

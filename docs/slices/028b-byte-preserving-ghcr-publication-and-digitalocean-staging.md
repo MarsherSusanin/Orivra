@@ -1,6 +1,7 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Intentional RED. Credentialed implementation and execution are pending.
+Status: Local production-author GREEN; two independent code verifiers and
+credentialed GHCR/staging execution are pending.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 
@@ -52,3 +53,19 @@ This RED performs no registry, SSH, DigitalOcean, DNS, Spaces, Coston2, Docker
 or candidate-output effect. It does not select final GHCR repository names,
 claim hosted staging, authorize production promotion, or run a canary. 029B
 owns production promotion/canary after accepted 028B hosted evidence.
+
+## Local GREEN evidence
+
+- strict publication/staging contracts and pure handoff derivation are GREEN;
+- the GHCR runtime verifies all five canonical OCI archives before registry
+  I/O and the direct Distribution API adapter preserves manifest bytes/digest;
+- credential environments retain only explicit file-backed least authority;
+- staging orchestration fixes exact digest pulls, service/check order,
+  append-only evidence and scoped cleanup through injected operator adapters;
+- typecheck, focused 028B tests, contracts/domain 100% coverage, serialized
+  deployment static, Action artifact sync, production build and Sites pass.
+
+No GHCR request, DigitalOcean/SSH action or hosted smoke has run. A real 028B
+PASS additionally requires the explicit five-repository target map, approved
+credential files, two independent verifier reports on one exact implementation
+tree and the resulting immutable publication/staging evidence.

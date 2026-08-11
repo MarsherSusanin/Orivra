@@ -1,6 +1,7 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; Slice 028B intentional RED
+- Status: Accepted; local production-author GREEN pending two independent
+  verifiers and credentialed execution
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -65,6 +66,14 @@ equal only the frozen `imageManifestDigest`. A tag, an index digest,
 No specific Docker, Buildx, Skopeo or ORAS command is accepted by this ADR.
 GREEN must prove that its chosen adapter preserves the single-manifest digest
 against GHCR before it may produce evidence.
+
+The local implementation selects the OCI Distribution HTTP API directly. It
+uploads only missing reachable blobs, writes the exact frozen OCI manifest by
+its digest, and re-reads `Docker-Content-Digest`; it performs no Docker load,
+build, repack, tag or index creation. `release:publish` is fixed to the exact
+accepted 029A candidate and verifier report checksums. This code boundary is
+locally GREEN, but it is not registry evidence until an approved package-write
+credential and explicit canonical target map complete a real GHCR run.
 
 ### Publication evidence
 

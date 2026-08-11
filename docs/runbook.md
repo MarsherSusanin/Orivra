@@ -689,6 +689,34 @@ real worker heartbeat, browser, Spaces restore and persisted live-Coston2
 checks in separate staging evidence. Failure publishes no PASS, cleans only
 run-owned resources and never promotes production; 029B remains separate.
 
+The local author implementation exposes the GHCR half as:
+
+```bash
+npm run release:publish -- \
+  --candidate /private/tmp/proofline-029a/<candidate> \
+  --core-report /private/tmp/proofline-029a-verifiers/<commit>/core-verifier.md \
+  --product-report /private/tmp/proofline-029a-verifiers/<commit>/product-verifier.md \
+  --targets /private/credentials/ghcr-publication-targets.v1.json \
+  --username <github-package-writer> \
+  --token-file /private/credentials/ghcr-write-token \
+  --operator-id <operator_ULID> \
+  --run-id <pub_ULID> \
+  --completed-at <canonical-UTC-after-run> \
+  --evidence-output /private/evidence/publication-evidence.v1.json
+```
+
+The targets file must be canonical JSON and explicitly list five unique
+lowercase `ghcr.io/<owner>/<package>` repositories in frozen image order. The
+token file is a regular non-symlink mode-0400 file under a private operator
+root; do not paste its value into the shell, environment, Git or Codex chat.
+The evidence parent must already be mode 0700 and the output must not exist.
+The command is fixed to candidate `8991e7e4…` and exact Core/Product report
+hashes. It verifies all five archives before the first registry request and
+writes mode-0400 evidence only after five exact remote manifest-digest checks.
+Do not run it until the 028B implementation receives two independent PASS
+reports. DigitalOcean staging remains a separate credentialed invocation and
+must produce its own append-only evidence before 029B.
+
 029B is the credentialed production promotion and canary. 029B starts only
 after 028B has published and staged the exact frozen candidate.
 

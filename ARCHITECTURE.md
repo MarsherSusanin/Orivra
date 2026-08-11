@@ -335,6 +335,9 @@ exact commit `fc2f6e0` / tree `f7cebc6`, and candidate SHA-256 is
 adds a separate explicit GHCR target map, byte-preserving registry adapter and
 append-only publication/staging evidence. It does not rebuild candidate bytes,
 infer package names from the Git remote or authorize 029B production effects.
+The contracts/runtime and direct OCI Distribution adapter are locally GREEN;
+two implementation verifiers and credentialed GHCR/staging evidence remain
+pending, so this is not a hosted or deployed claim.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

@@ -206,6 +206,22 @@ export {
   credentialFreeCandidateGateIds,
 } from "./candidate";
 export type { CredentialFreeMlpCandidateV1 } from "./candidate";
+export {
+  GhcrPublicationTargetsV1Schema,
+  PublicationEvidenceV1Schema,
+  StagingDeploymentEvidenceV1Schema,
+  canonicalSerializeGhcrPublicationTargets,
+  canonicalSerializePublicationEvidence,
+  canonicalSerializeStagingDeploymentEvidence,
+  checksumGhcrPublicationTargets,
+  checksumPublicationEvidence,
+  checksumStagingDeploymentEvidence,
+} from "./publication";
+export type {
+  GhcrPublicationTargetsV1,
+  PublicationEvidenceV1,
+  StagingDeploymentEvidenceV1,
+} from "./publication";
 export type {
   BackupEvidenceV1,
   RestoreDrillEvidenceV1,

@@ -36,6 +36,7 @@
     "test:docker:product": "node scripts/mlp-product-compose.mjs",
     "release:freeze": "node scripts/release-freeze.mjs",
     "release:candidate": "node scripts/mlp-candidate-freeze.mjs",
+    "release:publish": "node scripts/ghcr-publication.mjs",
     "test:action:artifact": "vitest run tests/action-artifact-sync.contract.test.ts --reporter=verbose",
     "compose:production": "node scripts/compose-production.mjs"
   },

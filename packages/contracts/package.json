@@ -11,7 +11,8 @@
     "./manifest": "./src/web2json-manifest.ts",
     "./templates": "./src/web2json-templates.ts",
     "./release": "./src/release.ts",
-    "./candidate": "./src/candidate.ts"
+    "./candidate": "./src/candidate.ts",
+    "./publication": "./src/publication.ts"
   },
   "sideEffects": false,
   "dependencies": {
