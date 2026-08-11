@@ -92,6 +92,24 @@ const releaseDomainRuntimeExports = [
   "verifyFrozenOciReleaseHandoff",
 ] as const;
 
+const publicationContractRuntimeExports = [
+  "GhcrPublicationTargetsV1Schema",
+  "PublicationEvidenceV1Schema",
+  "StagingDeploymentEvidenceV1Schema",
+  "canonicalSerializeGhcrPublicationTargets",
+  "canonicalSerializePublicationEvidence",
+  "canonicalSerializeStagingDeploymentEvidence",
+  "checksumGhcrPublicationTargets",
+  "checksumPublicationEvidence",
+  "checksumStagingDeploymentEvidence",
+] as const;
+
+const publicationDomainRuntimeExports = [
+  "createDigitalOceanStagingPlan",
+  "createPublicationEvidence",
+  "verifyPublicationEvidenceHandoff",
+] as const;
+
 const templateDomainRuntimeExports = [
   "getWeb2JsonTemplateCatalog",
   "getWeb2JsonTemplateDetail",
@@ -179,7 +197,7 @@ function expectNoPreflightTestBridge(candidate: string, label: string) {
 }
 
 describe("Slice 009 production worker purity", () => {
-  it("declares pure package metadata and exact custody/template/recovery/release/candidate feature subpaths", () => {
+  it("declares pure package metadata and exact custody/template/recovery/release/candidate/publication feature subpaths", () => {
     const contracts = JSON.parse(readFileSync(contractsPackage, "utf8"));
     const domain = JSON.parse(readFileSync(domainPackage, "utf8"));
 
@@ -194,12 +212,14 @@ describe("Slice 009 production worker purity", () => {
       "./recovery": "./src/recovery.ts",
       "./release": "./src/release.ts",
       "./candidate": "./src/candidate.ts",
+      "./publication": "./src/publication.ts",
     });
     expect(domain.exports).toEqual({
       ".": "./src/index.ts",
       "./templates": "./src/web2json-template-catalog.ts",
       "./release": "./src/oci-release.ts",
       "./candidate": "./src/mlp-candidate.ts",
+      "./publication": "./src/publication.ts",
     });
   });
 
@@ -358,6 +378,42 @@ describe("Slice 009 production worker purity", () => {
     }
   });
 
+  it("keeps cycle-free publication features identical through both pure package roots", async () => {
+    const contractFeature = resolve(root, "packages/contracts/src/publication.ts");
+    const domainFeature = resolve(root, "packages/domain/src/publication.ts");
+    expect(existsSync(contractFeature)).toBe(true);
+    expect(existsSync(domainFeature)).toBe(true);
+    if (!existsSync(contractFeature) || !existsSync(domainFeature)) return;
+    const publicationContractsSpecifier = "@proofline/contracts/publication";
+    const publicationDomainSpecifier = "@proofline/domain/publication";
+    const [rootContracts, publicationContracts, rootDomain, publicationDomain] =
+      await Promise.all([
+        import(/* @vite-ignore */ "@proofline/contracts"),
+        import(/* @vite-ignore */ publicationContractsSpecifier),
+        import(/* @vite-ignore */ "@proofline/domain"),
+        import(/* @vite-ignore */ publicationDomainSpecifier),
+      ]);
+    expect(Object.keys(publicationContracts).sort()).toEqual(
+      [...publicationContractRuntimeExports].sort(),
+    );
+    expect(Object.keys(publicationDomain).sort()).toEqual(
+      [...publicationDomainRuntimeExports].sort(),
+    );
+    for (const name of publicationContractRuntimeExports) {
+      expect(publicationContracts[name]).toBe(rootContracts[name]);
+    }
+    for (const name of publicationDomainRuntimeExports) {
+      expect(publicationDomain[name]).toBe(rootDomain[name]);
+    }
+    for (const feature of [contractFeature, domainFeature]) {
+      const source = readFileSync(feature, "utf8");
+      expect(source).not.toMatch(
+        /from\s*["']\.\/index["']|from\s*["']@proofline\/(?:contracts|domain)["']/,
+      );
+      expect(moduleLoadEffectViolations(feature)).toEqual([]);
+    }
+  });
+
   it("keeps manifest and template feature imports cycle-free", () => {
     const manifestFeature = resolve(
       root,
@@ -488,6 +544,14 @@ describe("Slice 009 production worker purity", () => {
       ]) {
         expect(bytesForSuffix(releaseInput), releaseInput).toBe(0);
       }
+      for (const publicationInput of [
+        "packages/contracts/src/publication.ts",
+        "packages/contracts/src/publication-runtime.mjs",
+        "packages/domain/src/publication.ts",
+        "packages/domain/src/publication-runtime.mjs",
+      ]) {
+        expect(bytesForSuffix(publicationInput), publicationInput).toBe(0);
+      }
       expect(freshArtifact).toMatch(/await startProductionWorker\(\)/);
       expect(freshArtifact).toMatch(/PROOFLINE_COSTON2_PRIVATE_KEY/);
       expect(freshArtifact).not.toMatch(
@@ -499,6 +563,9 @@ describe("Slice 009 production worker purity", () => {
       expect(freshArtifact).not.toMatch(
         /FrozenOciReleaseManifestV1Schema|FrozenOciReleaseReceiptV1Schema|imageManifestDigest|archiveSha256|artifactInventorySha256/,
       );
+      expect(freshArtifact).not.toMatch(
+        /GhcrPublicationTargetsV1Schema|PublicationEvidenceV1Schema|StagingDeploymentEvidenceV1Schema|ghcr-publication-targets|oci-publication-evidence|digitalocean-staging-deployment-evidence/,
+      );
       const artifactFindings = matchingLabels(
         freshArtifact,
         workerArtifactForbiddenRules,
@@ -507,7 +574,7 @@ describe("Slice 009 production worker purity", () => {
         .filter(
           ({ input, bytesInOutput }) =>
             bytesInOutput > 0 &&
-            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$|(?:^|\/)recovery(?:-schema)?\.ts$|(?:^|\/)recovery-runtime\.mjs$|(?:^|\/)release\.ts$|(?:^|\/)oci-release\.ts$|(?:^|\/)candidate(?:-runtime)?\.mjs$|(?:^|\/)candidate\.ts$|(?:^|\/)mlp-candidate(?:-runtime)?\.mjs$|(?:^|\/)mlp-candidate\.ts$/.test(
+            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$|(?:^|\/)recovery(?:-schema)?\.ts$|(?:^|\/)recovery-runtime\.mjs$|(?:^|\/)release\.ts$|(?:^|\/)oci-release\.ts$|(?:^|\/)candidate(?:-runtime)?\.mjs$|(?:^|\/)candidate\.ts$|(?:^|\/)mlp-candidate(?:-runtime)?\.mjs$|(?:^|\/)mlp-candidate\.ts$|(?:^|\/)publication(?:-runtime)?\.mjs$|(?:^|\/)publication\.ts$/.test(
               input,
             ),
         )

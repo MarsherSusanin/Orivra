@@ -1,8 +1,7 @@
 # Slice 029A — Credential-free MLP candidate freeze
 
-Status: Setup-cleanup correction GREEN locally after Core rejected exact
-candidate `78a85e2` / `20c0f41`. A replacement unified run and two independent
-same-tree verifiers are pending.
+Status: Complete. Core and Product independently PASS exact commit `fc2f6e0` /
+tree `f7cebc6`; the frozen candidate SHA-256 is `8991e7e49f4570702436c269c8f6bd0af7b8f186997bff2a52e6da22f7a0cdda`.
 
 Architecture authority: [ADR 0041](../adr/0041-credential-free-mlp-candidate-freeze.md).
 

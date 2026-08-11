@@ -669,15 +669,25 @@ and a failed run leaves no published candidate PASS. Preserve a successful
 read-only output for both independent verifiers; do not edit the candidate tree
 or output between their reports.
 
-Core rejected exact candidate `78a85e2` / `20c0f41`: a supported
-Compose-present/Buildx-unavailable setup failure happened before lifecycle
-cleanup was registered and left owned `.candidate-stage.*`,
-`.candidate-temp.*`, Docker config and plugin symlink paths. The locally GREEN
-correction registers the no-follow scoped discard boundary before the first
-owned setup write. Every setup failure preserves caller-owned paths, publishes
-no PASS and removes only paths created by that invocation; cleanup failure is
-reported deterministically without masking the original setup failure. A
-replacement terminal candidate and both independent reports are still pending.
+The corrected terminal 029A candidate is complete. Core and Product
+independently PASS exact commit `fc2f6e0` / tree `f7cebc6`; candidate SHA-256 is
+`8991e7e49f4570702436c269c8f6bd0af7b8f186997bff2a52e6da22f7a0cdda`.
+
+028B begins only from those immutable candidate bytes and the two exact report
+receipts. Its credentialed preflight requires an explicit canonical mapping
+from the five frozen `proofline/*` repositories to five unique GHCR package
+repositories; the Git remote never supplies that mapping. Before the first
+registry effect it verifies the candidate, manifest, receipt, every archive
+`archiveSha256` and every OCI `imageManifestDigest`. An injected registry
+adapter then copies each exact single-platform manifest without rebuild or
+media conversion and verifies the remote digest against
+`imageManifestDigest`, never against the archive digest. Only five verified
+remote digests may create append-only publication evidence. Staging consumes
+that evidence, uses read-only GHCR pull authority, starts an isolated project,
+runs role bootstrap and migrations before applications, and records readiness,
+real worker heartbeat, browser, Spaces restore and persisted live-Coston2
+checks in separate staging evidence. Failure publishes no PASS, cleans only
+run-owned resources and never promotes production; 029B remains separate.
 
 029B is the credentialed production promotion and canary. 029B starts only
 after 028B has published and staged the exact frozen candidate.

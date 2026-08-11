@@ -98,6 +98,16 @@ candidate tree or image bytes. The VDS pulls only a verified remote digest
 bound by that publication evidence. 029B is the credentialed production
 promotion and canary, only after 028B has published and staged that candidate.
 
+ADR 0042 assigns 028B effects to a credentialed release operator only after
+the accepted 029A candidate and both independent reports are revalidated. The
+operator supplies a canonical explicit five-image GHCR target map; neither the
+Git remote nor local archive names imply registry authority. A registry adapter
+must preserve each single-manifest digest and may not build, repack, retag to a
+mutable reference or convert media types. Staging uses a distinct read-only
+pull credential and an isolated DigitalOcean project. Publication evidence and
+staging evidence are separate append-only records; neither is production
+promotion authority, which remains 029B.
+
 Rollback verification must prove that a prior schema-compatible verified
 remote digest is present in immutable publication/deployment evidence bound to
 its `frozenReleaseManifestSha256`. The release manifest provides compatibility

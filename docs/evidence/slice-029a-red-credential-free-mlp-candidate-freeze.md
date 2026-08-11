@@ -175,3 +175,20 @@ Compose-present/Buildx-unavailable case and deterministic setup-cleanup
 `AggregateError`; typecheck, the 40-case focused 029A inventory and serialized
 194-case deployment static suite pass. A replacement full terminal run and two
 independent same-tree verifier reports are still required.
+
+## Final candidate verification
+
+The replacement credential-free candidate is complete on exact commit
+`fc2f6e0677c64dc4f2ee90a85219bcc9f8c9bfbc` / tree
+`f7cebc6ed3842f296b3be1c96645e2dd8cdfe5bd`. Its canonical candidate SHA-256 is
+`8991e7e49f4570702436c269c8f6bd0af7b8f186997bff2a52e6da22f7a0cdda`.
+Independent Core PASS report
+`/private/tmp/proofline-029a-verifiers/fc2f6e0/core-verifier.md` has SHA-256
+`d03dd65f00b120420734cba2d6473ccb8bcb0e9cd8f614174f8939a93533b60b`;
+independent Product PASS report
+`/private/tmp/proofline-029a-verifiers/fc2f6e0/product-verifier.md` has SHA-256
+`b396a60978279a48db4220d873ce5188b4848cf769d7715d30f828fb1092bd11`.
+These reports authorize the separate 028B credential gate; they are not hosted,
+deployment or security-scan evidence. Scan 8852 remains user-canceled and is
+not a security PASS; the documented deferred evidence-integrity risk remains
+open.

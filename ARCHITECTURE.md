@@ -328,12 +328,13 @@ manifest/receipt, the exact complete matrix and a worker-stopped recorded-
 fixture Compose journey into a canonical read-only candidate receipt. The
 receipt is not sufficient release authority until two independent verifiers
 PASS that exact tree; only then may 028B credentials be requested.
-Core rejected exact candidate `78a85e2` / `20c0f41` because failures during
-private setup could occur before the lifecycle registered scoped cleanup. The
-production correction is locally GREEN and places every owned setup write
-inside the same scoped no-follow discard boundary; a replacement terminal run
-and both same-tree verifier reports remain pending. This status does not
-authorize credentials, publication or deployment.
+The corrected 029A candidate is complete: Core and Product independently PASS
+exact commit `fc2f6e0` / tree `f7cebc6`, and candidate SHA-256 is
+`8991e7e49f4570702436c269c8f6bd0af7b8f186997bff2a52e6da22f7a0cdda`.
+[ADR 0042](docs/adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md)
+adds a separate explicit GHCR target map, byte-preserving registry adapter and
+append-only publication/staging evidence. It does not rebuild candidate bytes,
+infer package names from the Git remote or authorize 029B production effects.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна
