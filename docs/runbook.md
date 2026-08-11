@@ -264,9 +264,9 @@ authorization.
 ### Slice 028A offline OCI freeze
 
 ADR 0039 specifies exactly five ordered Linux/amd64 OCI archives: Caddy, Web,
-API, worker and PostgreSQL recovery. Core rejected candidate `5613640` /
-`6b1d3a0`; the corrective production-author implementation is locally GREEN
-and uses one clean private commit snapshot, a caller-supplied private WAL-G
+API, worker and PostgreSQL recovery. Core rejected replacement `1d3324d` /
+`473c534` for caller-owned OCI archive deletion; second corrective RED precedes
+a replacement command using one clean private commit snapshot and private WAL-G
 binary/receipt validated at use time, `pull=false`, `network=none`, no
 prefetch/registry/push, and build each image once. It normalizes accepted OCI
 Image Layout directories into deterministic uncompressed ustar, keeps

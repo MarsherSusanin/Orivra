@@ -2,11 +2,9 @@
 
 ## Status
 
-Accepted contract; corrective production-author GREEN locally. Independent
-Core rejected exact candidate `5613640` / `6b1d3a0` for caller-output cleanup
-and OCI control-path symlink authority. The replacement preserves caller-owned
-output and `lstat`-binds every OCI control path; final freeze and both
-independent verifiers are pending on one replacement tree.
+Accepted contract; second corrective RED. Core confirmed the first six fixes
+but rejected replacement `1d3324d` / `473c534` because OCI `EEXIST` cleanup
+deleted a caller-owned archive. Replacement and both verifiers are pending.
 
 ## Context
 

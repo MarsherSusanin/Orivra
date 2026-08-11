@@ -316,11 +316,10 @@ Each is built once from one clean private commit snapshot, PostgreSQL receives
 only a caller-supplied use-time verified WAL-G context, and deterministic OCI
 layout tar bytes are atomically handed off with a canonical non-circular
 receipt. No prefetch, registry, push or unified 029A authorization is implied.
-Core rejected production-author candidate `5613640` / `6b1d3a0` for
-caller-output cleanup and OCI control-path symlink authority. The corrective
-production-author implementation preserves external output and rejects all
-symlinked OCI control paths; final freeze and both independent verifiers remain
-pending on one replacement tree.
+Core confirmed the first six filesystem-authority corrections but rejected
+replacement `1d3324d` / `473c534`: OCI exclusive-create failure still deleted
+a pre-existing caller archive. Second corrective RED, replacement and both
+independent verifiers remain pending.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

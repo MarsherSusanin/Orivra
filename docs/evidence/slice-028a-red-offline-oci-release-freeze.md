@@ -1,9 +1,8 @@
 # Slice 028A RED — Offline OCI release freeze
 
-Status: Corrective production-author GREEN locally after independent Core FAIL
-on exact candidate `5613640d3baba32ec37f9ee2ce75c3ac2c9b2c29` / tree
-`6b1d3a06d0973f9d7f33d6278e1b976f6aa577c8`; final freeze and both verifiers
-pending on one replacement tree.
+Status: Second corrective RED after Core rejected exact replacement candidate
+`1d3324df0929d11a725de3182cb56c8f75d05808` / tree
+`473c5348db4c0f56aa0340e7aef7b492e3298c80`; replacement pending.
 
 Date: 2026-08-11 (Asia/Vladivostok)
 
@@ -178,3 +177,17 @@ Docker inputs, dependencies and locks are unchanged. The replacement still
 requires a final real offline freeze and fresh independent Core and Product
 PASS reports on one exact committed tree; no prior output or report is reused
 as release authorization.
+
+## Residual caller-owned archive rejection
+
+Core report `/private/tmp/proofline-028a-verifiers/1d3324d/core-verifier.md`
+has SHA-256
+`f83b8f440a020e47fa718a03832dab76adfe61edd658576b2598d55aa265e12f`.
+It confirms all first-wave six corrections but rejects exact replacement
+`1d3324d` / `473c534` for one residual ownership defect: OCI archive creation
+uses exclusive `open(..., "wx")`, then its shared catch removes the caller path
+after `EEXIST`. The second corrective RED supplies a valid layout and a
+pre-existing mode-`0400` caller archive, requires the fixed rejection, and
+preserves its exact bytes and mode. The archive writer may remove only an
+output it created during the current invocation. Public release contracts and
+the prior six corrections are unchanged.

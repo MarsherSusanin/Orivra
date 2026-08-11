@@ -288,6 +288,22 @@ test("packs the same accepted OCI layout to byte-identical ustar twice", async (
   assert.equal((await stat(first)).mode & 0o777, 0o600);
 });
 
+test("preserves a pre-existing caller OCI archive after exclusive-create rejection", async () => {
+  const module = await optionalModule("scripts/oci-layout-archive.mjs");
+  const parent = await temporary("proofline-028a-existing-archive-");
+  const layoutRoot = join(parent, "layout");
+  const outputPath = join(parent, "caller-owned.oci.tar");
+  const sentinelBytes = Buffer.from("caller-owned-oci-archive");
+  await writeValidOciLayout(layoutRoot);
+  await writeFile(outputPath, sentinelBytes, { mode: 0o600 });
+  await chmod(outputPath, 0o400);
+  await assert.rejects(module.writeCanonicalOciArchive({ layoutRoot, outputPath }), {
+    code: "OCI_RELEASE_ARCHIVE_INVALID",
+  });
+  assert.equal((await readFile(outputPath)).equals(sentinelBytes), true);
+  assert.equal((await lstat(outputPath)).mode & 0o777, 0o400);
+});
+
 for (const controlPath of ["blobs", "blobs/sha256", "index.json", "oci-layout"]) {
   test(`rejects symlinked OCI control path ${controlPath} before output creation`, async () => {
     const module = await optionalModule("scripts/oci-layout-archive.mjs");
