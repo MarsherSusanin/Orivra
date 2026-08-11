@@ -59,9 +59,23 @@ async function runGit(arguments_) {
   }
 }
 
-async function runDocker(arguments_, environment, cwd) {
+async function resolveBuildxExecutable(pathValue) {
+  const candidates = [
+    ...String(pathValue).split(":").filter(Boolean).map((directory) => join(directory, "docker-buildx")),
+    "/Applications/Docker.app/Contents/Resources/cli-plugins/docker-buildx",
+  ];
+  for (const candidate of candidates) {
+    const metadata = await lstat(candidate).catch(() => undefined);
+    if (metadata?.isFile() && !metadata.isSymbolicLink() && (metadata.mode & 0o111) !== 0) return candidate;
+  }
+  fail("Local Buildx capability is unavailable");
+}
+
+async function runDocker(arguments_, environment, cwd, buildxExecutable) {
   try {
-    return await execFileAsync("docker", arguments_, {
+    const executable = arguments_[0] === "buildx" ? buildxExecutable : "docker";
+    const childArguments = arguments_[0] === "buildx" ? arguments_.slice(1) : arguments_;
+    return await execFileAsync(executable, childArguments, {
       cwd,
       env: environment,
       encoding: "utf8",
@@ -121,6 +135,7 @@ async function main() {
   let walG;
   let environment;
   let commandById;
+  let buildxExecutable;
   let archiveResults = [];
   let finalized = false;
   try {
@@ -149,6 +164,7 @@ async function main() {
           xdgConfigDirectory: paths.xdg,
           sourceDateEpoch: snapshot.producer.sourceDateEpoch,
         });
+        buildxExecutable = await resolveBuildxExecutable(environment.PATH);
         commandById = new Map(createReleaseBuildCommands({
           sourceRoot: snapshot.sourceRoot,
           walGContextRoot: walG.contextRoot,
@@ -158,7 +174,7 @@ async function main() {
         return walG;
       },
       verifyCapability: async () => {
-        await runDocker(["buildx", "version"], environment, snapshot.sourceRoot);
+        await runDocker(["buildx", "version"], environment, snapshot.sourceRoot, buildxExecutable);
       },
       buildImage: async ({ id }) => {
         const command = commandById.get(id);
@@ -167,7 +183,7 @@ async function main() {
           value === "PROOFLINE_WAL_G_BINARY_SHA256=__BOUND_AT_EXECUTION__"
             ? `PROOFLINE_WAL_G_BINARY_SHA256=${walG.binarySha256}`
             : value);
-        await runDocker(arguments_, environment, snapshot.sourceRoot);
+        await runDocker(arguments_, environment, snapshot.sourceRoot, buildxExecutable);
         return { id, layoutRoot: command.layoutRoot };
       },
       inspectAndPackImage: async ({ id, index, repository, build }) => {
