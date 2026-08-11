@@ -1,4 +1,5 @@
 import {
+  PublicationEvidenceV1Schema,
   StagingDeploymentEvidenceV1Schema,
   canonicalSerializeStagingDeploymentEvidence,
 } from "../packages/contracts/src/publication-runtime.mjs";
@@ -45,11 +46,22 @@ function requirePublicationHandoff({ publicationHandoff, publicationEvidence, pu
   try {
     if (!publicationHandoff || publicationHandoff.evidence !== publicationEvidence ||
       publicationHandoff.expectedPublicationEvidenceSha256 !== publicationEvidenceSha256) throw new Error("handoff mismatch");
-    verifyPublicationEvidenceHandoff(publicationHandoff);
-    return publicationEvidence;
+    const privateEvidence = PublicationEvidenceV1Schema.parse(JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(publicationHandoff.evidenceBytes),
+    ));
+    verifyPublicationEvidenceHandoff({ ...publicationHandoff, evidence: privateEvidence });
+    return deepFreeze(privateEvidence);
   } catch (cause) {
     throw failure("STAGING_PUBLICATION_INVALID", "Publication evidence handoff is invalid", { cause });
   }
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const nested of Object.values(value)) deepFreeze(nested);
+  }
+  return value;
 }
 
 export function createStagingImagePlan(input) {

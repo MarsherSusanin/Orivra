@@ -2,8 +2,9 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Corrective intentional RED after Core rejected `7c2ca21` / `34a5751`;
-two independent verifier reports and all credentialed effects are pending.
+Status: Corrective RED closed by a production-author GREEN replacement after
+Core rejected `7c2ca21` / `34a5751`; two independent verifier reports and all
+credentialed effects are pending.
 
 ## Authorized predecessor
 
@@ -173,3 +174,9 @@ the exact contracts/domain/purity focus is 61/61 PASS; the exact
 GHCR/staging/roadmap focus is 32 PASS plus this one intentional RED; serialized
 deployment static is 211 PASS plus the same intentional RED; Sites
 compatibility is 46/46 PASS.
+
+The production-author replacement parses a fresh private authority exclusively
+from canonical `evidenceBytes`, recursively freezes it, and uses only that value
+after asynchronous provisioning. The causal mutation case and the other 32
+GHCR/staging/roadmap cases now PASS. This is not an independent verifier,
+hosted, deployed or security PASS.

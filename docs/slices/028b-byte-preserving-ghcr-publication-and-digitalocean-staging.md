@@ -1,6 +1,6 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Corrective intentional RED after Core rejected exact candidate
+Status: Production-author GREEN after correcting Core-rejected exact candidate
 `7c2ca21` / `34a5751`; both independent verifiers and all credentialed
 publication/staging effects are pending.
 
