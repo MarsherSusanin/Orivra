@@ -1,8 +1,8 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Production-author GREEN locally after independent Core rejected exact
-candidate `5322125` / `bad14e5`; both independent verifiers and all
-credentialed publication/staging effects are pending.
+Status: Corrective intentional RED after Core rejected exact candidate
+`7c2ca21` / `34a5751`; both independent verifiers and all credentialed
+publication/staging effects are pending.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 
@@ -89,3 +89,10 @@ The replacement also rejects registry upload redirects outside default-port
 443 and the exact same-repository upload namespace before bearer/body send,
 removes raw-object publication-to-staging chaining, and separates always-run
 local/session cleanup from failure-only staging teardown.
+
+Core then rejected exact `7c2ca21` / `34a5751`: the strict handoff verifier
+returned the caller-owned mutable evidence object, so an async provision seam
+could replace a repository/reference before pull and PASS. Corrective RED now
+requires one private schema-parsed, deeply immutable authority derived only
+from canonical evidence bytes; post-verification caller mutation cannot reach
+commands or evidence and otherwise fails before pull/PASS.

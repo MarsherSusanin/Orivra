@@ -339,9 +339,11 @@ Core rejected the first contracts/runtime candidate `5322125` / `bad14e5`:
 staging did not consume the strict publication handoff, remote observations
 could be promoted to a false PASS, the SSH pin was not enforced, the domain
 handoff was not transitive and OCI archives were reopened after authentication.
-The production-author replacement is GREEN locally and binds canonical
-bytes/checksums transitively, typed staging evidence, a pinned SSH session and
-one bounded no-follow archive lease. Two independent verifier PASS reports are
+Core then rejected replacement `7c2ca21` / `34a5751`: canonical bytes were
+verified, but staging retained the caller-owned mutable evidence object across
+async provisioning. Corrective RED requires a private schema-parsed, deeply
+immutable authority derived only from canonical bytes for commands,
+observations and emitted evidence. Two independent verifier PASS reports are
 pending. No credentialed, hosted or deployed claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в

@@ -727,8 +727,11 @@ record must parse and canonicalize as `StagingDeploymentEvidenceV1`, and one
 pinned SSH session must observe the expected host key before its first command.
 OCI publication authenticates, parses and streams each archive through the
 same no-follow descriptor/immutable capture with bounded memory; pathname
-reopen is forbidden. Its focused, coverage, static and frozen-archive checks
-are locally GREEN. Both independent verifiers must still PASS the same exact
+reopen is forbidden. Core rejected replacement `7c2ca21` / `34a5751` because
+the staging handoff returned a caller-owned mutable object after byte
+verification. Its corrective replacement must use only a private
+schema-parsed, deeply immutable value derived from canonical bytes after every
+async boundary. Both independent verifiers must PASS the same exact
 replacement tree before this runbook returns to credentialed operator execution.
 
 Registry upload locations must remain on `ghcr.io:443` under the exact same-

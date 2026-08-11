@@ -1,6 +1,6 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; production-author GREEN replacement pending two independent verifiers after Core rejected `5322125` / `bad14e5`
+- Status: Accepted contract; corrective RED after Core rejected `7c2ca21` / `34a5751` for mutable post-verification staging authority
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -136,6 +136,14 @@ all canonical input bytes and checksums, receipt inventory and the complete
 ordered image tuple before any DigitalOcean or SSH call. A legacy object,
 noncanonical bytes, self-derived checksum or substituted manifest is not pull
 authority.
+
+That verifier returns a new private schema-parsed and recursively immutable
+authority derived exclusively from the canonical evidence bytes. No caller
+object or nested reference survives verification. Every pull command,
+observation comparison and staging-evidence field uses that private value
+after every asynchronous provision/firewall/session boundary. Mutation of a
+caller-owned object after verification either has no effect or aborts before
+the first pull and before PASS evidence.
 
 Every remote observation is a strict typed result. A failed, incomplete or
 extra-field result blocks before evidence append. Successful orchestration

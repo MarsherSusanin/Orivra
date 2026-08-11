@@ -293,6 +293,69 @@ test("028B rejects a forged canonical five-reference handoff before DigitalOcean
   assert.equal(effects, 0);
 });
 
+test("028B keeps async staging authority bound to a private value parsed from canonical bytes", async () => {
+  const module = await runtime();
+  const canonical = createPublicationHandoffFixture();
+  const mutableEvidence = JSON.parse(new TextDecoder().decode(canonical.evidenceBytes));
+  const publicationHandoff = { ...canonical, evidence: mutableEvidence };
+  const canonicalImage = canonical.evidence.images[0];
+  const evilRepository = "ghcr.io/evil-owner/orivra-caddy";
+  const evilReference = `${evilRepository}@${canonicalImage.remoteDigest}`;
+  const imageCommands = [];
+  let evidenceWrites = 0;
+  let emittedEvidence;
+
+  const outcome = await module.runDigitalOceanStaging({
+    publicationHandoff,
+    publicationEvidence: mutableEvidence,
+    publicationEvidenceSha256: canonical.expectedPublicationEvidenceSha256,
+    target: stagingTarget(),
+    run: stagingRun(),
+    digitalOceanAdapter: {
+      provision: async () => {
+        await Promise.resolve();
+        mutableEvidence.images[0].remoteRepository = evilRepository;
+        mutableEvidence.images[0].remoteReference = evilReference;
+        return { deploymentId: "do-staging-authority", sshHost: "203.0.113.10", owned: true };
+      },
+      applyFirewall: async () => undefined,
+    },
+    sshAdapter: {
+      openPinnedSession: async () => ({
+        observedHostKeySha256: sha("8"),
+        run: async (command) => {
+          if (command.id === "pull-exact-digests" || command.id === "inspect-local-digests") {
+            imageCommands.push(structuredClone(command));
+          }
+          return typedObservation(command, canonical.evidence);
+        },
+        close: async () => undefined,
+      }),
+    },
+    appendStagingEvidence: async ({ bytes }) => {
+      evidenceWrites += 1;
+      emittedEvidence = StagingDeploymentEvidenceV1Schema.parse(JSON.parse(new TextDecoder().decode(bytes)));
+    },
+    closeLocalSession: async () => undefined,
+    teardownStaging: async () => undefined,
+  }).catch((error) => error);
+
+  if (outcome instanceof Error) {
+    assert.equal(imageCommands.length, 0);
+    assert.equal(evidenceWrites, 0);
+  } else {
+    assert.equal(outcome.status, "passed");
+    assert.equal(evidenceWrites, 1);
+    assert.equal(emittedEvidence.images[0].remoteRepository, canonicalImage.remoteRepository);
+    assert.equal(emittedEvidence.images[0].remoteReference, canonicalImage.remoteReference);
+    assert.equal(imageCommands.length, 2);
+    for (const command of imageCommands) {
+      assert.equal(command.imageReferences[0].remoteReference, canonicalImage.remoteReference);
+    }
+  }
+  assert.doesNotMatch(JSON.stringify({ imageCommands, emittedEvidence }), /evil-owner/);
+});
+
 test("028B rejects failed or ambiguous typed observations before PASS evidence", async () => {
   const module = await runtime();
   for (const failedCommandId of stagingCommandIds) {
