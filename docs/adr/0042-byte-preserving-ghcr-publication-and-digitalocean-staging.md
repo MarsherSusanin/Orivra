@@ -1,6 +1,6 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; production-author GREEN replacement pending two independent verifiers after Core rejected `7c2ca21` / `34a5751`
+- Status: Accepted contract; corrective RED after Core rejected `be3270c` / `0c12d82` for mutable target/run authority
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -144,6 +144,13 @@ observation comparison and staging-evidence field uses that private value
 after every asynchronous provision/firewall/session boundary. Mutation of a
 caller-owned object after verification either has no effect or aborts before
 the first pull and before PASS evidence.
+
+Before the first asynchronous effect, staging likewise strict-validates,
+privately clones and recursively freezes the complete target and run records.
+Only those private values reach provisioning, firewall, pinned-session,
+command construction and evidence. Later caller mutation of origin, Compose
+project, SSH pin, run ID, operator ID or completion time cannot reach any
+adapter or PASS field; otherwise the run stops before session/command effects.
 
 Every remote observation is a strict typed result. A failed, incomplete or
 extra-field result blocks before evidence append. Successful orchestration

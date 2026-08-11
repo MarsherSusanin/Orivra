@@ -339,12 +339,13 @@ Core rejected the first contracts/runtime candidate `5322125` / `bad14e5`:
 staging did not consume the strict publication handoff, remote observations
 could be promoted to a false PASS, the SSH pin was not enforced, the domain
 handoff was not transitive and OCI archives were reopened after authentication.
-Core then rejected replacement `7c2ca21` / `34a5751`: canonical bytes were
-verified, but staging retained the caller-owned mutable evidence object across
-async provisioning. The production-author replacement now uses a private
-schema-parsed, deeply immutable authority derived only from canonical bytes for
-commands, observations and emitted evidence. Two independent verifier PASS reports are
-pending. No credentialed, hosted or deployed claim exists.
+Core rejected replacement `7c2ca21` / `34a5751` for a mutable evidence alias.
+The next replacement closed it, but Core rejected `be3270c` / `0c12d82`:
+caller-owned target/run values remained mutable across async provisioning and
+could reach production-like command authority. Corrective RED requires private
+strict immutable snapshots of evidence, target and run before the first await.
+Two independent verifier PASS reports are pending. No credentialed, hosted or
+deployed claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

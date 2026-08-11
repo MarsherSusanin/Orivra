@@ -2,9 +2,8 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Corrective RED closed by a production-author GREEN replacement after
-Core rejected `7c2ca21` / `34a5751`; two independent verifier reports and all
-credentialed effects are pending.
+Status: Corrective intentional RED after Core rejected `be3270c` / `0c12d82`;
+two independent verifier reports and all credentialed effects are pending.
 
 ## Authorized predecessor
 
@@ -180,3 +179,30 @@ from canonical `evidenceBytes`, recursively freezes it, and uses only that value
 after asynchronous provisioning. The causal mutation case and the other 32
 GHCR/staging/roadmap cases now PASS. This is not an independent verifier,
 hosted, deployed or security PASS.
+
+## Target/run async-alias rejection and corrective RED
+
+Independent Core report
+`/private/tmp/proofline-028b-verifiers/be3270c/core-verifier.md` has SHA-256
+`5940fd08e10ce45dc6801d608e5b8ffdd7e07351db7df644fe6d7f4396e8aee5`
+and rejects exact commit `be3270cfe16a6806b481386ad9d6d712f46af3d0` /
+tree `0c12d829a6499317399b2901c4588ac5d06926ee`.
+
+That replacement correctly isolates canonical publication evidence, but
+retains caller-owned target and run objects after synchronous validation. The
+new causal RED holds provisioning pending, changes the caller origin, Compose
+project, SSH pin, run ID, operator ID and completion time, then resumes. A
+valid implementation passes only private strict, deeply frozen pre-await
+snapshots to provisioning/session/commands/evidence, or stops before remote
+session/command/PASS effects. The rejected runtime instead exposes the changed
+production-like target to provisioning and all fifteen command seams.
+
+This tests/docs-only wave preserves the prior fifteen cases and performs no
+registry, Docker, network, SSH, DigitalOcean, credential, live or
+frozen-output effect.
+
+Corrective classification on `be3270c` / `0c12d82`: syntax and typecheck PASS;
+the exact contracts/domain/purity focus is 61/61 PASS; the exact
+GHCR/staging/roadmap focus is 33 PASS plus this one intentional RED; serialized
+deployment static is 212 PASS plus the same intentional RED; Sites
+compatibility is 46/46 PASS.

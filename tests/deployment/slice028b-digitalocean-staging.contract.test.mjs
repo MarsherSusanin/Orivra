@@ -356,6 +356,90 @@ test("028B keeps async staging authority bound to a private value parsed from ca
   assert.doesNotMatch(JSON.stringify({ imageCommands, emittedEvidence }), /evil-owner/);
 });
 
+test("028B snapshots staging target and run before the first async effect", async () => {
+  const module = await runtime();
+  const publicationHandoff = createPublicationHandoffFixture();
+  const target = stagingTarget();
+  const run = stagingRun();
+  const expectedTarget = structuredClone(target);
+  const expectedRun = structuredClone(run);
+  let releaseProvision;
+  let provisionStarted;
+  const provisionStartedPromise = new Promise((resolve) => { provisionStarted = resolve; });
+  const provisionReleasePromise = new Promise((resolve) => { releaseProvision = resolve; });
+  let provisionTarget;
+  const sessionPins = [];
+  const commands = [];
+  let emittedEvidence;
+
+  const invocation = module.runDigitalOceanStaging({
+    publicationHandoff,
+    publicationEvidence: publicationHandoff.evidence,
+    publicationEvidenceSha256: publicationHandoff.expectedPublicationEvidenceSha256,
+    target,
+    run,
+    digitalOceanAdapter: {
+      provision: async ({ target: adapterTarget }) => {
+        provisionStarted();
+        await provisionReleasePromise;
+        provisionTarget = structuredClone(adapterTarget);
+        return { deploymentId: "do-staging-snapshot", sshHost: "203.0.113.10", owned: true };
+      },
+      applyFirewall: async () => undefined,
+    },
+    sshAdapter: {
+      openPinnedSession: async ({ expectedHostKeySha256 }) => {
+        sessionPins.push(expectedHostKeySha256);
+        return {
+          observedHostKeySha256: expectedHostKeySha256,
+          run: async (command) => {
+            commands.push(structuredClone(command));
+            return {
+              ...typedObservation(command, publicationHandoff.evidence),
+              sshHostKeySha256: expectedHostKeySha256,
+            };
+          },
+          close: async () => undefined,
+        };
+      },
+    },
+    appendStagingEvidence: async ({ bytes }) => {
+      emittedEvidence = StagingDeploymentEvidenceV1Schema.parse(JSON.parse(new TextDecoder().decode(bytes)));
+    },
+    closeLocalSession: async () => undefined,
+    teardownStaging: async () => undefined,
+  });
+
+  await provisionStartedPromise;
+  Reflect.set(target, "origin", "https://production.example.test");
+  Reflect.set(target, "composeProject", "proofline-production-live");
+  Reflect.set(target, "sshHostKeySha256", sha("9"));
+  Reflect.set(run, "runId", "stg_01K2Q4P6R8T0V2X4Z6B8D0F2H5");
+  Reflect.set(run, "operatorId", "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H5");
+  Reflect.set(run, "completedAt", "2026-08-12T23:59:59Z");
+  releaseProvision();
+
+  const result = await invocation.catch((error) => error);
+  assert.deepEqual(provisionTarget, expectedTarget);
+  if (result instanceof Error) {
+    assert.equal(sessionPins.length, 0);
+    assert.equal(commands.length, 0);
+    assert.equal(emittedEvidence, undefined);
+    return;
+  }
+  assert.equal(result.status, "passed");
+  assert.deepEqual(sessionPins, [expectedTarget.sshHostKeySha256]);
+  assert.equal(commands.length, stagingCommandIds.length);
+  assert.equal(commands.every((command) => command.composeProject === expectedTarget.composeProject), true);
+  assert.equal(emittedEvidence.target.composeProject, expectedTarget.composeProject);
+  assert.equal(emittedEvidence.target.publicOrigin, expectedTarget.origin);
+  assert.equal(emittedEvidence.run.sshHostKeySha256, expectedTarget.sshHostKeySha256);
+  assert.equal(emittedEvidence.run.runId, expectedRun.runId);
+  assert.equal(emittedEvidence.run.operatorId, expectedRun.operatorId);
+  assert.equal(emittedEvidence.run.completedAt, expectedRun.completedAt);
+  assert.doesNotMatch(JSON.stringify({ provisionTarget, sessionPins, commands, emittedEvidence }), /production-live|production\.example|F2H5|sha256:9{64}/);
+});
+
 test("028B rejects failed or ambiguous typed observations before PASS evidence", async () => {
   const module = await runtime();
   for (const failedCommandId of stagingCommandIds) {

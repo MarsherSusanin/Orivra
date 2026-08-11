@@ -1,7 +1,7 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Production-author GREEN after correcting Core-rejected exact candidate
-`7c2ca21` / `34a5751`; both independent verifiers and all credentialed
+Status: Corrective intentional RED after Core rejected exact candidate
+`be3270c` / `0c12d82`; both independent verifiers and all credentialed
 publication/staging effects are pending.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
@@ -96,3 +96,10 @@ could replace a repository/reference before pull and PASS. Corrective RED now
 requires one private schema-parsed, deeply immutable authority derived only
 from canonical evidence bytes; post-verification caller mutation cannot reach
 commands or evidence and otherwise fails before pull/PASS.
+
+The next replacement closed that evidence alias but Core rejected exact
+`be3270c` / `0c12d82`: caller-owned target/run objects remained mutable across
+provisioning, allowing a production-like Compose project and new SSH pin to
+reach all command seams. Corrective RED requires private strict snapshots of
+both target and run before the first await and exclusive use of them by every
+adapter, command and evidence field.

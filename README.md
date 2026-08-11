@@ -119,11 +119,12 @@ blockchain-операций.
   `bad14e5` for unbound staging authority, false PASS observations, an unused
   SSH pin and reopened archive bytes. Core then rejected replacement
   `7c2ca21` / `34a5751`: its verified handoff downgraded to a caller-owned
-  mutable object across async staging setup. The production-author replacement
-  now uses a private, schema-parsed and deeply immutable authority derived only
-  from canonical evidence bytes across every async seam. No GHCR, DigitalOcean
-  or SSH effect has occurred; two
-  independent PASS reports are still required before credentials are used.
+  mutable object across async staging setup. Its next replacement closed that
+  alias, but Core rejected `be3270c` / `0c12d82` because caller-owned target
+  and run values remained mutable across provisioning. Corrective RED requires
+  private strict immutable snapshots of evidence, target and run before async
+  effects. No GHCR, DigitalOcean or SSH effect has occurred; two independent
+  PASS reports are still required before credentials are used.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
