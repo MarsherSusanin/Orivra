@@ -189,10 +189,15 @@ async function main() {
       inspectAndPackImage: async ({ id, index, repository, build }) => {
         const filename = `images/${String(index + 1).padStart(2, "0")}-${id}.linux-amd64.oci.tar`;
         await mkdir(join(paths.archives, "images"), { recursive: true, mode: 0o700 });
-        const packed = await writeCanonicalOciArchive({
-          layoutRoot: build.layoutRoot,
-          outputPath: join(paths.archives, filename),
-        });
+        let packed;
+        try {
+          packed = await writeCanonicalOciArchive({
+            layoutRoot: build.layoutRoot,
+            outputPath: join(paths.archives, filename),
+          });
+        } catch {
+          throw new Error(`OCI release archive is invalid (${id})`);
+        }
         return Object.freeze({ id, repository, filename, ...packed });
       },
       writeManifestAndReceipt: async ({ source, archives }) => {
