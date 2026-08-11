@@ -316,11 +316,11 @@ Each is built once from one clean private commit snapshot, PostgreSQL receives
 only a caller-supplied use-time verified WAL-G context, and deterministic OCI
 layout tar bytes are atomically handed off with a canonical non-circular
 receipt. No prefetch, registry, push or unified 029A authorization is implied.
-Core confirmed the first six filesystem-authority corrections but rejected
-replacement `1d3324d` / `473c534`: OCI exclusive-create failure still deleted
-a pre-existing caller archive. The second corrective production-author
-implementation now preserves that archive; final freeze and both independent
-verifiers remain pending.
+Slice 028A is complete. Core and Product independently PASS exact commit
+`bdd09e78573fcd2a0310b1b90e3187b6b8f6d135` / tree
+`5d0acb9112024e84adfe5b3b907170c6d2d82d0e`; report SHA-256 values are frozen
+in ADR 0039. This remains credential-free local release-freeze evidence, not
+registry publication, hosted deployment, 029A authorization or security evidence.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

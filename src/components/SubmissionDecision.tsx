@@ -175,7 +175,7 @@ export function SubmissionDecision({
           <ArrowLeft size={17} aria-hidden="true" />
           Review preflight evidence
         </button>
-        <a className="submission-change-mode" href="/runs/new?step=submit">
+        <a className="submission-change-mode" href="/app/runs/new?step=submit">
           Change mode in a new run
         </a>
         {canConfirm ? (

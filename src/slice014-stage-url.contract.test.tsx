@@ -129,7 +129,7 @@ describe("/runs/new Composer step URL contract", () => {
     expect(new URLSearchParams(window.location.search).get("step")).toBe("source");
     expect(new URLSearchParams(window.location.search).get("template")).toBe("eth-usd");
     expect(new URLSearchParams(window.location.search).get("revision")).toBe("1");
-    expect(replaceState).toHaveBeenCalledTimes(1);
+    expect(replaceState).toHaveBeenCalledTimes(2);
     expectOnlyTemplateCatalogFetches(fetch);
   });
 
@@ -142,7 +142,7 @@ describe("/runs/new Composer step URL contract", () => {
     const steps = screen.getByRole("navigation", { name: /composer steps/i });
     const transform = within(steps).getByRole("link", { name: /transform/i });
     const transformUrl = new URL(transform.getAttribute("href")!, window.location.origin);
-    expect(transformUrl.pathname).toBe("/runs/new");
+    expect(transformUrl.pathname).toBe("/app/runs/new");
     expect(transformUrl.searchParams.get("step")).toBe("transform");
     expect(transform).not.toHaveAttribute("href", "#");
     await user.click(transform);

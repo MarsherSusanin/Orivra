@@ -53,7 +53,7 @@ describe("run discovery states", () => {
     const recent = await screen.findByRole("region", { name: /recent runs/i });
     expect(within(recent).getByRole("link", { name: /api\.example\.com/i })).toHaveAttribute(
       "href",
-      "/runs/run_active",
+      "/app/runs/run_active",
     );
     expect(within(recent).getByText("Resumable")).toBeVisible();
     expect(within(recent).getByText("active")).toBeVisible();
@@ -75,7 +75,7 @@ describe("run discovery states", () => {
       expect(item).not.toBeDisabled();
       expect(item).not.toHaveAttribute("href");
     }
-    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/app/settings");
   });
 
   it("keeps an unavailable list actionable without leaking its credential", async () => {
@@ -101,7 +101,7 @@ describe("run discovery states", () => {
 
     expect(screen.getByRole("heading", { name: /new web2json run/i })).toBeVisible();
     expect(screen.getByRole("navigation", { name: /composer steps/i })).toBeVisible();
-    expect(screen.getByRole("link", { name: /back to runs/i })).toHaveAttribute("href", "/runs");
+    expect(screen.getByRole("link", { name: /back to runs/i })).toHaveAttribute("href", "/app/runs");
   });
 
   it("emits Composer analytics only for the explicit start action", () => {

@@ -136,14 +136,14 @@ describe("session-only wallet onboarding", () => {
 
     expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();
     const opener = screen.getByRole("button", { name: /^sign in with wallet$/i });
-    expect(screen.getByRole("link", { name: /back to runs/i })).toHaveAttribute("href", "/runs");
-    expect(window.location.pathname).toBe(`/runs/${deepRunId}`);
+    expect(screen.getByRole("link", { name: /back to runs/i })).toHaveAttribute("href", "/app/runs");
+    expect(window.location.pathname).toBe(`/app/runs/${deepRunId}`);
     expect(document.body).not.toHaveTextContent(/project token|connect project/i);
     expect(ports.hydrateRun).not.toHaveBeenCalled();
     await user.click(opener);
 
     expect(screen.getByRole("dialog", { name: /sign in with wallet/i })).toBeVisible();
     expect(ports.hydrateRun).not.toHaveBeenCalled();
-    expect(window.location.pathname).toBe(`/runs/${deepRunId}`);
+    expect(window.location.pathname).toBe(`/app/runs/${deepRunId}`);
   });
 });

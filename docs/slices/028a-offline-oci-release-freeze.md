@@ -1,8 +1,11 @@
 # Slice 028A — Offline OCI release freeze
 
-Status: Second corrective production-author GREEN locally after Core rejected
-replacement `1d3324d` / `473c534`; final freeze and both independent verifiers
-are pending on one replacement tree.
+Status: COMPLETE. Core and Product independently PASS exact commit
+`bdd09e78573fcd2a0310b1b90e3187b6b8f6d135` / tree
+`5d0acb9112024e84adfe5b3b907170c6d2d82d0e`. Core report SHA-256 is
+`0257158f050fbd66416fb72d17fd909a5e314302330f7b9fb64d497038d2d5a6` and
+Product report SHA-256 is
+`e5ec749a48c38c7d03b895d25d65a5ebe0bc267fdf6208c746eae30bd74f9875`.
 
 Architecture authority: [ADR 0039](../adr/0039-offline-oci-release-freeze.md).
 
@@ -59,10 +62,9 @@ input, no pull, no build network, no registry and no credentials. It published
 exactly five deterministic OCI archives plus canonical manifest and receipt,
 then independently rechecked their hashes, modes and bounded tar inventories.
 
-The author result is not either independent verifier PASS, a unified 029A
-matrix, registry publication, hosted deployment or security evidence. A final
-freeze from the documented committed tree is the immutable input to the two
-028A verifiers.
+The accepted result includes both independent verifier PASS reports above. It
+is not a unified 029A matrix, registry publication, hosted deployment or
+security evidence.
 
 ## Exclusions
 

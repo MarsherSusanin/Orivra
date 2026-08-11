@@ -1,4 +1,4 @@
-import { ArrowClockwise, ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass, ShieldCheck } from "@phosphor-icons/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   createLocalProductAnalytics,
@@ -10,6 +10,10 @@ import {
   startDirectComposerJourney,
 } from "./services/composer-journey";
 import { stageReplacementComposerDraft } from "./services/composer-draft-store";
+import {
+  consumeLandingComposerHandoff,
+  stageLandingComposerHandoff,
+} from "./services/landing-composer-handoff";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { EvidenceStrip } from "./components/EvidenceStrip";
 import { ManifestComposer } from "./components/ManifestComposer";
@@ -52,7 +56,11 @@ import type {
   BrowserPort,
 } from "./services/wallet-provider-adapter";
 import type { StorageLike } from "./services/wallet-session-controller";
-import type { PreflightReportV1, RunRecoveryV1 } from "../packages/contracts/src";
+import type {
+  PreflightReportV1,
+  RunRecoveryV1,
+  Web2JsonManifestDraftV1,
+} from "../packages/contracts/src";
 import {
   timelineFromProjection,
   type EvidenceItem,
@@ -259,13 +267,36 @@ function walletApiBaseUrl(): string {
 }
 
 function deepRouteRunId(): string | null {
-  const match = /^\/runs\/([^/]+)\/?$/.exec(globalThis.location?.pathname ?? "");
+  const match = /^\/(?:app\/)?runs\/([^/]+)\/?$/.exec(globalThis.location?.pathname ?? "");
   if (!match || match[1] === "new") return null;
   try {
     return decodeURIComponent(match[1]);
   } catch {
     return null;
   }
+}
+
+function canonicalProductPath(pathname: string): string | null {
+  if (pathname === "/app") return "/app/runs";
+  if (pathname === "/runs") return "/app/runs";
+  if (pathname === "/runs/new") return "/app/runs/new";
+  if (pathname === "/settings") return "/app/settings";
+  const run = /^\/runs\/([^/]+)\/?$/.exec(pathname);
+  if (run) return `/app/runs/${run[1]}`;
+  return null;
+}
+
+function canonicalizeProductLocation(): string {
+  const location = globalThis.location;
+  if (!location) return "/";
+  const canonical = canonicalProductPath(location.pathname);
+  if (!canonical) return location.pathname;
+  globalThis.history.replaceState(
+    {},
+    "",
+    `${canonical}${location.search}${location.hash}`,
+  );
+  return canonical;
 }
 
 function displayNetwork(value: string | undefined): string {
@@ -913,7 +944,7 @@ function RunCockpit({
                 <button className="entry-primary" type="button" onClick={onRequireWallet}>
                   Sign in with wallet
                 </button>
-                <a className="entry-secondary" href="/runs">Back to runs</a>
+                <a className="entry-secondary" href="/app/runs">Back to runs</a>
               </div>
             </section>
           </main>
@@ -955,7 +986,7 @@ function RunCockpit({
             <section className={`entry-state${unavailable ? " is-error" : ""}`} role={unavailable ? "alert" : undefined}>
               <h1>{heading}</h1>
               <p>{description}</p>
-              <a className="entry-secondary" href="/runs">Back to runs</a>
+              <a className="entry-secondary" href="/app/runs">Back to runs</a>
             </section>
           </main>
         </div>
@@ -994,7 +1025,7 @@ function RunCockpit({
       setHydrationError("The persisted manifest could not be copied safely. Refresh and try again.");
       return;
     }
-    const destination = `/runs/new?from=${encodeURIComponent(activeRunId)}`;
+    const destination = `/app/runs/new?from=${encodeURIComponent(activeRunId)}`;
     if (import.meta.env.MODE === "test") {
       globalThis.history.pushState({}, "", destination);
       globalThis.dispatchEvent(new PopStateEvent("popstate"));
@@ -1179,7 +1210,13 @@ function ProductEntry({
   services,
   analytics,
   route,
-}: ProductRouteProps & { route: "runs" | "new" }) {
+  landingDraft,
+  onLandingDraftConsumed,
+}: ProductRouteProps & {
+  route: "runs" | "new";
+  landingDraft?: Web2JsonManifestDraftV1 | null;
+  onLandingDraftConsumed?(): void;
+}) {
   const [createdRunId, setCreatedRunId] = useState<string | null>(null);
   const resolvedToken = authorityToken;
   const servicePort = useMemo(() => {
@@ -1255,6 +1292,8 @@ function ProductEntry({
             services={servicePort}
             onManifestValidated={recordManifestValidation}
             onRunCreated={setCreatedRunId}
+            initialDraft={landingDraft ?? undefined}
+            onInitialDraftConsumed={onLandingDraftConsumed}
           />
         )}
       </div>
@@ -1264,8 +1303,14 @@ function ProductEntry({
 
 function ProductApp({
   shareToken,
+  landingDraft,
+  onLandingDraftConsumed,
   ...props
-}: AppProps & { shareToken: string }) {
+}: AppProps & {
+  shareToken: string;
+  landingDraft?: Web2JsonManifestDraftV1 | null;
+  onLandingDraftConsumed?(): void;
+}) {
   const wallet = useWalletSession();
   const [walletDialogOpen, setWalletDialogOpen] = useState(false);
   const walletToken = wallet.accessToken() ?? "";
@@ -1276,9 +1321,17 @@ function ProductApp({
   }, [walletAvailable]);
   const closeWalletDialog = useCallback(() => setWalletDialogOpen(false), []);
 
+  useEffect(() => {
+    if (!landingDraft || !walletAvailable || walletToken) return;
+    const timeout = globalThis.setTimeout(() => {
+      if (wallet.snapshot.status === "anonymous") setWalletDialogOpen(true);
+    }, 0);
+    return () => globalThis.clearTimeout(timeout);
+  }, [landingDraft, wallet.snapshot.status, walletAvailable, walletToken]);
+
   const pathname = globalThis.location?.pathname ?? "/";
   const routedRun = deepRouteRunId();
-  const route = pathname === "/settings" ? (
+  const productRoute = pathname === "/app/settings" ? (
     <div className="app-shell">
       <Sidebar active="Settings" />
       <div className="shell-main entry-shell-main">
@@ -1303,9 +1356,35 @@ function ProductApp({
       services={props.services}
       analytics={props.analytics}
       onRequireWallet={openWalletDialog}
-      route={pathname === "/runs/new" ? "new" : "runs"}
+      route={pathname === "/app/runs/new" ? "new" : "runs"}
+      landingDraft={landingDraft}
+      onLandingDraftConsumed={onLandingDraftConsumed}
     />
   );
+
+  const requiresWallet = Boolean(landingDraft && walletAvailable && !walletToken);
+  const route = requiresWallet ? (
+    <div className="app-shell">
+      <Sidebar active="" />
+      <div className="shell-main entry-shell-main">
+        <Topbar title="Sign in" attestationType="Web2Json" mode="new" />
+        <main className="wallet-entry-gate">
+          <ShieldCheck size={38} aria-hidden="true" />
+          <span className="section-label">Protected Orivra workspace</span>
+          <h1>Sign in to continue verification</h1>
+          <p>Use a compatible injected EVM wallet to sign one five-minute SIWE challenge. No transaction or gas is required.</p>
+          {wallet.snapshot.status === "restoring" ? (
+            <p role="status">Restoring browser session…</p>
+          ) : wallet.snapshot.status === "unavailable" ? (
+            <button className="entry-secondary" type="button" onClick={() => void wallet.retry()}>Retry session</button>
+          ) : (
+            <button className="entry-primary" type="button" onClick={openWalletDialog}>Sign in with wallet</button>
+          )}
+          {landingDraft ? <p className="wallet-entry-handoff">Your endpoint draft is ready and remains local until sign-in succeeds.</p> : null}
+        </main>
+      </div>
+    </div>
+  ) : productRoute;
 
   return (
     <>
@@ -1321,7 +1400,14 @@ function ProductApp({
   );
 }
 
-function PrivateApp(props: AppProps) {
+function PrivateApp({
+  landingDraft,
+  onLandingDraftConsumed,
+  ...props
+}: AppProps & {
+  landingDraft?: Web2JsonManifestDraftV1 | null;
+  onLandingDraftConsumed?(): void;
+}) {
   const [share] = useState<ShareBootstrap>(() =>
     sessionShareAuthority(),
   );
@@ -1343,20 +1429,26 @@ function PrivateApp(props: AppProps) {
       services={walletAccess.services}
       storage={suppressWalletRestore ? UNAVAILABLE_STORAGE : walletAccess.storage}
     >
-      <ProductApp {...props} walletAccess={walletAccess} shareToken={share.token} />
+      <ProductApp
+        {...props}
+        walletAccess={walletAccess}
+        shareToken={share.token}
+        landingDraft={landingDraft}
+        onLandingDraftConsumed={onLandingDraftConsumed}
+      />
     </WalletSessionProvider>
   );
 }
 
 function isPrivateProductPath(pathname: string): boolean {
   if (
-    pathname === "/runs" ||
-    pathname === "/runs/new" ||
-    pathname === "/settings"
+    pathname === "/app/runs" ||
+    pathname === "/app/runs/new" ||
+    pathname === "/app/settings"
   ) {
     return true;
   }
-  const runRoute = /^\/runs\/([^/]+)\/?$/.exec(pathname);
+  const runRoute = /^\/app\/runs\/([^/]+)\/?$/.exec(pathname);
   if (!runRoute) return false;
   try {
     return decodeURIComponent(runRoute[1]) !== "new";
@@ -1367,17 +1459,34 @@ function isPrivateProductPath(pathname: string): boolean {
 
 export function App(props: AppProps = {}) {
   const [pathname, setPathname] = useState(
-    () => globalThis.location?.pathname ?? "/",
+    canonicalizeProductLocation,
   );
+  const [landingDraft, setLandingDraft] = useState<Web2JsonManifestDraftV1 | null>(() => {
+    if (globalThis.location?.pathname !== "/app/runs/new") return null;
+    const handoff = consumeLandingComposerHandoff(browserSessionStorage());
+    return handoff.state === "restored" ? handoff.draft : null;
+  });
   const catalogRequest = useRef<PublicLandingRequestRefs["catalog"]["current"]>(null);
   const canonicalDemoRequest = useRef<CanonicalUrlAttackDemoRequestRef["current"]>(null);
 
   useEffect(() => {
     const restorePathname = () => {
-      setPathname(globalThis.location?.pathname ?? "/");
+      setPathname(canonicalizeProductLocation());
     };
     globalThis.addEventListener("popstate", restorePathname);
     return () => globalThis.removeEventListener("popstate", restorePathname);
+  }, []);
+
+  const continueFromLanding = useCallback((draft: Web2JsonManifestDraftV1) => {
+    stageLandingComposerHandoff(browserSessionStorage(), draft);
+    setLandingDraft(draft);
+    globalThis.history.pushState({}, "", "/app/runs/new?step=source");
+    setPathname("/app/runs/new");
+  }, []);
+
+  const consumeLandingDraft = useCallback(() => {
+    consumeLandingComposerHandoff(browserSessionStorage());
+    setLandingDraft(null);
   }, []);
 
   if (props.runId) return <PrivateApp {...props} />;
@@ -1391,7 +1500,7 @@ export function App(props: AppProps = {}) {
       <PublicLanding requests={{
         catalog: catalogRequest,
         demo: canonicalDemoRequest,
-      }} />
+      }} onContinue={continueFromLanding} />
     );
   }
   if (pathname === "/demo/canonical-url") {
@@ -1404,6 +1513,14 @@ export function App(props: AppProps = {}) {
   if (templateDetailRoute) {
     return <TemplateDetail id={templateDetailRoute[1]} />;
   }
-  if (isPrivateProductPath(pathname)) return <PrivateApp {...props} />;
+  if (isPrivateProductPath(pathname)) {
+    return (
+      <PrivateApp
+        {...props}
+        landingDraft={landingDraft}
+        onLandingDraftConsumed={consumeLandingDraft}
+      />
+    );
+  }
   return <PageUnavailable />;
 }

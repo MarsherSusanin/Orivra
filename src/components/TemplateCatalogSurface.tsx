@@ -27,7 +27,7 @@ function useTemplateClient(): TemplateCatalogClient {
 export function templateComposerPath(
   template: Pick<Web2JsonTemplateSummaryV1, "id" | "revision">,
 ): string {
-  return `/runs/new?template=${encodeURIComponent(template.id)}&revision=${template.revision}&step=source`;
+  return `/app/runs/new?template=${encodeURIComponent(template.id)}&revision=${template.revision}&step=source`;
 }
 
 export function TemplateCard({
@@ -112,7 +112,7 @@ export function TemplateGallery() {
                   <h1>Start from a template</h1>
                   <p>Choose a verified static starting point, then review every field in Composer.</p>
                 </div>
-                <a className="entry-secondary" href="/runs/new?step=source">Start blank</a>
+                <a className="entry-secondary" href="/app/runs/new?step=source">Start blank</a>
               </header>
               <section className="template-gallery" aria-label="Web2Json templates">
                 {catalog.value.templates.map((template) => (

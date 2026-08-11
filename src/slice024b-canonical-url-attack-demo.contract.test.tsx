@@ -120,13 +120,13 @@ describe("Slice 024B /demo/canonical-url product route", () => {
   });
 
   it("restores the deep route across back and forward without duplicate network work", async () => {
-    window.history.replaceState({}, "", "/runs");
+    window.history.replaceState({}, "", "/app/runs");
     window.history.pushState({}, "", "/demo/canonical-url");
     const fixture = renderDemo(Response.json(makeCanonicalUrlAttackDemoSummaryFixture()));
     await screen.findByRole("heading", { name: "Valid proof ≠ trusted URL" });
 
     window.history.back();
-    await waitFor(() => expect(window.location.pathname).toBe("/runs"));
+    await waitFor(() => expect(window.location.pathname).toBe("/app/runs"));
     await act(async () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });

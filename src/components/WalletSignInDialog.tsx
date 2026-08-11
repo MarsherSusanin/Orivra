@@ -518,7 +518,7 @@ export function WalletSignInDialog({
             <div className="wallet-sign-in-intro">
               <Wallet size={34} aria-hidden="true" />
               <p id="wallet-sign-in-description">
-                Verify a Coston2 EOA, sign one five-minute challenge, and keep access in this browser session only.
+                Use a compatible injected EVM wallet to verify a Coston2 EOA and sign one five-minute challenge. No transaction or gas is required.
               </p>
               <button
                 ref={primaryRef}
@@ -546,7 +546,7 @@ export function WalletSignInDialog({
               <div
                 className="wallet-provider-list"
                 role="listbox"
-                aria-label="Available wallets"
+                aria-label="Detected wallets"
               >
                 {view.providers.map((provider) => (
                   <button

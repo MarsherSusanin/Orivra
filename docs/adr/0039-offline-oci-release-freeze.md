@@ -2,10 +2,14 @@
 
 ## Status
 
-Accepted contract; second corrective production-author GREEN locally. Core
-confirmed the first six fixes but rejected replacement `1d3324d` / `473c534`
-because OCI `EEXIST` cleanup deleted a caller-owned archive. The archive writer
-now removes only output it created; final freeze and both verifiers are pending.
+Accepted and complete. Core and Product independently PASS exact commit
+`bdd09e78573fcd2a0310b1b90e3187b6b8f6d135` / tree
+`5d0acb9112024e84adfe5b3b907170c6d2d82d0e`. Core report SHA-256 is
+`sha256:0257158f050fbd66416fb72d17fd909a5e314302330f7b9fb64d497038d2d5a6`;
+Product report SHA-256 is
+`sha256:e5ec749a48c38c7d03b895d25d65a5ebe0bc267fdf6208c746eae30bd74f9875`.
+This is credential-free local release-freeze evidence, not registry
+publication, hosted deployment, 029A authorization or a security PASS.
 
 ## Context
 

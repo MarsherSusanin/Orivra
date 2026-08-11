@@ -29,7 +29,7 @@ describe("production product entry", () => {
     expect(screen.getByRole("heading", { name: /^runs$/i })).toBeVisible();
     expect(
       screen.getByRole("link", { name: /start (?:a )?web2json run/i }),
-    ).toHaveAttribute("href", "/runs/new");
+    ).toHaveAttribute("href", "/app/runs/new");
     expect(screen.queryAllByText("ETH/USD snapshot")).toHaveLength(0);
   });
 
@@ -79,7 +79,7 @@ describe("browser storage denial", () => {
     try {
       expect(() => render(<App services={services()} />)).not.toThrow();
       const start = screen.getByRole("link", { name: /start a web2json run/i });
-      expect(start).toHaveAttribute("href", "/runs/new");
+      expect(start).toHaveAttribute("href", "/app/runs/new");
       expect(() => fireEvent.click(start)).not.toThrow();
     } finally {
       denied.mockRestore();
@@ -100,7 +100,7 @@ describe("browser storage denial", () => {
         render(<App services={services()} analytics={{ emit: vi.fn() }} />),
       ).not.toThrow();
       const start = screen.getByRole("link", { name: /start a web2json run/i });
-      expect(start).toHaveAttribute("href", "/runs/new");
+      expect(start).toHaveAttribute("href", "/app/runs/new");
       expect(() => fireEvent.click(start)).not.toThrow();
       expect(consoleError).not.toHaveBeenCalled();
     } finally {

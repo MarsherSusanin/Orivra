@@ -3,11 +3,11 @@ import { useState } from "react";
 import orivraMark from "../assets/orivra-mark.svg";
 
 const items = [
-  { label: "Runs", icon: ChartBar, href: "/runs" },
+  { label: "Runs", icon: ChartBar, href: "/app/runs" },
   { label: "Requests", icon: FileText },
   { label: "Consumers", icon: UsersThree },
   { label: "CI", icon: Code },
-  { label: "Settings", icon: Gear, href: "/settings" },
+  { label: "Settings", icon: Gear, href: "/app/settings" },
 ];
 
 export function Sidebar({ active = "Runs" }: { active?: string }) {

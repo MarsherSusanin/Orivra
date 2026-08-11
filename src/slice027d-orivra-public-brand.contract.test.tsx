@@ -45,7 +45,7 @@ describe("Slice 027D Orivra public Web brand", () => {
     );
     expect(screen.getByRole("link", { name: "Orivra home" })).toHaveAttribute("href", "/");
     expect(screen.getByText("Orivra")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/runs");
+    expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/app/runs");
   });
 
   it("uses the new display name in the honest unknown-route state", () => {

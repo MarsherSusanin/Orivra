@@ -249,6 +249,8 @@ export function ManifestComposer({
   services,
   onManifestValidated,
   onRunCreated,
+  initialDraft,
+  onInitialDraftConsumed,
 }: {
   onConnect(): void;
   onStart(): void;
@@ -256,6 +258,8 @@ export function ManifestComposer({
   services: Pick<RunSurfaceServices, "createRun">;
   onManifestValidated(outcome: "accepted" | "rejected"): void;
   onRunCreated(runId: string): void;
+  initialDraft?: Web2JsonManifestDraftV1;
+  onInitialDraftConsumed?(): void;
 }) {
   const draftStore = useMemo(
     () => createComposerDraftStore(browserDraftStorage()),
@@ -298,6 +302,26 @@ export function ManifestComposer({
         restoreState: "restored" as const,
         storageUnavailable: false,
         templateState: initialTemplateState,
+        pendingLandingDraft: initialDraft && replacement.state !== "restored"
+          ? initialDraft
+          : null,
+        consumeLandingDraft: Boolean(initialDraft && replacement.state === "restored"),
+      };
+    }
+    if (initialDraft && replacement.state !== "restored") {
+      const staged = {
+        ...initialDraft,
+        step: requestedStep,
+      } satisfies Web2JsonManifestDraftV1;
+      const saved = draftStore.save(staged);
+      return {
+        draft: staged,
+        step: requestedStep,
+        restoreState: "fresh" as const,
+        storageUnavailable: saved.state === "unavailable",
+        templateState: initialTemplateState,
+        pendingLandingDraft: null,
+        consumeLandingDraft: true,
       };
     }
     if (loaded.state === "rejected") {
@@ -307,6 +331,8 @@ export function ManifestComposer({
         restoreState: "rejected" as const,
         storageUnavailable: false,
         templateState: initialTemplateState,
+        pendingLandingDraft: null,
+        consumeLandingDraft: Boolean(initialDraft),
       };
     }
     return {
@@ -317,6 +343,8 @@ export function ManifestComposer({
       restoreState: "fresh" as const,
       storageUnavailable: loaded.state === "unavailable",
       templateState: initialTemplateState,
+      pendingLandingDraft: null,
+      consumeLandingDraft: Boolean(initialDraft),
     };
   });
   const [step, setStep] = useState<ComposerStepV1>(startup.step);
@@ -329,6 +357,9 @@ export function ManifestComposer({
     startup.templateState,
   );
   const [replacementDialogOpen, setReplacementDialogOpen] = useState(false);
+  const [pendingLandingDraft, setPendingLandingDraft] = useState(
+    startup.pendingLandingDraft,
+  );
   const [sourceError, setSourceError] = useState("");
   const [jqError, setJqError] = useState("");
   const [abiError, setAbiError] = useState("");
@@ -375,6 +406,10 @@ export function ManifestComposer({
     globalThis.addEventListener("popstate", restoreStep);
     return () => globalThis.removeEventListener("popstate", restoreStep);
   }, [startup.step]);
+
+  useEffect(() => {
+    if (startup.consumeLandingDraft) onInitialDraftConsumed?.();
+  }, [onInitialDraftConsumed, startup.consumeLandingDraft]);
 
   useEffect(() => {
     const loadRequestedTemplate = () => {
@@ -728,7 +763,7 @@ export function ManifestComposer({
       }
       pendingCreateIntent.current = null;
       draftStore.clear();
-      const destination = `/runs/${encodeURIComponent(parsed.data.runId)}?step=preflight`;
+      const destination = `/app/runs/${encodeURIComponent(parsed.data.runId)}?step=preflight`;
       globalThis.history.pushState({}, "", destination);
       onRunCreated(parsed.data.runId);
     } catch {
@@ -790,6 +825,11 @@ export function ManifestComposer({
   const keepSavedDraft = () => {
     restoreReviewFocus.current = true;
     setReplacementDialogOpen(false);
+    if (pendingLandingDraft) {
+      setPendingLandingDraft(null);
+      onInitialDraftConsumed?.();
+      return;
+    }
     setTemplateState({ state: "idle" });
     removeRequestedTemplateFromLocation();
   };
@@ -826,28 +866,39 @@ export function ManifestComposer({
   };
 
   const replaceSavedDraft = () => {
-    if (
-      templateState.state !== "available" ||
-      submitting ||
-      submissionPending.current
-    ) return;
-    const template = {
-      ...importWeb2JsonManifestDraft({
-        manifest: templateState.detail.manifest,
-        updatedAt: new Date().toISOString(),
-        createIdempotencyKey: `composer_${randomUuid()}`,
-      }),
-      step: stepFromLocation(),
-    } satisfies Web2JsonManifestDraftV1;
+    if (submitting || submissionPending.current) return;
+    if (!pendingLandingDraft && templateState.state !== "available") return;
+    let template: Web2JsonManifestDraftV1;
+    if (pendingLandingDraft) {
+      template = {
+        ...pendingLandingDraft,
+        step: stepFromLocation(),
+      };
+    } else if (templateState.state === "available") {
+      template = {
+        ...importWeb2JsonManifestDraft({
+          manifest: templateState.detail.manifest,
+          updatedAt: new Date().toISOString(),
+          createIdempotencyKey: `composer_${randomUuid()}`,
+        }),
+        step: stepFromLocation(),
+      };
+    } else {
+      return;
+    }
     pendingCreateIntent.current = null;
     submissionPending.current = false;
     trustDirty.current = { ...CLEAN_TRUST };
     trustValidationAttempted.current = false;
     authoritativeDraft.current = true;
-    appliedTemplateSelection.current = {
-      id: templateState.detail.template.id,
-      revision: templateState.detail.template.revision,
-    };
+    appliedTemplateSelection.current = pendingLandingDraft
+      ? null
+      : templateState.state === "available"
+        ? {
+            id: templateState.detail.template.id,
+            revision: templateState.detail.template.revision,
+          }
+        : null;
     setSubmitting(false);
     setSourceError("");
     setJqError("");
@@ -859,12 +910,18 @@ export function ManifestComposer({
     setSubmitError("");
     setFocusField(null);
     setReplacementDialogOpen(false);
+    if (pendingLandingDraft) {
+      setPendingLandingDraft(null);
+      onInitialDraftConsumed?.();
+    }
     setRestoreState("fresh");
     setStep(template.step);
-    setTemplateState({
-      ...templateState,
-      pendingReplacement: false,
-    });
+    if (templateState.state === "available") {
+      setTemplateState({
+        ...templateState,
+        pendingReplacement: false,
+      });
+    }
     replaceDraft(template);
   };
 
@@ -897,7 +954,7 @@ export function ManifestComposer({
           <h1>New Web2Json run</h1>
           <p>Define one public source, its transform, and the URL invariants your consumer must enforce.</p>
         </div>
-        <a className="composer-back" href="/runs"><ArrowLeft size={17} aria-hidden="true" />Back to runs</a>
+        <a className="composer-back" href="/app/runs"><ArrowLeft size={17} aria-hidden="true" />Back to runs</a>
       </header>
 
       <ComposerStepsNav
@@ -928,11 +985,17 @@ export function ManifestComposer({
 
       {draft && (
         restoreState === "restored" ||
+        pendingLandingDraft ||
         (templateState.state === "available" && templateState.pendingReplacement)
       ) ? (
         <div className="composer-draft-notice" role="status">
           <div>
-            {templateState.state === "available" && templateState.pendingReplacement ? (
+            {pendingLandingDraft ? (
+              <>
+                <strong>A saved draft was restored. Review the URL from the landing before replacing it.</strong>
+                <span>Your saved fields remain authoritative until you confirm replacement.</span>
+              </>
+            ) : templateState.state === "available" && templateState.pendingReplacement ? (
               <>
                 <strong>A saved draft was restored. Review the requested template before replacing it.</strong>
                 <span>Your saved fields remain authoritative until you confirm replacement.</span>
@@ -944,7 +1007,7 @@ export function ManifestComposer({
               </>
             )}
           </div>
-          {templateState.state === "available" && templateState.pendingReplacement ? (
+          {pendingLandingDraft || (templateState.state === "available" && templateState.pendingReplacement) ? (
             <button
               className="entry-secondary"
               type="button"
@@ -1076,7 +1139,7 @@ export function ManifestComposer({
         />
       ) : null}
     </main>
-    {replacementDialogOpen && templateState.state === "available" ? (
+    {replacementDialogOpen && (pendingLandingDraft || templateState.state === "available") ? (
       <div className="dialog-backdrop" role="presentation">
         <section
           className="dialog-card template-replacement-dialog"
@@ -1086,7 +1149,11 @@ export function ManifestComposer({
           onKeyDown={handleReplacementDialogKeyDown}
         >
           <h2 id="template-replacement-title">Replace saved draft?</h2>
-          <p>This replaces the local draft with {templateState.detail.template.title} and creates a fresh request identity.</p>
+          <p>{pendingLandingDraft
+            ? "This replaces the local draft with the endpoint staged on the Orivra landing."
+            : templateState.state === "available"
+              ? `This replaces the local draft with ${templateState.detail.template.title} and creates a fresh request identity.`
+              : "The requested replacement is unavailable."}</p>
           <div className="entry-state-actions">
             <button
               className="entry-secondary"
@@ -1102,7 +1169,7 @@ export function ManifestComposer({
               ref={replaceSavedDraftRef}
               onClick={replaceSavedDraft}
             >
-              Replace with template
+              {pendingLandingDraft ? "Replace with landing URL" : "Replace with template"}
             </button>
           </div>
         </section>

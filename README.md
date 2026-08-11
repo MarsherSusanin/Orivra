@@ -182,10 +182,11 @@ and Product independently PASS exact commit `8137970` / tree `8c594cc`; scan
 8852 remains canceled and is not a security PASS. Slice 027D freezes the Orivra
 public display-name cutover before 028A; it does not migrate any Proofline
 technical identifier. Core and Product independently PASS exact `3d57840` /
-`fc7643f`. ADR 0039 has a second corrective locally GREEN production-author
-implementation after Core rejected replacement `1d3324d` / `473c534` for
-deleting a caller-owned pre-existing OCI archive; final freeze and both
-verifier PASS reports remain pending on one replacement tree.
+`fc7643f`. Slice 028A is complete: Core and Product independently PASS exact
+commit `bdd09e78573fcd2a0310b1b90e3187b6b8f6d135` / tree
+`5d0acb9112024e84adfe5b3b907170c6d2d82d0e`; report SHA-256 values are frozen
+in ADR 0039. This is credential-free local freeze evidence, not registry
+publication, hosted deployment, 029A authorization or a security PASS.
 028A–029B по-прежнему владеют release и production
 promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment

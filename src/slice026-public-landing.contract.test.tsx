@@ -118,7 +118,7 @@ function expectNoPrivatePorts(fixture: ReturnType<typeof renderPath>) {
 async function expectReadyLanding() {
   expect(
     await screen.findByRole("heading", {
-      name: "Trust the intended URL, not only a valid proof.",
+      name: "Verify what your Web2Json consumer actually trusts.",
     }),
   ).toBeVisible();
   expect(
@@ -141,11 +141,9 @@ describe("Slice 026 public landing", () => {
     await expectReadyLanding();
 
     expect(screen.getByText("Coston2 · Web2Json consumer assurance")).toBeVisible();
-    expect(screen.getByText(
-      "Orivra verifies the consumer’s scheme, host, path, and query, then packages reproducible evidence and safe Solidity.",
-    )).toBeVisible();
-    expect(screen.getByRole("link", { name: "Browse templates" })).toHaveAttribute("href", "/templates");
-    expect(screen.getByRole("link", { name: "Open runs" })).toHaveAttribute("href", "/runs");
+    expect(screen.getByText(/A valid proof is not enough/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Use a manifest template" })).toHaveAttribute("href", "/templates");
+    expect(screen.getByRole("link", { name: "Open runs" })).toHaveAttribute("href", "/app/runs");
     expect(screen.getByRole("heading", { name: "From proof to integration evidence" })).toBeVisible();
 
     const journey = [
@@ -166,7 +164,7 @@ describe("Slice 026 public landing", () => {
     const main = screen.getByRole("main");
     expect(within(main).getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Orivra home" })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/runs");
+    expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/app/runs");
     expect(screen.getByLabelText("Breadcrumb")).toHaveTextContent(/^Overview$/);
     expect(screen.getByRole("button", { name: "Network: Coston2" })).toBeVisible();
     expect(document.querySelector(".attestation-type")).toHaveTextContent("Web2Json");
@@ -183,7 +181,7 @@ describe("Slice 026 public landing", () => {
     expect(screen.getByText("A response-derived summary used only by this contract test.")).toBeVisible();
     expect(screen.getByRole("link", { name: /use template/i })).toHaveAttribute(
       "href",
-      "/runs/new?template=open-meteo-current-weather&revision=1&step=source",
+      "/app/runs/new?template=open-meteo-current-weather&revision=1&step=source",
     );
     expect(screen.getByText("Canonical URL attack")).toBeVisible();
     expect(screen.getByText("Persisted evidence available")).toBeVisible();
@@ -271,7 +269,7 @@ describe("Slice 026 public landing", () => {
     )).toBeVisible();
     expect(screen.getByRole("link", { name: "Open blank Composer" })).toHaveAttribute(
       "href",
-      "/runs/new?step=source",
+      "/app/runs/new?step=source",
     );
     expect(await screen.findByRole("heading", { name: "Valid proof ≠ trusted URL" })).toBeVisible();
   });
@@ -350,7 +348,7 @@ describe("Slice 026 public landing", () => {
     expectNoPrivatePorts(fixture);
     expect(fixture.storage.getItem).not.toHaveBeenCalled();
     expect(fixture.storage.setItem).not.toHaveBeenCalled();
-    expect(screen.queryByText(/sign in|connect wallet/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /sign in with wallet/i })).not.toBeInTheDocument();
   });
 
   it("preserves explicit injected run identity as the test composition authority", async () => {
@@ -362,7 +360,7 @@ describe("Slice 026 public landing", () => {
       await screen.findByRole("heading", { name: /loading run|run unavailable|run not found/i }),
     ).toBeVisible();
     expect(screen.queryByRole("heading", {
-      name: "Trust the intended URL, not only a valid proof.",
+      name: "Verify what your Web2Json consumer actually trusts.",
     })).not.toBeInTheDocument();
     expect(fixture.fetch).not.toHaveBeenCalled();
   });
@@ -377,7 +375,7 @@ describe("Slice 026 public landing", () => {
     expect(screen.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
     expect(screen.getByText("This Orivra route is not available in this build.")).toBeVisible();
     expect(screen.getByRole("link", { name: "Go home" })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("link", { name: "Open runs" })).toHaveAttribute("href", "/runs");
+    expect(screen.getByRole("link", { name: "Open runs" })).toHaveAttribute("href", "/app/runs");
     expect(fixture.fetch).not.toHaveBeenCalled();
     expectNoPrivatePorts(fixture);
     expect(fixture.storage.getItem).not.toHaveBeenCalled();
@@ -420,8 +418,8 @@ describe("Slice 026 public landing", () => {
     expect(templateSurfaceSource).toMatch(/Template(?:Card|Summary)/);
     expect(landingSource).not.toMatch(/api\.open-meteo\.com|api\.coinbase\.com/);
     expect(landingSource).not.toMatch(/Berlin current temperature|Open-Meteo|Coinbase|ETH\/USD spot price/);
-    expect(landingSource).not.toMatch(/sha256:[a-f0-9]{64}|abiSignature|expectedHost|\.temperature_2m/);
-    expect(landingSource).not.toMatch(/wallet|WalletSession|listNetworks|createRun|hydrateRun/);
+    expect(landingSource).not.toMatch(/sha256:[a-f0-9]{64}|\.temperature_2m/);
+    expect(landingSource).not.toMatch(/WalletSession|listNetworks|createRun|hydrateRun|wallet-provider-adapter/);
   });
 
   it("has no serious or critical accessibility violations in the ready state", async () => {

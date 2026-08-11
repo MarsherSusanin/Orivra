@@ -61,9 +61,9 @@ describe("wallet sign-in dialog escape routes", () => {
     expect(screen.getByRole("button", { name: /^sign in with wallet$/i })).toBeEnabled();
     expect(screen.getByRole("link", { name: /back to runs/i })).toHaveAttribute(
       "href",
-      "/runs",
+      "/app/runs",
     );
-    expect(window.location.pathname).toBe("/runs/run_locked");
+    expect(window.location.pathname).toBe("/app/runs/run_locked");
     expect(document.body).not.toHaveTextContent(/project token|connect project/i);
   });
 });
@@ -83,7 +83,7 @@ describe("disabled primary navigation", () => {
       );
       expect(item).toHaveAccessibleDescription(`${label} is not available in this build`);
     }
-    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/app/settings");
   });
 
   it("is keyboard and touch discoverable without navigating", async () => {

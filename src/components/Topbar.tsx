@@ -30,7 +30,7 @@ export function Topbar({
         <div className="breadcrumbs" aria-label="Breadcrumb">
           {mode === "overview" ? <span>Overview</span> : null}
           {mode === "index" ? <span>Runs</span> : null}
-          {mode !== "index" && mode !== "overview" ? <a href="/runs">Runs</a> : null}
+          {mode !== "index" && mode !== "overview" ? <a href="/app/runs">Runs</a> : null}
           {mode !== "index" && mode !== "overview" ? <CaretRight size={15} aria-hidden="true" /> : null}
           {mode !== "index" && mode !== "overview" ? <span>{breadcrumbTitle}</span> : null}
         </div>

@@ -194,7 +194,7 @@ describe("Slice 023C2B2 production wallet authority composition", () => {
       expect(document.body.innerHTML).not.toContain(PROJECT_TOKEN);
 
       first.unmount();
-      expect(window.location.pathname).toBe("/runs");
+      expect(window.location.pathname).toBe("/app/runs");
     } finally {
       if (descriptor) Object.defineProperty(globalThis, "ethereum", descriptor);
       else Reflect.deleteProperty(globalThis, "ethereum");
@@ -249,7 +249,7 @@ describe("Slice 023C2B2 production wallet authority composition", () => {
       />,
     );
 
-    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.pathname).toBe(`/app/runs/${RUN_ID}`);
     expect(window.location.search).toBe("");
     expect(window.location.hash).toBe("");
     await waitFor(() => expect(hydrateRun).toHaveBeenCalledOnce());
@@ -285,7 +285,7 @@ describe("Slice 023C2B2 production wallet authority composition", () => {
     );
     await flushWalletRestore();
 
-    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.pathname).toBe(`/app/runs/${RUN_ID}`);
     expect(window.location.search).toBe("?panel=diagnostics");
     expect(window.location.hash).toBe("");
     expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();
@@ -316,7 +316,7 @@ describe("Slice 023C2B2 production wallet authority composition", () => {
     );
     await flushWalletRestore();
 
-    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.pathname).toBe(`/app/runs/${RUN_ID}`);
     expect(window.location.search).toBe("?status=active");
     expect(window.location.hash).toBe("");
     expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();
@@ -343,7 +343,7 @@ describe("Slice 023C2B2 production wallet authority composition", () => {
       />,
     );
 
-    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.pathname).toBe(`/app/runs/${RUN_ID}`);
     expect(window.location.search).toBe("");
     expect(window.location.hash).toBe("");
     await waitFor(() => expect(hydrateRun).toHaveBeenCalledOnce());
@@ -385,7 +385,7 @@ describe("Slice 023C2B2 production wallet authority composition", () => {
       </React.StrictMode>,
     );
 
-    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.pathname).toBe(`/app/runs/${RUN_ID}`);
     expect(window.location.search).toBe("");
     expect(window.location.hash).toBe("");
     await waitFor(() => expect(hydrateRun).toHaveBeenCalledOnce());
@@ -456,7 +456,7 @@ describe("Slice 023C2B2 production wallet authority composition", () => {
     );
     await flushWalletRestore();
 
-    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.pathname).toBe(`/app/runs/${RUN_ID}`);
     expect(window.location.search).toBe(search);
     expect(window.location.hash).toBe("");
     expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();

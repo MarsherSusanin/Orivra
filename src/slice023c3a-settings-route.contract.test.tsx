@@ -77,14 +77,14 @@ afterEach(() => {
 describe("Slice 023C3A Settings route and authority", () => {
   it("makes Settings a real active route backed by account-only context transitions", () => {
     expect(appSource).toMatch(/AccountSettings/);
-    expect(appSource).toMatch(/pathname\s*===\s*["']\/settings["']/);
+    expect(appSource).toMatch(/pathname\s*===\s*["']\/app\/settings["']/);
     expect(contextSource).toMatch(/createAccountToken/);
     expect(contextSource).toMatch(/refreshAccount/);
     expect(contextSource).not.toMatch(/wallet-provider-adapter/);
 
     render(<Sidebar active="Settings" />);
     const settings = screen.getByRole("link", { name: "Settings" });
-    expect(settings).toHaveAttribute("href", "/settings");
+    expect(settings).toHaveAttribute("href", "/app/settings");
     expect(settings).toHaveAttribute("aria-current", "page");
   });
 

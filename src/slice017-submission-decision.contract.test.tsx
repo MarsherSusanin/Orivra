@@ -165,7 +165,7 @@ describe("Slice 017 immutable submission decision evidence", () => {
       expect(within(decision).queryByRole("combobox")).not.toBeInTheDocument();
       expect(within(decision).queryByRole("radio")).not.toBeInTheDocument();
       expect(within(decision).getByRole("link", { name: /change mode.*new run/i }))
-        .toHaveAttribute("href", expect.stringMatching(/^\/runs\/new/));
+        .toHaveAttribute("href", expect.stringMatching(/^\/app\/runs\/new/));
       expect(surface.confirmSubmission).not.toHaveBeenCalled();
     },
   );

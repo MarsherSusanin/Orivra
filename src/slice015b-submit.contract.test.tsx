@@ -214,7 +214,7 @@ describe("Slice 015B explicit Submit boundary", () => {
       location: `/v1/runs/${runId}`,
     });
     await waitFor(() => {
-      expect(window.location.pathname).toBe(`/runs/${runId}`);
+      expect(window.location.pathname).toBe(`/app/runs/${runId}`);
       expect(new URLSearchParams(window.location.search).get("step")).toBe(
         "preflight",
       );
@@ -261,7 +261,7 @@ describe("Slice 015B explicit Submit boundary", () => {
     });
     expect(createRun).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: /create preflight run/i }));
-    await waitFor(() => expect(window.location.pathname).toBe(`/runs/${runId}`));
+    await waitFor(() => expect(window.location.pathname).toBe(`/app/runs/${runId}`));
 
     expect(createRun).toHaveBeenCalledTimes(2);
     expect(createRun.mock.calls.map(([context]) => context.idempotencyKey)).toEqual([
@@ -290,7 +290,7 @@ describe("Slice 015B explicit Submit boundary", () => {
     renderSubmit({ createRun, analytics: analytics.port, token: projectToken });
 
     fireEvent.click(screen.getByRole("button", { name: /create preflight run/i }));
-    await waitFor(() => expect(window.location.pathname).toBe(`/runs/${runId}`));
+    await waitFor(() => expect(window.location.pathname).toBe(`/app/runs/${runId}`));
     expect(createRun).toHaveBeenCalledOnce();
     expect(remove).toHaveBeenCalled();
   });

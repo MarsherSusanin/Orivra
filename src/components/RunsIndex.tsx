@@ -50,7 +50,7 @@ function RunCard({
     <li>
       <a
         className="run-card"
-        href={`/runs/${encodeURIComponent(run.runId)}`}
+        href={`/app/runs/${encodeURIComponent(run.runId)}`}
         onClick={() => {
           if (run.resumable) onResume(run);
         }}
@@ -151,7 +151,7 @@ export function RunsIndex({
           <h1>Runs</h1>
           <p>Create a Web2Json proof run or continue from persisted evidence.</p>
         </div>
-        <a className="entry-primary" href="/runs/new" onClick={onStart}>
+        <a className="entry-primary" href="/app/runs/new" onClick={onStart}>
           <Plus size={20} weight="bold" aria-hidden="true" />Start a Web2Json run
         </a>
       </header>
@@ -159,7 +159,7 @@ export function RunsIndex({
       <nav className="run-filters" aria-label="Filter runs">
         <a
           className={!status ? "is-active" : ""}
-          href="/runs"
+          href="/app/runs"
           aria-current={!status ? "page" : undefined}
         >
           All
@@ -167,7 +167,7 @@ export function RunsIndex({
         {(["active", "completed", "failed"] as const).map((filter) => (
           <a
             className={status === filter ? "is-active" : ""}
-            href={`/runs?status=${filter}`}
+            href={`/app/runs?status=${filter}`}
             aria-current={status === filter ? "page" : undefined}
             key={filter}
           >

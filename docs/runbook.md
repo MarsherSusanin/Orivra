@@ -264,9 +264,9 @@ authorization.
 ### Slice 028A offline OCI freeze
 
 ADR 0039 specifies exactly five ordered Linux/amd64 OCI archives: Caddy, Web,
-API, worker and PostgreSQL recovery. Core rejected replacement `1d3324d` /
-`473c534` for caller-owned OCI archive deletion; the second corrective
-production-author implementation is locally GREEN and uses one clean private
+API, worker and PostgreSQL recovery. Slice 028A is complete: Core and Product
+independently PASS exact commit `bdd09e78573fcd2a0310b1b90e3187b6b8f6d135`
+/ tree `5d0acb9112024e84adfe5b3b907170c6d2d82d0e`. The accepted implementation uses one clean private
 commit snapshot and private WAL-G
 binary/receipt validated at use time, `pull=false`, `network=none`, no
 prefetch/registry/push, and build each image once. It normalizes accepted OCI
@@ -274,8 +274,8 @@ Image Layout directories into deterministic uncompressed ustar, keeps
 `archiveSha256` distinct from the single-platform `imageManifestDigest`, and
 publishes only a canonical manifest plus non-circular checksum receipt after
 all private resources and final Git identity pass. 029A owns the separate
-unified-matrix authorization receipt. A final replacement freeze and two
-independent 028A verifiers must PASS one exact tree before completion.
+unified-matrix authorization receipt. The verifier report SHA-256 values are
+frozen in ADR 0039; no registry publication or hosted deployment is implied.
 
 Production runtime composition always adds `deploy/compose.backup.yaml` through
 the fixed `compose:production -- --runtime` wrapper. When the recovery

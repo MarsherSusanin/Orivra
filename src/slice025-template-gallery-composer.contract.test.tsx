@@ -120,11 +120,11 @@ describe("Slice 025C template gallery, detail and Composer authority", () => {
     expect(within(weather).getByText("Open-Meteo")).toBeVisible();
     expect(within(weather).getByRole("link", { name: "Use template" })).toHaveAttribute(
       "href",
-      "/runs/new?template=open-meteo-current-weather&revision=1&step=source",
+      "/app/runs/new?template=open-meteo-current-weather&revision=1&step=source",
     );
     expect(screen.getByRole("link", { name: "Start blank" })).toHaveAttribute(
       "href",
-      "/runs/new?step=source",
+      "/app/runs/new?step=source",
     );
     expect(fixture.fetch).toHaveBeenCalledOnce();
     expectOnlyTemplateApiRequests(fixture.fetch);
@@ -141,7 +141,7 @@ describe("Slice 025C template gallery, detail and Composer authority", () => {
     expect(provenance).toHaveTextContent(openMeteoTemplateDetail.template.manifestSha256);
     expect(screen.getByRole("link", { name: "Use template" })).toHaveAttribute(
       "href",
-      "/runs/new?template=open-meteo-current-weather&revision=1&step=source",
+      "/app/runs/new?template=open-meteo-current-weather&revision=1&step=source",
     );
     expect(document.body).not.toHaveTextContent(openMeteoManifest.request.abiSignature);
     expect(document.body).not.toHaveTextContent(openMeteoManifest.request.jq);

@@ -281,7 +281,7 @@ describe("Slice 023C2B2 integrated Runs and deep-route sign-in", () => {
       projectToken: PROJECT_TOKEN,
       after: 0,
     }));
-    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.pathname).toBe(`/app/runs/${RUN_ID}`);
     expect(window.location.search).toBe("?panel=diagnostics");
   });
 });
@@ -339,7 +339,7 @@ describe("Slice 023C2B2 Composer pending authentication intent", () => {
       manifest: finalized.manifest,
       idempotencyKey: draft.createIdempotencyKey,
     });
-    expect(window.location.pathname).toBe(`/runs/${RUN_ID}`);
+    expect(window.location.pathname).toBe(`/app/runs/${RUN_ID}`);
     expect(new URLSearchParams(window.location.search).get("step")).toBe("preflight");
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
   });

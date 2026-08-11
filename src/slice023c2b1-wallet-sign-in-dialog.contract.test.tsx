@@ -235,7 +235,7 @@ describe("Slice 023C2B1 lazy dialog discovery", () => {
     discovery.resolve([walletA, walletB]);
     accessNetworks.resolve(networks);
 
-    const chooser = await screen.findByRole("listbox", { name: "Available wallets" });
+    const chooser = await screen.findByRole("listbox", { name: "Detected wallets" });
     const choices = within(chooser).getAllByRole("option");
     expect(choices.map((choice) => choice.textContent)).toEqual(["Wallet A", "Wallet B"]);
     expect(choices.every((choice) => Boolean(choice.textContent?.trim()))).toBe(true);
@@ -444,7 +444,7 @@ describe("Slice 023C2B1 cancellation, focus and accessibility", () => {
     expect(initial.violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical")).toEqual([]);
 
     await user.click(screen.getByRole("button", { name: "Sign in with wallet" }));
-    await screen.findByRole("listbox", { name: "Available wallets" });
+    await screen.findByRole("listbox", { name: "Detected wallets" });
     const chooser = await axe.run(rendered.container, { rules: { "color-contrast": { enabled: false } } });
     expect(chooser.violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical")).toEqual([]);
   });
