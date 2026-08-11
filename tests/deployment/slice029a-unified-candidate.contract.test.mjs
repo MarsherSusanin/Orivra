@@ -113,6 +113,7 @@ test("029A materializes verified WAL-G at the exact retained offline-build conte
     const prefetchRoot = join(parent, "docker/.prefetch");
     const receiptBytes = Buffer.from('{"binarySha256":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","binarySize":8,"version":"1"}');
     await mkdir(capturedContext, { mode: 0o700 });
+    await mkdir(join(parent, "docker"), { mode: 0o700 });
     await writeFile(join(capturedContext, "wal-g"), "verified", { mode: 0o555 });
     const releaseRoot = await module.materializeCandidateWalGPrefetch({
       capturedContextRoot: capturedContext,

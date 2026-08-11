@@ -1,4 +1,4 @@
-import { chmod, lstat, mkdir, readdir, realpath, rm, rmdir, symlink } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, readdir, realpath, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 
 export const CANDIDATE_COMPOSE_PLUGIN_PATHS = Object.freeze([
@@ -109,6 +109,43 @@ export async function materializeCandidateComposePlugin({
   throw Object.assign(new Error("Local Compose plugin is unavailable"), {
     code: "MLP_CANDIDATE_INPUT_INVALID",
   });
+}
+
+export async function materializeCandidateWalGPrefetch({
+  capturedContextRoot,
+  prefetchRoot,
+  receiptBytes,
+} = {}) {
+  if (
+    typeof capturedContextRoot !== "string" || !isAbsolute(capturedContextRoot) ||
+    capturedContextRoot.includes("\0") ||
+    typeof prefetchRoot !== "string" || !isAbsolute(prefetchRoot) || prefetchRoot.includes("\0") ||
+    !Buffer.isBuffer(receiptBytes) || receiptBytes.length < 1 || receiptBytes.length > 4096
+  ) invalid();
+  const [contextMetadata, binaryMetadata] = await Promise.all([
+    lstat(capturedContextRoot),
+    lstat(join(capturedContextRoot, "wal-g")),
+  ]);
+  if (
+    !contextMetadata.isDirectory() || contextMetadata.isSymbolicLink() ||
+    !binaryMetadata.isFile() || binaryMetadata.isSymbolicLink() ||
+    (binaryMetadata.mode & 0o777) !== 0o555
+  ) invalid();
+  const releaseRoot = join(prefetchRoot, "wal_g_release");
+  try {
+    await mkdir(prefetchRoot, { mode: 0o700 });
+    await mkdir(releaseRoot, { mode: 0o700 });
+    await copyFile(join(capturedContextRoot, "wal-g"), join(releaseRoot, "wal-g"));
+    await chmod(join(releaseRoot, "wal-g"), 0o555);
+    await writeFile(join(releaseRoot, "receipt.v1.json"), receiptBytes, {
+      mode: 0o444,
+      flag: "wx",
+    });
+    return releaseRoot;
+  } catch (cause) {
+    await removeOwnedCandidatePath(prefetchRoot).catch(() => undefined);
+    throw cause;
+  }
 }
 
 export async function runCredentialFreeCandidateMatrix({ commands, runCommand } = {}) {

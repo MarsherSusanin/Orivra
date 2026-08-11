@@ -2,7 +2,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import {
   chmod,
-  copyFile,
   lstat,
   mkdir,
   mkdtemp,
@@ -36,6 +35,7 @@ import {
   createCredentialFreeCandidateCommands,
   createCredentialFreeCandidateEnvironment,
   materializeCandidateComposePlugin,
+  materializeCandidateWalGPrefetch,
   removeOwnedCandidatePath,
   runCredentialFreeCandidateLifecycle,
   runCredentialFreeCandidateMatrix,
@@ -141,10 +141,11 @@ async function verifyAndMaterializeWalG({ walGInputRoot, captureRoot, prefetchRo
       version: "1",
     }), "utf8");
     if (sha256(receiptBytes) !== captured.receiptSha256) fail("Candidate WAL-G receipt changed");
-    await mkdir(prefetchRoot, { mode: 0o700 });
-    await copyFile(join(captured.contextRoot, "wal-g"), join(prefetchRoot, "wal-g"));
-    await chmod(join(prefetchRoot, "wal-g"), 0o555);
-    await writeFile(join(prefetchRoot, "receipt.v1.json"), receiptBytes, { mode: 0o444, flag: "wx" });
+    await materializeCandidateWalGPrefetch({
+      capturedContextRoot: captured.contextRoot,
+      prefetchRoot,
+      receiptBytes,
+    });
     return captured;
   } catch (cause) {
     if (captured?.contextRoot) await removeReleaseCapturedInput(captured.contextRoot).catch(() => undefined);

@@ -78,3 +78,8 @@ exact `docker/.prefetch/wal_g_release/{wal-g,receipt.v1.json}` context. No
 candidate, release or product artifact was published and scoped cleanup removed
 the temporary prefetch tree. The corrective RED contract freezes that retained
 nested context and exact 0555/0444 file modes before the production correction.
+The narrow GREEN helper now materializes only that nested context, preserves
+the verified modes and remains covered by the candidate's no-follow scoped
+cleanup. Typecheck, the exact 11-case candidate deployment contract and the
+serialized 190-case deployment static inventory pass before the next mandatory
+from-scratch unified run.
