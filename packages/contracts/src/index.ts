@@ -187,6 +187,18 @@ export {
   checksumRecoveryEvidenceHandoff,
   checksumRestoreDrillEvidence,
 } from "./recovery-schema";
+export {
+  FrozenOciReleaseManifestV1Schema,
+  FrozenOciReleaseReceiptV1Schema,
+  canonicalSerializeFrozenOciReleaseManifest,
+  canonicalSerializeFrozenOciReleaseReceipt,
+  checksumFrozenOciReleaseManifest,
+  checksumReleaseArtifactInventory,
+} from "./release";
+export type {
+  FrozenOciReleaseManifestV1,
+  FrozenOciReleaseReceiptV1,
+} from "./release";
 export type {
   BackupEvidenceV1,
   RestoreDrillEvidenceV1,

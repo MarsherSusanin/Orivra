@@ -20,6 +20,13 @@ export {
   resolveWeb2JsonTemplate,
 } from "./web2json-template-catalog";
 export {
+  createFrozenOciReleaseManifest,
+  createFrozenOciReleaseReceipt,
+  deriveCanonicalOciArchiveEntries,
+  inspectSinglePlatformOciLayout,
+  verifyFrozenOciReleaseHandoff,
+} from "./oci-release";
+export {
   canonicalSerializeEvidenceReceipt,
   createEvidenceReceipt,
 } from "./evidence-receipt";

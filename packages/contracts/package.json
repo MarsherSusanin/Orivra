@@ -9,7 +9,8 @@
     "./recovery": "./src/recovery.ts",
     "./wallet-auth": "./src/wallet-auth.ts",
     "./manifest": "./src/web2json-manifest.ts",
-    "./templates": "./src/web2json-templates.ts"
+    "./templates": "./src/web2json-templates.ts",
+    "./release": "./src/release.ts"
   },
   "sideEffects": false,
   "dependencies": {
