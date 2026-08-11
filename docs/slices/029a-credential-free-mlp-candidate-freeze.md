@@ -1,6 +1,7 @@
 # Slice 029A — Credential-free MLP candidate freeze
 
-Status: Production implementation GREEN locally; the one-shot unified candidate
+Status: Corrective RED after Core rejected exact candidate `78a85e2` /
+`20c0f41` for setup failures bypassing scoped cleanup. A replacement unified
 run and two independent same-tree verifiers are pending.
 
 Architecture authority: [ADR 0041](../adr/0041-credential-free-mlp-candidate-freeze.md).

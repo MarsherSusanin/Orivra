@@ -1,6 +1,6 @@
 # ADR 0041: Credential-free MLP candidate freeze
 
-- Status: Accepted for Slice 029A
+- Status: Accepted contract; corrective RED after Core FAIL `78a85e2` / `20c0f41`
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0039, ADR 0040
 

@@ -111,10 +111,11 @@ blockchain-операций.
   accepted locally. [ADR 0041](docs/adr/0041-credential-free-mlp-candidate-freeze.md)
   now freezes 029A as the final credential-free unified matrix and same-tree
   release-receipt boundary before any production credential is requested.
-- Slice 029A now has a locally GREEN production implementation for the strict
-  serial matrix, fresh 028A handoff and worker-stopped loopback product journey.
-  The terminal candidate run and both independent same-tree verifier reports
-  remain pending, so credentials and deployment are still forbidden.
+- Slice 029A is in corrective RED after Core rejected exact candidate
+  `78a85e2` / `20c0f41`: pre-lifecycle setup failures could leave owned private
+  stage/temp/config/plugin paths. A replacement terminal run and both
+  independent same-tree verifier reports remain pending, so credentials and
+  deployment are still forbidden.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

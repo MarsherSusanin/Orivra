@@ -137,3 +137,33 @@ with an exact six-artifact filesystem boundary and a no-follow streaming SHA-
 six-file streaming smoke pass; the next evidence step remains a complete clean-
 tree unified rerun because the prior terminal command did not publish a
 candidate.
+
+## Pre-lifecycle setup cleanup corrective RED
+
+Independent Core report
+`/private/tmp/proofline-029a-verifiers/78a85e2/core-verifier.md` has SHA-256
+`d10b645b181076f3ca8cfdfe1f1a5bcda345e1f5d7848e3d82a8f24efb03c989` and
+rejects exact candidate `78a85e21f0f73d4d7f7a58747464a2f272c07633` /
+`20c0f415303fe2db7cedd186dadac17e496c7184`. The terminal created owned
+stage/temp/config and Compose-plugin paths before entering the only lifecycle
+catch that calls `discard`; exact Compose-present/Buildx-unavailable setup
+therefore left those paths behind.
+
+The corrective contract registers one production-used outer terminal boundary
+before the first owned setup action. One causal filesystem matrix fails after
+each setup seam from temporary-root creation through the exact unavailable
+Buildx lookup. Every case requires zero owned `.candidate-stage.*` and
+`.candidate-temp.*` paths, no config or plugin symlink, no candidate PASS, and
+byte/mode-identical caller paths and plugin targets. Cleanup remains scoped and
+no-follow. If cleanup also fails, a deterministic `AggregateError` retains the
+original setup failure first and cleanup failure second instead of masking
+either. Existing 029A receipt, matrix, product, authority and publication
+contracts are unchanged; no Docker, network or credential action is evidence
+for this RED wave.
+
+Corrective RED classification on the rejected exact base: syntax and typecheck
+PASS; candidate contracts/domain controls are 18/18 PASS; focused unified-
+candidate plus product controls are 21 PASS and the one new intentional RED;
+serialized deployment static is 193 PASS plus that same single RED; Sites
+compatibility is 46/46 PASS. The RED reason is the absent production-used outer
+terminal cleanup seam, not a changed receipt, product or deployment assertion.

@@ -669,6 +669,15 @@ and a failed run leaves no published candidate PASS. Preserve a successful
 read-only output for both independent verifiers; do not edit the candidate tree
 or output between their reports.
 
+Core rejected exact candidate `78a85e2` / `20c0f41`: a supported
+Compose-present/Buildx-unavailable setup failure happened before lifecycle
+cleanup was registered and left owned `.candidate-stage.*`,
+`.candidate-temp.*`, Docker config and plugin symlink paths. Corrective RED now
+requires the no-follow scoped discard boundary before the first owned setup
+write. Every setup failure preserves caller-owned paths, publishes no PASS and
+removes only paths created by that invocation; cleanup failure is reported
+deterministically without masking the original setup failure.
+
 029B is the credentialed production promotion and canary. 029B starts only
 after 028B has published and staged the exact frozen candidate.
 

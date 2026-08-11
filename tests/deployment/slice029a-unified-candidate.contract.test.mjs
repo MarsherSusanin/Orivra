@@ -155,6 +155,127 @@ test("029A exposes BuildKit only through one verified local Buildx plugin in the
   }
 });
 
+test("029A setup failures discard every owned path before lifecycle entry", async () => {
+  const module = await orchestration();
+  assert.equal(typeof module.runCredentialFreeCandidateTerminal, "function");
+  const phases = [
+    "temporary-root", "stage-root", "capture", "docker-config", "home",
+    "recovery-evidence", "tmp", "home-config", "docker-config-file",
+    "compose-plugin", "buildx-plugin",
+  ];
+
+  for (const phase of phases) {
+    const parent = await mkdtemp(join(tmpdir(), `proofline-029a-setup-${phase}-`));
+    const stageRoot = join(parent, `.candidate-stage.${phase}`);
+    const candidateOutput = join(parent, "candidate-pass");
+    const callerOutput = join(parent, "caller-owned");
+    const callerSentinel = join(callerOutput, "sentinel.txt");
+    const composePlugin = join(parent, "docker-compose");
+    const originalFailure = new Error(`setup-${phase}`);
+    let temporaryRoot;
+    let paths;
+    try {
+      await mkdir(callerOutput, { mode: 0o700 });
+      await writeFile(callerSentinel, "caller-owned", { mode: 0o400 });
+      await chmod(callerOutput, 0o500);
+      await writeFile(composePlugin, "verified local compose plugin", { mode: 0o555 });
+
+      const failAfter = (completedPhase) => {
+        if (phase === completedPhase) throw originalFailure;
+      };
+      const failure = await module.runCredentialFreeCandidateTerminal({
+        setup: async () => {
+          temporaryRoot = await mkdtemp(join(parent, ".candidate-temp."));
+          failAfter("temporary-root");
+          paths = {
+            capture: join(temporaryRoot, "capture"),
+            dockerConfig: join(temporaryRoot, "docker-config"),
+            home: join(temporaryRoot, "home"),
+            recoveryEvidence: join(temporaryRoot, "recovery-evidence"),
+            tmp: join(temporaryRoot, "tmp"),
+          };
+          await mkdir(stageRoot, { mode: 0o700 });
+          await symlink(callerSentinel, join(stageRoot, "caller-sentinel-link"));
+          failAfter("stage-root");
+          for (const pathName of ["capture", "dockerConfig", "home", "recoveryEvidence", "tmp"]) {
+            await mkdir(paths[pathName], { mode: 0o700 });
+            failAfter(pathName === "dockerConfig" ? "docker-config" :
+              pathName === "recoveryEvidence" ? "recovery-evidence" : pathName);
+          }
+          await mkdir(join(paths.home, ".config"), { mode: 0o700 });
+          failAfter("home-config");
+          await writeFile(join(paths.dockerConfig, "config.json"), '{"auths":{}}', {
+            mode: 0o600,
+            flag: "wx",
+          });
+          failAfter("docker-config-file");
+          await module.materializeCandidateComposePlugin({
+            dockerConfigDirectory: paths.dockerConfig,
+            candidatePaths: [composePlugin],
+          });
+          failAfter("compose-plugin");
+          assert.equal((await lstat(join(
+            paths.dockerConfig, "cli-plugins/docker-compose",
+          ))).isSymbolicLink(), true);
+          await module.materializeCandidateBuildxPlugin({
+            dockerConfigDirectory: paths.dockerConfig,
+            candidatePaths: [join(parent, "missing-docker-buildx")],
+          });
+          throw new Error("Buildx-unavailable setup unexpectedly continued");
+        },
+        runLifecycle: async () => {
+          throw new Error("Candidate lifecycle must not start after setup failure");
+        },
+        discard: async () => {
+          await module.removeOwnedCandidatePath(stageRoot);
+          if (temporaryRoot) await module.removeOwnedCandidatePath(temporaryRoot);
+        },
+      }).catch((cause) => cause);
+
+      if (phase === "buildx-plugin") {
+        assert.equal(failure?.code, "MLP_CANDIDATE_INPUT_INVALID");
+        assert.match(failure?.message ?? "", /Local Buildx plugin is unavailable/);
+      } else {
+        assert.equal(failure, originalFailure);
+      }
+      assert.deepEqual((await readdir(parent)).filter((entry) =>
+        entry.startsWith(".candidate-stage.") || entry.startsWith(".candidate-temp.")), []);
+      await assert.rejects(() => lstat(candidateOutput), { code: "ENOENT" });
+      assert.equal(await readFile(callerSentinel, "utf8"), "caller-owned");
+      assert.equal((await lstat(callerSentinel)).mode & 0o777, 0o400);
+      assert.equal((await lstat(callerOutput)).mode & 0o777, 0o500);
+      assert.equal(await readFile(composePlugin, "utf8"), "verified local compose plugin");
+      assert.equal((await lstat(composePlugin)).mode & 0o777, 0o555);
+      if (paths) {
+        await assert.rejects(() => lstat(join(paths.dockerConfig, "config.json")), { code: "ENOENT" });
+        await assert.rejects(() => lstat(join(
+          paths.dockerConfig, "cli-plugins/docker-compose",
+        )), { code: "ENOENT" });
+      }
+    } finally {
+      await chmod(callerOutput, 0o700).catch(() => undefined);
+      await chmod(callerSentinel, 0o600).catch(() => undefined);
+      await chmod(composePlugin, 0o700).catch(() => undefined);
+      await rm(parent, { recursive: true, force: true });
+    }
+  }
+
+  const originalFailure = new Error("setup-original");
+  const cleanupFailure = new Error("setup-cleanup");
+  const aggregate = await module.runCredentialFreeCandidateTerminal({
+    setup: async () => { throw originalFailure; },
+    runLifecycle: async () => "must-not-run",
+    discard: async () => { throw cleanupFailure; },
+  }).catch((cause) => cause);
+  assert.equal(aggregate instanceof AggregateError, true);
+  assert.deepEqual(aggregate.errors, [originalFailure, cleanupFailure]);
+  assert.equal(aggregate.cause, originalFailure);
+  assert.equal(aggregate.message, "Credential-free candidate setup cleanup failed");
+
+  const source = await readFile(new URL("../../scripts/mlp-candidate-freeze.mjs", import.meta.url), "utf8");
+  assert.match(source, /await runCredentialFreeCandidateTerminal\s*\(/);
+});
+
 test("029A materializes verified WAL-G at the exact retained offline-build context", async () => {
   const module = await orchestration();
   const parent = await mkdtemp(join(tmpdir(), "proofline-029a-wal-g-context-"));
