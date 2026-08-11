@@ -20,6 +20,7 @@ const SHA256 = /^sha256:[a-f0-9]{64}$/;
 const SOURCE_ERROR = "Release source authority is invalid";
 const SOURCE_CHANGED_ERROR = "Release source authority changed";
 const WAL_G_ERROR = "Release WAL-G authority is invalid";
+const MAXIMUM_WAL_G_BINARY_BYTES = 128 * 1024 * 1024;
 
 function failSource(code = "RELEASE_SOURCE_INVALID", message = SOURCE_ERROR) {
   throw Object.assign(new Error(message), { code });
@@ -225,7 +226,7 @@ export async function captureVerifiedReleaseWalG({ inputRoot, captureParentDirec
       lock?.platform !== "linux/amd64" || !Number.isSafeInteger(lock?.maximumBytes) ||
       lock.maximumBytes < 1 || !SHA256.test(lock?.binarySha256 ?? "")) failWalG();
     const [binary, receiptBytes] = await Promise.all([
-      readExactRegular(join(inputRoot, "wal-g"), 0o555, lock.maximumBytes),
+      readExactRegular(join(inputRoot, "wal-g"), 0o555, MAXIMUM_WAL_G_BINARY_BYTES),
       readExactRegular(join(inputRoot, "receipt.v1.json"), 0o444, 4096),
     ]);
     let receipt;
