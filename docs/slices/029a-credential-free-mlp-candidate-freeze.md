@@ -1,8 +1,8 @@
 # Slice 029A — Credential-free MLP candidate freeze
 
-Status: Corrective RED after Core rejected exact candidate `78a85e2` /
-`20c0f41` for setup failures bypassing scoped cleanup. A replacement unified
-run and two independent same-tree verifiers are pending.
+Status: Setup-cleanup correction GREEN locally after Core rejected exact
+candidate `78a85e2` / `20c0f41`. A replacement unified run and two independent
+same-tree verifiers are pending.
 
 Architecture authority: [ADR 0041](../adr/0041-credential-free-mlp-candidate-freeze.md).
 

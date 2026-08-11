@@ -1,6 +1,6 @@
 # ADR 0041: Credential-free MLP candidate freeze
 
-- Status: Accepted contract; corrective RED after Core FAIL `78a85e2` / `20c0f41`
+- Status: Accepted contract; setup-cleanup correction GREEN locally after rejected `78a85e2` / `20c0f41`, replacement candidate pending
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0039, ADR 0040
 

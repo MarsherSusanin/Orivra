@@ -167,3 +167,11 @@ candidate plus product controls are 21 PASS and the one new intentional RED;
 serialized deployment static is 193 PASS plus that same single RED; Sites
 compatibility is 46/46 PASS. The RED reason is the absent production-used outer
 terminal cleanup seam, not a changed receipt, product or deployment assertion.
+
+The production correction exports that terminal seam, registers `discard`
+before the first owned setup action and runs the unchanged lifecycle only after
+setup completes. The exact 11-phase filesystem matrix is GREEN, including the
+Compose-present/Buildx-unavailable case and deterministic setup-cleanup
+`AggregateError`; typecheck, the 40-case focused 029A inventory and serialized
+194-case deployment static suite pass. A replacement full terminal run and two
+independent same-tree verifier reports are still required.

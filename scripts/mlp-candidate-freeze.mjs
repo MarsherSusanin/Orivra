@@ -39,6 +39,7 @@ import {
   removeOwnedCandidatePath,
   runCredentialFreeCandidateLifecycle,
   runCredentialFreeCandidateMatrix,
+  runCredentialFreeCandidateTerminal,
   verifyCandidateFrozenReleaseArtifacts,
 } from "./mlp-candidate-orchestration.mjs";
 import { createRecordedProductFixture } from "./mlp-product-compose-runtime.mjs";
@@ -173,36 +174,14 @@ async function main() {
   const { outputDirectory, walGInputRoot } = parseArguments(process.argv.slice(2));
   const outputParent = await validatePrivateOutput(outputDirectory);
   const stageRoot = join(outputParent, `.candidate-stage.${randomBytes(16).toString("hex")}`);
-  const temporaryRoot = await mkdtemp(join(outputParent, ".candidate-temp."));
   const releaseRoot = join(stageRoot, "release");
   const fixturePath = join(stageRoot, fixtureFilename);
   const candidatePath = join(stageRoot, candidateFilename);
   const prefetchRoot = join(repositoryRoot, "docker/.prefetch");
-  const paths = {
-    capture: join(temporaryRoot, "capture"),
-    dockerConfig: join(temporaryRoot, "docker-config"),
-    home: join(temporaryRoot, "home"),
-    recoveryEvidence: join(temporaryRoot, "recovery-evidence"),
-    tmp: join(temporaryRoot, "tmp"),
-  };
-  await mkdir(stageRoot, { mode: 0o700 });
-  for (const path of Object.values(paths)) await mkdir(path, { mode: 0o700 });
-  await mkdir(join(paths.home, ".config"), { mode: 0o700 });
-  await writeFile(join(paths.dockerConfig, "config.json"), '{"auths":{}}', { mode: 0o600, flag: "wx" });
-  await materializeCandidateComposePlugin({ dockerConfigDirectory: paths.dockerConfig });
-  await materializeCandidateBuildxPlugin({ dockerConfigDirectory: paths.dockerConfig });
-  const environment = createCredentialFreeCandidateEnvironment({
-    ambientEnvironment: { PATH: process.env.PATH },
-    homeDirectory: paths.home,
-    dockerConfigDirectory: paths.dockerConfig,
-    temporaryDirectory: paths.tmp,
-  });
-  const commands = createCredentialFreeCandidateCommands({
-    releaseOutput: releaseRoot,
-    walGInput: walGInputRoot,
-    fixtureOutput: fixturePath,
-    recoveryEvidenceOutput: paths.recoveryEvidence,
-  });
+  let temporaryRoot;
+  let paths;
+  let environment;
+  let commands;
   let producer;
   let capturedWalG;
   let release;
@@ -212,83 +191,128 @@ async function main() {
   let prefetchOwned = false;
 
   const discard = async () => {
+    const failures = [];
+    const attempt = async (action) => {
+      try {
+        await action();
+      } catch (cause) {
+        failures.push(cause);
+      }
+    };
     if (capturedWalG?.contextRoot) {
-      await removeReleaseCapturedInput(capturedWalG.contextRoot).catch(() => undefined);
+      await attempt(() => removeReleaseCapturedInput(capturedWalG.contextRoot));
     }
-    if (prefetchOwned) await removeOwnedCandidatePath(prefetchRoot).catch(() => undefined);
-    await removeOwnedCandidatePath(stageRoot).catch(() => undefined);
-    await removeOwnedCandidatePath(temporaryRoot).catch(() => undefined);
-    if (outputOwned) await removeOwnedCandidatePath(outputDirectory).catch(() => undefined);
+    if (prefetchOwned) await attempt(() => removeOwnedCandidatePath(prefetchRoot));
+    await attempt(() => removeOwnedCandidatePath(stageRoot));
+    if (temporaryRoot) await attempt(() => removeOwnedCandidatePath(temporaryRoot));
+    if (outputOwned) await attempt(() => removeOwnedCandidatePath(outputDirectory));
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "Credential-free candidate cleanup failed");
+    }
   };
 
-  const result = await runCredentialFreeCandidateLifecycle({
-    verifyInputs: async () => {
-      producer = await resolveProducer();
-      await lstat(prefetchRoot).then(() => fail("Candidate prefetch context already exists"), (cause) => {
-        if (cause?.code !== "ENOENT") throw cause;
-      });
-      capturedWalG = await verifyAndMaterializeWalG({ walGInputRoot, captureRoot: paths.capture, prefetchRoot });
-      prefetchOwned = true;
-    },
-    runMatrix: async () => {
-      await runCredentialFreeCandidateMatrix({
-        commands: commands.slice(0, 15),
-        runCommand: (command) => runCommand(command, environment),
-      });
-    },
-    freezeRelease: async () => {
-      await runCommand(commands[15], environment);
-      release = await readFrozenRelease(releaseRoot, producer);
-    },
-    runProduct: async () => {
-      await runCommand(commands[16], environment);
-      fixtureBytes = await readFile(fixturePath);
-      const expectedFixture = Buffer.from(await createRecordedProductFixture());
-      if (!fixtureBytes.equals(expectedFixture)) fail();
-      candidate = createCredentialFreeMlpCandidate({
-        producer,
-        frozenRelease: {
-          manifestSha256: sha256(release.manifestBytes),
-          receiptSha256: sha256(release.receiptBytes),
-          artifactInventorySha256: release.receipt.artifactInventorySha256,
-        },
-        fixtureSha256: sha256(fixtureBytes),
-      });
-      verifyCredentialFreeMlpCandidateHandoff({
-        candidate,
-        expectedProducer: producer,
-        manifestBytes: release.manifestBytes,
-        receiptBytes: release.receiptBytes,
-        receiptArtifactInventorySha256: release.receipt.artifactInventorySha256,
-        fixtureBytes,
-      });
-      await writeFile(candidatePath, canonicalSerializeCredentialFreeMlpCandidate(candidate), {
+  const result = await runCredentialFreeCandidateTerminal({
+    setup: async () => {
+      temporaryRoot = await mkdtemp(join(outputParent, ".candidate-temp."));
+      paths = {
+        capture: join(temporaryRoot, "capture"),
+        dockerConfig: join(temporaryRoot, "docker-config"),
+        home: join(temporaryRoot, "home"),
+        recoveryEvidence: join(temporaryRoot, "recovery-evidence"),
+        tmp: join(temporaryRoot, "tmp"),
+      };
+      await mkdir(stageRoot, { mode: 0o700 });
+      for (const path of Object.values(paths)) await mkdir(path, { mode: 0o700 });
+      await mkdir(join(paths.home, ".config"), { mode: 0o700 });
+      await writeFile(join(paths.dockerConfig, "config.json"), '{"auths":{}}', {
         mode: 0o600,
         flag: "wx",
       });
+      await materializeCandidateComposePlugin({ dockerConfigDirectory: paths.dockerConfig });
+      await materializeCandidateBuildxPlugin({ dockerConfigDirectory: paths.dockerConfig });
+      environment = createCredentialFreeCandidateEnvironment({
+        ambientEnvironment: { PATH: process.env.PATH },
+        homeDirectory: paths.home,
+        dockerConfigDirectory: paths.dockerConfig,
+        temporaryDirectory: paths.tmp,
+      });
+      commands = createCredentialFreeCandidateCommands({
+        releaseOutput: releaseRoot,
+        walGInput: walGInputRoot,
+        fixtureOutput: fixturePath,
+        recoveryEvidenceOutput: paths.recoveryEvidence,
+      });
     },
-    finalizeResources: async () => {
-      await removeReleaseCapturedInput(capturedWalG.contextRoot);
-      capturedWalG = undefined;
-      await removeOwnedCandidatePath(prefetchRoot);
-      prefetchOwned = false;
-      await removeOwnedCandidatePath(temporaryRoot);
-    },
-    verifyFinalSource: async () => {
-      await verifyReleaseSourceForPublication({ producer, runGit });
-    },
-    publish: async () => {
-      const inventory = (await readdir(stageRoot)).sort();
-      if (JSON.stringify(inventory) !== JSON.stringify([
-        candidateFilename, fixtureFilename, "release",
-      ].sort())) fail("Candidate output inventory is invalid");
-      await chmod(candidatePath, 0o400);
-      await chmod(fixturePath, 0o400);
-      await chmod(stageRoot, 0o500);
-      await rename(stageRoot, outputDirectory);
-      outputOwned = true;
-      return Object.freeze({ status: "passed", producer, candidateSha256: checksumCandidate(candidate) });
-    },
+    runLifecycle: () => runCredentialFreeCandidateLifecycle({
+      verifyInputs: async () => {
+        producer = await resolveProducer();
+        await lstat(prefetchRoot).then(() => fail("Candidate prefetch context already exists"), (cause) => {
+          if (cause?.code !== "ENOENT") throw cause;
+        });
+        capturedWalG = await verifyAndMaterializeWalG({ walGInputRoot, captureRoot: paths.capture, prefetchRoot });
+        prefetchOwned = true;
+      },
+      runMatrix: async () => {
+        await runCredentialFreeCandidateMatrix({
+          commands: commands.slice(0, 15),
+          runCommand: (command) => runCommand(command, environment),
+        });
+      },
+      freezeRelease: async () => {
+        await runCommand(commands[15], environment);
+        release = await readFrozenRelease(releaseRoot, producer);
+      },
+      runProduct: async () => {
+        await runCommand(commands[16], environment);
+        fixtureBytes = await readFile(fixturePath);
+        const expectedFixture = Buffer.from(await createRecordedProductFixture());
+        if (!fixtureBytes.equals(expectedFixture)) fail();
+        candidate = createCredentialFreeMlpCandidate({
+          producer,
+          frozenRelease: {
+            manifestSha256: sha256(release.manifestBytes),
+            receiptSha256: sha256(release.receiptBytes),
+            artifactInventorySha256: release.receipt.artifactInventorySha256,
+          },
+          fixtureSha256: sha256(fixtureBytes),
+        });
+        verifyCredentialFreeMlpCandidateHandoff({
+          candidate,
+          expectedProducer: producer,
+          manifestBytes: release.manifestBytes,
+          receiptBytes: release.receiptBytes,
+          receiptArtifactInventorySha256: release.receipt.artifactInventorySha256,
+          fixtureBytes,
+        });
+        await writeFile(candidatePath, canonicalSerializeCredentialFreeMlpCandidate(candidate), {
+          mode: 0o600,
+          flag: "wx",
+        });
+      },
+      finalizeResources: async () => {
+        await removeReleaseCapturedInput(capturedWalG.contextRoot);
+        capturedWalG = undefined;
+        await removeOwnedCandidatePath(prefetchRoot);
+        prefetchOwned = false;
+        await removeOwnedCandidatePath(temporaryRoot);
+      },
+      verifyFinalSource: async () => {
+        await verifyReleaseSourceForPublication({ producer, runGit });
+      },
+      publish: async () => {
+        const inventory = (await readdir(stageRoot)).sort();
+        if (JSON.stringify(inventory) !== JSON.stringify([
+          candidateFilename, fixtureFilename, "release",
+        ].sort())) fail("Candidate output inventory is invalid");
+        await chmod(candidatePath, 0o400);
+        await chmod(fixturePath, 0o400);
+        await chmod(stageRoot, 0o500);
+        await rename(stageRoot, outputDirectory);
+        outputOwned = true;
+        return Object.freeze({ status: "passed", producer, candidateSha256: checksumCandidate(candidate) });
+      },
+      discard,
+    }),
     discard,
   });
   process.stdout.write(`${JSON.stringify(result)}\n`);

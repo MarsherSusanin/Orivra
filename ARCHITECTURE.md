@@ -329,10 +329,11 @@ fixture Compose journey into a canonical read-only candidate receipt. The
 receipt is not sufficient release authority until two independent verifiers
 PASS that exact tree; only then may 028B credentials be requested.
 Core rejected exact candidate `78a85e2` / `20c0f41` because failures during
-private setup could occur before the lifecycle registered scoped cleanup. 029A
-is in corrective RED; a replacement terminal run and both same-tree verifier
-reports remain pending. This status does not authorize credentials,
-publication or deployment.
+private setup could occur before the lifecycle registered scoped cleanup. The
+production correction is locally GREEN and places every owned setup write
+inside the same scoped no-follow discard boundary; a replacement terminal run
+and both same-tree verifier reports remain pending. This status does not
+authorize credentials, publication or deployment.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

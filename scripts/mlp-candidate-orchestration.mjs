@@ -293,6 +293,32 @@ export async function runCredentialFreeCandidateLifecycle({
   }
 }
 
+export async function runCredentialFreeCandidateTerminal({
+  setup,
+  runLifecycle,
+  discard,
+} = {}) {
+  if ([setup, runLifecycle, discard].some((hook) => typeof hook !== "function")) invalid();
+  let setupCompleted = false;
+  try {
+    await setup();
+    setupCompleted = true;
+    return await runLifecycle();
+  } catch (cause) {
+    if (setupCompleted) throw cause;
+    try {
+      await discard();
+    } catch (cleanupCause) {
+      throw new AggregateError(
+        [cause, cleanupCause],
+        "Credential-free candidate setup cleanup failed",
+        { cause },
+      );
+    }
+    throw cause;
+  }
+}
+
 export async function removeOwnedCandidatePath(path) {
   if (typeof path !== "string" || !isAbsolute(path) || path.includes("\0")) invalid();
   const metadata = await lstat(path).catch((cause) => {
