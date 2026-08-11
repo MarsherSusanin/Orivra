@@ -649,6 +649,12 @@ user testing use recorded fixtures through local Docker Compose. 029A runs with
 no credentials and no external network. The whole 022–029A range remains
 credential-free.
 
+ADR 0041 requires `release:candidate` to bind a fresh same-tree 028A freeze,
+the exact ordered matrix below and the worker-stopped recorded-fixture Compose
+journey into one canonical read-only receipt. The author receipt is necessary
+but not sufficient: two independent release verifiers must PASS that same tree
+before 028B credentials are allowed.
+
 029B is the credentialed production promotion and canary. 029B starts only
 after 028B has published and staged the exact frozen candidate.
 

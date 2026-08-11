@@ -33,9 +33,10 @@ The product journey is delivered as independently frozen vertical slices:
 | 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Complete; independently verified on `527c561` / `ebdf648` |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Complete; Core and Product PASS `8137970` / `8c594cc`; scan 8852 user-canceled/not a security PASS; deferred evidence-integrity validation risk remains open |
 | 027D | Orivra public display brand with Proofline technical compatibility | Complete; Core and Product PASS `3d57840` / `fc7643f` |
-| 028A | Verified local OCI archives and frozen digest manifest | Second corrective production-author GREEN after Core FAIL `1d3324d` / `473c534`; final freeze and two verifier PASS reports pending, credential-free |
+| 027E | Orivra verification entry and canonical protected routes | Complete; Core and Product PASS `e42da1f` / `18116a6`, credential-free |
+| 028A | Verified local OCI archives and frozen digest manifest | Complete; Core and Product PASS `bdd09e7` / `5d0acb9`, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
-| 029A | Local MLP validation and candidate freeze | Planned, credential-free |
+| 029A | Local MLP validation and candidate freeze | Intentional RED under ADR 0041, credential-free |
 | 029B | Exact-digest production promotion and seven-day canary | Blocked until 028B hosted evidence |
 
 ## Completed pre-infrastructure product journey

@@ -20,7 +20,12 @@ Start with the landing handoff and route contracts, then typecheck and the narro
 
 ## Candidate status
 
-Production-author GREEN candidate; independent Core and Product verification is pending for one exact committed tree.
+COMPLETE. Core and Product independently PASS exact commit
+`e42da1ffa689ceb4b3bd43e78f46bd6a3e98eed7` / tree
+`18116a629c770f7ea6b4cdfc8e7dd2b814915e2f`. Core report SHA-256 is
+`3172a3bdd585229c18173f9442acd7f977c014522e1b993a6306fb24455b91b9` and
+Product report SHA-256 is
+`016b281c9ffec6df3b19553eb5c48e5aa24d2b3ecaae7cf97ba1a3cc06759ec3`.
 
 - `npm run typecheck`: PASS.
 - Web contracts: 176 suites and 601 tests PASS.
@@ -31,3 +36,5 @@ Production-author GREEN candidate; independent Core and Product verification is 
 - No entered source endpoint, wallet provider or private API request was observed before the explicit product action.
 
 Slice 028A production and frozen output are unchanged. Its accepted exact-tree Core and Product PASS report identities are recorded only in the canonical release status documents.
+This is local credential-free module evidence, not 029A release, security,
+hosted or deployed evidence.

@@ -322,6 +322,13 @@ Slice 028A is complete. Core and Product independently PASS exact commit
 in ADR 0039. This remains credential-free local release-freeze evidence, not
 registry publication, hosted deployment, 029A authorization or security evidence.
 
+[ADR 0041](docs/adr/0041-credential-free-mlp-candidate-freeze.md) defines 029A
+as one same-tree credential-free release boundary. It binds a fresh 028A
+manifest/receipt, the exact complete matrix and a worker-stopped recorded-
+fixture Compose journey into a canonical read-only candidate receipt. The
+receipt is not sufficient release authority until two independent verifiers
+PASS that exact tree; only then may 028B credentials be requested.
+
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна
 выполнять MinIO restore drill в отдельный volume. Droplet backup не является

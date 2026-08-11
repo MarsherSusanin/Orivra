@@ -104,6 +104,13 @@ blockchain-операций.
   evidence, not release authorization. `@proofline/*`,
   `PROOFLINE_*`, database/storage/evidence, CLI, Action, Solidity, Docker and S3
   identifiers remain compatibility-stable.
+- Slice 027E is complete. Core and Product independently PASS exact commit
+  `e42da1ffa689ceb4b3bd43e78f46bd6a3e98eed7` / tree
+  `18116a629c770f7ea6b4cdfc8e7dd2b814915e2f`; the public URL preview, lazy SIWE
+  handoff, canonical `/app/*` routes and desktop/mobile browser contract are
+  accepted locally. [ADR 0041](docs/adr/0041-credential-free-mlp-candidate-freeze.md)
+  now freezes 029A as the final credential-free unified matrix and same-tree
+  release-receipt boundary before any production credential is requested.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

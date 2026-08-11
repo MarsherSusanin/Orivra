@@ -43,5 +43,6 @@ ADR фиксирует архитектурное решение, которое
 | [0038](0038-orivra-public-brand.md) | Orivra becomes the public display name while Proofline protocol, package, persistence and deployment identifiers remain compatible |
 | [0039](0039-offline-oci-release-freeze.md) | Five exact Linux/amd64 OCI archives are built once offline and frozen under distinct archive/image digests plus a non-circular receipt |
 | [0040](0040-orivra-verification-entry.md) | Public Orivra URL preview hands a bounded local draft to protected canonical `/app/*` routes without fetching the source or changing ShareLinkV1 |
+| [0041](0041-credential-free-mlp-candidate-freeze.md) | One clean tree binds the complete credential-free matrix, recorded-fixture Compose journey and fresh offline OCI freeze into a canonical candidate receipt |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.
