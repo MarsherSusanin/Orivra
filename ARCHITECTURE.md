@@ -301,13 +301,21 @@ commit `527c561` / tree `ebdf648`. ADR 0037 candidate `1218e589` / tree
 материализовал canonical `RestoreDrillEvidenceV1`, promotion negatives были
 связаны с synthetic restore fixture, а producer commit/tree получили одно
 случайное значение. Corrective RED замораживает atomic canonical handoff,
-distinct exact repository identities и actual-evidence promotion boundary;
-replacement production GREEN и два новых verifier PASS pending. Later stash
+distinct exact repository identities и actual-evidence promotion boundary.
+The replacement is now local credential-free production-author GREEN: focused
+contracts, coverage, real PostgreSQL, offline builds and Docker 027A/027B/027C
+author gates pass with scoped cleanup. Later stash
 candidate `ccccf5d2` is also rejected by scan `ae807f50`: verified execution
 must consume one private commit snapshot, backup provenance must come from one
 losslessly parsed WAL-G detail record, and only the terminal canonical
 backup/restore/handoff triad may feed V2 handoff+restore-bound promotion
-authorization. Draft evidence is never terminal or promotion-authorizable. Нет
+authorization. Draft evidence is never terminal or promotion-authorizable.
+Codex Security scan 8852 was canceled by the user before final
+reportability/severity and is not a PASS. Its deferred validation risk remains:
+a safe no-effect fixture published terminal handoff backup bytes with an
+inventory digest inconsistent with their entries; the strict parser rejected
+those bytes, while the promotion parser reached its injected effect with the
+self-consistent triad. Two independent reviews remain pending. Нет
 release-ready VDS composition или production
 deployment. В репозитории нет
 `.github/workflows` или настроенного merge queue. Hosting is not yet

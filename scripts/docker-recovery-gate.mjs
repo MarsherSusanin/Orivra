@@ -34,8 +34,24 @@ import { createCredentialFreeRecoveryEnvironments } from "./recovery-gate-enviro
 import { runBoundedRecoveryChild } from "./recovery-async-child.mjs";
 import { finalizeRecoveryGate } from "./recovery-gate-lifecycle.mjs";
 import { authorizeRestorePromotion } from "./restore-promotion.mjs";
+import {
+  RECOVERY_EVIDENCE_DIRECTORY_NAME,
+  RECOVERY_EVIDENCE_FILENAMES,
+  discardRecoveryEvidenceHandoff,
+  publishRecoveryEvidenceHandoff,
+  stageRecoveryEvidenceHandoff,
+  validateRecoveryEvidenceOutputDirectory,
+} from "./recovery-evidence-handoff.mjs";
+import {
+  captureRecoveryProducerSnapshot,
+  cleanupRecoveryProducerSnapshot,
+  verifyRecoveryProducerSnapshotForPublication,
+} from "./recovery-producer-snapshot.mjs";
+import { selectRecoveryBackupMetadata } from "./recovery-selected-backup-metadata.mjs";
+import { runRecoveryEvidencePublication } from "./recovery-evidence-publication.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+let commandRoot = root;
 const projectPrefix = "proofline-027c-recovery";
 const project = `${projectPrefix}-${process.pid}-${randomBytes(4).toString("hex")}`;
 const timeoutMs = 15 * 60 * 1_000;
@@ -58,6 +74,8 @@ const files = [
   "deploy/compose.backup.yaml",
   "deploy/compose.recovery.qa.yaml",
 ];
+const evidenceOutputDirectory =
+  process.env.PROOFLINE_RECOVERY_EVIDENCE_OUTPUT_DIR;
 
 async function resolveComposeExecutable() {
   for (const candidate of [
@@ -83,7 +101,7 @@ function sha256(value) {
 
 function docker(args, environment, capture = false, allowFailure = false) {
   const result = spawnSync("docker", args, {
-    cwd: root,
+    cwd: commandRoot,
     encoding: "utf8",
     env: environment,
     stdio: capture ? "pipe" : "inherit",
@@ -100,7 +118,7 @@ function docker(args, environment, capture = false, allowFailure = false) {
 
 function dockerBytes(args, environment, allowFailure = false, input) {
   const result = spawnSync("docker", args, {
-    cwd: root,
+    cwd: commandRoot,
     env: environment,
     encoding: null,
     maxBuffer: 64 * 1024 * 1024,
@@ -127,7 +145,7 @@ async function asyncCommand(
   const result = await runBoundedRecoveryChild({
     executable,
     args,
-    cwd: root,
+    cwd: commandRoot,
     environment,
     timeoutMs: remaining,
     killGraceMs: 1_000,
@@ -234,7 +252,7 @@ function compose(
   const command = ["--project-name", projectName];
   for (const file of files) command.push("--file", file);
   const result = spawnSync(composeExecutable, [...command, ...args], {
-    cwd: root,
+    cwd: commandRoot,
     encoding: "utf8",
     env: environment,
     stdio: capture ? "pipe" : "inherit",
@@ -361,10 +379,10 @@ async function prepareSecrets(directory) {
   return paths;
 }
 
-async function environmentFor(directory) {
+async function environmentFor(directory, producerIdentity, sourceRoot) {
   const paths = await prepareSecrets(directory);
   const lock = JSON.parse(
-    await readFile(join(root, "docker/base-images.json"), "utf8"),
+    await readFile(join(sourceRoot, "docker/base-images.json"), "utf8"),
   );
   const minio = lock.images.minio;
   const minioClient = lock.images.minioClient;
@@ -394,7 +412,7 @@ async function environmentFor(directory) {
       `${minioClient.repository}@${minioClient.linuxAmd64Digest}`,
     PROOFLINE_PUBLIC_ORIGIN: "https://127.0.0.1",
     PROOFLINE_DEPLOYMENT_ID: `deployment_${randomBytes(32).toString("hex")}`,
-    PROOFLINE_RELEASE_TREE_SHA: randomBytes(20).toString("hex"),
+    PROOFLINE_RELEASE_TREE_SHA: producerIdentity.treeSha,
     PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
     PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
     PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
@@ -467,7 +485,13 @@ function exactPositiveChecks(value) {
     value.checks.inventorySha256Matches === true;
 }
 
-async function runRecovery(environment, paths, imageLock) {
+async function runRecovery(
+  environment,
+  paths,
+  imageLock,
+  producerIdentity,
+  sourceRoot,
+) {
   const deadline = Date.now() + timeoutMs;
   docker([
     "run", "--rm", "--pull", "never", "--network", "none",
@@ -492,28 +516,25 @@ async function runRecovery(environment, paths, imageLock) {
       "INSERT INTO proofline_recovery_sentinel VALUES ('base');",
     environment,
   );
-  const backupStartLsn = sql(
-    project,
-    "SELECT pg_current_wal_lsn()",
-    environment,
-  );
   compose(
     project,
     ["up", "--detach", "--pull", "never", "base-backup"],
     environment,
   );
   await waitForJob(project, "base-backup", environment, deadline);
-  const backupList = compose(
+  const backupListDetailBytes = Buffer.from(compose(
     project,
     ["run", "--rm", "--no-deps", "backup-status"],
     environment,
     true,
-  ).stdout;
-  const backups = JSON.parse(backupList);
-  const backupId = backups.at(-1)?.backup_name;
-  if (!/^base_[0-9A-F]{24}$/.test(backupId ?? "")) {
+  ).stdout, "utf8");
+  const backupIds = [...backupListDetailBytes.toString("utf8").matchAll(
+    /"backup_name"\s*:\s*"(base_[0-9A-F]{24})"/g,
+  )].map((match) => match[1]);
+  if (backupIds.length !== 1) {
     throw new Error("Exact backup id is absent");
   }
+  const [backupId] = backupIds;
   sql(
     project,
     "INSERT INTO proofline_recovery_sentinel VALUES ('before-cut')",
@@ -549,11 +570,13 @@ async function runRecovery(environment, paths, imageLock) {
     "SELECT system_identifier FROM pg_control_system()",
     environment,
   );
-  const backupStopLsn = sql(
-    project,
-    "SELECT pg_current_wal_lsn()",
-    environment,
-  );
+  const selectedBackup = selectRecoveryBackupMetadata({
+    backupListDetailBytes,
+    selectedBackupId: backupId,
+    expectedSystemIdentifier: systemIdentifier,
+    postgresMajor: 17,
+    walSegmentBytes: 16 * 1024 * 1024,
+  });
   compose(project, ["stop", "postgres"], environment);
   const reader = storageReader(environment, paths, systemIdentifier);
   const expectedInventory = await collectCiphertextInventory({
@@ -561,13 +584,12 @@ async function runRecovery(environment, paths, imageLock) {
     maximumObjects: 100_000,
     maximumTotalBytes: 512 * 1024 * 1024,
   });
-  const completedAt = canonicalMicroseconds(new Date());
   const evidence = {
     version: "1",
     kind: "base-backup",
     producer: {
-      commitSha: environment.PROOFLINE_RELEASE_TREE_SHA,
-      treeSha: environment.PROOFLINE_RELEASE_TREE_SHA,
+      commitSha: producerIdentity.commitSha,
+      treeSha: producerIdentity.treeSha,
       postgresImageDigest: imageLock.images.postgresRecovery.linuxAmd64Digest,
       walGVersion: "v3.0.8",
     },
@@ -578,7 +600,7 @@ async function runRecovery(environment, paths, imageLock) {
       schemaVersion: 10,
       migrationCount: 10,
       migrationManifestSha256: sha256(
-        await readFile(join(root, "apps/api/db/migrations/manifest.v1.json")),
+        await readFile(join(sourceRoot, "apps/api/db/migrations/manifest.v1.json")),
       ),
     },
     storage: {
@@ -590,14 +612,14 @@ async function runRecovery(environment, paths, imageLock) {
       encryptionKeyIdSha256: sha256(await readFile(paths.backup_encryption_key)),
     },
     backup: {
-      id: backupId,
-      startedAt: canonicalMicroseconds(new Date(Date.now() - 1_000)),
-      completedAt,
-      startLsn: backupStartLsn,
-      stopLsn: backupStopLsn,
-      startWalSegment: backupId.slice("base_".length),
-      stopWalSegment: afterWal,
-      timeline: Number(timeline),
+      id: selectedBackup.id,
+      startedAt: selectedBackup.startedAt,
+      completedAt: selectedBackup.completedAt,
+      startLsn: selectedBackup.startLsn,
+      stopLsn: selectedBackup.stopLsn,
+      startWalSegment: selectedBackup.startWalSegment,
+      stopWalSegment: selectedBackup.stopWalSegment,
+      timeline: selectedBackup.timeline,
     },
     inventory: expectedInventory,
     status: "completed",
@@ -627,6 +649,7 @@ async function runRecovery(environment, paths, imageLock) {
     PROOFLINE_EXPECTED_INVENTORY_SHA256:
       evidence.inventory.canonicalSha256,
   });
+  const restoreStartedAt = canonicalMicroseconds(new Date());
   compose(project, ["up", "--pull", "never", "pitr-fetch"], environment);
   compose(
     project,
@@ -660,6 +683,7 @@ async function runRecovery(environment, paths, imageLock) {
   if (!exactPositiveChecks(restoreChecks)) {
     throw new Error("PITR machine-readable verification failed");
   }
+  const restoreCompletedAt = canonicalMicroseconds(new Date());
   const sourceVolumeIdentitySha256 = sha256(`${project}:postgres_data`);
   const restoreVolumeIdentitySha256 = sha256(`${project}:pitr_postgres_data`);
   if (sourceVolumeIdentitySha256 === restoreVolumeIdentitySha256) {
@@ -685,6 +709,10 @@ async function runRecovery(environment, paths, imageLock) {
     targetTime,
     timeline,
     evidence,
+    pitrVerify: verified,
+    directRecoveryState,
+    restoreStartedAt,
+    restoreCompletedAt,
   };
 }
 
@@ -692,62 +720,195 @@ function canonicalMicroseconds(date) {
   return date.toISOString().replace(/\.([0-9]{3})Z$/, ".$1000Z");
 }
 
+await validateRecoveryEvidenceOutputDirectory({
+  outputDirectory: evidenceOutputDirectory,
+});
+const outputRoot = await realpath(evidenceOutputDirectory);
 const temporaryDirectory = await mkdtemp(join(tmpdir(), `${project}-`));
+const snapshotParentDirectory = await mkdtemp(
+  join(tmpdir(), `${project}-source-`),
+);
 let environment;
 let negativeChildEnvironment;
 let paths;
 let imageLock;
+let snapshot;
+let stagedEvidence;
+let negativeReport;
+let finalizerCompleted = false;
+let snapshotCleanupCompleted = false;
+
+async function runFailureDiagnostics() {
+  if (!environment) return;
+  const diagnosticController = new AbortController();
+  const diagnosticDeadline = Date.now() + 15_000;
+  const command = ["--project-name", project];
+  for (const file of files) command.push("--file", file);
+  await asyncCommand(composeExecutable, [
+    ...command, "ps", "--all",
+  ], environment, diagnosticController.signal, diagnosticDeadline, true);
+  await asyncCommand(composeExecutable, [
+    ...command, "logs", "--no-color", "--tail", "100",
+    "minio", "minio-init", "postgres", "db-role-bootstrap", "migrator",
+    "base-backup", "backup-status", "pitr-fetch", "pitr-postgres",
+    "pitr-verify",
+  ], environment, diagnosticController.signal, diagnosticDeadline, true);
+}
+
 try {
-  ({ environment, negativeChildEnvironment, paths, imageLock } =
-    await environmentFor(temporaryDirectory));
-  const positive = await runRecovery(environment, paths, imageLock);
-  const orchestration = createDockerRecoveryOrchestration(
-    createDockerRecoveryNegativeRuntime({
-      root,
-      project,
-      environment,
-      negativeChildEnvironment,
-      paths,
-      positive,
-      authorizeRestorePromotion,
-    }),
-  );
-  const negativeReport = await runRecoveryNegativeControls({
-    orchestration,
-    caseTimeoutMs: negativeCaseTimeoutMs,
-    cleanupTimeoutMs: negativeCleanupTimeoutMs,
-  });
+  const secretRoot = await realpath(temporaryDirectory);
+  const snapshotParentRoot = await realpath(snapshotParentDirectory);
   if (
-    negativeReport.cases.map(({ id }) => id).join("\n") !==
-    recoveryNegativeCaseIds.join("\n")
+    outputRoot === secretRoot || outputRoot.startsWith(`${secretRoot}/`) ||
+    outputRoot === snapshotParentRoot ||
+    outputRoot.startsWith(`${snapshotParentRoot}/`)
   ) {
-    throw new Error("Recovery negative inventory is incomplete");
+    throw new Error("Recovery evidence output must be caller owned");
   }
-  process.stdout.write(`${JSON.stringify(negativeReport)}\n`);
-} catch (cause) {
-  if (environment) {
-    const diagnosticController = new AbortController();
-    const diagnosticDeadline = Date.now() + 15_000;
-    const command = ["--project-name", project];
-    for (const file of files) command.push("--file", file);
-    await asyncCommand(composeExecutable, [
-      ...command, "ps", "--all",
-    ], environment, diagnosticController.signal, diagnosticDeadline, true);
-    await asyncCommand(composeExecutable, [
-      ...command, "logs", "--no-color", "--tail", "100",
-      "minio", "minio-init", "postgres", "db-role-bootstrap", "migrator",
-      "base-backup", "backup-status", "pitr-fetch", "pitr-postgres",
-      "pitr-verify",
-    ], environment, diagnosticController.signal, diagnosticDeadline, true);
-  }
-  throw cause;
-} finally {
-  await finalizeRecoveryGate({
-    temporaryDirectory,
-    finalizerTimeoutMs: projectFinalizerTimeoutMs,
-    finalizeProject: (signal) => environment
-      ? finalizeRecoveryProject(environment, signal)
-      : undefined,
-    removeTemporaryDirectory: (path) => rm(path, { recursive: true, force: true }),
+  snapshot = await captureRecoveryProducerSnapshot({
+    repositoryRoot: root,
+    snapshotParentDirectory,
+    allowDirtyDraft: true,
   });
+  commandRoot = snapshot.sourceRoot;
+  const producerIdentity = snapshot.producerIdentity;
+  ({ environment, negativeChildEnvironment, paths, imageLock } =
+    await environmentFor(
+      temporaryDirectory,
+      producerIdentity,
+      snapshot.sourceRoot,
+    ));
+  const publication = await runRecoveryEvidencePublication({
+    outputRoot,
+    snapshot,
+    async runRecoveryFromSnapshot({ sourceRoot }) {
+      return runRecovery(
+        environment,
+        paths,
+        imageLock,
+        producerIdentity,
+        sourceRoot,
+      );
+    },
+    async stageEvidence({ recoveryResult, sourceRoot }) {
+      stagedEvidence = await stageRecoveryEvidenceHandoff({
+        outputDirectory: outputRoot,
+        producerIdentity,
+        backupEvidence: recoveryResult.evidence,
+        pitrVerify: recoveryResult.pitrVerify,
+        directRecoveryState: recoveryResult.directRecoveryState,
+        targetTime: recoveryResult.targetTime,
+        timeline: Number(recoveryResult.timeline),
+        sourceVolumeIdentitySha256: recoveryResult.sourceVolumeIdentitySha256,
+        restoreVolumeIdentitySha256: recoveryResult.restoreVolumeIdentitySha256,
+        startedAt: recoveryResult.restoreStartedAt,
+        completedAt: recoveryResult.restoreCompletedAt,
+      });
+      if (sourceRoot !== snapshot.sourceRoot) {
+        throw new Error("Recovery source snapshot changed");
+      }
+      recoveryResult.backupEvidencePath = join(
+        stagedEvidence.stageRoot,
+        RECOVERY_EVIDENCE_FILENAMES.backup,
+      );
+      recoveryResult.restoreEvidencePath = join(
+        stagedEvidence.stageRoot,
+        RECOVERY_EVIDENCE_FILENAMES.restore,
+      );
+      recoveryResult.handoffReceiptPath = join(
+        stagedEvidence.stageRoot,
+        RECOVERY_EVIDENCE_FILENAMES.handoff,
+      );
+      recoveryResult.backupEvidenceBytes = await readFile(
+        recoveryResult.backupEvidencePath,
+      );
+      recoveryResult.restoreEvidenceBytes = await readFile(
+        recoveryResult.restoreEvidencePath,
+      );
+      recoveryResult.handoffReceiptBytes = await readFile(
+        recoveryResult.handoffReceiptPath,
+      );
+      recoveryResult.restoreEvidenceSha256 = stagedEvidence.restore.sha256;
+      recoveryResult.handoffReceiptSha256 = stagedEvidence.handoff.sha256;
+      return stagedEvidence;
+    },
+    async runNegativeControls({ recoveryResult }) {
+      const orchestration = createDockerRecoveryOrchestration(
+        createDockerRecoveryNegativeRuntime({
+          root: snapshot.sourceRoot,
+          project,
+          environment,
+          negativeChildEnvironment,
+          paths,
+          positive: recoveryResult,
+          authorizeRestorePromotion,
+        }),
+      );
+      negativeReport = await runRecoveryNegativeControls({
+        orchestration,
+        caseTimeoutMs: negativeCaseTimeoutMs,
+        cleanupTimeoutMs: negativeCleanupTimeoutMs,
+      });
+      if (
+        negativeReport.cases.map(({ id }) => id).join("\n") !==
+        recoveryNegativeCaseIds.join("\n")
+      ) {
+        throw new Error("Recovery negative inventory is incomplete");
+      }
+    },
+    async finalizeProjectAndSecrets() {
+      await finalizeRecoveryGate({
+        temporaryDirectory,
+        finalizerTimeoutMs: projectFinalizerTimeoutMs,
+        finalizeProject: (signal) => environment
+          ? finalizeRecoveryProject(environment, signal)
+          : undefined,
+        removeTemporaryDirectory: (path) =>
+          rm(path, { recursive: true, force: true }),
+      });
+      finalizerCompleted = true;
+    },
+    async cleanupSnapshot({ sourceRoot }) {
+      await cleanupRecoveryProducerSnapshot({ sourceRoot });
+      await rm(snapshotParentDirectory, { recursive: true, force: true });
+      snapshotCleanupCompleted = true;
+    },
+    verifyFinalSource: () =>
+      verifyRecoveryProducerSnapshotForPublication({ snapshot }),
+    publishEvidence: ({ stagedEvidence: exactStagedEvidence }) =>
+      publishRecoveryEvidenceHandoff({
+        outputDirectory: outputRoot,
+        stagedEvidence: exactStagedEvidence,
+        finalProducerIdentity: snapshot.producerIdentity,
+      }),
+    discardEvidence: ({ stagedEvidence: exactStagedEvidence }) =>
+      discardRecoveryEvidenceHandoff({
+        outputDirectory: outputRoot,
+        stagedEvidence: exactStagedEvidence,
+      }),
+    runFailureDiagnostics,
+  });
+  process.stdout.write(`${JSON.stringify({
+    version: "1",
+    kind: "recovery-gate",
+    status: publication.status,
+    evidenceHandoff: publication,
+    negativeControls: negativeReport,
+  })}\n`);
+} finally {
+  if (!finalizerCompleted) {
+    await finalizeRecoveryGate({
+      temporaryDirectory,
+      finalizerTimeoutMs: projectFinalizerTimeoutMs,
+      finalizeProject: (signal) => environment
+        ? finalizeRecoveryProject(environment, signal)
+        : undefined,
+      removeTemporaryDirectory: (path) =>
+        rm(path, { recursive: true, force: true }),
+    });
+  }
+  if (snapshot && !snapshotCleanupCompleted) {
+    await cleanupRecoveryProducerSnapshot({ sourceRoot: snapshot.sourceRoot });
+  }
+  await rm(snapshotParentDirectory, { recursive: true, force: true });
 }

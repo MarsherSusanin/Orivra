@@ -18,7 +18,11 @@ const ProducerSchema = z
     postgresImageDigest: Sha256Schema,
     walGVersion: z.literal("v3.0.8"),
   })
-  .strict();
+  .strict()
+  .refine((value) => value.commitSha !== value.treeSha, {
+    path: ["treeSha"],
+    message: "Producer commit and tree identities must be distinct.",
+  });
 
 const RestoreDrillEvidenceCoreSchema = z
   .object({
@@ -75,6 +79,16 @@ export const RestoreDrillEvidenceV1Schema = RestoreDrillEvidenceCoreSchema.refin
   { path: ["completedAt"], message: "Restore completion precedes its start." },
 );
 
+function validateAuthorizationChronology(value, context) {
+  if (value.expiresAt <= value.authorizedAt) {
+    context.addIssue({
+      code: "custom",
+      path: ["expiresAt"],
+      message: "Promotion authorization must expire after issuance.",
+    });
+  }
+}
+
 export const RestorePromotionAuthorizationV1Schema = z
   .object({
     version: z.literal("1"),
@@ -86,15 +100,58 @@ export const RestorePromotionAuthorizationV1Schema = z
     promote: z.literal(true),
   })
   .strict()
+  .superRefine(validateAuthorizationChronology);
+
+export const RecoveryEvidenceHandoffV1Schema = z
+  .object({
+    version: z.literal("1"),
+    kind: z.literal("recovery-evidence-handoff"),
+    status: z.literal("passed"),
+    verification: z.enum(["verified", "draft"]),
+    releaseClaim: z.boolean(),
+    producer: ProducerSchema,
+    backup: z
+      .object({
+        filename: z.literal("backup-evidence.v1.json"),
+        sha256: Sha256Schema,
+      })
+      .strict(),
+    restore: z
+      .object({
+        filename: z.literal("restore-drill-evidence.v1.json"),
+        sha256: Sha256Schema,
+      })
+      .strict(),
+  })
+  .strict()
   .superRefine((value, context) => {
-    if (value.expiresAt <= value.authorizedAt) {
+    if (
+      !(
+        (value.verification === "verified" && value.releaseClaim === true) ||
+        (value.verification === "draft" && value.releaseClaim === false)
+      )
+    ) {
       context.addIssue({
         code: "custom",
-        path: ["expiresAt"],
-        message: "Promotion authorization must expire after issuance.",
+        path: ["releaseClaim"],
+        message: "Recovery evidence verification and release claim disagree.",
       });
     }
   });
+
+export const RestorePromotionAuthorizationV2Schema = z
+  .object({
+    version: z.literal("2"),
+    kind: z.literal("restore-promotion-authorization"),
+    recoveryEvidenceHandoffSha256: Sha256Schema,
+    restoreDrillEvidenceSha256: Sha256Schema,
+    operator: z.string().regex(/^operator_[a-z0-9]{16,64}$/),
+    authorizedAt: UtcMicrosecondsSchema,
+    expiresAt: UtcMicrosecondsSchema,
+    promote: z.literal(true),
+  })
+  .strict()
+  .superRefine(validateAuthorizationChronology);
 
 function canonicalJson(value) {
   if (value === null || typeof value === "boolean" || typeof value === "string") {
@@ -109,4 +166,8 @@ function canonicalJson(value) {
 
 export function canonicalSerializeRestoreDrillEvidence(value) {
   return canonicalJson(RestoreDrillEvidenceV1Schema.parse(value));
+}
+
+export function canonicalSerializeRecoveryEvidenceHandoff(value) {
+  return canonicalJson(RecoveryEvidenceHandoffV1Schema.parse(value));
 }

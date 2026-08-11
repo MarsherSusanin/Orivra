@@ -182,7 +182,13 @@ export async function runRecoveryNegativeControls({
       ) {
         throw primaryFailure;
       }
-      failNegativeControl();
+      failNegativeControl({
+        caseId: definition.id,
+        phaseId: typeof primaryFailure?.phaseId === "string"
+          ? primaryFailure.phaseId
+          : "unknown",
+        ...(primaryFailure?.diagnostics ?? {}),
+      });
     }
     cases.push({
       id: definition.id,

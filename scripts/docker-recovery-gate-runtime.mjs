@@ -48,14 +48,24 @@ function sha256(value) {
 }
 
 function parseFailedChildOutput(execution, definition) {
+  const invalidExecution = () => Object.assign(
+    new Error("Recovery child execution is invalid"),
+    {
+      diagnostics: {
+        childExitCodeIsInteger: Number.isSafeInteger(execution?.exitCode),
+        childOutputPresent:
+          typeof execution?.stdout === "string" && execution.stdout.length > 0 ||
+          typeof execution?.stderr === "string" && execution.stderr.length > 0,
+        childRecordCount: 0,
+      },
+    },
+  );
   if (
     !execution ||
-    !Number.isSafeInteger(execution.exitCode) ||
-    execution.exitCode === 0 ||
     typeof execution.stdout !== "string" ||
     typeof execution.stderr !== "string"
   ) {
-    throw new Error("Recovery child execution is invalid");
+    throw invalidExecution();
   }
   const combined = `${execution.stdout}${execution.stderr}`;
   const records = combined.split(/\r?\n/).filter(Boolean).flatMap((line) => {
@@ -67,15 +77,75 @@ function parseFailedChildOutput(execution, definition) {
   });
   const value = records.at(-1);
   if (
+    value?.version === "1" &&
+    value.caseId === definition.id &&
+    value.status === "diagnostic" &&
+    [
+      "missing-wal-state-invalid",
+      "missing-wal-environment-invalid",
+      "missing-wal-entry-failed",
+      "missing-wal-prestart-failed",
+      "missing-wal-start-failed",
+      "missing-wal-wait-failed",
+      "missing-wal-inspect-failed",
+      "missing-wal-logs-failed",
+      "missing-wal-terminal-failed",
+      "missing-wal-nonterminal",
+      "missing-wal-segment-unobserved",
+    ].includes(value.diagnosticId)
+  ) {
+    throw Object.assign(new Error("Recovery child diagnostic failed closed"), {
+      phaseId: value.diagnosticId,
+    });
+  }
+  if (!Number.isSafeInteger(execution.exitCode) || execution.exitCode === 0) {
+    const failure = invalidExecution();
+    failure.diagnostics.childRecordCount = Math.min(records.length, 9);
+    throw failure;
+  }
+  if (
     !value ||
     value.version !== "1" ||
     value.caseId !== definition.id ||
     value.status !== "failed" ||
     value.failureCode !== definition.expectedFailureCode
   ) {
-    throw new Error("Recovery child output is invalid");
+    throw Object.assign(new Error("Recovery child output is invalid"), {
+      diagnostics: {
+        childExitCodeIsInteger: true,
+        childOutputPresent: combined.length > 0,
+        childRecordCount: Math.min(records.length, 9),
+      },
+    });
   }
   return { value, combined };
+}
+
+async function runPhase(phaseId, operation) {
+  try {
+    return await operation();
+  } catch (cause) {
+    const boundedPhaseId = [
+      "missing-wal-state-invalid",
+      "missing-wal-environment-invalid",
+      "missing-wal-entry-failed",
+      "missing-wal-prestart-failed",
+      "missing-wal-start-failed",
+      "missing-wal-wait-failed",
+      "missing-wal-inspect-failed",
+      "missing-wal-logs-failed",
+      "missing-wal-terminal-failed",
+      "missing-wal-nonterminal",
+      "missing-wal-segment-unobserved",
+    ].includes(cause?.phaseId)
+      ? cause.phaseId
+      : phaseId;
+    throw Object.assign(new Error("Recovery negative phase failed closed"), {
+      code: "RECOVERY_NEGATIVE_PHASE_FAILED",
+      phaseId: boundedPhaseId,
+      diagnostics: cause?.diagnostics,
+    });
+  }
 }
 
 export function createDockerRecoveryOrchestration(runtime) {
@@ -101,10 +171,10 @@ export function createDockerRecoveryOrchestration(runtime) {
       if (!action || signal?.aborted) {
         throw new Error("Recovery negative case is invalid");
       }
-      const fixture = await runtime.prepareCase({
+      const fixture = await runPhase("prepare", () => runtime.prepareCase({
         id: definition.id,
         action,
-      }, signal);
+      }, signal));
       if (
         !fixture ||
         fixture.caseId !== definition.id ||
@@ -113,9 +183,12 @@ export function createDockerRecoveryOrchestration(runtime) {
       ) {
         throw new Error("Recovery adverse state is invalid");
       }
-      const execution = await runtime.executeRecoveryCase(fixture, signal);
-      const child = parseFailedChildOutput(execution, definition);
-      const observation = await inspectRecoveryCase(fixture, signal);
+      const execution = await runPhase("execute", () =>
+        runtime.executeRecoveryCase(fixture, signal));
+      const child = await runPhase("child-output", () =>
+        parseFailedChildOutput(execution, definition));
+      const observation = await runPhase("parent-observation", () =>
+        inspectRecoveryCase(fixture, signal));
       return {
         caseId: definition.id,
         status: child.value.status,

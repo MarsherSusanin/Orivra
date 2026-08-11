@@ -216,8 +216,11 @@ independent verifiers. Its positive recovery checks did not create canonical
 `RestoreDrillEvidenceV1`, its promotion negatives substituted synthetic restore
 evidence, and its backup producer used one random tree-shaped value for both
 commit and tree. The prior local gate and security scan therefore do not count
-as accepted 027C evidence. Corrective RED is frozen; production correction and
-both replacement verifier reports are pending.
+as accepted 027C evidence. The frozen correction is now local
+production-author GREEN: focused contracts, the unified matrix, real
+PostgreSQL, isolated prefetch, two offline builds and Docker 027A/027B/027C
+gates passed with exact scoped cleanup. Both replacement verifier reports are
+still pending.
 
 Later stash candidate `ccccf5d2c2d45415ceb68e6e670a793ee22e0382` is also
 rejected by Codex Security scan `ae807f50-4ceb-4412-94f2-03e8e311bff3`
@@ -226,6 +229,16 @@ rejected by Codex Security scan `ae807f50-4ceb-4412-94f2-03e8e311bff3`
 It did not bind execution to one immutable repository snapshot, derived backup
 metadata from unrelated clocks/LSNs, published before its real negative and
 final-cleanup boundary, and let draft evidence reach promotion authorization.
+
+Codex Security scan 8852 of the replacement was explicitly canceled by the
+user before final reportability/severity and is not a security PASS. Preserve
+its deferred validation risk for the next security wave: a safe no-effect
+fixture returned `published=true`, `strictParserRejected=true` and
+`promotionEffectCount=1` after the terminal handoff path published
+`BackupEvidenceV1` bytes whose `inventory.canonicalSha256` did not match their
+entries, while a self-consistent triad reached the promotion parser's injected
+effect. This is a deferred evidence-integrity observation, not a vulnerability
+or severity classification and not a claim that the production path is fixed.
 
 This is local credential-free author evidence only. It uses no production
 Spaces, GHCR, DNS, SSH or live Coston2 credential and proves no hosted/VDS
@@ -782,16 +795,18 @@ Upstream Coston2 outage блокирует release. Override возможен т
   восстанавливайте подтверждённый WAL/base-backup PITR в новый PostgreSQL
   volume, проверяйте его и только затем выполняйте явное переключение.
 - 027C candidate `1218e589` / `f0d6e325` rejected by both verifiers and is not
-  recovery evidence. Corrective positive-evidence RED is frozen; replacement
-  production implementation, local MinIO gate and two independent verification
-  waves remain pending. Droplet backup не считается database restore evidence.
+  recovery evidence. Its replacement is local production-author GREEN and the
+  MinIO recovery gate passes, but two independent verification waves remain
+  pending. Scan 8852 was user-canceled and is not a security PASS; retain its
+  deferred inventory-digest/promotion-parser validation risk. Droplet backup не
+  считается database restore evidence.
 - ADR 0037 замораживает WAL-G v3.0.8, custom official PostgreSQL 17.6 Debian
   image, encrypted prefix
   `s3://<bucket>/proofline/v1/<slot>/<systemIdentifier>`, daily 02:00 UTC base
   backup, eight retained FULL chains and paused exact-time recovery. Эти
-  image/asset locks and archive services remain implemented, but local recovery
-  evidence is rejected until the corrective handoff reaches GREEN and both
-  independent verifiers PASS; это не hosted evidence.
+  image/asset locks and archive services remain implemented. The corrective
+  handoff is production-author GREEN, but local recovery evidence is not
+  accepted until both independent verifiers PASS; это не hosted evidence.
 - Production restore authority — только exact completed backup evidence,
   backup ID, UTC target и numeric timeline; `LATEST` запрещён. Restore всегда
   пишет в новый пустой volume и остаётся paused/in-recovery. `pg_promote`

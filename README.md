@@ -83,8 +83,16 @@ blockchain-операций.
   synthetic, PASS publication was premature and draft evidence could reach
   promotion. Corrective tests/docs-only RED freezes private source snapshots,
   exact WAL-G detail metadata, a terminal canonical three-file handoff and V2
-  authorization bound to handoff plus restore; replacement production GREEN
-  and two new reviews are pending.
+  authorization bound to handoff plus restore. The replacement is now local
+  credential-free production-author GREEN: focused recovery contracts, the
+  unified matrix, real PostgreSQL, two offline builds and Docker 027A/027B/027C
+  gates passed, with exact scoped cleanup. This is not a security PASS. Codex
+  Security scan 8852 was canceled by the user before final
+  reportability/severity. Its deferred validation risk remains open: a safe
+  no-effect fixture published terminal handoff backup bytes whose
+  `inventory.canonicalSha256` did not match their entries; the strict parser
+  rejected them, while the promotion parser reached its injected effect with
+  the self-consistent triad. Two independent reviews are still pending.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
@@ -151,14 +159,16 @@ ports и Docker socket не публикуются.
 Репозиторий содержит независимо проверенные replacement 027A и Slice 027B.
 027B Core и Product verification PASS exact commit `527c561` / tree
 `ebdf648`; это локальное credential-free evidence, не actual-worker или hosted
-evidence. ADR 0037 и Slice 027C имеют frozen corrective RED после того, как оба
-verifier отклонили exact `1218e589` / `f0d6e325` из-за отсутствующего positive
-restore-evidence handoff и ложной producer identity. До replacement GREEN и
-двух новых PASS это не accepted recovery evidence. Stash `ccccf5d2` также
-отклонён scan `ae807f50`; frozen correction требует immutable source snapshot,
-lossless WAL-G metadata, terminal `RecoveryEvidenceHandoffV1` и
-`RestorePromotionAuthorizationV2`. 028A–029B по-прежнему
-владеют release и production promotion.
+evidence. ADR 0037 и Slice 027C now have a local production-author GREEN
+replacement after both verifiers rejected exact `1218e589` / `f0d6e325` and
+scan `ae807f50` rejected stash `ccccf5d2`. The replacement uses an immutable
+source snapshot, lossless WAL-G metadata, terminal
+`RecoveryEvidenceHandoffV1` and `RestorePromotionAuthorizationV2`, and passed
+the focused, unified, real-PostgreSQL, offline-build and Docker A/B/C author
+gates. Scan 8852 was user-canceled and is explicitly not a security PASS; its
+deferred inventory-digest/promotion-parser validation risk remains open. Two
+independent PASS reports are still required before 027C acceptance. 028A–029B
+по-прежнему владеют release и production promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment
 не provisioned. Sites сохраняется только как
 compatibility artifact; это больше не выбранный production host.
@@ -224,8 +234,9 @@ Web2JsonManifestV1
   one-shot checksummed migration под PostgreSQL advisory lock, persistent
   database volume, `/healthz`, `/readyz`, worker heartbeat и off-host
   WAL/base-backup PITR. Локальная credential-free 027B readiness
-  independently verified; 027C backup/recovery остаётся corrective RED
-  после rejected candidates и не имеет accepted author gate. GHCR publication,
+  independently verified; 027C backup/recovery is production-author GREEN but
+  remains unaccepted pending two independent reviews, and canceled scan 8852
+  is not a security PASS. GHCR publication,
   VDS deployment и использование production Spaces credentials ещё не
   выполнялись. Это не hosted, live-production, фактический RPO/RTO или SLA PASS.
 - Rollback разрешён только на prior schema-compatible verified remote digest,

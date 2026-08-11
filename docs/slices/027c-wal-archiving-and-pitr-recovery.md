@@ -35,14 +35,26 @@ is also rejected after Codex Security scan
 `ae807f50-4ceb-4412-94f2-03e8e311bff3`: it consumed mutable shared-worktree
 sources after separate Git identity reads, published synthetic backup metadata,
 published PASS before negatives/final cleanup, and let draft evidence reach the
-promotion authority boundary. Corrective tests/docs-only RED now freezes a
+promotion authority boundary. Corrective tests/docs-only RED freezes a
 private immutable source snapshot, lossless exact WAL-G selected metadata,
 terminal three-artifact publication and V2 authorization bound to the actual
-handoff and restore. Production correction, affected
-coverage, real PostgreSQL, offline Docker recovery and two new independent
-reviews remain pending. This status is not hosted/VDS or production Spaces
-evidence, uses no live Coston2 or deployment credential, and makes no actual
-RPO/RTO or SLA claim.
+handoff and restore. The replacement is now local credential-free
+production-author GREEN: focused 53 and static 146 cases, affected coverage,
+real PostgreSQL (22 files / 163 tests, zero skip), isolated prefetch, two
+offline builds, Docker 027A/027B/027C and the unified author matrix passed with
+exact cleanup. Two independent reviews remain pending.
+
+Codex Security scan 8852 was canceled by the user before final
+reportability/severity and is explicitly not a security PASS. Deferred
+validation risk `PL-027C-HANDOFF-INVENTORY-DIGEST` / sibling
+`C8852-CONTRACTS-002` remains open: a safe no-effect fixture observed
+`published=true`, `strictParserRejected=true` and `promotionEffectCount=1`
+when terminal handoff backup bytes carried an inventory digest inconsistent
+with their entries and a self-consistent triad reached the promotion parser's
+injected effect. This is not labeled a vulnerability or severity and is not
+claimed fixed. This status is not hosted/VDS or production Spaces evidence,
+uses no live Coston2 or deployment credential, and makes no actual RPO/RTO or
+SLA claim.
 
 ## Delivery split
 

@@ -31,7 +31,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Complete; independently verified on `527c561` / `ebdf648` |
 | 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Complete; independently verified on `527c561` / `ebdf648` |
 | 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Complete; independently verified on `527c561` / `ebdf648` |
-| 027C | WAL/base-backup PITR and local MinIO restore drill | Security corrective RED frozen after scan ae807f50; production correction pending |
+| 027C | WAL/base-backup PITR and local MinIO restore drill | Local production-author GREEN; two independent reviews pending; scan 8852 user-canceled/not a PASS with deferred evidence-integrity validation risk |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
 | 029A | Local MLP validation and candidate freeze | Planned, credential-free |

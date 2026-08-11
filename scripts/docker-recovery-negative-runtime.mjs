@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { runBoundedRecoveryChild } from "./recovery-async-child.mjs";
 import { selectCredentialFreeNegativeChildEnvironment } from "./recovery-gate-environment.mjs";
 import { observeFutureTargetParentTerminalFailure } from "./recovery-future-target-parent-probe.mjs";
+import { canonicalJson } from "./backup-evidence-validation.mjs";
 import {
   createRecoveryNegativeParentObserver,
   createRecoveryNegativeProbeIdentity,
@@ -41,43 +42,6 @@ function cleanResult() {
   return { containers: 0, networks: 0, volumes: 0, temporaryPaths: 0 };
 }
 
-function promotionEvidence() {
-  return {
-    version: "1",
-    kind: "pitr-restore-drill",
-    producer: {
-      commitSha: "a".repeat(40),
-      treeSha: "b".repeat(40),
-      postgresImageDigest: `sha256:${"c".repeat(64)}`,
-      walGVersion: "v3.0.8",
-    },
-    sourceBackupEvidenceSha256: `sha256:${"d".repeat(64)}`,
-    target: {
-      targetTime: "2026-08-10T00:00:00.000000Z",
-      inclusive: true,
-      timeline: 1,
-    },
-    restore: {
-      sourceVolumeIdentitySha256: `sha256:${"e".repeat(64)}`,
-      restoreVolumeIdentitySha256: `sha256:${"f".repeat(64)}`,
-      paused: true,
-      inRecovery: true,
-      promoted: false,
-    },
-    checks: {
-      systemIdentifierMatches: true,
-      schemaVersion: 10,
-      migrationChecksums: 10,
-      beforeCutPresent: true,
-      afterCutAbsent: true,
-      inventorySha256Matches: true,
-    },
-    startedAt: "2026-08-10T00:00:00.000000Z",
-    completedAt: "2026-08-10T00:01:00.000000Z",
-    status: "passed",
-  };
-}
-
 export function createDockerRecoveryNegativeRuntime({
   root,
   project,
@@ -102,6 +66,16 @@ export function createDockerRecoveryNegativeRuntime({
     negativeChildEnvironment,
   );
   const states = new Map();
+
+  if (
+    typeof positive.backupEvidencePath !== "string" ||
+    typeof positive.restoreEvidencePath !== "string" ||
+    typeof positive.handoffReceiptPath !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/.test(positive.restoreEvidenceSha256 ?? "") ||
+    !/^sha256:[a-f0-9]{64}$/.test(positive.handoffReceiptSha256 ?? "")
+  ) {
+    throw new TypeError("A positive recovery evidence handoff is required");
+  }
 
   async function runDocker(args, signal, { allowFailure = false, input } = {}) {
     const result = await runBoundedRecoveryChild({
@@ -142,19 +116,87 @@ export function createDockerRecoveryNegativeRuntime({
     ], signal, { input, allowFailure });
   }
 
+  function recoverySecretMounts(state) {
+    return [
+      "--mount",
+      `type=bind,src=${paths.backup_reader_access_key_id},dst=/run/secrets/backup_reader_access_key_id,readonly`,
+      "--mount",
+      `type=bind,src=${paths.backup_reader_secret_access_key},dst=/run/secrets/backup_reader_secret_access_key,readonly`,
+      "--mount",
+      `type=bind,src=${state.encryptionKeyPath ?? paths.backup_encryption_key},dst=/run/secrets/backup_encryption_key,readonly`,
+    ];
+  }
+
+  function recoveryEnvironmentArguments(state) {
+    const values = {
+      PGDATA: "/var/lib/postgresql/data",
+      PROOFLINE_BACKUP_SLOT: "qa",
+      PROOFLINE_BACKUP_ENDPOINT: "http://minio:9000",
+      PROOFLINE_BACKUP_REGION: "us-east-1",
+      PROOFLINE_BACKUP_BUCKET: "proofline-recovery-qa",
+      PROOFLINE_BACKUP_QA: "true",
+      PROOFLINE_BACKUP_SYSTEM_IDENTIFIER: state.systemIdentifier,
+      PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE: "/run/secrets/backup_encryption_key",
+      PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE:
+        "/run/secrets/backup_reader_access_key_id",
+      PROOFLINE_BACKUP_READER_SECRET_ACCESS_KEY_FILE:
+        "/run/secrets/backup_reader_secret_access_key",
+      PROOFLINE_RESTORE_BACKUP_ID: state.backupId,
+      PROOFLINE_RESTORE_BACKUP_EVIDENCE_SHA256: state.backupEvidenceSha256,
+      PROOFLINE_RECOVERY_TARGET_TIME: state.targetTime,
+      PROOFLINE_RECOVERY_TARGET_TIMELINE: state.timeline,
+      recovery_target_inclusive: "on",
+      recovery_target_action: "pause",
+      recovery_target_timeline: state.timeline,
+    };
+    return Object.entries(values).flatMap(([name, value]) => [
+      "--env",
+      `${name}=${value}`,
+    ]);
+  }
+
+  async function prepareRestoreVolume(state, signal) {
+    await runDocker([
+      "run", "--rm", "--pull", "never", "--network",
+      `${project}_recovery_internal`, "--platform", "linux/amd64",
+      "--user", "999:999", "--read-only", "--tmpfs",
+      "/tmp:size=32m,mode=1777", "--mount",
+      `type=volume,src=${state.restoreVolume},dst=/var/lib/postgresql/data`,
+      ...recoverySecretMounts(state),
+      ...recoveryEnvironmentArguments(state),
+      environment.PROOFLINE_POSTGRES_IMAGE,
+      "/usr/local/bin/proofline-pitr-fetch.sh",
+    ], signal);
+  }
+
   async function preparePromotion(state, mismatch) {
-    state.restoreEvidencePath = join(state.directory, "restore-evidence.json");
+    const backupEvidenceBytes = await readFile(positive.backupEvidencePath);
+    const restoreEvidenceBytes = await readFile(positive.restoreEvidencePath);
+    const handoffReceiptBytes = await readFile(positive.handoffReceiptPath);
+    if (sha256(restoreEvidenceBytes) !== positive.restoreEvidenceSha256) {
+      throw new Error("Positive restore evidence identity does not match");
+    }
+    if (sha256(handoffReceiptBytes) !== positive.handoffReceiptSha256) {
+      throw new Error("Positive recovery handoff identity does not match");
+    }
+    state.backupEvidencePath = positive.backupEvidencePath;
+    state.restoreEvidencePath = positive.restoreEvidencePath;
+    state.handoffReceiptPath = positive.handoffReceiptPath;
+    state.restoreEvidenceSha256 = positive.restoreEvidenceSha256;
+    state.handoffReceiptSha256 = positive.handoffReceiptSha256;
+    state.backupEvidenceSha256 = sha256(backupEvidenceBytes);
     state.authorizationPath = join(state.directory, "authorization.json");
-    state.currentTime = new Date().toISOString();
-    await writeFile(state.restoreEvidencePath, JSON.stringify(promotionEvidence()), {
-      mode: 0o600,
-    });
+    state.currentTime = canonicalMicroseconds(new Date());
     if (mismatch) {
       const now = new Date(state.currentTime);
-      await writeFile(state.authorizationPath, JSON.stringify({
-        version: "1",
+      const mismatchedRestoreEvidenceSha256 = sha256(
+        `mismatch:${positive.restoreEvidenceSha256}`,
+      );
+      await writeFile(state.authorizationPath, canonicalJson({
+        version: "2",
         kind: "restore-promotion-authorization",
-        restoreDrillEvidenceSha256: `sha256:${"1".repeat(64)}`,
+        recoveryEvidenceHandoffSha256: positive.handoffReceiptSha256,
+        restoreDrillEvidenceSha256: mismatchedRestoreEvidenceSha256,
         operator: "operator_corrective027c00",
         authorizedAt: canonicalMicroseconds(new Date(now.getTime() - 1_000)),
         expiresAt: canonicalMicroseconds(new Date(now.getTime() + 60_000)),
@@ -220,8 +262,14 @@ export function createDockerRecoveryNegativeRuntime({
       try { await access(state.authorizationPath); return false; }
       catch { return true; }
     }
-    const bytes = await readFile(state.authorizationPath, "utf8");
-    return bytes.includes(`sha256:${"1".repeat(64)}`);
+    const authorization = JSON.parse(
+      await readFile(state.authorizationPath, "utf8"),
+    );
+    return authorization.version === "2" &&
+      authorization.recoveryEvidenceHandoffSha256 ===
+        positive.handoffReceiptSha256 &&
+      authorization.restoreDrillEvidenceSha256 !==
+        positive.restoreEvidenceSha256;
   }
 
   async function inspectContainerIdentity(identity, signal) {
@@ -235,15 +283,55 @@ export function createDockerRecoveryNegativeRuntime({
       labels?.["com.docker.compose.service"] === identity.serviceName;
   }
 
+  async function inspectRestoreVolumeBinding(identity, signal) {
+    const inspected = await runDocker([
+      "inspect", "--format", "{{json .Mounts}}", identity.containerName,
+    ], signal, { allowFailure: true });
+    if (inspected.exitCode !== 0) return false;
+    let mounts;
+    try { mounts = JSON.parse(inspected.stdout.trim()); } catch { return false; }
+    return Array.isArray(mounts) && mounts.some((mount) =>
+      mount.Type === "volume" &&
+      mount.Name === identity.restoreVolume &&
+      mount.Destination === "/var/lib/postgresql/data");
+  }
+
+  async function observeMissingWalTerminalFailure(state, identity, signal) {
+    if (
+      !await inspectContainerIdentity(identity, signal) ||
+      !await inspectRestoreVolumeBinding(identity, signal)
+    ) return false;
+    const inspected = await runDocker([
+      "inspect", "--format", "{{json .State}}", identity.containerName,
+    ], signal, { allowFailure: true });
+    const logs = await runDocker(["logs", identity.containerName], signal, {
+      allowFailure: true,
+    });
+    if (inspected.exitCode !== 0 || logs.exitCode !== 0) return false;
+    let containerState;
+    try { containerState = JSON.parse(inspected.stdout.trim()); }
+    catch { return false; }
+    const walSegment = state.objectKey.split("/").at(-1).replace(/\.lz4$/, "");
+    return containerState?.Status === "exited" &&
+      Number.isSafeInteger(containerState?.ExitCode) &&
+      containerState.ExitCode !== 0 &&
+      `${logs.stdout}${logs.stderr}`.includes(walSegment);
+  }
+
   async function inspectRecoverySink(state, identity, signal) {
     if (state.caseId.startsWith("promotion-authorization-")) {
       let promotions = 0;
       let code;
       try {
         await authorizeRestorePromotion({
-          restoreEvidencePath: state.restoreEvidencePath,
-          authorizationPath: state.authorizationPath,
-          currentTime: new Date(state.currentTime),
+          handoffReceiptBytes: await readFile(state.handoffReceiptPath),
+          expectedHandoffReceiptSha256: state.handoffReceiptSha256,
+          backupEvidenceBytes: await readFile(state.backupEvidencePath),
+          restoreEvidenceBytes: await readFile(state.restoreEvidencePath),
+          authorizationBytes: await readFile(state.authorizationPath).catch(
+            (cause) => cause?.code === "ENOENT" ? undefined : Promise.reject(cause),
+          ),
+          now: state.currentTime,
           run() { promotions += 1; },
         });
       } catch (cause) {
@@ -252,7 +340,13 @@ export function createDockerRecoveryNegativeRuntime({
       state.parentPromotionAttempts = promotions;
       return promotions === 0 && code === state.expectedFailureCode;
     }
-    if (!await inspectContainerIdentity(identity, signal)) return false;
+    if (state.caseId === "missing-wal-object") {
+      return observeMissingWalTerminalFailure(state, identity, signal);
+    }
+    if (
+      !await inspectContainerIdentity(identity, signal) ||
+      !await inspectRestoreVolumeBinding(identity, signal)
+    ) return false;
     if (state.caseId === "future-recovery-target") {
       return observeFutureTargetParentTerminalFailure({
         identity,
@@ -267,11 +361,6 @@ export function createDockerRecoveryNegativeRuntime({
       allowFailure: true,
     });
     const output = `${logs.stdout}${logs.stderr}`;
-    if (state.caseId === "missing-wal-object") {
-      const walSegment = state.objectKey.split("/").at(-1).replace(/\.lz4$/, "");
-      return status.exitCode === 0 && status.stdout.trim() === "exited" &&
-        output.includes(walSegment);
-    }
     if (["reused-restore-volume", "nonempty-restore-volume"].includes(
       state.caseId,
     )) {
@@ -301,11 +390,7 @@ export function createDockerRecoveryNegativeRuntime({
       }) ? 0 : 1;
     }
     if (state.caseId === "missing-wal-object") {
-      const logs = await runDocker(["logs", identity.containerName], signal, {
-        allowFailure: true,
-      });
-      const walSegment = state.objectKey.split("/").at(-1).replace(/\.lz4$/, "");
-      return logs.exitCode === 0 && logs.stdout.concat(logs.stderr).includes(walSegment)
+      return await observeMissingWalTerminalFailure(state, identity, signal)
         ? 0
         : 1;
     }
@@ -353,7 +438,7 @@ export function createDockerRecoveryNegativeRuntime({
       if (id === "missing-wal-object" || id === "corrupt-backup-object") {
         const entry = id === "missing-wal-object"
           ? positive.evidence.inventory.entries.find(({ key }) =>
-              key.startsWith("wal_005/") && key.includes(positive.beforeWal))
+              key.startsWith("wal_005/") && key.includes(positive.afterWal))
           : positive.evidence.inventory.entries.find(({ key }) =>
               key.startsWith("basebackups_005/") && key.endsWith("/part_001.tar.lz4"));
         if (!entry) throw new Error("Required recovery object is absent");
@@ -363,6 +448,7 @@ export function createDockerRecoveryNegativeRuntime({
           `recovery/proofline-recovery-qa/negative-fixtures/${caseProject}`;
         await minio(["cp", objectTarget(entry.key), state.objectBackupTarget], signal);
         if (id === "missing-wal-object") {
+          await prepareRestoreVolume(state, signal);
           await minio(["rm", "--force", objectTarget(entry.key)], signal);
         } else {
           const corruptBytes = Buffer.from("corrupt-backup", "utf8");

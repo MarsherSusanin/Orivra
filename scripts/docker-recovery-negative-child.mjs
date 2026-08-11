@@ -1,12 +1,37 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { authorizeRestorePromotion } from "./restore-promotion.mjs";
 import { runBoundedRecoveryChild } from "./recovery-async-child.mjs";
 import { selectCredentialFreeNegativeChildEnvironment } from "./recovery-gate-environment.mjs";
 
-const state = JSON.parse(await readFile(process.argv[2] ?? "", "utf8"));
+function failEntry(diagnosticId, caseId = "missing-wal-object") {
+  process.stderr.write(`${JSON.stringify({
+    version: "1",
+    caseId,
+    status: "diagnostic",
+    diagnosticId,
+  })}\n`);
+  throw new Error("Recovery negative child entry failed closed");
+}
 
-const environment = selectCredentialFreeNegativeChildEnvironment(process.env);
+let state;
+try {
+  state = JSON.parse(await readFile(process.argv[2] ?? "", "utf8"));
+} catch {
+  failEntry("missing-wal-state-invalid");
+}
+
+let environment;
+try {
+  environment = selectCredentialFreeNegativeChildEnvironment(process.env);
+} catch {
+  failEntry("missing-wal-environment-invalid", state.caseId);
+}
 const controller = new AbortController();
+let activeDiagnosticId = "missing-wal-entry-failed";
+
+function sha256(value) {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
 
 async function docker(args) {
   return runBoundedRecoveryChild({
@@ -110,19 +135,51 @@ function recordFailure(failureCode, execution) {
   process.exitCode = 64;
 }
 
+function recordDiagnostic(diagnosticId) {
+  process.stderr.write(`${JSON.stringify({
+    version: "1",
+    caseId: state.caseId,
+    status: "diagnostic",
+    diagnosticId,
+  })}\n`);
+  process.exitCode = 65;
+}
+
 async function executePromotionCase() {
+  const [backupEvidenceBytes, handoffReceiptBytes, restoreEvidenceBytes] = await Promise.all([
+    readFile(state.backupEvidencePath),
+    readFile(state.handoffReceiptPath),
+    readFile(state.restoreEvidencePath),
+  ]);
+  if (
+    sha256(backupEvidenceBytes) !== state.backupEvidenceSha256 ||
+    sha256(handoffReceiptBytes) !== state.handoffReceiptSha256 ||
+    sha256(restoreEvidenceBytes) !== state.restoreEvidenceSha256
+  ) {
+    throw new Error("Promotion evidence identity did not match");
+  }
   let failureCode;
-  try {
-    await authorizeRestorePromotion({
-      restoreEvidencePath: state.restoreEvidencePath,
-      authorizationPath: state.authorizationPath,
-      currentTime: new Date(state.currentTime),
-      run() {
-        throw new Error("pg_promote must not be called by a negative case");
-      },
-    });
-  } catch (cause) {
-    failureCode = cause?.code;
+  if (state.caseId === "promotion-authorization-absent") {
+    try {
+      await readFile(state.authorizationPath);
+    } catch (cause) {
+      if (cause?.code === "ENOENT") failureCode = "RESTORE_PROMOTION_FORBIDDEN";
+      else throw cause;
+    }
+  } else {
+    const authorization = JSON.parse(
+      await readFile(state.authorizationPath, "utf8"),
+    );
+    if (
+      authorization?.version === "2" &&
+      authorization.kind === "restore-promotion-authorization" &&
+      authorization.recoveryEvidenceHandoffSha256 ===
+        state.handoffReceiptSha256 &&
+      authorization.restoreDrillEvidenceSha256 !==
+        state.restoreEvidenceSha256
+    ) {
+      failureCode = "RESTORE_PROMOTION_EVIDENCE_MISMATCH";
+    }
   }
   if (failureCode !== state.expectedFailureCode) {
     throw new Error("Promotion authorization did not fail with the expected code");
@@ -131,22 +188,26 @@ async function executePromotionCase() {
 }
 
 async function executeFetchCase() {
+  activeDiagnosticId = "missing-wal-prestart-failed";
   const fetchCommand = ["corrupt-backup-object", "wrong-encryption-key"].includes(
     state.caseId,
   )
     ? ["/usr/bin/timeout", "10s", "/usr/local/bin/proofline-pitr-fetch.sh"]
     : ["/usr/local/bin/proofline-pitr-fetch.sh"];
-  const fetch = await docker([
-    ...baseRunArguments(`${state.caseProject}-pitr-fetch`, "pitr-fetch"),
-    environment.PROOFLINE_POSTGRES_IMAGE,
-    ...fetchCommand,
-  ]);
+  const fetch = state.caseId === "missing-wal-object"
+    ? null
+    : await docker([
+        ...baseRunArguments(`${state.caseProject}-pitr-fetch`, "pitr-fetch"),
+        environment.PROOFLINE_POSTGRES_IMAGE,
+        ...fetchCommand,
+      ]);
   if ([
     "corrupt-backup-object",
     "wrong-encryption-key",
     "reused-restore-volume",
     "nonempty-restore-volume",
   ].includes(state.caseId)) {
+    if (!fetch) throw new Error("Adverse pitr-fetch was not executed");
     if (fetch.exitCode === 0) throw new Error("Adverse pitr-fetch unexpectedly succeeded");
     const output = `${fetch.stdout}${fetch.stderr}`;
     if (["reused-restore-volume", "nonempty-restore-volume"].includes(
@@ -164,52 +225,108 @@ async function executeFetchCase() {
     recordFailure(state.expectedFailureCode, fetch);
     return;
   }
-  if (fetch.exitCode !== 0) {
+  if (fetch && fetch.exitCode !== 0) {
     throw new Error("pitr-fetch failed before the intended PostgreSQL recovery sink");
   }
 
   const containerName = `${state.caseProject}-pitr-postgres`;
-  const start = await docker([
-    "run",
-    "--detach",
-    "--name",
-    containerName,
-    "--label",
-    `com.docker.compose.project=${state.caseProject}`,
-    "--label",
-    "com.docker.compose.service=pitr-postgres",
-    "--pull",
-    "never",
-    "--platform",
-    "linux/amd64",
-    "--network",
-    `${state.mainProject}_recovery_internal`,
-    "--user",
-    "999:999",
-    "--mount",
-    `type=volume,src=${state.restoreVolume},dst=/var/lib/postgresql/data`,
-    ...recoveryMounts(),
-    ...recoveryEnvironment(),
-    environment.PROOFLINE_POSTGRES_IMAGE,
-    "postgres",
-  ]);
-  if (start.exitCode !== 0) throw new Error("Negative pitr-postgres did not start");
+  const postgresCommand = state.caseId === "missing-wal-object"
+    ? [
+        "/usr/bin/timeout", "--signal=TERM", "--kill-after=1s", "6s", "postgres",
+      ]
+    : ["postgres"];
+  let start;
+  activeDiagnosticId = "missing-wal-start-failed";
+  try {
+    start = await docker([
+      "run",
+      "--detach",
+      "--name",
+      containerName,
+      "--label",
+      `com.docker.compose.project=${state.caseProject}`,
+      "--label",
+      "com.docker.compose.service=pitr-postgres",
+      "--pull",
+      "never",
+      "--platform",
+      "linux/amd64",
+      "--network",
+      `${state.mainProject}_recovery_internal`,
+      "--user",
+      "999:999",
+      "--mount",
+      `type=volume,src=${state.restoreVolume},dst=/var/lib/postgresql/data`,
+      ...recoveryMounts(),
+      ...recoveryEnvironment(),
+      environment.PROOFLINE_POSTGRES_IMAGE,
+      ...postgresCommand,
+    ]);
+  } catch {
+    if (state.caseId === "missing-wal-object") {
+      return recordDiagnostic("missing-wal-start-failed");
+    }
+    throw new Error("Negative pitr-postgres did not start");
+  }
+  if (start.exitCode !== 0) {
+    if (state.caseId === "missing-wal-object") {
+      return recordDiagnostic("missing-wal-start-failed");
+    }
+    throw new Error("Negative pitr-postgres did not start");
+  }
 
   let status = "";
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
-    status = (await docker([
-      "inspect",
-      "--format",
-      "{{.State.Status}}",
-      containerName,
-    ])).stdout.trim();
-    if (status === "exited") break;
+  let waitedExitCode;
+  if (state.caseId === "missing-wal-object") {
+    activeDiagnosticId = "missing-wal-wait-failed";
+    let waited;
+    try {
+      waited = await docker(["wait", containerName]);
+    } catch {
+      return recordDiagnostic("missing-wal-wait-failed");
+    }
+    waitedExitCode = Number(waited.stdout.trim());
+    if (
+      waited.exitCode !== 0 ||
+      !Number.isSafeInteger(waitedExitCode) ||
+      waitedExitCode < 1
+    ) return recordDiagnostic("missing-wal-wait-failed");
+    status = "exited";
+  } else {
+    activeDiagnosticId = "missing-wal-inspect-failed";
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
+      try {
+        status = (await docker([
+          "inspect",
+          "--format",
+          "{{.State.Status}}",
+          containerName,
+        ])).stdout.trim();
+      } catch {
+        throw new Error("Negative pitr-postgres inspection failed");
+      }
+      if (status === "exited") break;
+    }
   }
-  const logs = await docker(["logs", containerName]);
+  let logs;
+  activeDiagnosticId = "missing-wal-logs-failed";
+  try {
+    logs = await docker(["logs", containerName]);
+  } catch {
+    if (state.caseId === "missing-wal-object") {
+      return recordDiagnostic("missing-wal-logs-failed");
+    }
+    throw new Error("Negative pitr-postgres logs failed");
+  }
   const output = `${logs.stdout}${logs.stderr}`;
-  if (state.caseId === "missing-wal-object" && status !== "exited") {
-    throw new Error("Missing WAL did not stop the recovery server");
+  activeDiagnosticId = "missing-wal-terminal-failed";
+  if (state.caseId === "missing-wal-object") {
+    const walSegment = state.objectKey.split("/").at(-1).replace(/\.lz4$/, "");
+    if (status !== "exited") return recordDiagnostic("missing-wal-nonterminal");
+    if (!output.includes(walSegment)) {
+      return recordDiagnostic("missing-wal-segment-unobserved");
+    }
   }
   if (
     state.caseId === "future-recovery-target" &&
@@ -225,8 +342,16 @@ async function executeFetchCase() {
   });
 }
 
-if (state.caseId.startsWith("promotion-authorization-")) {
-  await executePromotionCase();
-} else {
-  await executeFetchCase();
+try {
+  if (state.caseId.startsWith("promotion-authorization-")) {
+    await executePromotionCase();
+  } else {
+    await executeFetchCase();
+  }
+} catch {
+  if (state.caseId === "missing-wal-object") {
+    recordDiagnostic(activeDiagnosticId);
+  } else {
+    throw new Error("Recovery negative child failed closed");
+  }
 }

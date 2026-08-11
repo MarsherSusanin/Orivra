@@ -2,12 +2,18 @@ import { z } from "zod";
 import {
   RestoreDrillEvidenceV1Schema,
   RestorePromotionAuthorizationV1Schema,
+  RestorePromotionAuthorizationV2Schema,
+  RecoveryEvidenceHandoffV1Schema,
+  canonicalSerializeRecoveryEvidenceHandoff,
   canonicalSerializeRestoreDrillEvidence,
 } from "./recovery-runtime.mjs";
 
 export {
   RestoreDrillEvidenceV1Schema,
   RestorePromotionAuthorizationV1Schema,
+  RestorePromotionAuthorizationV2Schema,
+  RecoveryEvidenceHandoffV1Schema,
+  canonicalSerializeRecoveryEvidenceHandoff,
   canonicalSerializeRestoreDrillEvidence,
 };
 
@@ -32,7 +38,11 @@ const ProducerSchema = z
     postgresImageDigest: Sha256Schema,
     walGVersion: z.literal("v3.0.8"),
   })
-  .strict();
+  .strict()
+  .refine((value) => value.commitSha !== value.treeSha, {
+    path: ["treeSha"],
+    message: "Producer commit and tree identities must be distinct.",
+  });
 
 const DatabaseSchema = z
   .object({
@@ -205,6 +215,14 @@ export type RestorePromotionAuthorizationV1 = z.infer<
   typeof RestorePromotionAuthorizationV1Schema
 >;
 
+export type RestorePromotionAuthorizationV2 = z.infer<
+  typeof RestorePromotionAuthorizationV2Schema
+>;
+
+export type RecoveryEvidenceHandoffV1 = z.infer<
+  typeof RecoveryEvidenceHandoffV1Schema
+>;
+
 type JsonValue = null | boolean | number | string | JsonValue[] | {
   [key: string]: JsonValue;
 };
@@ -308,4 +326,8 @@ export function checksumBackupEvidence(value: unknown): string {
 
 export function checksumRestoreDrillEvidence(value: unknown): string {
   return `sha256:${sha256Hex(canonicalSerializeRestoreDrillEvidence(value))}`;
+}
+
+export function checksumRecoveryEvidenceHandoff(value: unknown): string {
+  return `sha256:${sha256Hex(canonicalSerializeRecoveryEvidenceHandoff(value))}`;
 }
