@@ -106,3 +106,9 @@ missing caller-owned evidence root. The next corrective RED contract assigns
 one private mode-0700 directory under the candidate's owned temporary root only
 to `docker-recovery`; all other child environments remain unchanged, and the
 directory is removed by the existing exact-scoped finalizer before publication.
+
+The orchestration correction now creates that directory inside its private
+candidate temp root and assigns the path only to the retained recovery command.
+Typecheck, the exact 13-case candidate contract and the serialized 192-case
+deployment inventory pass; the failed attempt left no candidate or scoped
+Docker resources, so the next step is one clean from-scratch unified rerun.

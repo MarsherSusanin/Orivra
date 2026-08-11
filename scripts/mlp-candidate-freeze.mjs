@@ -185,6 +185,7 @@ async function main() {
     capture: join(temporaryRoot, "capture"),
     dockerConfig: join(temporaryRoot, "docker-config"),
     home: join(temporaryRoot, "home"),
+    recoveryEvidence: join(temporaryRoot, "recovery-evidence"),
     tmp: join(temporaryRoot, "tmp"),
   };
   await mkdir(stageRoot, { mode: 0o700 });
@@ -203,6 +204,7 @@ async function main() {
     releaseOutput: releaseRoot,
     walGInput: walGInputRoot,
     fixtureOutput: fixturePath,
+    recoveryEvidenceOutput: paths.recoveryEvidence,
   });
   let producer;
   let capturedWalG;

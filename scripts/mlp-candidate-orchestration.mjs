@@ -45,11 +45,16 @@ export function createCredentialFreeCandidateCommands({
   releaseOutput = "__RELEASE_OUTPUT__",
   walGInput = "__WAL_G_INPUT__",
   fixtureOutput = "__FIXTURE_OUTPUT__",
+  recoveryEvidenceOutput = "__RECOVERY_EVIDENCE_OUTPUT__",
 } = {}) {
   return gateDefinitions.map(([id, arguments_]) => Object.freeze({
     id,
     executable: "npm",
-    environment: Object.freeze(id === "postgres" ? { PROOFLINE_TESTCONTAINERS: "1" } : {}),
+    environment: Object.freeze(id === "postgres"
+      ? { PROOFLINE_TESTCONTAINERS: "1" }
+      : id === "docker-recovery"
+        ? { PROOFLINE_RECOVERY_EVIDENCE_OUTPUT_DIR: recoveryEvidenceOutput }
+        : {}),
     arguments: Object.freeze(arguments_.map((value) => {
       if (value === "__RELEASE_OUTPUT__") return releaseOutput;
       if (value === "__WAL_G_INPUT__") return walGInput;
