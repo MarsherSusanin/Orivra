@@ -2,9 +2,9 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Compatibility intentional RED after real GHCR returned a singular
-same-repository upload Location; zero images, publication evidence or staging
-effects exist.
+Status: Compatibility production-author GREEN after real GHCR returned a
+singular same-repository upload Location; fresh Core/Product verification is
+pending and zero images, publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -289,3 +289,11 @@ PASS; the exact contracts/domain/purity focus is 61/61 PASS; the exact
 GHCR/staging/roadmap focus is 34 PASS plus this one intentional RED; serialized
 deployment static is 213 PASS plus the same intentional RED; Sites
 compatibility is 46/46 PASS.
+
+The production-author correction changes only the upload-Location parser. It
+accepts the retained exact plural and the observed exact singular same-origin,
+default-443, same-repository prefix with one non-empty non-nested opaque ID.
+Every frozen authority/path negative remains fail-closed. Post-correction
+typecheck, pure focus 61/61, GHCR/staging/roadmap 35/35, serialized deployment
+static 214/214 and Sites 46/46 PASS. Publication remains paused until two fresh
+independent verifiers PASS one exact replacement tree.

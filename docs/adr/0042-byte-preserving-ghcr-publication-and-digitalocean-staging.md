@@ -1,6 +1,6 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; compatibility RED after real GHCR singular upload Location; zero images/evidence/staging
+- Status: Accepted contract; singular GHCR Location production-author GREEN; fresh Core/Product verification pending; zero images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 

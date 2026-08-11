@@ -24,8 +24,13 @@ function requireSameRegistryLocation(value) {
 function requireUploadLocation(value, remoteRepository) {
   const url = requireSameRegistryLocation(value);
   const path = repositoryPath(remoteRepository);
-  const prefix = `/v2/${path}/blobs/uploads/`;
-  if (!url.pathname.startsWith(prefix) || url.pathname.length === prefix.length) fail();
+  const prefix = [
+    `/v2/${path}/blobs/uploads/`,
+    `/v2/${path}/blobs/upload/`,
+  ].find((candidate) => url.pathname.startsWith(candidate));
+  if (!prefix) fail();
+  const opaqueId = url.pathname.slice(prefix.length);
+  if (opaqueId.length === 0 || opaqueId.includes("/")) fail();
   return url;
 }
 

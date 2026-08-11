@@ -131,8 +131,10 @@ blockchain-операций.
   diagnostic reached blob-upload `POST` 202 but exposed GHCR's singular
   same-repository `/blobs/upload/<opaque-id>` Location, while the adapter froze
   only plural `/blobs/uploads/`. It failed closed on Caddy: zero image IDs,
-  publication evidence and staging effects. The compatibility correction is
-  intentional RED and requires two fresh same-tree verifier PASS reports.
+  publication evidence and staging effects. The narrow production-author
+  correction now accepts only the exact singular and retained plural
+  same-repository forms; focused gates pass and two fresh same-tree verifier
+  PASS reports are pending before publication resumes.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

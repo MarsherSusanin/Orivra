@@ -719,9 +719,10 @@ commit `70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
 then reached GHCR blob-upload `POST` 202 and returned relative singular
 `/v2/marshersusanin/orivra-caddy/blobs/upload/<opaque-id>`. The adapter failed
 closed because it froze only plural `blobs/uploads`; zero images and no PASS
-evidence/staging were produced. Do not retry publication until this narrow
-compatibility correction and two fresh same-tree verifier reports PASS. Use a
-separate classic token with only `read:packages` on the VDS after publication.
+evidence/staging were produced. The narrow production-author correction now
+passes focused gates, but publication remains paused until two fresh same-tree
+verifier reports PASS. Use a separate classic token with only `read:packages`
+on the VDS after publication.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now

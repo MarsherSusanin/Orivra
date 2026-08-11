@@ -352,9 +352,10 @@ Core and Product independently PASS exact commit
 `88ec38335ab9630e1fd8c4d5247101bd046f06eb`. A later authenticated real GHCR
 diagnostic reached upload `POST` 202 and returned singular same-repository
 `/blobs/upload/<opaque-id>`; the adapter accepted only assumed plural
-`/blobs/uploads/` and failed closed. Compatibility correction invalidates the
-prior code-verifier passes. No image, publication/staging PASS evidence,
-hosted or deployed claim exists.
+`/blobs/uploads/` and failed closed. The narrow production-author correction
+accepts both exact forms without widening host, port, repository or path
+authority; focused gates pass and fresh Core/Product verification is pending.
+No image, publication/staging PASS evidence, hosted or deployed claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

@@ -1,9 +1,9 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Compatibility corrective RED after a real GHCR diagnostic exposed the
-singular same-repository upload Location; zero images, publication evidence or
-staging effects exist. Prior Core/Product PASS `70f63cb` / `88ec383` covers the
-superseded adapter bytes and must be repeated after production correction.
+Status: Singular GHCR Location production-author GREEN after a real diagnostic;
+zero images, publication evidence or staging effects exist. Prior Core/Product
+PASS `70f63cb` / `88ec383` covers superseded adapter bytes; fresh same-tree
+verification is pending before publication resumes.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 
@@ -131,3 +131,9 @@ accepted only the assumed plural `blobs/uploads` form and failed closed on
 Caddy. Compatibility RED adds only that exact singular default-443 same-repo
 form and preserves every redirect/authority rejection. Published image IDs,
 publication evidence and staging remain empty.
+
+The production-author correction accepts only the exact retained plural and
+observed singular same-origin/default-443/same-repository forms with one
+non-empty non-nested opaque ID. Typecheck, pure 61/61, focused 35/35,
+deployment static 214/214 and Sites 46/46 PASS. Fresh Core/Product verification
+is required before another credentialed attempt.
