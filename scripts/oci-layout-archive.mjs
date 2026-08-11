@@ -76,6 +76,18 @@ async function hashRegularFile(path, expectedSize, expectedDigest) {
   }
 }
 
+async function requireRegularFile(path) {
+  const metadata = await lstat(path);
+  if (!metadata.isFile() || metadata.isSymbolicLink()) fail();
+  return metadata;
+}
+
+async function requireDirectory(path) {
+  const metadata = await lstat(path);
+  if (!metadata.isDirectory() || metadata.isSymbolicLink()) fail();
+  return metadata;
+}
+
 async function loadVerifiedLayout(layoutRoot) {
   if (typeof layoutRoot !== "string" || !isAbsolute(layoutRoot) || layoutRoot.includes("\0")) fail();
   const rootMetadata = await lstat(layoutRoot);
@@ -87,10 +99,14 @@ async function loadVerifiedLayout(layoutRoot) {
     const metadata = await lstat(ingest);
     if (!metadata.isDirectory() || metadata.isSymbolicLink() || (await readdir(ingest)).length !== 0) fail();
   }
-  const layoutBytes = await readFile(join(layoutRoot, "oci-layout"));
+  const layoutPath = join(layoutRoot, "oci-layout");
+  const indexPath = join(layoutRoot, "index.json");
+  await requireRegularFile(layoutPath);
+  await requireRegularFile(indexPath);
+  const layoutBytes = await readFile(layoutPath);
   if (!layoutBytes.equals(Buffer.from('{"imageLayoutVersion":"1.0.0"}'))) fail();
 
-  const rawIndex = parseJson(await readFile(join(layoutRoot, "index.json")));
+  const rawIndex = parseJson(await readFile(indexPath));
   const descriptor = rawIndex?.manifests?.[0];
   if (!exactKeys(rawIndex, ["schemaVersion", "mediaType", "manifests"]) ||
     rawIndex.schemaVersion !== 2 || rawIndex.mediaType !== IMAGE_INDEX || rawIndex.manifests.length !== 1 ||
@@ -105,9 +121,11 @@ async function loadVerifiedLayout(layoutRoot) {
     ].includes(key)))) fail();
 
   const blobsRoot = join(layoutRoot, "blobs");
+  await requireDirectory(blobsRoot);
   const algorithms = await readdir(blobsRoot);
   if (algorithms.length !== 1 || algorithms[0] !== "sha256") fail();
   const digestRoot = join(blobsRoot, "sha256");
+  await requireDirectory(digestRoot);
   const blobNames = (await readdir(digestRoot)).sort();
   if (blobNames.some((name) => !/^[a-f0-9]{64}$/.test(name))) fail();
   const blobPath = (digest) => join(digestRoot, digest.slice(7));

@@ -1,8 +1,9 @@
 # Slice 028A RED — Offline OCI release freeze
 
-Status: Corrective RED after independent Core FAIL on exact candidate
-`5613640d3baba32ec37f9ee2ce75c3ac2c9b2c29` / tree
-`6b1d3a06d0973f9d7f33d6278e1b976f6aa577c8`; replacement pending.
+Status: Corrective production-author GREEN locally after independent Core FAIL
+on exact candidate `5613640d3baba32ec37f9ee2ce75c3ac2c9b2c29` / tree
+`6b1d3a06d0973f9d7f33d6278e1b976f6aa577c8`; final freeze and both verifiers
+pending on one replacement tree.
 
 Date: 2026-08-11 (Asia/Vladivostok)
 
@@ -159,3 +160,21 @@ PASS; package/contracts/domain 46/46 PASS; deployment 19 retained PASS plus six
 causal corrective RED; serialized static 165 retained PASS plus the same six
 RED; Sites 36/36 PASS. No Docker, network, build, credential or production
 effect ran during this corrective wave.
+
+## Corrective GREEN
+
+The replacement changes only the two release helpers. Publication records
+whether this invocation completed the atomic rename and removes the final path
+only in that case; a pre-existing caller path is never owned by its failure
+cleanup. Symlinks are unlinked directly without `chmod` or traversal. OCI
+layout verification now `lstat`-binds `blobs` and `blobs/sha256` as real
+directories and `index.json` and `oci-layout` as real regular files before any
+read or archive creation.
+
+Post-fix evidence: diff-check and typecheck PASS; focused deployment 25/25,
+including all six corrective cases; package/contracts/domain 46/46; serialized
+deployment static 171/171. The public manifest/receipt schema, five-image tuple,
+Docker inputs, dependencies and locks are unchanged. The replacement still
+requires a final real offline freeze and fresh independent Core and Product
+PASS reports on one exact committed tree; no prior output or report is reused
+as release authorization.

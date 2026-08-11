@@ -2,9 +2,11 @@
 
 ## Status
 
-Accepted contract; corrective RED. Independent Core rejected exact candidate
-`5613640` / `6b1d3a0` for caller-output cleanup and OCI control-path symlink
-authority. Replacement production and both independent verifiers are pending.
+Accepted contract; corrective production-author GREEN locally. Independent
+Core rejected exact candidate `5613640` / `6b1d3a0` for caller-output cleanup
+and OCI control-path symlink authority. The replacement preserves caller-owned
+output and `lstat`-binds every OCI control path; final freeze and both
+independent verifiers are pending on one replacement tree.
 
 ## Context
 

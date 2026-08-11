@@ -98,7 +98,11 @@ async function walk(root, prefix = "") {
 async function thawAndRemove(path) {
   const metadata = await lstat(path).catch(() => undefined);
   if (!metadata) return;
-  if (metadata.isDirectory() && !metadata.isSymbolicLink()) {
+  if (metadata.isSymbolicLink()) {
+    await rm(path, { force: true });
+    return;
+  }
+  if (metadata.isDirectory()) {
     await chmod(path, 0o700).catch(() => undefined);
     for (const entry of await readdir(path).catch(() => [])) await thawAndRemove(join(path, entry));
   } else {
@@ -113,6 +117,7 @@ export async function publishFrozenReleaseOutput({ stageRoot, outputDirectory, a
     [stageRoot, outputDirectory].some((path) => path.includes("\0") || ["", ".", ".."].includes(basename(path)))) {
     throw new Error("Release publication boundary is invalid");
   }
+  let publishedByThisCall = false;
   try {
     const stageMetadata = await lstat(stageRoot);
     if (!stageMetadata.isDirectory() || stageMetadata.isSymbolicLink()) throw new Error("Release stage is invalid");
@@ -123,6 +128,7 @@ export async function publishFrozenReleaseOutput({ stageRoot, outputDirectory, a
     for (const file of staged.files) await chmod(join(stageRoot, file), 0o400);
     for (const directory of staged.directories.reverse()) await chmod(directory, 0o500);
     await rename(stageRoot, outputDirectory);
+    publishedByThisCall = true;
     await afterRename();
     const published = await walk(outputDirectory);
     if (JSON.stringify(published.files.sort()) !== JSON.stringify(EXPECTED_OUTPUT_FILES)) {
@@ -131,7 +137,7 @@ export async function publishFrozenReleaseOutput({ stageRoot, outputDirectory, a
     return Object.freeze({ status: "passed", outputDirectory });
   } catch (cause) {
     await thawAndRemove(stageRoot).catch(() => undefined);
-    await thawAndRemove(outputDirectory).catch(() => undefined);
+    if (publishedByThisCall) await thawAndRemove(outputDirectory).catch(() => undefined);
     throw cause;
   }
 }
