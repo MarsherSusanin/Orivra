@@ -35,6 +35,7 @@ import {
 import {
   createCredentialFreeCandidateCommands,
   createCredentialFreeCandidateEnvironment,
+  materializeCandidateComposePlugin,
   removeOwnedCandidatePath,
   runCredentialFreeCandidateLifecycle,
   runCredentialFreeCandidateMatrix,
@@ -188,6 +189,7 @@ async function main() {
   for (const path of Object.values(paths)) await mkdir(path, { mode: 0o700 });
   await mkdir(join(paths.home, ".config"), { mode: 0o700 });
   await writeFile(join(paths.dockerConfig, "config.json"), '{"auths":{}}', { mode: 0o600, flag: "wx" });
+  await materializeCandidateComposePlugin({ dockerConfigDirectory: paths.dockerConfig });
   const environment = createCredentialFreeCandidateEnvironment({
     ambientEnvironment: { PATH: process.env.PATH },
     homeDirectory: paths.home,

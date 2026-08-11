@@ -33,6 +33,18 @@ Frozen classification:
 This wave changes tests and documentation only. It does not run Docker, build,
 coverage, PostgreSQL, network or credentials and does not claim 029A PASS.
 
+## Unified-run correction
+
+The first clean-tree unified run on `f2676d0` passed full unit, all three
+coverage gates, real PostgreSQL, Solidity, E2E, build, Sites and Action sync,
+then failed closed at Docker static. Its fresh no-auth `DOCKER_CONFIG` also hid
+the host's local Compose plugin, so Docker parsed Compose `-f`/`--file` as
+top-level flags and exactly twenty retained 027A/027B render controls failed.
+No candidate, release or product artifact was published. The corrective
+contract freezes one executable plugin from an exact local system-path
+allowlist inside the private Docker config while continuing to exclude the
+user config and all registry credentials.
+
 ## Production GREEN checkpoint
 
 The follow-up production wave implements the candidate contracts/domain

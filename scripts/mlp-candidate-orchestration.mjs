@@ -1,5 +1,13 @@
-import { chmod, lstat, readdir, rm, rmdir } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, realpath, rm, rmdir, symlink } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+
+export const CANDIDATE_COMPOSE_PLUGIN_PATHS = Object.freeze([
+  "/Applications/Docker.app/Contents/Resources/cli-plugins/docker-compose",
+  "/usr/local/lib/docker/cli-plugins/docker-compose",
+  "/usr/libexec/docker/cli-plugins/docker-compose",
+  "/usr/lib/docker/cli-plugins/docker-compose",
+  "/opt/homebrew/lib/docker/cli-plugins/docker-compose",
+]);
 
 const gateDefinitions = Object.freeze([
   ["typecheck", ["run", "typecheck"]],
@@ -67,6 +75,39 @@ export function createCredentialFreeCandidateEnvironment({
     TMPDIR: temporaryDirectory,
     TZ: "UTC",
     XDG_CONFIG_HOME: join(homeDirectory, ".config"),
+  });
+}
+
+export async function materializeCandidateComposePlugin({
+  dockerConfigDirectory,
+  candidatePaths = CANDIDATE_COMPOSE_PLUGIN_PATHS,
+} = {}) {
+  if (typeof dockerConfigDirectory !== "string" || !isAbsolute(dockerConfigDirectory) ||
+    dockerConfigDirectory.includes("\0") || !Array.isArray(candidatePaths) || candidatePaths.length < 1) {
+    invalid();
+  }
+  const configMetadata = await lstat(dockerConfigDirectory);
+  if (!configMetadata.isDirectory() || configMetadata.isSymbolicLink() ||
+    (configMetadata.mode & 0o777) !== 0o700) invalid();
+  for (const candidate of candidatePaths) {
+    if (typeof candidate !== "string" || !isAbsolute(candidate) || candidate.includes("\0")) invalid();
+    const metadata = await lstat(candidate).catch((cause) => {
+      if (cause?.code === "ENOENT") return undefined;
+      throw cause;
+    });
+    if (!metadata) continue;
+    if (!metadata.isFile() || metadata.isSymbolicLink() || (metadata.mode & 0o111) === 0) continue;
+    const resolved = await realpath(candidate);
+    const resolvedMetadata = await lstat(resolved);
+    if (!resolvedMetadata.isFile() || resolvedMetadata.isSymbolicLink() ||
+      (resolvedMetadata.mode & 0o111) === 0) continue;
+    const pluginDirectory = join(dockerConfigDirectory, "cli-plugins");
+    await mkdir(pluginDirectory, { mode: 0o700 });
+    await symlink(resolved, join(pluginDirectory, "docker-compose"));
+    return resolved;
+  }
+  throw Object.assign(new Error("Local Compose plugin is unavailable"), {
+    code: "MLP_CANDIDATE_INPUT_INVALID",
   });
 }
 

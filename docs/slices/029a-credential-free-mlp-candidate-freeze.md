@@ -19,7 +19,8 @@ registry access or deployment claims.
 - fresh frozen-release manifest/receipt/inventory checksums;
 - canonical checked-in template/replay expectation bytes and exact worker-
   stopped loopback Compose observation, without database import or live claim;
-- fresh no-auth child environment; no prefetch/pull/login/push/live Coston2;
+- fresh no-auth child environment with one allowlisted local Compose plugin and
+  no user Docker config; no prefetch/pull/login/push/live Coston2;
 - caller-owned 0700 parent, private staging, 0400 files, 0500 final directories,
   atomic publication and scoped no-follow cleanup;
 - final Git identity recheck immediately before publication;

@@ -34,11 +34,13 @@ journey and a fresh offline OCI freeze all agree.
    stopped. The fixture is read-only expected data: it is not imported into
    PostgreSQL, does not claim live Coston2 provenance and is not a production-
    importable test adapter.
-5. The runner constructs a fresh minimal child environment and fresh empty
-   Docker config. It never runs prefetch, pull, login, push, registry operations
-   or the live Coston2 suite. Only loopback HTTPS and Docker-local Compose
-   communication belong to the recorded product journey. This does not claim
-   daemon-global network isolation.
+5. The runner constructs a fresh minimal child environment and fresh no-auth
+   Docker config. The config exposes only one executable local Compose plugin
+   selected from the frozen system-path allowlist; it never reads the user's
+   Docker config or credential store. It never runs prefetch, pull, login, push,
+   registry operations or the live Coston2 suite. Only loopback HTTPS and
+   Docker-local Compose communication belong to the recorded product journey.
+   This does not claim daemon-global network isolation.
 6. A caller-owned absolute mode-0700 output parent and WAL-G input are required.
    The runner owns only a new absent output path and scoped ignored prefetch
    material derived from that verified input. Any failure removes only owned

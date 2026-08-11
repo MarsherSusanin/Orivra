@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -68,6 +68,41 @@ test("029A child environment is minimal, private and strips ambient credentials"
   assert.equal(JSON.stringify(environment).includes("remote.invalid"), false);
   assert.equal(JSON.stringify(environment).includes("aws"), false);
   assert.equal(JSON.stringify(environment).includes("gh"), false);
+});
+
+test("029A exposes Compose only through one verified local plugin in its private no-auth config", async () => {
+  const module = await orchestration();
+  assert.deepEqual(module.CANDIDATE_COMPOSE_PLUGIN_PATHS, [
+    "/Applications/Docker.app/Contents/Resources/cli-plugins/docker-compose",
+    "/usr/local/lib/docker/cli-plugins/docker-compose",
+    "/usr/libexec/docker/cli-plugins/docker-compose",
+    "/usr/lib/docker/cli-plugins/docker-compose",
+    "/opt/homebrew/lib/docker/cli-plugins/docker-compose",
+  ]);
+  const parent = await mkdtemp(join(tmpdir(), "proofline-029a-compose-plugin-"));
+  try {
+    const dockerConfig = join(parent, "docker-config");
+    const plugin = join(parent, "docker-compose");
+    await mkdir(dockerConfig, { mode: 0o700 });
+    await writeFile(plugin, "verified local compose plugin", { mode: 0o555 });
+    const resolved = await module.materializeCandidateComposePlugin({
+      dockerConfigDirectory: dockerConfig,
+      candidatePaths: [join(parent, "missing"), plugin],
+    });
+    const installed = join(dockerConfig, "cli-plugins/docker-compose");
+    const canonicalPlugin = await realpath(plugin);
+    assert.equal(resolved, canonicalPlugin);
+    assert.equal((await lstat(installed)).isSymbolicLink(), true);
+    assert.equal(await realpath(installed), canonicalPlugin);
+    assert.equal((await lstat(plugin)).mode & 0o777, 0o555);
+    await assert.rejects(() => module.materializeCandidateComposePlugin({
+      dockerConfigDirectory: dockerConfig,
+      candidatePaths: [join(parent, "missing")],
+    }), /Compose plugin is unavailable/);
+  } finally {
+    await chmod(parent, 0o700).catch(() => undefined);
+    await rm(parent, { recursive: true, force: true });
+  }
 });
 
 test("029A runs gates serially, records only fixed PASS ids and fails fast", async () => {
@@ -157,5 +192,6 @@ test("029A CLI source contains final identity, exact output modes and no prefetc
   assert.match(source, /frozen-release-manifest\.v1\.json/);
   assert.match(source, /credential-free-mlp-candidate\.v1\.json/);
   assert.match(source, /recorded-product-fixture\.v1\.json/);
+  assert.match(source, /materializeCandidateComposePlugin/);
   assert.doesNotMatch(source, /docker:prefetch|test:live:coston2|docker\s+(?:login|push|pull)/);
 });
