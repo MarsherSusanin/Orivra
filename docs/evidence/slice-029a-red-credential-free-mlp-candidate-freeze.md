@@ -68,3 +68,13 @@ directories behind. The correction uses `rmdir` only after the no-follow walk
 and strengthens the fixture to prove owned removal plus external symlink-target
 byte/mode preservation. The exact failed-run residues are removed separately;
 no caller-owned path is broadened into cleanup authority.
+
+The next clean-tree unified attempt passed unit, coverage, real PostgreSQL,
+Solidity, E2E, build, Sites, Action sync and all 189 static deployment cases,
+then failed closed before the first Docker build. Candidate materialization had
+placed the verified WAL-G binary and receipt directly under
+`docker/.prefetch`, while the retained offline build boundary accepts only the
+exact `docker/.prefetch/wal_g_release/{wal-g,receipt.v1.json}` context. No
+candidate, release or product artifact was published and scoped cleanup removed
+the temporary prefetch tree. The corrective RED contract freezes that retained
+nested context and exact 0555/0444 file modes before the production correction.

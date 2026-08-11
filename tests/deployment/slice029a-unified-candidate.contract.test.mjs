@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -99,6 +99,35 @@ test("029A exposes Compose only through one verified local plugin in its private
       dockerConfigDirectory: dockerConfig,
       candidatePaths: [join(parent, "missing")],
     }), /Compose plugin is unavailable/);
+  } finally {
+    await chmod(parent, 0o700).catch(() => undefined);
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+
+test("029A materializes verified WAL-G at the exact retained offline-build context", async () => {
+  const module = await orchestration();
+  const parent = await mkdtemp(join(tmpdir(), "proofline-029a-wal-g-context-"));
+  try {
+    const capturedContext = join(parent, "captured");
+    const prefetchRoot = join(parent, "docker/.prefetch");
+    const receiptBytes = Buffer.from('{"binarySha256":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","binarySize":8,"version":"1"}');
+    await mkdir(capturedContext, { mode: 0o700 });
+    await writeFile(join(capturedContext, "wal-g"), "verified", { mode: 0o555 });
+    const releaseRoot = await module.materializeCandidateWalGPrefetch({
+      capturedContextRoot: capturedContext,
+      prefetchRoot,
+      receiptBytes,
+    });
+    assert.equal(releaseRoot, join(prefetchRoot, "wal_g_release"));
+    assert.deepEqual(await readdir(prefetchRoot), ["wal_g_release"]);
+    assert.deepEqual((await readdir(releaseRoot)).sort(), ["receipt.v1.json", "wal-g"]);
+    assert.equal(await readFile(join(releaseRoot, "wal-g"), "utf8"), "verified");
+    assert.deepEqual(await readFile(join(releaseRoot, "receipt.v1.json")), receiptBytes);
+    assert.equal((await lstat(join(releaseRoot, "wal-g"))).mode & 0o777, 0o555);
+    assert.equal((await lstat(join(releaseRoot, "receipt.v1.json"))).mode & 0o777, 0o444);
+    await assert.rejects(() => lstat(join(prefetchRoot, "wal-g")), { code: "ENOENT" });
+    await assert.rejects(() => lstat(join(prefetchRoot, "receipt.v1.json")), { code: "ENOENT" });
   } finally {
     await chmod(parent, 0o700).catch(() => undefined);
     await rm(parent, { recursive: true, force: true });
