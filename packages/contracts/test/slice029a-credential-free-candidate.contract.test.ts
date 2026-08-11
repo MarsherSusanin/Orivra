@@ -41,7 +41,7 @@ function candidate() {
     product: {
       fixtureFilename: "recorded-product-fixture.v1.json" as const,
       fixtureSha256: sha("4"),
-      mode: "runtime-verified-recorded-fixture" as const,
+      mode: "checked-in-recorded-fixture" as const,
       publicOrigin: "https://127.0.0.1" as const,
       worker: "stopped" as const,
       status: "passed" as const,

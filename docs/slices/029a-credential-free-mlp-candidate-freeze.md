@@ -17,8 +17,8 @@ registry access or deployment claims.
 - exact producer commit/tree across candidate, OCI manifest and OCI receipt;
 - exact ordered 17-gate PASS tuple;
 - fresh frozen-release manifest/receipt/inventory checksums;
-- canonical recorded fixture bytes and exact worker-stopped loopback Compose
-  observation;
+- canonical checked-in template/replay expectation bytes and exact worker-
+  stopped loopback Compose observation, without database import or live claim;
 - fresh no-auth child environment; no prefetch/pull/login/push/live Coston2;
 - caller-owned 0700 parent, private staging, 0400 files, 0500 final directories,
   atomic publication and scoped no-follow cleanup;

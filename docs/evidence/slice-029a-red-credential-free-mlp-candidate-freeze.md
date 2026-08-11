@@ -8,9 +8,10 @@ independent PASS reports on exact commit
 `18116a629c770f7ea6b4cdfc8e7dd2b814915e2f`.
 
 The RED contracts require a canonical same-tree candidate receipt, the exact
-ordered unified matrix, a fresh offline OCI freeze and a recorded canonical URL
-attack fixture imported through local production Compose while worker remains
-stopped. They also freeze minimal no-auth environment, fail-fast execution,
+ordered unified matrix, a fresh offline OCI freeze and a canonical checked-in
+template/replay expectation verified through local production Compose while
+worker remains stopped. The fixture is never imported or described as live
+Coston2 evidence. The contracts also freeze minimal no-auth environment, fail-fast execution,
 atomic read-only publication and no-follow scoped cleanup.
 
 Expected RED reason: the candidate schema/domain verifier, 029A orchestration,

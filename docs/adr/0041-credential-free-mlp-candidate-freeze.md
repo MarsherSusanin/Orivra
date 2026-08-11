@@ -27,12 +27,13 @@ journey and a fresh offline OCI freeze all agree.
    Docker image/HTTPS, runtime persistence, recovery, fresh OCI release freeze
    and the recorded-product Compose journey. Missing, duplicate, reordered or
    failed gates are invalid.
-4. The product journey imports one canonical recorded URL-attack fixture into
-   PostgreSQL through the least-privilege importer, starts the production
-   Caddy/Web/API/PostgreSQL composition with `--pull never --no-build`, proves
-   the anonymous summary and exact recording download, and keeps worker stopped.
-   It does not use dummy worker credentials or a production-importable test
-   adapter.
+4. The product journey binds one canonical checked-in fixture containing the
+   accepted template/replay expectations, starts the production Caddy/Web/API/
+   PostgreSQL composition with `--pull never --no-build`, proves the matching
+   public shell and template API/detail through loopback HTTPS, and keeps worker
+   stopped. The fixture is read-only expected data: it is not imported into
+   PostgreSQL, does not claim live Coston2 provenance and is not a production-
+   importable test adapter.
 5. The runner constructs a fresh minimal child environment and fresh empty
    Docker config. It never runs prefetch, pull, login, push, registry operations
    or the live Coston2 suite. Only loopback HTTPS and Docker-local Compose

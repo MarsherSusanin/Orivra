@@ -19,7 +19,7 @@ test("029A product observation binds exact loopback origin and stopped worker", 
   assert.deepEqual(module.createRecordedProductObservation({ fixtureSha256: `sha256:${"a".repeat(64)}` }), {
     fixtureFilename: "recorded-product-fixture.v1.json",
     fixtureSha256: `sha256:${"a".repeat(64)}`,
-    mode: "runtime-verified-recorded-fixture",
+    mode: "checked-in-recorded-fixture",
     publicOrigin: "https://127.0.0.1",
     worker: "stopped",
     status: "passed",
@@ -47,19 +47,17 @@ test("029A Compose gate uses production services, no pull/build and never starts
   assert.doesNotMatch(source, /["']worker["']/);
 });
 
-test("029A imports the fixture through the least-privilege production importer", async () => {
+test("029A keeps the fixture as expected data and never imports or injects it", async () => {
   const source = await readFile(new URL("../../scripts/mlp-product-compose.mjs", import.meta.url), "utf8");
-  assert.match(source, /import-canonical-url-attack-recording\.js/);
-  assert.match(source, /recording_importer_database_url/);
-  assert.match(source, /proofline_recording_importer_login/);
-  assert.doesNotMatch(source, /NODE_ENV["']?\s*:\s*["']test/);
+  assert.doesNotMatch(source, /import-canonical-url-attack-recording|recording_importer|INSERT\s+INTO|psql/i);
+  assert.doesNotMatch(source, /NODE_ENV["']?\s*:\s*["']test|test adapter/i);
 });
 
-test("029A proves exact public summary and recording download through Caddy", async () => {
+test("029A proves exact public shell and template fixture through Caddy", async () => {
   const source = await readFile(new URL("../../scripts/mlp-product-compose.mjs", import.meta.url), "utf8");
-  assert.match(source, /\/api\/v1\/demo\/canonical-url\/summary/);
-  assert.match(source, /\/api\/v1\/demo\/canonical-url\/recording/);
-  assert.match(source, /recordingSha256/);
+  assert.match(source, /\/api\/v1\/templates/);
+  assert.match(source, /\/api\/v1\/templates\/open-meteo-current-weather/);
+  assert.match(source, /\/templates\/open-meteo-current-weather/);
   assert.match(source, /https:\/\/127\.0\.0\.1/);
 });
 
