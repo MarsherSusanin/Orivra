@@ -68,3 +68,12 @@ regressed and no test performed a registry, host, Docker or credential effect.
 No registry, Docker, network, credential, SSH, DigitalOcean, Spaces, live
 Coston2 or frozen-candidate write is performed. No hosted/deployed/security
 PASS or 029B authority is claimed.
+
+## Fixture digest correction
+
+The initial RED fixture accidentally assigned the fifth `postgres-recovery`
+archive and image-manifest the same synthetic SHA-256 digit, contradicting the
+frozen distinct-digest invariant before production could be exercised. The two
+affected fixtures now use `a` through `e` for archive digests and `1` through
+`5` for image-manifest digests. No schema, runtime or effect contract changed;
+the stashed production WIP was not applied.

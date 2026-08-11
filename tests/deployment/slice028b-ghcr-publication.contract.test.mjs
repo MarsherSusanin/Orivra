@@ -19,7 +19,7 @@ function publicationFixture() {
     sourceRepository: `proofline/${id}`,
     archiveFilename: `images/0${index + 1}-${id}.linux-amd64.oci.tar`,
     archiveSizeBytes: 1_024 + index,
-    archiveSha256: sha(String(9 - index)),
+    archiveSha256: sha(String.fromCharCode(97 + index)),
     imageManifestDigest: sha(String(index + 1)),
     platform: "linux/amd64",
     remoteRepository: `ghcr.io/example-owner/orivra-${id}`,
