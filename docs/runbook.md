@@ -655,6 +655,20 @@ journey into one canonical read-only receipt. The author receipt is necessary
 but not sufficient: two independent release verifiers must PASS that same tree
 before 028B credentials are allowed.
 
+The terminal author command requires a new absent output below a caller-owned
+mode-0700 parent and an already verified private WAL-G input directory:
+
+```bash
+npm run release:candidate -- \
+  --output /private/tmp/proofline-029a/<candidate-directory> \
+  --wal-g-input /private/tmp/proofline-029a/<wal-g-input-directory>
+```
+
+It is fail-fast and serial. It must not invoke prefetch or a live-network gate,
+and a failed run leaves no published candidate PASS. Preserve a successful
+read-only output for both independent verifiers; do not edit the candidate tree
+or output between their reports.
+
 029B is the credentialed production promotion and canary. 029B starts only
 after 028B has published and staged the exact frozen candidate.
 

@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./templates": "./src/web2json-template-catalog.ts",
-    "./release": "./src/oci-release.ts"
+    "./release": "./src/oci-release.ts",
+    "./candidate": "./src/mlp-candidate.ts"
   },
   "sideEffects": false,
   "dependencies": {

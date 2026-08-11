@@ -33,7 +33,10 @@
     "test:docker": "node scripts/docker-gate.mjs",
     "test:docker:runtime": "node scripts/docker-runtime-smoke.mjs",
     "test:docker:recovery": "node scripts/docker-recovery-gate.mjs",
+    "test:docker:product": "node scripts/mlp-product-compose.mjs",
     "release:freeze": "node scripts/release-freeze.mjs",
+    "release:candidate": "node scripts/mlp-candidate-freeze.mjs",
+    "test:action:artifact": "vitest run tests/action-artifact-sync.contract.test.ts --reporter=verbose",
     "compose:production": "node scripts/compose-production.mjs"
   },
   "dependencies": {

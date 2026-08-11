@@ -328,6 +328,9 @@ manifest/receipt, the exact complete matrix and a worker-stopped recorded-
 fixture Compose journey into a canonical read-only candidate receipt. The
 receipt is not sufficient release authority until two independent verifiers
 PASS that exact tree; only then may 028B credentials be requested.
+The production implementation is locally GREEN, but the single terminal
+candidate run and both same-tree verifier reports remain pending; this status
+does not authorize credentials, publication or deployment.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

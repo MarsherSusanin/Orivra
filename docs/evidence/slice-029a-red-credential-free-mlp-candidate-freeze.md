@@ -32,3 +32,14 @@ Frozen classification:
 
 This wave changes tests and documentation only. It does not run Docker, build,
 coverage, PostgreSQL, network or credentials and does not claim 029A PASS.
+
+## Production GREEN checkpoint
+
+The follow-up production wave implements the candidate contracts/domain
+binding, strict serial orchestration, worker-stopped production Compose journey
+and atomic terminal runner. Before candidate freeze: typecheck PASS; focused
+candidate contracts/domain 18/18 PASS; focused lifecycle/product 16/16 PASS;
+serialized deployment static 188/188 PASS; contracts/domain coverage 50 files,
+579 tests and exact 100% statements/branches/functions/lines. No credential,
+registry, external-network or hosted claim is made. The one-shot unified run and
+two independent verifier reports remain pending on the final committed tree.

@@ -64,6 +64,19 @@ describe("Slice 029A candidate evidence binding", () => {
     })).toBe(true);
   });
 
+  it("rejects malformed candidate bytes before any handoff comparison", async () => {
+    const feature = await module();
+    const bytes = fixture();
+    expect(() => feature.verifyCredentialFreeMlpCandidateHandoff({
+      candidate: { version: "1", kind: "credential-free-mlp-candidate" },
+      expectedProducer: { commitSha, treeSha },
+      manifestBytes: bytes.manifestBytes,
+      receiptBytes: bytes.receiptBytes,
+      receiptArtifactInventorySha256: `sha256:${"3".repeat(64)}`,
+      fixtureBytes: bytes.fixtureBytes,
+    })).toThrowError(/candidate/i);
+  });
+
   it.each(["producer", "manifest", "receipt", "inventory", "fixture"])(
     "rejects a %s mismatch before acceptance",
     async (kind) => {

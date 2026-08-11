@@ -179,7 +179,7 @@ function expectNoPreflightTestBridge(candidate: string, label: string) {
 }
 
 describe("Slice 009 production worker purity", () => {
-  it("declares pure package metadata and exact custody/template/recovery/release feature subpaths", () => {
+  it("declares pure package metadata and exact custody/template/recovery/release/candidate feature subpaths", () => {
     const contracts = JSON.parse(readFileSync(contractsPackage, "utf8"));
     const domain = JSON.parse(readFileSync(domainPackage, "utf8"));
 
@@ -193,11 +193,13 @@ describe("Slice 009 production worker purity", () => {
       "./templates": "./src/web2json-templates.ts",
       "./recovery": "./src/recovery.ts",
       "./release": "./src/release.ts",
+      "./candidate": "./src/candidate.ts",
     });
     expect(domain.exports).toEqual({
       ".": "./src/index.ts",
       "./templates": "./src/web2json-template-catalog.ts",
       "./release": "./src/oci-release.ts",
+      "./candidate": "./src/mlp-candidate.ts",
     });
   });
 
@@ -505,7 +507,7 @@ describe("Slice 009 production worker purity", () => {
         .filter(
           ({ input, bytesInOutput }) =>
             bytesInOutput > 0 &&
-            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$|(?:^|\/)recovery(?:-schema)?\.ts$|(?:^|\/)recovery-runtime\.mjs$|(?:^|\/)release\.ts$|(?:^|\/)oci-release\.ts$/.test(
+            /(?:^|\/)wallet-auth\.ts$|(?:^|\/)canonical-url-attack-demo\.ts$|(?:^|\/)web2json-templates\.ts$|(?:^|\/)web2json-template-catalog\.ts$|(?:^|\/)deployment(?:-schema)?\.ts$|(?:^|\/)recovery(?:-schema)?\.ts$|(?:^|\/)recovery-runtime\.mjs$|(?:^|\/)release\.ts$|(?:^|\/)oci-release\.ts$|(?:^|\/)candidate(?:-runtime)?\.mjs$|(?:^|\/)candidate\.ts$|(?:^|\/)mlp-candidate(?:-runtime)?\.mjs$|(?:^|\/)mlp-candidate\.ts$/.test(
               input,
             ),
         )

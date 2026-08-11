@@ -199,6 +199,13 @@ export type {
   FrozenOciReleaseManifestV1,
   FrozenOciReleaseReceiptV1,
 } from "./release";
+export {
+  CredentialFreeMlpCandidateV1Schema,
+  canonicalSerializeCredentialFreeMlpCandidate,
+  checksumCredentialFreeMlpCandidate,
+  credentialFreeCandidateGateIds,
+} from "./candidate";
+export type { CredentialFreeMlpCandidateV1 } from "./candidate";
 export type {
   BackupEvidenceV1,
   RestoreDrillEvidenceV1,

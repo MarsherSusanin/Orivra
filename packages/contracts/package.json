@@ -10,7 +10,8 @@
     "./wallet-auth": "./src/wallet-auth.ts",
     "./manifest": "./src/web2json-manifest.ts",
     "./templates": "./src/web2json-templates.ts",
-    "./release": "./src/release.ts"
+    "./release": "./src/release.ts",
+    "./candidate": "./src/candidate.ts"
   },
   "sideEffects": false,
   "dependencies": {

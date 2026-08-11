@@ -1,7 +1,7 @@
 # Slice 029A — Credential-free MLP candidate freeze
 
-Status: Intentional RED. Contracts and lifecycle are frozen before production
-implementation.
+Status: Production implementation GREEN locally; the one-shot unified candidate
+run and two independent same-tree verifiers are pending.
 
 Architecture authority: [ADR 0041](../adr/0041-credential-free-mlp-candidate-freeze.md).
 
@@ -32,6 +32,16 @@ registry access or deployment claims.
 - `packages/domain/test/slice029a-candidate-evidence.contract.test.ts`
 - `tests/deployment/slice029a-unified-candidate.contract.test.mjs`
 - `tests/deployment/slice029a-recorded-product-compose.contract.test.mjs`
+
+## Executable handoff
+
+`npm run release:candidate -- --output <absent-path-under-mode-0700-parent>
+--wal-g-input <absolute-verified-input>` is the only terminal author command.
+It runs the frozen gates serially, creates a fresh 028A release under the stage,
+proves the worker-stopped product journey, removes its scoped temporary inputs,
+rechecks the exact clean Git identity and atomically publishes the read-only
+candidate directory. A local GREEN implementation is not a candidate PASS until
+this command and both independent verifiers succeed on one committed tree.
 
 ## Explicit exclusions
 

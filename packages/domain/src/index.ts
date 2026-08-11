@@ -27,6 +27,10 @@ export {
   verifyFrozenOciReleaseHandoff,
 } from "./oci-release";
 export {
+  createCredentialFreeMlpCandidate,
+  verifyCredentialFreeMlpCandidateHandoff,
+} from "./mlp-candidate";
+export {
   canonicalSerializeEvidenceReceipt,
   createEvidenceReceipt,
 } from "./evidence-receipt";
