@@ -78,3 +78,21 @@ must PASS the same stopped tree before 028A.
 
 Historical ADR/slice/evidence wording remains unchanged. This local RED record
 is not hosted CI, deployment, security PASS or live evidence.
+
+## Retained 027C status compatibility correction
+
+The first 027D RED commit updated the canonical roadmap from the superseded
+027C production-author status to the independently verified parent truth, but
+the retained deployment contract still required the old row. Production stash
+`a8206a8f712e7c29dd668bd85d217a8ec79e9161` was inspected read-only and never
+applied. Only that exact docs-status assertion is corrected to require Core and
+Product PASS `8137970` / `8c594cc`, canceled scan 8852 not being a security
+PASS, and the deferred evidence-integrity validation risk remaining open. All
+WAL-G, recovery, authority, topology, negative-control and no-hosting assertions
+remain unchanged.
+
+Post-correction verification is bounded and deterministic: syntax and
+typecheck PASS; the targeted retained 027C file is 15/15 PASS; the exact 027D
+focus remains 12 intentional RED plus eight controls PASS; serialized Docker
+static contracts are 146/146 PASS; and Sites compatibility is 36/36 PASS. No
+Docker daemon, build, network, production, dependency or lockfile effect ran.
