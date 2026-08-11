@@ -49,7 +49,7 @@ test("029A Compose gate uses production services, no pull/build and never starts
 
 test("029A keeps the fixture as expected data and never imports or injects it", async () => {
   const source = await readFile(new URL("../../scripts/mlp-product-compose.mjs", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /import-canonical-url-attack-recording|recording_importer|INSERT\s+INTO|psql/i);
+  assert.doesNotMatch(source, /import-canonical-url-attack-recording|--recording|INSERT\s+INTO|psql/i);
   assert.doesNotMatch(source, /NODE_ENV["']?\s*:\s*["']test|test adapter/i);
 });
 

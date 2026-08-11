@@ -13,6 +13,10 @@ template/replay expectation verified through local production Compose while
 worker remains stopped. The fixture is never imported or described as live
 Coston2 evidence. The contracts also freeze minimal no-auth environment, fail-fast execution,
 atomic read-only publication and no-follow scoped cleanup.
+The retained deployment role-bootstrap may still receive its unused least-
+privilege importer database secret; the gate forbids invoking the importer,
+supplying `--recording` or issuing direct SQL, rather than hiding required
+Compose configuration.
 
 Expected RED reason: the candidate schema/domain verifier, 029A orchestration,
 recorded-product Compose gate and `release:candidate` command do not exist.
