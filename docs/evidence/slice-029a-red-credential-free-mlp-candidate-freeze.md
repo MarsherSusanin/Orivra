@@ -92,3 +92,10 @@ builder, which cannot execute the accepted `RUN --mount` Dockerfile. The next
 corrective RED contract freezes one executable `docker-buildx` from an exact
 system-path allowlist beside `docker-compose`; it still forbids reading the
 user Docker config, credential helpers or registry authority.
+
+The production correction now materializes that Buildx plugin through the same
+verified local-plugin boundary. Typecheck, the exact 12-case 029A contract and
+the serialized 191-case deployment inventory pass. A private no-auth config
+smoke resolves Docker Desktop Buildx `v0.25.0-desktop.1` without daemon,
+registry or credential access; the next evidence step is the complete unified
+candidate run from a clean commit.

@@ -9,6 +9,14 @@ export const CANDIDATE_COMPOSE_PLUGIN_PATHS = Object.freeze([
   "/opt/homebrew/lib/docker/cli-plugins/docker-compose",
 ]);
 
+export const CANDIDATE_BUILDX_PLUGIN_PATHS = Object.freeze([
+  "/Applications/Docker.app/Contents/Resources/cli-plugins/docker-buildx",
+  "/usr/local/lib/docker/cli-plugins/docker-buildx",
+  "/usr/libexec/docker/cli-plugins/docker-buildx",
+  "/usr/lib/docker/cli-plugins/docker-buildx",
+  "/opt/homebrew/lib/docker/cli-plugins/docker-buildx",
+]);
+
 const gateDefinitions = Object.freeze([
   ["typecheck", ["run", "typecheck"]],
   ["unit", ["test", "--", "--maxWorkers=1"]],
@@ -78,12 +86,16 @@ export function createCredentialFreeCandidateEnvironment({
   });
 }
 
-export async function materializeCandidateComposePlugin({
+async function materializeCandidateDockerPlugin({
   dockerConfigDirectory,
-  candidatePaths = CANDIDATE_COMPOSE_PLUGIN_PATHS,
+  candidatePaths,
+  pluginName,
+  unavailableMessage,
 } = {}) {
   if (typeof dockerConfigDirectory !== "string" || !isAbsolute(dockerConfigDirectory) ||
-    dockerConfigDirectory.includes("\0") || !Array.isArray(candidatePaths) || candidatePaths.length < 1) {
+    dockerConfigDirectory.includes("\0") || !Array.isArray(candidatePaths) || candidatePaths.length < 1 ||
+    typeof pluginName !== "string" || !/^docker-[a-z]+$/.test(pluginName) ||
+    typeof unavailableMessage !== "string" || unavailableMessage.length < 1) {
     invalid();
   }
   const configMetadata = await lstat(dockerConfigDirectory);
@@ -102,12 +114,41 @@ export async function materializeCandidateComposePlugin({
     if (!resolvedMetadata.isFile() || resolvedMetadata.isSymbolicLink() ||
       (resolvedMetadata.mode & 0o111) === 0) continue;
     const pluginDirectory = join(dockerConfigDirectory, "cli-plugins");
-    await mkdir(pluginDirectory, { mode: 0o700 });
-    await symlink(resolved, join(pluginDirectory, "docker-compose"));
+    await mkdir(pluginDirectory, { mode: 0o700 }).catch((cause) => {
+      if (cause?.code !== "EEXIST") throw cause;
+    });
+    const pluginDirectoryMetadata = await lstat(pluginDirectory);
+    if (!pluginDirectoryMetadata.isDirectory() || pluginDirectoryMetadata.isSymbolicLink() ||
+      (pluginDirectoryMetadata.mode & 0o777) !== 0o700) invalid();
+    await symlink(resolved, join(pluginDirectory, pluginName));
     return resolved;
   }
-  throw Object.assign(new Error("Local Compose plugin is unavailable"), {
+  throw Object.assign(new Error(unavailableMessage), {
     code: "MLP_CANDIDATE_INPUT_INVALID",
+  });
+}
+
+export async function materializeCandidateComposePlugin({
+  dockerConfigDirectory,
+  candidatePaths = CANDIDATE_COMPOSE_PLUGIN_PATHS,
+} = {}) {
+  return materializeCandidateDockerPlugin({
+    dockerConfigDirectory,
+    candidatePaths,
+    pluginName: "docker-compose",
+    unavailableMessage: "Local Compose plugin is unavailable",
+  });
+}
+
+export async function materializeCandidateBuildxPlugin({
+  dockerConfigDirectory,
+  candidatePaths = CANDIDATE_BUILDX_PLUGIN_PATHS,
+} = {}) {
+  return materializeCandidateDockerPlugin({
+    dockerConfigDirectory,
+    candidatePaths,
+    pluginName: "docker-buildx",
+    unavailableMessage: "Local Buildx plugin is unavailable",
   });
 }
 
