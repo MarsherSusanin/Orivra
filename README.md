@@ -97,9 +97,11 @@ blockchain-операций.
   `8c594cc58820670aba66e7b3cbd6f1f818420a19`; this does not close or classify
   the deferred scan risk.
 - [ADR 0038](docs/adr/0038-orivra-public-brand.md) selects **Orivra** as the
-  public display name before 028A. Slice 027D is intentional RED: Web metadata,
-  the local SVG mark, fail-closed SIWE cutover, CLI/Action copy and generated
-  artifacts are frozen in tests but not implemented. `@proofline/*`,
+  public display name before 028A. Slice 027D is production-author GREEN
+  locally: Web metadata and copy, the local SVG mark, fail-closed SIWE cutover,
+  CLI/Action copy and generated artifacts pass the affected contracts,
+  coverage, Sites and real-browser checks. Two independent verifier reports on
+  one stopped commit/tree are still pending, so 027D is not yet release-frozen. `@proofline/*`,
   `PROOFLINE_*`, database/storage/evidence, CLI, Action, Solidity, Docker and S3
   identifiers remain compatibility-stable.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;

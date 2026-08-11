@@ -92,7 +92,7 @@ describe("Slice 023D1 wallet quota client", () => {
       retryable: true,
       retryAfterSeconds: 4,
     });
-    expect(String(failure)).toBe("WalletAccessError: Proofline request failed.");
+    expect(String(failure)).toBe("WalletAccessError: Orivra request failed.");
     expect(exposedFailure(failure)).not.toContain(ATTACKER);
     expect(exposedFailure(failure)).not.toContain(PROJECT_TOKEN);
   });
@@ -146,7 +146,7 @@ describe("Slice 023D1 run quota client", () => {
       code,
     });
     expect(String(failure)).toBe(
-      "ProoflineClientError: Proofline run creation failed.",
+      "ProoflineClientError: Orivra run creation failed.",
     );
     expect((failure as unknown as { retryAfterSeconds?: unknown }).retryAfterSeconds)
       .toBeUndefined();
@@ -167,7 +167,7 @@ describe("Slice 023D1 run quota client", () => {
       retryAfterSeconds: 41_584,
     });
     expect(String(failure)).toBe(
-      "ProoflineClientError: Proofline run creation is rate limited. Retry safely.",
+      "ProoflineClientError: Orivra run creation is rate limited. Retry safely.",
     );
     expect(exposedFailure(failure)).not.toContain(ATTACKER);
     expect(exposedFailure(failure)).not.toContain(PROJECT_TOKEN);
@@ -187,7 +187,7 @@ describe("Slice 023D1 run quota client", () => {
     expect((failure as unknown as { retryAfterSeconds?: unknown }).retryAfterSeconds)
       .toBeUndefined();
     expect(String(failure)).toBe(
-      "ProoflineClientError: Proofline has reached the active live-run limit.",
+      "ProoflineClientError: Orivra has reached the active live-run limit.",
     );
     expect(exposedFailure(failure)).not.toContain(ATTACKER);
   });

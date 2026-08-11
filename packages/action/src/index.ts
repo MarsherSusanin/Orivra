@@ -55,11 +55,11 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
         !persistedValid)
     ) {
       await input.artifacts.writeSummary(
-        "Proofline replay failed: persisted run identity is incomplete or mismatched.",
+        "Orivra replay failed: persisted run identity is incomplete or mismatched.",
       );
       return 1;
     }
-    const summary = `Proofline replay\n\nRun: ${result.runId}\n\nChecksum: ${result.checksum}`;
+    const summary = `Orivra replay\n\nRun: ${result.runId}\n\nChecksum: ${result.checksum}`;
     await input.artifacts.writeSummary(summary);
     await input.artifacts.upload("proofline-replay-evidence", result);
     return 0;
@@ -67,7 +67,7 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
 
   if (!input.env.PROOFLINE_PROJECT_TOKEN) {
     await input.artifacts.writeSummary(
-      "Proofline live Coston2 gate failed: the project token is missing.",
+      "Orivra live Coston2 gate failed: the project token is missing.",
     );
     return 1;
   }
@@ -79,7 +79,7 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
     !isExactGitHash(expectedTreeHash)
   ) {
     await input.artifacts.writeSummary(
-      "Proofline live Coston2 gate failed: commit/tree identity must contain exact 40-hex Git hashes.",
+      "Orivra live Coston2 gate failed: commit/tree identity must contain exact 40-hex Git hashes.",
     );
     return 1;
   }
@@ -113,12 +113,12 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
       result.consumerVerified !== true
     ) {
       await input.artifacts.writeSummary(
-        "Proofline live Coston2 gate failed: commit/tree identity or release evidence is incomplete.",
+        "Orivra live Coston2 gate failed: commit/tree identity or release evidence is incomplete.",
       );
       return 1;
     }
     const summary = [
-      "Proofline live Coston2",
+      "Orivra live Coston2",
       ...(result.commitHash ? [`Commit: ${result.commitHash}`] : []),
       ...(result.treeHash ? [`Tree: ${result.treeHash}`] : []),
       `Run: ${result.runId}`,
@@ -135,7 +135,7 @@ export async function runProoflineAction(input: ActionInput): Promise<number> {
     return 0;
   } catch {
     await input.artifacts.writeSummary(
-      "Proofline live Coston2 gate failed without publishable evidence.",
+      "Orivra live Coston2 gate failed without publishable evidence.",
     );
     return 1;
   }

@@ -91,7 +91,7 @@ function DemoEvidence({ state }: { state: DemoState }) {
           <WarningCircle size={28} aria-hidden="true" />
           <div>
             <h3>Verified recording unavailable</h3>
-            <p>No verified persisted recording is available for this deployment. Proofline does not substitute a fixture or synthetic result.</p>
+            <p>No verified persisted recording is available for this deployment. Orivra does not substitute a fixture or synthetic result.</p>
             <a className="entry-secondary" href="/demo/canonical-url">View availability details</a>
           </div>
         </div>
@@ -124,7 +124,7 @@ export function PageUnavailable() {
         <main className="landing-unavailable">
           <WarningCircle size={36} aria-hidden="true" />
           <h1>Page unavailable</h1>
-          <p>This Proofline route is not available in this build.</p>
+          <p>This Orivra route is not available in this build.</p>
           <div className="landing-actions">
             <a className="entry-primary" href="/">Go home</a>
             <a className="entry-secondary" href="/runs">Open runs</a>
@@ -178,7 +178,7 @@ export function PublicLanding({ requests }: { requests: PublicLandingRequestRefs
             <div>
               <span className="section-label">Coston2 · Web2Json consumer assurance</span>
               <h1 id="landing-title">Trust the intended URL, not only a valid proof.</h1>
-              <p>Proofline verifies the consumer’s scheme, host, path, and query, then packages reproducible evidence and safe Solidity.</p>
+              <p>Orivra verifies the consumer’s scheme, host, path, and query, then packages reproducible evidence and safe Solidity.</p>
               <div className="landing-actions">
                 <a className="entry-primary" href="/templates">Browse templates</a>
                 <a className="entry-secondary" href="/runs">Open runs</a>

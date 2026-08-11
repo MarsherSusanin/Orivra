@@ -178,7 +178,7 @@ function expectSessionRequired(operation: () => Promise<unknown>) {
     status: 403,
     code: "ACCOUNT_SESSION_REQUIRED",
     retryable: false,
-    message: "Proofline request failed.",
+    message: "Orivra request failed.",
   });
 }
 
@@ -189,7 +189,7 @@ function expectIssueBusy(operation: () => Promise<unknown>) {
     status: 409,
     code: "IDEMPOTENCY_CONFLICT",
     retryable: false,
-    message: "Proofline request failed.",
+    message: "Orivra request failed.",
   });
 }
 
@@ -320,7 +320,7 @@ describe("Slice 023C3A account operations in the wallet session context", () => 
         name: "WalletAccessError",
         status: 403,
         code: "ACCOUNT_SESSION_REQUIRED",
-        message: "Proofline request failed.",
+        message: "Orivra request failed.",
       },
     });
     expect(JSON.stringify(outcome)).not.toContain(RAW_TOKEN);
@@ -457,7 +457,7 @@ describe("Slice 023C3A account operations in the wallet session context", () => 
           name: "WalletAccessError",
           status: 403,
           code: "ACCOUNT_SESSION_REQUIRED",
-          message: "Proofline request failed.",
+          message: "Orivra request failed.",
         },
       });
       expect(screen.getByLabelText("session state")).toHaveTextContent(`authenticated:${ADDRESS_B}:`);

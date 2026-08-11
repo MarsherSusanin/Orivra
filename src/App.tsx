@@ -350,7 +350,7 @@ function pendingActionCopy(stage: string, state: string) {
   if (state === "active") {
     return {
       title: `${label} is in progress.`,
-      description: `Proofline is waiting for the persisted ${stage} transition to complete.`,
+      description: `Orivra is waiting for the persisted ${stage} transition to complete.`,
     };
   }
   return {
@@ -368,10 +368,10 @@ function recoveryTitle(recovery: RunRecoveryV1): string {
 function recoveryDetail(recovery: RunRecoveryV1): string {
   const checkpoint = recovery.resumeFrom.replaceAll("-", " ");
   if (recovery.state === "waiting") {
-    return `Proofline is observing the persisted ${checkpoint}; no manual retry is required.`;
+    return `Orivra is observing the persisted ${checkpoint}; no manual retry is required.`;
   }
   if (recovery.state === "retryable") {
-    return `Proofline will retry the same command from ${checkpoint} without creating another effect.`;
+    return `Orivra will retry the same command from ${checkpoint} without creating another effect.`;
   }
   return recovery.retrySafety === "new-run-required"
     ? `The preserved evidence cannot safely continue. Create a new run from the original manifest.`

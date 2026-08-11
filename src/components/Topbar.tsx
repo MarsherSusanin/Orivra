@@ -19,7 +19,7 @@ export function Topbar({
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <strong className="wordmark">Proofline</strong>
+        <strong className="wordmark">Orivra</strong>
         <span className="topbar-divider" aria-hidden="true" />
         <button className="network-switcher" type="button" aria-label={`Network: ${network}`}>
           <GlobeHemisphereWest size={24} aria-hidden="true" />

@@ -29,7 +29,7 @@ export function ProjectTokenDialog({
     event.preventDefault();
     const token = value.trim();
     if (!PROJECT_TOKEN.test(token)) {
-      setError("Enter a valid Proofline project token.");
+      setError("Enter a valid Orivra project token.");
       inputRef.current?.focus();
       return;
     }

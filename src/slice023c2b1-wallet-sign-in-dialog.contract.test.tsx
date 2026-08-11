@@ -281,7 +281,7 @@ describe("Slice 023C2B1 lazy dialog discovery", () => {
     expect(wallet.signMessage).toHaveBeenCalledWith({ message: challenge.message });
 
     await act(async () => signature.resolve({ address: ADDRESS, signature: SIGNATURE }));
-    expect(await screen.findByText("Creating Proofline session…")).toBeVisible();
+    expect(await screen.findByText("Creating Orivra session…")).toBeVisible();
     expect(access.createWalletSession).toHaveBeenCalledWith({
       version: "1",
       challengeId: CHALLENGE_ID,
@@ -360,7 +360,7 @@ describe("Slice 023C2B1 bounded failure states", () => {
       {
         name: "offline",
         access: { listNetworks: vi.fn(async () => { throw new WalletAccessError({ kind: "transport", status: 0, code: "TRANSPORT_UNAVAILABLE", retryable: true }); }) },
-        expected: "Proofline is offline",
+        expected: "Orivra is offline",
         chooseProvider: false,
       },
     ];
@@ -425,7 +425,7 @@ describe("Slice 023C2B1 cancellation, focus and accessibility", () => {
 
     await user.click(start);
     await user.click(await screen.findByRole("option", { name: "Wallet A" }));
-    expect(await screen.findByText("Creating Proofline session…")).toBeVisible();
+    expect(await screen.findByText("Creating Orivra session…")).toBeVisible();
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("dialog", { name: "Sign in with wallet" })).not.toBeInTheDocument();

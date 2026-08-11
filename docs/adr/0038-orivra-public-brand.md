@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted as the Slice 027D contract. Production surfaces are intentionally RED.
+Accepted as the Slice 027D contract. Production surfaces are locally GREEN;
+two independent verifier PASS reports on one stopped commit/tree remain pending.
 
 ## Context
 

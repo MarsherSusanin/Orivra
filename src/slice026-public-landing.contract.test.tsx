@@ -142,7 +142,7 @@ describe("Slice 026 public landing", () => {
 
     expect(screen.getByText("Coston2 · Web2Json consumer assurance")).toBeVisible();
     expect(screen.getByText(
-      "Proofline verifies the consumer’s scheme, host, path, and query, then packages reproducible evidence and safe Solidity.",
+      "Orivra verifies the consumer’s scheme, host, path, and query, then packages reproducible evidence and safe Solidity.",
     )).toBeVisible();
     expect(screen.getByRole("link", { name: "Browse templates" })).toHaveAttribute("href", "/templates");
     expect(screen.getByRole("link", { name: "Open runs" })).toHaveAttribute("href", "/runs");
@@ -165,7 +165,7 @@ describe("Slice 026 public landing", () => {
 
     const main = screen.getByRole("main");
     expect(within(main).getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("link", { name: "Proofline home" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Orivra home" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/runs");
     expect(screen.getByLabelText("Breadcrumb")).toHaveTextContent(/^Overview$/);
     expect(screen.getByRole("button", { name: "Network: Coston2" })).toBeVisible();
@@ -281,7 +281,7 @@ describe("Slice 026 public landing", () => {
     expect(await screen.findByRole("heading", { name: "Response-derived starting point" })).toBeVisible();
     expect(await screen.findByRole("heading", { name: "Verified recording unavailable" })).toBeVisible();
     expect(screen.getByText(
-      "No verified persisted recording is available for this deployment. Proofline does not substitute a fixture or synthetic result.",
+      "No verified persisted recording is available for this deployment. Orivra does not substitute a fixture or synthetic result.",
     )).toBeVisible();
     expect(screen.getByRole("link", { name: "View availability details" })).toHaveAttribute(
       "href",
@@ -313,7 +313,7 @@ describe("Slice 026 public landing", () => {
       expect(await screen.findByRole("heading", { name: "Response-derived starting point" })).toBeVisible();
       expect(await screen.findByRole("heading", { name: "Verified recording unavailable" })).toBeVisible();
       expect(screen.getByText(
-        "No verified persisted recording is available for this deployment. Proofline does not substitute a fixture or synthetic result.",
+        "No verified persisted recording is available for this deployment. Orivra does not substitute a fixture or synthetic result.",
       )).toBeVisible();
       expect(screen.queryByText("Persisted evidence available")).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Inspect evidence" })).not.toBeInTheDocument();
@@ -375,7 +375,7 @@ describe("Slice 026 public landing", () => {
   ])("fails an unknown or alias route honestly without private or public reads: %s", async (path) => {
     const fixture = renderPath({ path });
     expect(screen.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
-    expect(screen.getByText("This Proofline route is not available in this build.")).toBeVisible();
+    expect(screen.getByText("This Orivra route is not available in this build.")).toBeVisible();
     expect(screen.getByRole("link", { name: "Go home" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Open runs" })).toHaveAttribute("href", "/runs");
     expect(fixture.fetch).not.toHaveBeenCalled();

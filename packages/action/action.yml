@@ -1,5 +1,5 @@
-name: Proofline Web2Json
-description: Replay a Proofline bundle on pull requests or run Coston2 in merge queue.
+name: Orivra Web2Json
+description: Replay an Orivra bundle on pull requests or run Coston2 in merge queue.
 inputs:
   manifest:
     description: Path to a Web2JsonManifestV1 JSON file.

@@ -89,7 +89,7 @@ describe("clean-built executable package artifacts", () => {
     const output = `${execution.stdout}\n${execution.stderr}`;
 
     expect(execution.status).toBe(1);
-    expect(output).toMatch(/Proofline release gate|configuration/i);
+    expect(output).toMatch(/Orivra release gate|configuration/i);
     expect(output).not.toMatch(/Dynamic require of "?(?:os|node:os)"?/i);
   });
 });

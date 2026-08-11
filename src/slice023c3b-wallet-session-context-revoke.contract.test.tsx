@@ -195,7 +195,7 @@ function expectSessionRequired(operation: () => Promise<unknown>) {
     status: 403,
     code: "ACCOUNT_SESSION_REQUIRED",
     retryable: false,
-    message: "Proofline request failed.",
+    message: "Orivra request failed.",
   });
 }
 
@@ -206,7 +206,7 @@ function expectBusy(operation: () => Promise<unknown>) {
     status: 409,
     code: "IDEMPOTENCY_CONFLICT",
     retryable: false,
-    message: "Proofline request failed.",
+    message: "Orivra request failed.",
   });
 }
 
@@ -217,7 +217,7 @@ function expectContractFailure(operation: () => Promise<unknown>) {
     status: 502,
     code: "AUTH_RESPONSE_INVALID",
     retryable: false,
-    message: "Proofline returned an invalid response.",
+    message: "Orivra returned an invalid response.",
   });
 }
 

@@ -1,6 +1,7 @@
 # Slice 027D — Orivra public display brand
 
-Status: Intentional RED; contracts and documentation frozen; production absent.
+Status: Production-author GREEN locally; two independent verifier PASS reports
+pending on one stopped commit/tree before 028A.
 
 Architecture authority: [ADR 0038](../adr/0038-orivra-public-brand.md).
 
@@ -67,3 +68,17 @@ No legal/company/domain rename, package publication, database migration,
 environment migration, historical-doc rewrite, DNS/SSH/DigitalOcean/GHCR/
 Spaces operation, Docker gate, live Coston2 effect or hosted claim is part of
 027D.
+
+## Local author evidence
+
+- exact Slice 027D contracts: 20/20 PASS;
+- affected Web/API/CLI/Action suites and coverage thresholds PASS;
+- Action dist regenerated from source; root build and Sites 36/36 PASS;
+- desktop 1488x1058 and mobile 390x844 acceptance PASS across landing,
+  templates, Runs, Composer, Settings and unknown route, including keyboard,
+  axe, console/network and reload/back/forward checks;
+- two offline/no-pull builds of the affected Web/API/Caddy images and the exact
+  local HTTPS Orivra smoke PASS on the final author bytes with scoped cleanup.
+
+This is credential-free local author evidence, not a security PASS, hosted
+deployment, DNS/Spaces/GHCR/Coston2 operation or release authorization.

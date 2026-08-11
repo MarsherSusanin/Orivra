@@ -248,9 +248,10 @@ evidence identities, Docker paths/prefixes or `/proofline/v1` object storage.
 The SIWE cutover is fail-closed. Only the newly reconstructed Orivra message is
 accepted; an already-issued Proofline challenge is unavailable before recovery
 or session effects and the user requests a new five-minute challenge. No dual
-brand parser or client brand authority exists. The tests/docs are intentional
-RED until production and generated artifacts change, and 027D completes before
-028A.
+brand parser or client brand authority exists. Production and generated
+artifacts are locally GREEN under the affected contracts, coverage, Sites and
+real-browser acceptance. Two independent verifier reports on one stopped tree
+remain pending; 027D completes only after both PASS and before 028A.
 
 ## Release architecture and current operational status
 

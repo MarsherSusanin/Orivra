@@ -144,7 +144,7 @@ afterEach(() => {
 describe("Slice 017 immutable submission decision evidence", () => {
   it.each([
     ["wallet", /connected wallet/i, /wallet pays/i, /broadcasts.*Coston2/i, /never receives.*key/i],
-    ["relayer", /Proofline relayer/i, /relayer pays/i, /worker broadcasts.*Coston2/i, /project authorization.*policy/i],
+    ["relayer", /Orivra relayer/i, /relayer pays/i, /worker broadcasts.*Coston2/i, /project authorization.*policy/i],
     ["replay", /no signer/i, /no payer/i, /no network effect/i, /recorded evidence/i],
   ] as const)(
     "explains signer, payer, network effect and trust model for %s",

@@ -124,7 +124,7 @@ describe("Slice 023C1 corrective wallet access boundary", () => {
         code,
         retryable,
       });
-      expect(String(failure)).toBe("WalletAccessError: Proofline request failed.");
+      expect(String(failure)).toBe("WalletAccessError: Orivra request failed.");
       expect(JSON.stringify(failure)).not.toContain(PROJECT_TOKEN);
     },
   );
@@ -150,7 +150,7 @@ describe("Slice 023C1 corrective wallet access boundary", () => {
         code: `HTTP_${status}`,
         retryable: true,
       }));
-      expect(String(failure)).toBe("WalletAccessError: Proofline request failed.");
+      expect(String(failure)).toBe("WalletAccessError: Orivra request failed.");
       const publicFailure = JSON.stringify(failure);
       expect(publicFailure).not.toContain(PROJECT_TOKEN);
       expect(publicFailure).not.toContain(`PROJECT_${"A".repeat(64)}`);
@@ -194,7 +194,7 @@ describe("Slice 023C1 corrective wallet access boundary", () => {
         code: "REQUEST_FAILED",
         retryable: true,
       });
-      expect(String(failure)).toBe("WalletAccessError: Proofline request failed.");
+      expect(String(failure)).toBe("WalletAccessError: Orivra request failed.");
       const exposed = [
         failure.message,
         failure.code,

@@ -146,7 +146,7 @@ function TokenRevealDialog({
           {confirming ? (
             <div className="settings-token-loss">
               <p id="settings-token-reveal-description">
-                Proofline cannot show this token again. Copy it before closing or generate a replacement later.
+                Orivra cannot show this token again. Copy it before closing or generate a replacement later.
               </p>
               <div className="settings-reveal-actions">
                 <button

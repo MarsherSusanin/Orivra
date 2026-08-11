@@ -253,6 +253,29 @@ async function runSmoke({ environment }) {
 
   const rootResponse = await waitFor("/", 200);
   if (!/<!doctype html/i.test(rootResponse.body)) throw new Error("QA root is not the Web shell");
+  if (!rootResponse.body.includes("<title>Orivra · Web2Json evidence</title>")) {
+    throw new Error("QA root is missing the Orivra document title");
+  }
+  if (!rootResponse.body.includes(
+    'content="Orivra — observable, verifiable Flare Data Connector runs."',
+  )) {
+    throw new Error("QA root is missing the Orivra document description");
+  }
+  if (/<title>[^<]*Proofline|content="[^"]*Proofline/.test(rootResponse.body)) {
+    throw new Error("QA root exposes the retired public display name");
+  }
+  const markPath = /href="(\/assets\/orivra-mark-[^"]+\.svg)"/.exec(rootResponse.body)?.[1];
+  if (!markPath) throw new Error("QA root is missing the hashed Orivra vector mark");
+  const markResponse = await waitFor(markPath, 200);
+  const svgNamespace = 'xmlns="http://www.w3.org/2000/svg"';
+  const markWithoutNamespace = markResponse.body.replace(svgNamespace, "");
+  if (
+    !/^<svg\b/.test(markResponse.body) ||
+    !markResponse.body.includes(svgNamespace) ||
+    /<script|<foreignObject|<image|https?:|javascript:|(?:href|src|style)\s*=|on\w+\s*=|url\s*\(/i.test(markWithoutNamespace)
+  ) {
+    throw new Error("QA Orivra vector mark is not passive local SVG");
+  }
   await waitFor("/templates/open-meteo-current-weather", 200);
   await waitFor("/api/v1/templates", 200);
   await waitFor("/api/v1/templates?unexpected=1", 400);

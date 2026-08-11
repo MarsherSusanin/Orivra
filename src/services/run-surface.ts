@@ -517,7 +517,7 @@ export function createLiveSurfaceServices(input: {
       );
       const parsed = CreateRunResultV1Schema.safeParse(result);
       if (!parsed.success) {
-        throw new Error("Proofline returned an invalid create-run response contract");
+        throw new Error("Orivra returned an invalid create-run response contract");
       }
       return parsed.data;
     },

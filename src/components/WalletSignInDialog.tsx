@@ -57,7 +57,7 @@ const FAILURE_COPY: Partial<Record<DialogStage, { title: string; body: string }>
   },
   "provider-unavailable": {
     title: "Wallet unavailable",
-    body: "Proofline could not reach a compatible browser wallet.",
+    body: "Orivra could not reach a compatible browser wallet.",
   },
   unsupported: {
     title: "Coston2 unavailable",
@@ -76,12 +76,12 @@ const FAILURE_COPY: Partial<Record<DialogStage, { title: string; body: string }>
     body: "The signature did not match the verified wallet and challenge.",
   },
   offline: {
-    title: "Proofline is offline",
-    body: "The request did not reach Proofline. Retry safely when connectivity returns.",
+    title: "Orivra is offline",
+    body: "The request did not reach Orivra. Retry safely when connectivity returns.",
   },
   error: {
     title: "Challenge could not be verified",
-    body: "Proofline stopped before signing because the authentication evidence was invalid.",
+    body: "Orivra stopped before signing because the authentication evidence was invalid.",
   },
 };
 
@@ -176,7 +176,7 @@ function runningCopy(stage: DialogStage, walletName: string | null): string {
     case "awaiting-signature":
       return `Confirm the signature in ${walletName}…`;
     case "creating-session":
-      return "Creating Proofline session…";
+      return "Creating Orivra session…";
     default:
       return "";
   }
@@ -590,7 +590,7 @@ export function WalletSignInDialog({
               <CheckCircle size={36} weight="fill" aria-hidden="true" />
               <h3>Signed in</h3>
               <p id="wallet-sign-in-description">
-                This browser session can now open your persisted Proofline runs.
+                This browser session can now open your persisted Orivra runs.
               </p>
               <button
                 ref={primaryRef}

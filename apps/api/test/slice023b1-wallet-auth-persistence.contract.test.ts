@@ -24,7 +24,7 @@ const MESSAGE = [
   "proofline.example wants you to sign in with your Ethereum account:",
   ADDRESS,
   "",
-  "Sign in to Proofline and create your default project.",
+  "Sign in to Orivra and create your default project.",
   "",
   "URI: https://proofline.example",
   "Version: 1",

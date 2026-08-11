@@ -103,7 +103,7 @@ describe("Slice 004 GitHub Action production adapter", () => {
       }),
     ).resolves.toBe(1);
     expect(setFailed).toHaveBeenCalledWith(
-      "Proofline release gate failed without publishable detail",
+      "Orivra release gate failed without publishable detail",
     );
     expect(JSON.stringify(setFailed.mock.calls)).not.toMatch(
       /project_secret|deadbeef/i,

@@ -253,6 +253,12 @@ Existing pre-cutover SIWE challenges fail closed after deployment and users
 request a new challenge; the unchanged expiry bounds disruption to five
 minutes. Do not add a compatibility parser or brand environment variable.
 
+The 027D production-author result is locally GREEN: affected contracts and
+coverage, regenerated Action/Web artifacts, Sites compatibility and desktop/
+mobile browser acceptance passed. This is not hosted or deployed evidence and
+does not authorize 028A yet. Two different read-only verifiers must still PASS
+one exact stopped commit/tree; any production-byte change invalidates both.
+
 Production runtime composition always adds `deploy/compose.backup.yaml` through
 the fixed `compose:production -- --runtime` wrapper. When the recovery
 PostgreSQL image is selected, `up` first rejects ambient AWS/WAL-G authority,

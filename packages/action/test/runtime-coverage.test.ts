@@ -74,7 +74,7 @@ describe("Action production runtime coverage", () => {
     ).resolves.toBe(code);
     expect(setExitCode).toHaveBeenCalledWith(code);
     if (code === 0) expect(setFailed).not.toHaveBeenCalled();
-    else expect(setFailed).toHaveBeenCalledWith("Proofline release gate failed");
+    else expect(setFailed).toHaveBeenCalledWith("Orivra release gate failed");
   });
 });
 

@@ -25,7 +25,7 @@ type ReleaseGateTimeoutError = Error & {
 function releaseGateTimeout(): ReleaseGateTimeoutError {
   return Object.assign(
     new Error(
-      "Proofline live release gate timed out (LIVE_GATE_DEADLINE_EXCEEDED)",
+      "Orivra live release gate timed out (LIVE_GATE_DEADLINE_EXCEEDED)",
     ),
     {
       code: "RELEASE_GATE_TIMEOUT" as const,
@@ -80,7 +80,7 @@ export function observerActionEnvironment(
 function required(environment: Environment, name: string): string {
   const value = environment[name]?.trim();
   if (!value) {
-    throw new Error(`Proofline Action configuration requires ${name}`);
+    throw new Error(`Orivra Action configuration requires ${name}`);
   }
   return value;
 }
@@ -89,7 +89,7 @@ function persistedIdentity(run: Record<string, unknown>) {
   const runId = String(run.runId ?? "");
   const lastSequence = Number(run.sequence);
   if (!runId || !Number.isSafeInteger(lastSequence) || lastSequence < 1) {
-    throw new Error("Persisted Proofline run identity is incomplete");
+    throw new Error("Persisted Orivra run identity is incomplete");
   }
   return { runId, lastSequence };
 }
@@ -171,7 +171,7 @@ export function createPersistedActionRunClient(input: {
   function createDeadline(timeoutMs: number): LiveDeadline {
     const startedAt = input.clock.now();
     if (!Number.isFinite(startedAt)) {
-      throw new Error("Proofline live monotonic clock returned an invalid value");
+      throw new Error("Orivra live monotonic clock returned an invalid value");
     }
     return {
       expiresAt: startedAt + timeoutMs,
@@ -276,7 +276,7 @@ export function createPersistedActionRunClient(input: {
       }
       throw Object.assign(
         new Error(
-          `Proofline API rejected ${method} ${path} (${response.status})`,
+          `Orivra API rejected ${method} ${path} (${response.status})`,
         ),
         { status: response.status, code },
       );
@@ -348,7 +348,7 @@ export function createPersistedActionRunClient(input: {
       deadline,
     )) as Record<string, unknown>;
     const runId = String(created.runId ?? "");
-    if (!runId) throw new Error("Proofline API did not persist a run identity");
+    if (!runId) throw new Error("Orivra API did not persist a run identity");
     return { runId, manifest };
   }
 
@@ -494,11 +494,11 @@ export function createPersistedActionRunClient(input: {
     const bundle = replayProofBundle(serialized);
     if (!isDeepStrictEqual(bundle.manifest, manifest)) {
       throw new Error(
-        "Local Proofline bundle manifest does not match the requested manifest",
+        "Local Orivra bundle manifest does not match the requested manifest",
       );
     }
     if (canonicalSerializeProofBundle(bundle) !== serialized) {
-      throw new Error("Local Proofline bundle replay is not byte-identical");
+      throw new Error("Local Orivra bundle replay is not byte-identical");
     }
     return {
       runId: bundle.runId,
@@ -521,7 +521,7 @@ export function createPersistedActionRunClient(input: {
         deadline,
         () =>
           new Error(
-            "Persisted Proofline run timed out before terminal evidence",
+            "Persisted Orivra run timed out before terminal evidence",
           ),
       );
       const identity = persistedIdentity(projection);
@@ -653,12 +653,12 @@ export async function runActionEntry(input: {
     const result = await (input.runAction ?? runProoflineAction)(
       dependencies as never,
     );
-    if (result !== 0) input.setFailed("Proofline release gate failed");
+    if (result !== 0) input.setFailed("Orivra release gate failed");
     input.setExitCode(result);
     return result;
   } catch {
     input.setFailed(
-      "Proofline release gate failed without publishable detail",
+      "Orivra release gate failed without publishable detail",
     );
     input.setExitCode(1);
     return 1;

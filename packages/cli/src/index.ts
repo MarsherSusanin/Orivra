@@ -203,13 +203,13 @@ function parseSubmissionResponse(
     parsed.data.mode !== request.mode ||
     parsed.data.effectOwner !== expectedEffectOwner[request.mode]
   ) {
-    throw new Error("Proofline returned an invalid submission response contract");
+    throw new Error("Orivra returned an invalid submission response contract");
   }
   return parsed.data;
 }
 
 const rootHelp = [
-  "Proofline Web2Json release client",
+  "Orivra Web2Json release client",
   "",
   "Usage: proofline <command> [options]",
   "",
@@ -371,7 +371,7 @@ export async function runProoflineCli(input: CliDependencies): Promise<number> {
       input.io.stdout(`Recorded canonical URL attack: ${outputPath}`);
       return 0;
     }
-    input.io.stderr("Unsupported Proofline command");
+    input.io.stderr("Unsupported Orivra command");
     return 2;
   } catch (error) {
     input.io.stderr(safeCliErrorMessage(error));
@@ -465,7 +465,7 @@ export function createProductionCliDependencies(input: {
     const method = init.method ?? "GET";
     const response = await requestApi(path, init);
     if (!response.ok) {
-      throw new Error(`Proofline API rejected ${method} ${path} (${response.status})`);
+      throw new Error(`Orivra API rejected ${method} ${path} (${response.status})`);
     }
     return response;
   }
@@ -500,7 +500,7 @@ export function createProductionCliDependencies(input: {
             value = await response.json();
           } catch {
             throw new Error(
-              "Proofline returned an invalid submission response contract",
+              "Orivra returned an invalid submission response contract",
             );
           }
           const parsed = parseSubmissionResponse(value, request);
@@ -512,7 +512,7 @@ export function createProductionCliDependencies(input: {
             : undefined;
         if (response.status !== 409 || code !== "PREFLIGHT_NOT_READY") {
           throw new Error(
-            `Proofline API rejected POST ${path} (${response.status})`,
+            `Orivra API rejected POST ${path} (${response.status})`,
           );
         }
         const remainingMs = timeoutMs - (input.clock.now() - startedAt);

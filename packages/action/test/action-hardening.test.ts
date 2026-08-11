@@ -98,7 +98,7 @@ describe("GitHub Action evidence hardening", () => {
 
     await expect(runProoflineAction(liveInput(deps))).resolves.toBe(1);
     expect(deps.artifacts.writeSummary).toHaveBeenCalledWith(
-      "Proofline live Coston2 gate failed without publishable evidence.",
+      "Orivra live Coston2 gate failed without publishable evidence.",
     );
     expect(JSON.stringify(deps.artifacts.writeSummary.mock.calls)).not.toMatch(
       /project_secret|deadbeef/i,

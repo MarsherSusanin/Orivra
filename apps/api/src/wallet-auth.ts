@@ -67,7 +67,7 @@ export function buildEip4361Message(input: {
     `${webOrigin.host} wants you to sign in with your Ethereum account:`,
     address,
     "",
-    "Sign in to Proofline and create your default project.",
+    "Sign in to Orivra and create your default project.",
     "",
     `URI: ${webOrigin.origin}`,
     "Version: 1",

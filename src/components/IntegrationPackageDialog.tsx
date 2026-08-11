@@ -46,7 +46,7 @@ function canonicalDiagnosticCodes(codes: readonly string[]): string[] {
 
 function workflowYaml(runId: string): string {
   return [
-    "name: Proofline replay",
+    "name: Orivra replay",
     "on: [pull_request]",
     "jobs:",
     "  proofline:",

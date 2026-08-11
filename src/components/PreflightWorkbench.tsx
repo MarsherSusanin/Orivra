@@ -32,7 +32,7 @@ const verdictContent = {
   blocked: {
     heading: "Submission blocked",
     eyebrow: "Remediation required",
-    description: "Proofline found a persisted blocker. Fix the manifest and create a new run.",
+    description: "Orivra found a persisted blocker. Fix the manifest and create a new run.",
     icon: XCircle,
   },
 } as const;
@@ -44,7 +44,7 @@ const fallbackContent = {
   },
   pending: {
     heading: "Preflight evidence is preparing",
-    description: "Persisted evidence is pending. Proofline will read it after the run advances.",
+    description: "Persisted evidence is pending. Orivra will read it after the run advances.",
   },
   unavailable: {
     heading: "Preflight report unavailable",
@@ -56,7 +56,7 @@ const fallbackContent = {
   },
   transport: {
     heading: "Preflight report could not be loaded",
-    description: "Proofline could not read persisted evidence. Submission remains blocked.",
+    description: "Orivra could not read persisted evidence. Submission remains blocked.",
   },
 } as const;
 

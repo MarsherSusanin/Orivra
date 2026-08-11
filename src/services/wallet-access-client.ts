@@ -58,10 +58,10 @@ export type WalletAccessErrorKind =
   | "input";
 
 const ERROR_MESSAGES: Record<WalletAccessErrorKind, string> = {
-  input: "Proofline request input is invalid.",
-  contract: "Proofline returned an invalid response.",
-  http: "Proofline request failed.",
-  transport: "Proofline is unavailable. Retry safely.",
+  input: "Orivra request input is invalid.",
+  contract: "Orivra returned an invalid response.",
+  http: "Orivra request failed.",
+  transport: "Orivra is unavailable. Retry safely.",
 };
 
 export class WalletAccessError extends Error {

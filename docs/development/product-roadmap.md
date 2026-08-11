@@ -32,7 +32,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Complete; independently verified on `527c561` / `ebdf648` |
 | 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Complete; independently verified on `527c561` / `ebdf648` |
 | 027C | WAL/base-backup PITR and local MinIO restore drill | Complete; Core and Product PASS `8137970` / `8c594cc`; scan 8852 user-canceled/not a security PASS; deferred evidence-integrity validation risk remains open |
-| 027D | Orivra public display brand with Proofline technical compatibility | Intentional RED; contracts/docs frozen before 028A |
+| 027D | Orivra public display brand with Proofline technical compatibility | Production-author GREEN locally; two independent verifier PASS reports pending before 028A |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
 | 029A | Local MLP validation and candidate freeze | Planned, credential-free |
@@ -129,9 +129,9 @@ Credential-free delivery covers 022–029A:
   [ADR 0038](../adr/0038-orivra-public-brand.md). Web/metadata/vector, SIWE,
   CLI and Action display copy change; the exact Proofline technical
   compatibility allowlist does not. Old signed Proofline challenges fail closed
-  and users request a new five-minute challenge. This tests/docs-only wave is
-  intentional RED and must reach production, generated-artifact, coverage,
-  browser and two-verifier GREEN before 028A.
+  and users request a new five-minute challenge. Production, generated-artifact,
+  affected coverage, Sites and browser gates are locally GREEN. Two independent
+  verifier PASS reports on one stopped commit/tree remain required before 028A.
 - **028A local release truth** builds and exports OCI archives, then must verify them.
   The frozen release manifest stores per-image `archiveSha256`,
   `imageManifestDigest`, `platform` and `repository`/`reference` fields.

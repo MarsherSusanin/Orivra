@@ -186,7 +186,7 @@ export function ComposerSourceStep({
         <div>
           <span className="section-label">Step 1 · Source</span>
           <h2 id="composer-source-title">Choose the public response</h2>
-          <p>Proofline accepts one secure GET source. The browser only records this request definition.</p>
+          <p>Orivra accepts one secure GET source. The browser only records this request definition.</p>
         </div>
         <label className="composer-import">
           <FileArrowUp size={18} aria-hidden="true" />Import manifest

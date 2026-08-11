@@ -1,6 +1,6 @@
 import { ChartBar, Code, FileText, Gear, UsersThree } from "@phosphor-icons/react";
 import { useState } from "react";
-import prooflineMark from "../assets/proofline-mark.png";
+import orivraMark from "../assets/orivra-mark.svg";
 
 const items = [
   { label: "Runs", icon: ChartBar, href: "/runs" },
@@ -15,8 +15,8 @@ export function Sidebar({ active = "Runs" }: { active?: string }) {
 
   return (
     <aside className="sidebar" aria-label="Primary navigation">
-      <a className="brand-mark" href="/" aria-label="Proofline home">
-        <img src={prooflineMark} width="48" height="48" alt="" />
+      <a className="brand-mark" href="/" aria-label="Orivra home">
+        <img src={orivraMark} width="48" height="48" alt="" />
       </a>
       <nav className="nav-list">
         {items.map(({ label, icon: Icon, href }) => {

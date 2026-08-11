@@ -260,7 +260,7 @@ describe("Slice 023C1 wallet access client", () => {
         code: "AUTH_RESPONSE_INVALID",
         retryable: false,
       });
-      expect(String(failure)).toBe("WalletAccessError: Proofline returned an invalid response.");
+      expect(String(failure)).toBe("WalletAccessError: Orivra returned an invalid response.");
       expect(String(failure)).not.toMatch(/project_|share_|Bearer|stack|digest/i);
     }
   });
@@ -304,7 +304,7 @@ describe("Slice 023C1 wallet access client", () => {
       code: "REQUEST_FAILED",
       retryable: true,
     });
-    expect(String(httpFailure)).toBe("WalletAccessError: Proofline request failed.");
+    expect(String(httpFailure)).toBe("WalletAccessError: Orivra request failed.");
 
     const transportClient = createWalletAccessClient({
       baseUrl: API_BASE_URL,
@@ -319,7 +319,7 @@ describe("Slice 023C1 wallet access client", () => {
       code: "TRANSPORT_UNAVAILABLE",
       retryable: true,
     });
-    expect(String(transportFailure)).toBe("WalletAccessError: Proofline is unavailable. Retry safely.");
+    expect(String(transportFailure)).toBe("WalletAccessError: Orivra is unavailable. Retry safely.");
     expect(JSON.stringify([httpFailure, transportFailure])).not.toContain(PROJECT_TOKEN);
     expect(String(httpFailure) + String(transportFailure)).not.toMatch(/Bearer|private\.ts|stack/i);
   });

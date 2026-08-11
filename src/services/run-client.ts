@@ -245,7 +245,7 @@ async function responseError(
         : undefined;
     if (dailyQuota) {
       return new ProoflineClientError(
-        "Proofline run creation is rate limited. Retry safely.",
+        "Orivra run creation is rate limited. Retry safely.",
         {
           status: response.status,
           code: "PROJECT_RUN_QUOTA_EXHAUSTED",
@@ -255,23 +255,23 @@ async function responseError(
     }
     if (activeLive) {
       return new ProoflineClientError(
-        "Proofline has reached the active live-run limit.",
+        "Orivra has reached the active live-run limit.",
         { status: response.status, code: "ACTIVE_LIVE_RUN_LIMIT_REACHED" },
       );
     }
     if (establishedCreateConflictCode !== null) {
       return new ProoflineClientError(
-        "Proofline run creation failed.",
+        "Orivra run creation failed.",
         { status: response.status, code: establishedCreateConflictCode },
       );
     }
     return new ProoflineClientError(
-      "Proofline run creation failed.",
+      "Orivra run creation failed.",
       { status: response.status, code: `HTTP_${response.status}` },
     );
   }
   return new ProoflineClientError(
-    redact(`Proofline API ${response.status}: ${detail}`, projectToken),
+    redact(`Orivra API ${response.status}: ${detail}`, projectToken),
     { status: response.status, code: safeErrorCode(code, response.status) },
   );
 }
@@ -292,7 +292,7 @@ export function createRunClient(input: {
     try {
       normalizedExpectedWebOrigin = new URL(expectedWebOrigin).origin;
     } catch {
-      throw new ProoflineClientError("The expected Proofline web origin is invalid", {
+      throw new ProoflineClientError("The expected Orivra web origin is invalid", {
         status: 500,
         code: "SHARE_LINK_INVALID",
       });
@@ -326,7 +326,7 @@ export function createRunClient(input: {
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       throw new ProoflineClientError(
-        redact(`Proofline API transport error: ${message}`, input.projectToken),
+        redact(`Orivra API transport error: ${message}`, input.projectToken),
         { status: 503, code: "TRANSPORT_UNAVAILABLE" },
       );
     }
@@ -357,7 +357,7 @@ export function createRunClient(input: {
     const parsed = SubmissionResponseV1Schema.safeParse(result);
     if (!parsed.success || parsed.data.runId !== runId || parsed.data.mode !== mode) {
       throw new ProoflineClientError(
-        "Proofline returned an invalid submission response contract",
+        "Orivra returned an invalid submission response contract",
         { status: 502, code: "SUBMISSION_RESPONSE_INVALID" },
       );
     }
@@ -387,7 +387,7 @@ export function createRunClient(input: {
       });
       const parsed = CreateRunResultV1Schema.safeParse(result);
       if (!parsed.success) {
-        throw new Error("Proofline returned an invalid create-run response contract");
+        throw new Error("Orivra returned an invalid create-run response contract");
       }
       const accepted: CreateRunResultV1 = parsed.data;
       safeStorageSet(storage, LAST_RUN_KEY, accepted.runId);
@@ -406,7 +406,7 @@ export function createRunClient(input: {
       const parsed = PreflightReportV1Schema.safeParse(result);
       if (!parsed.success) {
         throw new ProoflineClientError(
-          "Proofline returned an invalid preflight report contract",
+          "Orivra returned an invalid preflight report contract",
           { status: 502, code: "PREFLIGHT_REPORT_INVALID" },
         );
       }
@@ -418,7 +418,7 @@ export function createRunClient(input: {
       const parsed = ConsumerLabReportV1Schema.safeParse(result);
       if (!parsed.success || parsed.data.runId !== runId) {
         throw new ProoflineClientError(
-          "Proofline returned an invalid Consumer Lab report contract",
+          "Orivra returned an invalid Consumer Lab report contract",
           { status: 502, code: "CONSUMER_LAB_INVALID" },
         );
       }
@@ -447,7 +447,7 @@ export function createRunClient(input: {
       const parsed = EvidenceReceiptV1Schema.safeParse(result);
       if (!parsed.success || parsed.data.runId !== runId) {
         throw new ProoflineClientError(
-          "Proofline returned an invalid evidence receipt contract",
+          "Orivra returned an invalid evidence receipt contract",
           { status: 502, code: "EVIDENCE_RECEIPT_INVALID" },
         );
       }
@@ -476,7 +476,7 @@ export function createRunClient(input: {
           returnedOrigin !== normalizedExpectedWebOrigin)
       ) {
         throw new ProoflineClientError(
-          "Proofline returned an invalid share-link contract",
+          "Orivra returned an invalid share-link contract",
           { status: 502, code: "SHARE_LINK_INVALID" },
         );
       }
@@ -504,7 +504,7 @@ export function createRunClient(input: {
       );
       if (result.mode !== "wallet") {
         throw new ProoflineClientError(
-          "Proofline returned an invalid wallet submission response",
+          "Orivra returned an invalid wallet submission response",
           { status: 502, code: "SUBMISSION_RESPONSE_INVALID" },
         );
       }
