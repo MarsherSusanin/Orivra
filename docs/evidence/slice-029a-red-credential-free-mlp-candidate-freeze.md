@@ -84,3 +84,11 @@ promotes only the copied build-context binary to 0555, and remains covered by th
 cleanup. Typecheck, the exact 11-case candidate deployment contract and the
 serialized 190-case deployment static inventory pass before the next mandatory
 from-scratch unified run.
+
+That next attempt reached the first real offline Docker build, then failed
+closed because the same fresh no-auth `DOCKER_CONFIG` exposed Compose but not
+the host's verified local Buildx plugin. Docker therefore selected the legacy
+builder, which cannot execute the accepted `RUN --mount` Dockerfile. The next
+corrective RED contract freezes one executable `docker-buildx` from an exact
+system-path allowlist beside `docker-compose`; it still forbids reading the
+user Docker config, credential helpers or registry authority.

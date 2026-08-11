@@ -105,6 +105,41 @@ test("029A exposes Compose only through one verified local plugin in its private
   }
 });
 
+test("029A exposes BuildKit only through one verified local Buildx plugin in the same no-auth config", async () => {
+  const module = await orchestration();
+  assert.deepEqual(module.CANDIDATE_BUILDX_PLUGIN_PATHS, [
+    "/Applications/Docker.app/Contents/Resources/cli-plugins/docker-buildx",
+    "/usr/local/lib/docker/cli-plugins/docker-buildx",
+    "/usr/libexec/docker/cli-plugins/docker-buildx",
+    "/usr/lib/docker/cli-plugins/docker-buildx",
+    "/opt/homebrew/lib/docker/cli-plugins/docker-buildx",
+  ]);
+  const parent = await mkdtemp(join(tmpdir(), "proofline-029a-buildx-plugin-"));
+  try {
+    const dockerConfig = join(parent, "docker-config");
+    const plugin = join(parent, "docker-buildx");
+    await mkdir(dockerConfig, { mode: 0o700 });
+    await writeFile(plugin, "verified local buildx plugin", { mode: 0o555 });
+    const resolved = await module.materializeCandidateBuildxPlugin({
+      dockerConfigDirectory: dockerConfig,
+      candidatePaths: [join(parent, "missing"), plugin],
+    });
+    const installed = join(dockerConfig, "cli-plugins/docker-buildx");
+    const canonicalPlugin = await realpath(plugin);
+    assert.equal(resolved, canonicalPlugin);
+    assert.equal((await lstat(installed)).isSymbolicLink(), true);
+    assert.equal(await realpath(installed), canonicalPlugin);
+    assert.equal((await lstat(plugin)).mode & 0o777, 0o555);
+    await assert.rejects(() => module.materializeCandidateBuildxPlugin({
+      dockerConfigDirectory: dockerConfig,
+      candidatePaths: [join(parent, "missing")],
+    }), /Buildx plugin is unavailable/);
+  } finally {
+    await chmod(parent, 0o700).catch(() => undefined);
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+
 test("029A materializes verified WAL-G at the exact retained offline-build context", async () => {
   const module = await orchestration();
   const parent = await mkdtemp(join(tmpdir(), "proofline-029a-wal-g-context-"));
