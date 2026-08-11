@@ -19,8 +19,8 @@ import {
   FrozenOciReleaseReceiptV1Schema,
   canonicalSerializeFrozenOciReleaseManifest,
   canonicalSerializeFrozenOciReleaseReceipt,
+  checksumReleaseArtifactInventory,
 } from "../packages/contracts/src/release-runtime.mjs";
-import { createFrozenOciReleaseReceipt } from "../packages/domain/src/oci-release-runtime.mjs";
 import { writeCanonicalOciArchive } from "./oci-layout-archive.mjs";
 import {
   captureReleaseSourceSnapshot,
@@ -249,15 +249,29 @@ async function main() {
           })),
         });
         const manifestBytes = Buffer.from(canonicalSerializeFrozenOciReleaseManifest(manifest), "utf8");
-        const archiveInputs = await Promise.all(archives.map(async (archive) => ({
-          filename: archive.filename,
-          bytes: new Uint8Array(await readFile(join(paths.archives, archive.filename))),
-        })));
-        const receipt = FrozenOciReleaseReceiptV1Schema.parse(createFrozenOciReleaseReceipt({
+        const artifacts = [
+          {
+            filename: "frozen-release-manifest.v1.json",
+            sizeBytes: manifestBytes.byteLength,
+            sha256: sha256(manifestBytes),
+          },
+          ...archives.map((archive) => ({
+            filename: archive.filename,
+            sizeBytes: archive.archiveSizeBytes,
+            sha256: archive.archiveSha256,
+          })),
+        ].sort((left, right) => left.filename.localeCompare(right.filename, "en"));
+        const receipt = FrozenOciReleaseReceiptV1Schema.parse({
+          version: "1",
+          kind: "frozen-oci-release-receipt",
+          status: "passed",
+          verification: "verified",
+          releaseClaim: true,
           producer: { commitSha: source.producer.commitSha, treeSha: source.producer.treeSha },
-          manifestBytes,
-          archives: archiveInputs,
-        }));
+          frozenReleaseManifestSha256: sha256(manifestBytes),
+          artifacts,
+          artifactInventorySha256: checksumReleaseArtifactInventory(artifacts),
+        });
         await mkdir(join(stageRoot, "images"), { recursive: true, mode: 0o700 });
         await writeFile(join(stageRoot, "frozen-release-manifest.v1.json"), manifestBytes, { mode: 0o600, flag: "wx" });
         await writeFile(join(stageRoot, "frozen-release-receipt.v1.json"), canonicalSerializeFrozenOciReleaseReceipt(receipt), { mode: 0o600, flag: "wx" });
