@@ -17,7 +17,15 @@ function repositoryPath(remoteRepository) {
 
 function requireSameRegistryLocation(value) {
   const url = new URL(value, "https://ghcr.io");
-  if (url.protocol !== "https:" || url.hostname !== "ghcr.io" || url.username || url.password) fail();
+  if (url.protocol !== "https:" || url.hostname !== "ghcr.io" || url.port !== "" || url.username || url.password || url.hash) fail();
+  return url;
+}
+
+function requireUploadLocation(value, remoteRepository) {
+  const url = requireSameRegistryLocation(value);
+  const path = repositoryPath(remoteRepository);
+  const prefix = `/v2/${path}/blobs/uploads/`;
+  if (!url.pathname.startsWith(prefix) || url.pathname.length === prefix.length) fail();
   return url;
 }
 
@@ -76,7 +84,7 @@ export async function createGhcrRegistryPublicationAdapter({ username, tokenByte
     const started = await registryRequest(remoteRepository, "blobs/uploads/", { method: "POST" }, [202]);
     const location = started.headers.get("location");
     if (!location) fail();
-    const upload = requireSameRegistryLocation(location);
+    const upload = requireUploadLocation(location, remoteRepository);
     upload.searchParams.set("digest", digest);
     const token = await bearer(remoteRepository);
     const completed = await requireResponse(await request(upload, {
@@ -99,18 +107,23 @@ export async function createGhcrRegistryPublicationAdapter({ username, tokenByte
       const manifestBlob = inspected.blobs.find(({ digest }) => digest === image.imageManifestDigest);
       if (!manifestBlob) fail();
       for (const blob of inspected.blobs) {
-        if (blob.digest !== image.imageManifestDigest) await ensureBlob(remoteRepository, blob.digest, blob.bytes);
+        if (blob.digest !== image.imageManifestDigest) {
+          const bytes = blob.bytes ?? await inspected.readBlob?.(blob.digest);
+          await ensureBlob(remoteRepository, blob.digest, bytes);
+        }
       }
+      const manifestBytes = manifestBlob.bytes ?? await inspected.readBlob?.(manifestBlob.digest);
+      if (!(manifestBytes instanceof Uint8Array)) fail();
       const response = await registryRequest(
         remoteRepository,
         `manifests/${image.imageManifestDigest}`,
         {
           method: "PUT",
           headers: {
-            "content-length": String(manifestBlob.bytes.byteLength),
+            "content-length": String(manifestBytes.byteLength),
             "content-type": OCI_MANIFEST,
           },
-          body: manifestBlob.bytes,
+          body: manifestBytes,
         },
         [201],
       );

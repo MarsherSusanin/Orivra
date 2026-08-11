@@ -1,4 +1,8 @@
-import { canonicalJson } from "../packages/contracts/src/release-runtime.mjs";
+import {
+  StagingDeploymentEvidenceV1Schema,
+  canonicalSerializeStagingDeploymentEvidence,
+} from "../packages/contracts/src/publication-runtime.mjs";
+import { verifyPublicationEvidenceHandoff } from "../packages/domain/src/publication-runtime.mjs";
 
 const imageIds = Object.freeze(["caddy", "web", "api", "worker", "postgres-recovery"]);
 const imageEnvironment = Object.freeze({
@@ -37,20 +41,19 @@ export async function createStagingCredentialEnvironment({
   });
 }
 
-function requirePublicationEvidence(publicationEvidence) {
-  if (!publicationEvidence || publicationEvidence.kind !== "oci-publication-evidence" ||
-    publicationEvidence.status !== "passed" || publicationEvidence.verification !== "verified" ||
-    publicationEvidence.publicationClaim !== true || !Array.isArray(publicationEvidence.images) ||
-    publicationEvidence.images.length !== imageIds.length) throw failure("STAGING_PUBLICATION_INVALID", "Publication evidence is invalid");
-  publicationEvidence.images.forEach((image, index) => {
-    if (image.id !== imageIds[index] || image.remoteDigest !== image.imageManifestDigest && image.imageManifestDigest !== undefined ||
-      image.remoteReference !== `${image.remoteRepository}@${image.remoteDigest}`) throw failure("STAGING_PUBLICATION_INVALID", "Publication image is invalid");
-  });
-  return publicationEvidence;
+function requirePublicationHandoff({ publicationHandoff, publicationEvidence, publicationEvidenceSha256 }) {
+  try {
+    if (!publicationHandoff || publicationHandoff.evidence !== publicationEvidence ||
+      publicationHandoff.expectedPublicationEvidenceSha256 !== publicationEvidenceSha256) throw new Error("handoff mismatch");
+    verifyPublicationEvidenceHandoff(publicationHandoff);
+    return publicationEvidence;
+  } catch (cause) {
+    throw failure("STAGING_PUBLICATION_INVALID", "Publication evidence handoff is invalid", { cause });
+  }
 }
 
-export function createStagingImagePlan({ publicationEvidence }) {
-  const evidence = requirePublicationEvidence(publicationEvidence);
+export function createStagingImagePlan(input) {
+  const evidence = requirePublicationHandoff(input);
   const environment = {};
   for (const image of evidence.images) environment[imageEnvironment[image.id]] = image.remoteReference;
   return Object.freeze({
@@ -89,46 +92,116 @@ function commandFor(id, evidence, target) {
   });
 }
 
-function inspectDigestResult(result, evidence) {
-  if (!Array.isArray(result) || result.length !== evidence.images.length || result.some((item, index) =>
-    item.id !== evidence.images[index].id || item.remoteDigest !== evidence.images[index].remoteDigest)) {
-    throw failure("STAGING_REMOTE_DIGEST_MISMATCH", "Staging image digest mismatch");
-  }
+function exactKeys(value, keys) {
+  return value && typeof value === "object" && !Array.isArray(value) &&
+    Object.keys(value).sort().join("\0") === [...keys].sort().join("\0");
 }
 
-export async function runDigitalOceanStaging({ publicationEvidence, publicationEvidenceSha256, target, digitalOceanAdapter, sshAdapter, appendStagingEvidence, cleanup }) {
-  const evidence = requirePublicationEvidence(publicationEvidence);
+function requireObservation(id, observed, evidence, sshHostKeySha256) {
+  const common = ["status", "sshHostKeySha256"];
+  const expectedKeys = id === "inspect-local-digests" ? [...common, "images"]
+    : id === "migrator" ? [...common, "migrationManifestSha256", "targetVersion", "schemaVersion"]
+      : id === "readyz-real-heartbeat" ? [...common, "readyz", "workerHeartbeat"]
+        : id === "spaces-pitr-restore" ? [...common, "restoreEvidenceSha256"]
+          : id === "persisted-live-coston2" ? [...common, "runId"]
+            : id === "install-read-only-pull-credential" ? [...common, "registry", "access"]
+              : common;
+  if (!exactKeys(observed, expectedKeys) || observed.status !== "passed" ||
+    observed.sshHostKeySha256 !== sshHostKeySha256) {
+    throw failure("STAGING_OBSERVATION_INVALID", "Staging observation is invalid");
+  }
+  if (id === "inspect-local-digests" && (!Array.isArray(observed.images) ||
+    observed.images.length !== evidence.images.length || observed.images.some((item, index) =>
+      !exactKeys(item, ["id", "remoteDigest"]) || item.id !== evidence.images[index].id ||
+      item.remoteDigest !== evidence.images[index].remoteDigest))) {
+    throw failure("STAGING_REMOTE_DIGEST_MISMATCH", "Staging image digest mismatch");
+  }
+  if (id === "migrator" && (!/^sha256:[a-f0-9]{64}$/.test(observed.migrationManifestSha256 ?? "") ||
+    observed.targetVersion !== 10 || observed.schemaVersion !== 10)) throw failure("STAGING_OBSERVATION_INVALID", "Staging observation is invalid");
+  if (id === "readyz-real-heartbeat" &&
+    (!exactKeys(observed.readyz, ["status"]) || observed.readyz.status !== "passed" ||
+      !exactKeys(observed.workerHeartbeat, ["status"]) || observed.workerHeartbeat.status !== "current")) {
+    throw failure("STAGING_OBSERVATION_INVALID", "Staging observation is invalid");
+  }
+  if (id === "spaces-pitr-restore" && !/^sha256:[a-f0-9]{64}$/.test(observed.restoreEvidenceSha256 ?? "")) throw failure("STAGING_OBSERVATION_INVALID", "Staging observation is invalid");
+  if (id === "persisted-live-coston2" && !/^run_[0-9A-Z]{26}$/.test(observed.runId ?? "")) throw failure("STAGING_OBSERVATION_INVALID", "Staging observation is invalid");
+  if (id === "install-read-only-pull-credential" && (observed.registry !== "ghcr.io" || observed.access !== "read-only")) throw failure("STAGING_OBSERVATION_INVALID", "Staging observation is invalid");
+  return observed;
+}
+
+function buildStagingEvidence({ evidence, publicationEvidenceSha256, target, run, resource, observations }) {
+  return StagingDeploymentEvidenceV1Schema.parse({
+    version: "1",
+    kind: "digitalocean-staging-deployment-evidence",
+    status: "passed",
+    verification: "verified",
+    stagingClaim: true,
+    producer: evidence.producer,
+    publicationEvidenceSha256,
+    frozenReleaseManifestSha256: evidence.frozenRelease.frozenReleaseManifestSha256,
+    target: {
+      provider: "digitalocean",
+      environment: "staging",
+      deploymentId: resource.deploymentId,
+      composeProject: target.composeProject,
+      publicOrigin: target.origin,
+    },
+    run: { ...run, sshHostKeySha256: target.sshHostKeySha256 },
+    pullCredential: { registry: "ghcr.io", access: "read-only" },
+    images: evidence.images.map(({ id, remoteRepository, remoteReference, remoteDigest }) => ({ id, remoteRepository, remoteReference, remoteDigest })),
+    checks: {
+      exactDigestPull: { status: "passed" },
+      migration: {
+        migrationManifestSha256: observations.migrator.migrationManifestSha256,
+        targetVersion: observations.migrator.targetVersion,
+        schemaVersion: observations.migrator.schemaVersion,
+        status: "passed",
+      },
+      healthz: { status: "passed" },
+      readyz: observations["readyz-real-heartbeat"].readyz,
+      workerHeartbeat: observations["readyz-real-heartbeat"].workerHeartbeat,
+      hostedBrowserSmoke: { status: "passed" },
+      spacesRestore: { restoreEvidenceSha256: observations["spaces-pitr-restore"].restoreEvidenceSha256, status: "passed" },
+      liveCoston2: { runId: observations["persisted-live-coston2"].runId, status: "passed" },
+    },
+  });
+}
+
+export async function runDigitalOceanStaging({ publicationHandoff, publicationEvidence, publicationEvidenceSha256, target, run, digitalOceanAdapter, sshAdapter, appendStagingEvidence, closeLocalSession, teardownStaging, cleanup }) {
+  const evidence = requirePublicationHandoff({ publicationHandoff, publicationEvidence, publicationEvidenceSha256 });
   if (!target || !target.origin?.startsWith("https://") || !/^proofline-staging-[a-z0-9-]+$/.test(target.composeProject ?? "") ||
     /production/i.test(target.composeProject) || !/^sha256:[a-f0-9]{64}$/.test(target.sshHostKeySha256 ?? "") ||
-    !/^sha256:[a-f0-9]{64}$/.test(publicationEvidenceSha256 ?? "")) throw failure("STAGING_TARGET_INVALID", "Staging target is invalid");
+    !/^sha256:[a-f0-9]{64}$/.test(publicationEvidenceSha256 ?? "") ||
+    !run || !/^stg_[0-9A-Z]{26}$/.test(run.runId ?? "") || !/^operator_[0-9A-Z]{26}$/.test(run.operatorId ?? "") ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(run.completedAt ?? "")) throw failure("STAGING_TARGET_INVALID", "Staging target is invalid");
   let resource;
+  let session;
   let original;
   let result;
   let stagingEvidenceWritten = false;
   try {
     resource = await digitalOceanAdapter.provision({ environment: "staging", target });
     await digitalOceanAdapter.applyFirewall({ resource, ingress: [80, 443], environment: "staging" });
+    session = await sshAdapter.openPinnedSession({
+      endpoint: { host: resource.sshHost, port: 22 },
+      expectedHostKeySha256: target.sshHostKeySha256,
+    });
+    if (session?.observedHostKeySha256 !== target.sshHostKeySha256 || typeof session.run !== "function") {
+      throw failure("STAGING_SSH_HOST_KEY_MISMATCH", "Staging SSH host key mismatch");
+    }
     const observations = {};
     for (const id of commandIds) {
-      const observed = await sshAdapter.run(commandFor(id, evidence, target));
-      observations[id] = observed;
-      if (id === "inspect-local-digests") inspectDigestResult(observed, evidence);
+      observations[id] = requireObservation(
+        id,
+        await session.run(commandFor(id, evidence, target)),
+        evidence,
+        target.sshHostKeySha256,
+      );
     }
-    const stagingEvidence = {
-      version: "1",
-      kind: "digitalocean-staging-deployment-evidence",
-      status: "passed",
-      verification: "verified",
-      stagingClaim: true,
-      environment: "staging",
-      publicationEvidenceSha256,
-      deploymentId: resource.deploymentId,
-      imageReferences: evidence.images.map(({ id, remoteReference }) => ({ id, remoteReference })),
-      checks: commandIds.slice(2).map((id) => ({ id, status: "passed" })),
-    };
+    const stagingEvidence = buildStagingEvidence({ evidence, publicationEvidenceSha256, target, run, resource, observations });
     await appendStagingEvidence({
       filename: "staging-deployment-evidence.v1.json",
-      bytes: Buffer.from(canonicalJson(stagingEvidence), "utf8"),
+      bytes: Buffer.from(canonicalSerializeStagingDeploymentEvidence(stagingEvidence), "utf8"),
     });
     stagingEvidenceWritten = true;
     result = Object.freeze({ status: "passed", environment: "staging", deploymentId: resource.deploymentId });
@@ -138,12 +211,22 @@ export async function runDigitalOceanStaging({ publicationEvidence, publicationE
       partial: { publicationEvidenceRetained: true, stagingEvidenceWritten },
     });
   }
-  let cleanupFailure;
-  if (resource?.owned === true) {
-    try { await cleanup(resource); } catch (cause) { cleanupFailure = cause; }
+  const cleanupFailures = [];
+  if (session && typeof session.close === "function") {
+    try { await session.close(); } catch (cause) { cleanupFailures.push(cause); }
   }
-  if (original && cleanupFailure) throw Object.assign(new AggregateError([original, cleanupFailure], "Staging and cleanup failed"), { cause: original });
+  if (typeof closeLocalSession === "function") {
+    try { await closeLocalSession(); } catch (cause) { cleanupFailures.push(cause); }
+  }
+  if (resource?.owned === true && (original || typeof closeLocalSession !== "function")) {
+    const finalizer = original ? (teardownStaging ?? cleanup) : cleanup;
+    if (typeof finalizer === "function") {
+      try { await finalizer(resource); } catch (cause) { cleanupFailures.push(cause); }
+    }
+  }
+  if (original && cleanupFailures.length) throw Object.assign(new AggregateError([original, ...cleanupFailures], "Staging and cleanup failed"), { cause: original });
   if (original) throw original;
-  if (cleanupFailure) throw cleanupFailure;
+  if (cleanupFailures.length === 1) throw cleanupFailures[0];
+  if (cleanupFailures.length > 1) throw new AggregateError(cleanupFailures, "Staging cleanup failed");
   return result;
 }

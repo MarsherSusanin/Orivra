@@ -1,8 +1,8 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Corrective intentional RED after independent Core rejected exact
-candidate `5322125` / `bad14e5`; replacement implementation and both verifiers
-are pending.
+Status: Production-author GREEN locally after independent Core rejected exact
+candidate `5322125` / `bad14e5`; both independent verifiers and all
+credentialed publication/staging effects are pending.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 
@@ -50,7 +50,7 @@ DigitalOcean staging environment from those exact remote digests.
 
 ## Explicit exclusions
 
-This RED performs no registry, SSH, DigitalOcean, DNS, Spaces, Coston2, Docker
+This slice has performed no registry, SSH, DigitalOcean, DNS, Spaces, Coston2, Docker
 or candidate-output effect. It does not select final GHCR repository names,
 claim hosted staging, authorize production promotion, or run a canary. 029B
 owns production promotion/canary after accepted 028B hosted evidence.
@@ -64,7 +64,9 @@ owns production promotion/canary after accepted 028B hosted evidence.
 - staging orchestration fixes exact digest pulls, service/check order,
   append-only evidence and scoped cleanup through injected operator adapters;
 - typecheck, focused 028B tests, contracts/domain 100% coverage, serialized
-  deployment static, Action artifact sync, production build and Sites pass.
+  deployment static and Sites pass;
+- the five frozen 029A OCI archives pass the single-descriptor parser and exact
+  manifest-digest revalidation without registry or external network access.
 
 No GHCR request, DigitalOcean/SSH action or hosted smoke has run. A real 028B
 PASS additionally requires the explicit five-repository target map, approved

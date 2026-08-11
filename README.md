@@ -117,9 +117,11 @@ blockchain-операций.
   `8991e7e49f4570702436c269c8f6bd0af7b8f186997bff2a52e6da22f7a0cdda`.
   Core rejected the first ADR 0042 implementation at exact `5322125` /
   `bad14e5` for unbound staging authority, false PASS observations, an unused
-  SSH pin and reopened archive bytes. Corrective RED is frozen; no GHCR,
-  DigitalOcean or SSH effect has occurred, and a replacement plus two verifier
-  PASS reports are required before credentials may be used.
+  SSH pin and reopened archive bytes. The replacement is production-author
+  GREEN locally: it binds canonical handoff bytes transitively, requires typed
+  observations through one pinned SSH session and keeps each OCI archive on
+  one bounded no-follow lease. No GHCR, DigitalOcean or SSH effect has occurred;
+  two independent PASS reports are still required before credentials are used.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

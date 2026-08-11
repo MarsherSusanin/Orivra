@@ -1,6 +1,7 @@
 import {
   GhcrPublicationTargetsV1Schema,
   PublicationEvidenceV1Schema,
+  canonicalSerializeGhcrPublicationTargets,
   canonicalSerializePublicationEvidence,
   checksumGhcrPublicationTargets,
   checksumPublicationEvidence,
@@ -113,9 +114,21 @@ export function verifyPublicationEvidenceHandoff(input) {
   const receipt = FrozenOciReleaseReceiptV1Schema.parse(JSON.parse(decoder.decode(input.receiptBytes)));
   const targetMap = GhcrPublicationTargetsV1Schema.parse(JSON.parse(decoder.decode(input.targetMapBytes)));
   const checks = [
+    exactBytes(input.evidenceBytes, canonicalSerializePublicationEvidence(evidence)),
+    input.expectedPublicationEvidenceSha256 === sha256Bytes(input.evidenceBytes),
+    checksumPublicationEvidence(evidence) === input.expectedPublicationEvidenceSha256,
     exactBytes(input.candidateBytes, canonicalSerializeCredentialFreeMlpCandidate(candidate)),
     exactBytes(input.manifestBytes, canonicalSerializeFrozenOciReleaseManifest(manifest)),
     exactBytes(input.receiptBytes, canonicalSerializeFrozenOciReleaseReceipt(receipt)),
+    exactBytes(input.targetMapBytes, canonicalSerializeGhcrPublicationTargets(targetMap)),
+    candidate.frozenRelease.manifestSha256 === sha256Bytes(input.manifestBytes),
+    candidate.frozenRelease.receiptSha256 === sha256Bytes(input.receiptBytes),
+    candidate.frozenRelease.artifactInventorySha256 === receipt.artifactInventorySha256,
+    receipt.frozenReleaseManifestSha256 === sha256Bytes(input.manifestBytes),
+    manifest.producer.commitSha === candidate.producer.commitSha,
+    manifest.producer.treeSha === candidate.producer.treeSha,
+    receipt.producer.commitSha === candidate.producer.commitSha,
+    receipt.producer.treeSha === candidate.producer.treeSha,
     evidence.authorization.credentialFreeMlpCandidateSha256 === sha256Bytes(input.candidateBytes),
     evidence.authorization.coreReportSha256 === input.verifierReports?.coreReportSha256,
     evidence.authorization.productReportSha256 === input.verifierReports?.productReportSha256,
@@ -125,10 +138,17 @@ export function verifyPublicationEvidenceHandoff(input) {
     evidence.ghcrPublicationTargetsSha256 === checksumGhcrPublicationTargets(targetMap),
     evidence.producer.commitSha === candidate.producer.commitSha,
     evidence.producer.treeSha === candidate.producer.treeSha,
-    evidence.images.every((image, index) =>
-      image.id === manifest.images[index].id &&
-      image.archiveSha256 === manifest.images[index].archiveSha256 &&
-      image.remoteRepository === targetMap.images[index].remoteRepository),
+    evidence.images.every((image, index) => {
+      const frozen = manifest.images[index];
+      const target = targetMap.images[index];
+      return image.id === frozen.id && target.id === frozen.id &&
+        image.sourceRepository === frozen.repository && target.sourceRepository === frozen.repository &&
+        image.platform === frozen.platform && image.archiveFilename === frozen.archiveFilename &&
+        image.archiveSizeBytes === frozen.archiveSizeBytes && image.archiveSha256 === frozen.archiveSha256 &&
+        image.imageManifestDigest === frozen.imageManifestDigest &&
+        image.remoteRepository === target.remoteRepository && image.remoteDigest === frozen.imageManifestDigest &&
+        image.remoteReference === `${target.remoteRepository}@${frozen.imageManifestDigest}`;
+    }),
   ];
   if (checks.includes(false)) invalid();
   return true;

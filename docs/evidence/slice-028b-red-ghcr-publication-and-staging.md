@@ -2,7 +2,9 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Corrective intentional RED after Core rejected `5322125` / `bad14e5`.
+Status: Corrective intentional RED closed by a production-author GREEN
+replacement; two independent verifier reports and all credentialed effects are
+pending after Core rejected `5322125` / `bad14e5`.
 
 ## Authorized predecessor
 
@@ -138,3 +140,10 @@ failures are the exact missing transitive/canonical handoff checks,
 schema-valid typed staging evidence, enforced pinned session,
 single-descriptor archive capture, strict upload-Location authority, separate
 session/teardown lifecycle and removal of mutable raw-object staging authority.
+
+The replacement closes all fourteen causal RED cases. Typecheck, the exact 61
+contracts/domain/purity cases, exact 32 GHCR/staging/roadmap cases, serialized
+deployment static 211/211, contracts/domain coverage 100% in all metrics and
+direct single-descriptor revalidation of all five frozen 029A OCI archives are
+GREEN. This is production-author evidence only, not an independent PASS and
+not a hosted, deployed or security claim.

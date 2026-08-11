@@ -20,11 +20,15 @@ import { verifyCredentialFreeMlpCandidateHandoff } from "../packages/domain/src/
 import { createPublicationEvidence } from "../packages/domain/src/publication-runtime.mjs";
 import {
   createPublicationCredentialEnvironment,
-  inspectFrozenOciArchiveForPublication,
+  captureFrozenOciArchiveForPublication,
   runGhcrPublication,
 } from "./ghcr-publication-runtime.mjs";
 import { createGhcrRegistryPublicationAdapter } from "./ghcr-registry-adapter.mjs";
-import { readCanonicalOciUstarEntries } from "./oci-ustar-reader.mjs";
+import {
+  checksumOciArchiveDescriptor,
+  inspectCanonicalOciUstarDescriptor,
+  readOciDescriptorRange,
+} from "./oci-ustar-reader.mjs";
 
 const AUTHORIZED = Object.freeze({
   commitSha: "fc2f6e0677c64dc4f2ee90a85219bcc9f8c9bfbc",
@@ -33,7 +37,7 @@ const AUTHORIZED = Object.freeze({
   coreReportSha256: "sha256:d03dd65f00b120420734cba2d6473ccb8bcb0e9cd8f614174f8939a93533b60b",
   productReportSha256: "sha256:b396a60978279a48db4220d873ce5188b4848cf769d7715d30f828fb1092bd11",
 });
-const limits = Object.freeze({ maxEntries: 4_096, maxJsonBytes: 1_048_576, maxTotalBlobBytes: 4_294_967_296 });
+const limits = Object.freeze({ maxEntries: 4_096, maxJsonBytes: 1_048_576, maxResidentBytes: 4_294_967_296 });
 
 function fail(message = "GHCR publication input is invalid") {
   throw Object.assign(new Error(message), { code: "GHCR_PUBLICATION_INPUT_INVALID" });
@@ -57,17 +61,6 @@ function parseArguments(values) {
 
 function sha256(bytes) {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-}
-
-async function checksumFile(path) {
-  const handle = await open(path, "r");
-  try {
-    const hash = createHash("sha256");
-    for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk);
-    return `sha256:${hash.digest("hex")}`;
-  } finally {
-    await handle.close();
-  }
 }
 
 async function requirePrivateCandidateRoot(path) {
@@ -171,13 +164,15 @@ async function main() {
     const evidence = await runGhcrPublication({
       images,
       targetMap,
-      inspectArchive: (image) => inspectFrozenOciArchiveForPublication({
+      inspectArchive: (image) => captureFrozenOciArchiveForPublication({
         archivePath: image.archivePath,
         expected: image,
-        inspectArchive: lstat,
-        checksumArchive: checksumFile,
-        readEntries: readCanonicalOciUstarEntries,
         limits,
+        openArchive: open,
+        checksumDescriptor: checksumOciArchiveDescriptor,
+        inspectDescriptor: inspectCanonicalOciUstarDescriptor,
+        readDescriptorRange: readOciDescriptorRange,
+        closeDescriptor: (handle) => handle.close(),
       }),
       registryAdapter,
       createEvidence: (remoteResults) => createPublicationEvidence({

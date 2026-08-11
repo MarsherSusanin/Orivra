@@ -1,4 +1,5 @@
 import { sha256Bytes } from "../packages/contracts/src/release-runtime.mjs";
+import { constants as fsConstants } from "node:fs";
 import { GhcrPublicationTargetsV1Schema } from "../packages/contracts/src/publication-runtime.mjs";
 import { inspectSinglePlatformOciLayout } from "../packages/domain/src/oci-release-runtime.mjs";
 
@@ -94,6 +95,85 @@ export async function inspectFrozenOciArchiveForPublication({
   }
 }
 
+export async function captureFrozenOciArchiveForPublication({
+  archivePath,
+  expected,
+  limits,
+  openArchive,
+  checksumDescriptor,
+  inspectDescriptor,
+  readDescriptorRange,
+  closeDescriptor,
+}) {
+  let descriptor;
+  let closed = false;
+  try {
+    if (!isPrivateAbsolutePath(archivePath) || !expected || !limits ||
+      !Number.isSafeInteger(limits.maxEntries) || limits.maxEntries < 3 ||
+      !Number.isSafeInteger(limits.maxJsonBytes) || limits.maxJsonBytes < 1 ||
+      !Number.isSafeInteger(limits.maxResidentBytes) || limits.maxResidentBytes < 1 ||
+      ![openArchive, checksumDescriptor, inspectDescriptor, readDescriptorRange, closeDescriptor].every((value) => typeof value === "function")) {
+      throw new Error("invalid capture input");
+    }
+    descriptor = await openArchive(archivePath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    if (await checksumDescriptor(descriptor) !== expected.archiveSha256) throw new Error("archive checksum mismatch");
+    const inspected = await inspectDescriptor(descriptor, limits);
+    const stat = inspected?.stat;
+    if (!stat || stat.isFile !== true || stat.isSymbolicLink === true || stat.mode !== 0o400 ||
+      stat.size !== expected.archiveSizeBytes || inspected.platform !== expected.platform ||
+      inspected.imageManifestDigest !== expected.imageManifestDigest || !Array.isArray(inspected.blobs) ||
+      inspected.blobs.length < 1 || inspected.blobs.length > limits.maxEntries) throw new Error("archive identity mismatch");
+    const seen = new Set();
+    const blobs = inspected.blobs.map((blob) => {
+      if (!blob || !/^sha256:[a-f0-9]{64}$/.test(blob.digest ?? "") || seen.has(blob.digest) ||
+        !Number.isSafeInteger(blob.offset) || blob.offset < 0 || !Number.isSafeInteger(blob.size) || blob.size < 1 ||
+        blob.offset + blob.size > stat.size || blob.size > limits.maxResidentBytes) throw new Error("blob descriptor invalid");
+      seen.add(blob.digest);
+      return Object.freeze({ digest: blob.digest, offset: blob.offset, size: blob.size });
+    });
+    if (!seen.has(expected.imageManifestDigest)) throw new Error("manifest blob missing");
+    const byDigest = new Map(blobs.map((blob) => [blob.digest, blob]));
+    return Object.freeze({
+      imageManifestDigest: inspected.imageManifestDigest,
+      platform: inspected.platform,
+      blobs: Object.freeze(blobs),
+      async readBlob(digest) {
+        const blob = byDigest.get(digest);
+        if (closed || !blob) throw failure("OCI_PUBLICATION_ARCHIVE_INVALID", "OCI publication archive is invalid");
+        const bytes = await readDescriptorRange(descriptor, { offset: blob.offset, size: blob.size });
+        if (!(bytes instanceof Uint8Array) || bytes.byteLength !== blob.size || sha256Bytes(bytes) !== digest) {
+          throw failure("OCI_PUBLICATION_ARCHIVE_INVALID", "OCI publication archive is invalid");
+        }
+        return bytes;
+      },
+      async dispose() {
+        if (!closed) {
+          closed = true;
+          await closeDescriptor(descriptor);
+        }
+      },
+    });
+  } catch (cause) {
+    if (descriptor && !closed) {
+      closed = true;
+      await closeDescriptor(descriptor).catch(() => undefined);
+    }
+    if (cause?.code === "OCI_PUBLICATION_ARCHIVE_INVALID") throw cause;
+    throw failure("OCI_PUBLICATION_ARCHIVE_INVALID", "OCI publication archive is invalid", { cause });
+  }
+}
+
+async function disposeInspected(values) {
+  const failures = [];
+  for (const value of values) {
+    if (typeof value?.dispose === "function") {
+      try { await value.dispose(); } catch (cause) { failures.push(cause); }
+    }
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, "Archive capture cleanup failed");
+}
+
 function validatePublicationInputs(images, targetMap) {
   const targets = GhcrPublicationTargetsV1Schema.parse(targetMap);
   if (!Array.isArray(images) || images.length !== imageIds.length) throw failure("GHCR_PUBLICATION_INVALID", "Publication inventory is invalid");
@@ -109,22 +189,26 @@ function validatePublicationInputs(images, targetMap) {
 export async function publishFrozenImagesToGhcr({ images, targetMap, inspectArchive, registryAdapter }) {
   const targets = validatePublicationInputs(images, targetMap);
   const inspected = [];
-  for (const image of images) inspected.push(await inspectArchive(image));
-  const results = [];
-  for (let index = 0; index < images.length; index += 1) {
-    const image = images[index];
-    const remoteRepository = targets.images[index].remoteRepository;
-    if (inspected[index]?.imageManifestDigest !== image.imageManifestDigest) {
-      throw failure("GHCR_PUBLICATION_INVALID", "Verified image digest is invalid", { failedImageId: image.id });
+  try {
+    for (const image of images) inspected.push(await inspectArchive(image));
+    const results = [];
+    for (let index = 0; index < images.length; index += 1) {
+      const image = images[index];
+      const remoteRepository = targets.images[index].remoteRepository;
+      if (inspected[index]?.imageManifestDigest !== image.imageManifestDigest) {
+        throw failure("GHCR_PUBLICATION_INVALID", "Verified image digest is invalid", { failedImageId: image.id });
+      }
+      await registryAdapter.copyVerifiedImage({ image, inspected: inspected[index], remoteRepository });
+      const remoteDigest = await registryAdapter.inspectRemoteDigest({ image, remoteRepository });
+      if (remoteDigest !== image.imageManifestDigest) {
+        throw failure("GHCR_REMOTE_DIGEST_MISMATCH", "GHCR remote manifest digest mismatch", { failedImageId: image.id });
+      }
+      results.push(Object.freeze({ id: image.id, remoteRepository, remoteDigest }));
     }
-    await registryAdapter.copyVerifiedImage({ image, inspected: inspected[index], remoteRepository });
-    const remoteDigest = await registryAdapter.inspectRemoteDigest({ image, remoteRepository });
-    if (remoteDigest !== image.imageManifestDigest) {
-      throw failure("GHCR_REMOTE_DIGEST_MISMATCH", "GHCR remote manifest digest mismatch", { failedImageId: image.id });
-    }
-    results.push(Object.freeze({ id: image.id, remoteRepository, remoteDigest }));
+    return Object.freeze(results);
+  } finally {
+    await disposeInspected(inspected);
   }
-  return Object.freeze(results);
 }
 
 export async function appendPublicationEvidence({ filename, bytes, putIfAbsent, readExisting }) {
@@ -138,16 +222,16 @@ export async function appendPublicationEvidence({ filename, bytes, putIfAbsent, 
   return true;
 }
 
-export async function runGhcrPublication({ images, targetMap, inspectArchive, registryAdapter, appendEvidence, startStaging, cleanup, createEvidence }) {
+export async function runGhcrPublication({ images, targetMap, inspectArchive, registryAdapter, appendEvidence, cleanup, createEvidence }) {
   let original;
   let result;
   const publishedImageIds = [];
   let failedImageId;
   let publicationEvidenceWritten = false;
   let stagingStarted = false;
+  const inspected = [];
   try {
     const targets = validatePublicationInputs(images, targetMap);
-    const inspected = [];
     for (const image of images) inspected.push(await inspectArchive(image));
     const remoteResults = [];
     for (let index = 0; index < images.length; index += 1) {
@@ -166,10 +250,6 @@ export async function runGhcrPublication({ images, targetMap, inspectArchive, re
     const evidence = typeof createEvidence === "function" ? await createEvidence(remoteResults) : { remoteResults };
     await appendEvidence(evidence);
     publicationEvidenceWritten = true;
-    if (typeof startStaging === "function") {
-      await startStaging(evidence);
-      stagingStarted = true;
-    }
     result = evidence;
   } catch (cause) {
     original = cause;
@@ -185,10 +265,12 @@ export async function runGhcrPublication({ images, targetMap, inspectArchive, re
       });
     }
   }
-  let cleanupFailure;
-  try { await cleanup(); } catch (cause) { cleanupFailure = cause; }
-  if (original && cleanupFailure) throw Object.assign(new AggregateError([original, cleanupFailure], "Publication and cleanup failed"), { cause: original });
+  const cleanupFailures = [];
+  try { await disposeInspected(inspected); } catch (cause) { cleanupFailures.push(cause); }
+  try { await cleanup(); } catch (cause) { cleanupFailures.push(cause); }
+  if (original && cleanupFailures.length) throw Object.assign(new AggregateError([original, ...cleanupFailures], "Publication and cleanup failed"), { cause: original });
   if (original) throw original;
-  if (cleanupFailure) throw cleanupFailure;
+  if (cleanupFailures.length === 1) throw cleanupFailures[0];
+  if (cleanupFailures.length > 1) throw new AggregateError(cleanupFailures, "Publication cleanup failed");
   return result;
 }

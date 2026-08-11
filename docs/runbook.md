@@ -718,7 +718,8 @@ reports. DigitalOcean staging remains a separate credentialed invocation and
 must produce its own append-only evidence before 029B.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
-for either credentialed command. The replacement must revalidate canonical
+for either credentialed command. The production-author replacement now
+revalidates canonical
 publication-evidence bytes and their independently supplied checksum through
 the complete candidate/manifest/receipt/target/report handoff before any host
 effect. Every staging check returns an exact typed observation, the accepted
@@ -726,8 +727,9 @@ record must parse and canonicalize as `StagingDeploymentEvidenceV1`, and one
 pinned SSH session must observe the expected host key before its first command.
 OCI publication authenticates, parses and streams each archive through the
 same no-follow descriptor/immutable capture with bounded memory; pathname
-reopen is forbidden. Both independent verifiers must PASS the replacement tree
-before this runbook returns to operator execution.
+reopen is forbidden. Its focused, coverage, static and frozen-archive checks
+are locally GREEN. Both independent verifiers must still PASS the same exact
+replacement tree before this runbook returns to credentialed operator execution.
 
 Registry upload locations must remain on `ghcr.io:443` under the exact same-
 repository upload namespace before authorization or body send. Publication
