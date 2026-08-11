@@ -2,7 +2,7 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Intentional RED; production contracts/adapters/commands do not exist.
+Status: Corrective intentional RED after Core rejected `5322125` / `bad14e5`.
 
 ## Authorized predecessor
 
@@ -97,3 +97,44 @@ frozen distinct-digest invariant before production could be exercised. The two
 affected fixtures now use `a` through `e` for archive digests and `1` through
 `5` for image-manifest digests. No schema, runtime or effect contract changed;
 the stashed production WIP was not applied.
+
+## Core rejection and corrective RED
+
+Independent Core report
+`/private/tmp/proofline-028b-verifiers/5322125/core-verifier.md` has SHA-256
+`5c0baa5ca9f5f09943f155e65ae630bbf7ba21a2a87ff07c2c2c8ec5a2663661`
+and rejects exact commit `5322125c8c17877018b5a16d2f89d3ad184a7e89` /
+tree `bad14e5ba344e908c95103321a6c595b08fd308e`.
+
+The causal corrective matrix freezes five unchanged trust requirements:
+
+1. staging consumes canonical publication evidence bytes, an independent
+   checksum and the strict transitive candidate/release/target/report handoff;
+2. failed, missing or ambiguous remote observations cannot create evidence,
+   while accepted bytes parse and canonicalize as exact
+   `StagingDeploymentEvidenceV1`;
+3. one authenticated endpoint and expected host-key digest establish a pinned
+   SSH session used by every command, with mismatch blocking before remote I/O;
+4. candidate, manifest, receipt, target and every image archive/manifest field
+   remain transitively bound during both creation and verification; and
+5. one `O_RDONLY|O_NOFOLLOW` descriptor/immutable capture supplies stat, hash,
+   parse and bounded upload ranges, with all leases closed on every outcome.
+
+The same corrective wave freezes Core's adjacent hardening and lifecycle
+controls: upload `Location` remains on default-port 443 inside the exact same-
+repository upload namespace before bearer/body send; publication cannot chain
+staging from a mutable object; successful staging closes local/session
+resources but is preserved, while failed run-owned staging alone is torn down.
+
+This wave changes tests and canonical status only. It performs no registry,
+Docker, network, SSH, DigitalOcean, credential, live or frozen-output effect.
+
+Corrective classification on the rejected implementation: syntax and
+typecheck PASS; focused contracts/domain/purity are 56 PASS plus 5 intentional
+RED; focused deployment and retained DigitalOcean roadmap are 23 PASS plus 9
+intentional RED; serialized deployment static is 202 PASS plus the same 9
+intentional RED; Sites compatibility is 46/46 PASS. The fourteen focused
+failures are the exact missing transitive/canonical handoff checks,
+schema-valid typed staging evidence, enforced pinned session,
+single-descriptor archive capture, strict upload-Location authority, separate
+session/teardown lifecycle and removal of mutable raw-object staging authority.

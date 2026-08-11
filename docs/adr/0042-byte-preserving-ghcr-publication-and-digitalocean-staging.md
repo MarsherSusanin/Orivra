@@ -1,7 +1,6 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted; local production-author GREEN pending two independent
-  verifiers and credentialed execution
+- Status: Accepted contract; corrective RED after Core rejected `5322125` / `bad14e5`
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -63,6 +62,11 @@ After each copy the adapter independently reads the GHCR remote digest; it must
 equal only the frozen `imageManifestDigest`. A tag, an index digest,
 `archiveSha256`, mismatch or converted manifest fails closed.
 
+An upload `Location` is accepted only on HTTPS default port 443 and within the
+exact normalized `/v2/<same-repository>/blobs/uploads/…` namespace. Cross-port,
+cross-repository and arbitrary same-host paths are rejected before attaching a
+bearer token or request body.
+
 No specific Docker, Buildx, Skopeo or ORAS command is accepted by this ADR.
 GREEN must prove that its chosen adapter preserves the single-manifest digest
 against GHCR before it may produce evidence.
@@ -93,6 +97,9 @@ embedded in itself. `publication-evidence.v1.json` is written only after all
 five remote checks pass, through an injected conditional-create append-only
 sink. An existing key/file is never overwritten or deleted. The frozen 029A
 directory, its release manifest, receipt and OCI archives are never changed.
+Publication returns canonical evidence bytes/checksum to its caller and never
+invokes staging with a mutable in-memory evidence object; staging is a separate
+explicit handoff invocation.
 
 ### DigitalOcean staging
 
@@ -121,6 +128,36 @@ binds publication-evidence SHA, frozen-manifest SHA, producer, DigitalOcean
 staging target, pinned host key, exact five remote digest references, read-only
 pull capability, schema/migration, readiness, browser, restore and live
 evidence. It never mutates publication evidence.
+
+The staging adapter accepts only canonical `PublicationEvidenceV1` bytes plus
+an independently supplied checksum and the complete candidate/manifest/
+receipt/target/report handoff. One strict verifier cross-binds the producer,
+all canonical input bytes and checksums, receipt inventory and the complete
+ordered image tuple before any DigitalOcean or SSH call. A legacy object,
+noncanonical bytes, self-derived checksum or substituted manifest is not pull
+authority.
+
+Every remote observation is a strict typed result. A failed, incomplete or
+extra-field result blocks before evidence append. Successful orchestration
+derives the complete `StagingDeploymentEvidenceV1` from those observations,
+schema-parses it and emits only exact canonical UTF-8. The authenticated
+DigitalOcean control-plane endpoint and expected SSH host-key digest establish
+one pinned session before the first command; the independently observed key
+must match, every command uses that session and the evidence records the
+observed value.
+
+Successful staging closes only local credential/session resources and leaves
+the accepted staging infrastructure running for verification. Failure closes
+those local resources and may additionally tear down only the run-owned failed
+staging deployment. One generic cleanup callback may not destroy successful
+staging while still emitting PASS.
+
+Archive authentication, OCI parsing and registry upload share one
+`O_RDONLY|O_NOFOLLOW` file descriptor (or an equivalent immutable private
+capture). Metadata, full archive checksum, descriptor ranges and bounded blob
+streams remain tied to that identity. Five descriptors may be authenticated
+before registry I/O, but layer payloads are never retained across all five in
+memory; each lease closes exactly once on success or failure.
 
 ### Credentials, diagnostics and failure
 

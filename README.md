@@ -115,9 +115,11 @@ blockchain-операций.
   `fc2f6e0677c64dc4f2ee90a85219bcc9f8c9bfbc` / tree
   `f7cebc6ed3842f296b3be1c96645e2dd8cdfe5bd`; frozen candidate SHA-256 is
   `8991e7e49f4570702436c269c8f6bd0af7b8f186997bff2a52e6da22f7a0cdda`.
-  ADR 0042 now has local production-author GREEN 028B contracts/runtime: no
-  GHCR, DigitalOcean or SSH effect has occurred, and explicit credentials plus
-  hosted evidence are still required to complete 028B.
+  Core rejected the first ADR 0042 implementation at exact `5322125` /
+  `bad14e5` for unbound staging authority, false PASS observations, an unused
+  SSH pin and reopened archive bytes. Corrective RED is frozen; no GHCR,
+  DigitalOcean or SSH effect has occurred, and a replacement plus two verifier
+  PASS reports are required before credentials may be used.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

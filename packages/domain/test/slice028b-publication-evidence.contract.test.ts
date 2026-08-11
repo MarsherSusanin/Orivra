@@ -123,6 +123,32 @@ async function feature(): Promise<Record<string, any>> {
   return import(/* @vite-ignore */ path).catch(() => ({}));
 }
 
+function creationInput() {
+  return {
+    candidate, candidateBytes, manifest, manifestBytes, receipt, receiptBytes,
+    targetMap, targetMapBytes, verifierReports, remoteResults,
+    publication: {
+      runId: "pub_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+      operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+      completedAt: "2026-08-12T00:00:00Z",
+    },
+  };
+}
+
+function handoffInput(module: Record<string, any>, evidence = module.createPublicationEvidence(creationInput())) {
+  const evidenceBytes = bytes(evidence);
+  return {
+    evidence,
+    evidenceBytes,
+    expectedPublicationEvidenceSha256: checksumBytes(evidenceBytes),
+    candidateBytes,
+    manifestBytes,
+    receiptBytes,
+    targetMapBytes,
+    verifierReports,
+  };
+}
+
 describe("Slice 028B publication evidence domain", () => {
   it("creates immutable publication evidence only from the exact 029A handoff", async () => {
     const module = await feature();
@@ -155,14 +181,7 @@ describe("Slice 028B publication evidence domain", () => {
       manifest.images.map((image) => image.imageManifestDigest),
     );
     expect(Object.isFrozen(evidence)).toBe(true);
-    expect(module.verifyPublicationEvidenceHandoff({
-      evidence,
-      candidateBytes,
-      manifestBytes,
-      receiptBytes,
-      targetMapBytes,
-      verifierReports,
-    })).toBe(true);
+    expect(module.verifyPublicationEvidenceHandoff(handoffInput(module, evidence))).toBe(true);
   });
 
   it.each([
@@ -175,19 +194,65 @@ describe("Slice 028B publication evidence domain", () => {
   ])("rejects a mismatched %s before handoff", async (_label, delta) => {
     const module = await feature();
     expect(() => module.verifyPublicationEvidenceHandoff({
-      evidence: {
-        ...module.createPublicationEvidence({
-          candidate, candidateBytes, manifest, manifestBytes, receipt, receiptBytes,
-          targetMap, targetMapBytes, verifierReports, remoteResults,
-          publication: { runId: "pub_01K2Q4P6R8T0V2X4Z6B8D0F2H4", operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4", completedAt: "2026-08-12T00:00:00Z" },
-        }),
-      },
-      candidateBytes,
-      manifestBytes,
-      receiptBytes,
-      targetMapBytes,
-      verifierReports,
+      ...handoffInput(module),
       ...delta,
+    })).toThrow();
+  });
+
+  it.each([
+    ["noncanonical publication evidence bytes", (input: any) => ({
+      ...input,
+      evidenceBytes: new TextEncoder().encode(JSON.stringify(input.evidence, null, 2)),
+    })],
+    ["mismatched expected publication checksum", (input: any) => ({
+      ...input,
+      expectedPublicationEvidenceSha256: sha("0"),
+    })],
+    ["noncanonical target-map bytes", (input: any) => ({
+      ...input,
+      targetMapBytes: new TextEncoder().encode(JSON.stringify(targetMap, null, 2)),
+    })],
+  ])("rejects %s before publication handoff", async (_label, mutate) => {
+    const module = await feature();
+    expect(() => module.verifyPublicationEvidenceHandoff(mutate(handoffInput(module)))).toThrow();
+  });
+
+  it.each([
+    ["archive digest", (image: any) => ({ ...image, archiveSha256: sha("0") })],
+    ["image manifest digest", (image: any) => ({
+      ...image,
+      imageManifestDigest: sha("0"),
+      reference: `${image.repository}@${sha("0")}`,
+    })],
+  ])("rejects a canonical substituted manifest %s bound only inside forged evidence", async (_label, mutateImage) => {
+    const module = await feature();
+    const evidence = module.createPublicationEvidence(creationInput());
+    const substitutedManifest = {
+      ...manifest,
+      images: manifest.images.map((image, index) => index === 0 ? mutateImage(image) : image),
+    };
+    const substitutedManifestBytes = bytes(substitutedManifest);
+    const forgedImage = {
+      ...evidence.images[0],
+      archiveSha256: substitutedManifest.images[0].archiveSha256,
+      imageManifestDigest: substitutedManifest.images[0].imageManifestDigest,
+      remoteDigest: substitutedManifest.images[0].imageManifestDigest,
+      remoteReference: `${evidence.images[0].remoteRepository}@${substitutedManifest.images[0].imageManifestDigest}`,
+    };
+    const forgedEvidence = {
+      ...evidence,
+      frozenRelease: {
+        ...evidence.frozenRelease,
+        frozenReleaseManifestSha256: checksumBytes(substitutedManifestBytes),
+      },
+      images: [forgedImage, ...evidence.images.slice(1)],
+    };
+    const forgedEvidenceBytes = bytes(forgedEvidence);
+    expect(() => module.verifyPublicationEvidenceHandoff({
+      ...handoffInput(module, forgedEvidence),
+      evidenceBytes: forgedEvidenceBytes,
+      expectedPublicationEvidenceSha256: checksumBytes(forgedEvidenceBytes),
+      manifestBytes: substitutedManifestBytes,
     })).toThrow();
   });
 

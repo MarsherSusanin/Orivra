@@ -1,7 +1,8 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Local production-author GREEN; two independent code verifiers and
-credentialed GHCR/staging execution are pending.
+Status: Corrective intentional RED after independent Core rejected exact
+candidate `5322125` / `bad14e5`; replacement implementation and both verifiers
+are pending.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 
@@ -69,3 +70,20 @@ No GHCR request, DigitalOcean/SSH action or hosted smoke has run. A real 028B
 PASS additionally requires the explicit five-repository target map, approved
 credential files, two independent verifier reports on one exact implementation
 tree and the resulting immutable publication/staging evidence.
+
+## Corrective verifier boundary
+
+Core rejected the first implementation because a shallow publication object
+could authorize staging and false observations could yield schema-invalid PASS
+bytes; the publication verifier also accepted canonical manifest substitution,
+the SSH pin was unused, and archive bytes were reopened and retained outside
+their authenticated identity. Corrective RED now requires canonical handoff
+bytes/checksum and transitive binding, exact typed observations and strict
+staging evidence, one enforced pinned SSH session, and a bounded single-
+descriptor archive lease. No credentialed execution is allowed before the
+replacement receives both independent PASS reports.
+
+The replacement also rejects registry upload redirects outside default-port
+443 and the exact same-repository upload namespace before bearer/body send,
+removes raw-object publication-to-staging chaining, and separates always-run
+local/session cleanup from failure-only staging teardown.

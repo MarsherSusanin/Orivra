@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import { chmod, lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -137,6 +138,61 @@ test("028B safely inspects one bounded exact OCI manifest and its reachable blob
   }
 });
 
+test("028B authenticates and uploads through one O_NOFOLLOW archive descriptor", async () => {
+  const module = await runtime();
+  const archivePath = "/private/input/image.oci.tar";
+  const manifestBytes = Buffer.from("authenticated-manifest");
+  const manifestDigest = shaBytes(manifestBytes);
+  const descriptor = Object.freeze({ id: "fd-authenticated-1" });
+  const calls = [];
+  const capture = await module.captureFrozenOciArchiveForPublication({
+    archivePath,
+    expected: {
+      archiveSizeBytes: 4_096,
+      archiveSha256: sha("a"),
+      imageManifestDigest: manifestDigest,
+      platform: "linux/amd64",
+    },
+    limits: { maxEntries: 4_096, maxJsonBytes: 1_048_576, maxResidentBytes: 8_388_608 },
+    openArchive: async (path, flags) => {
+      calls.push(["open", path, flags]);
+      return descriptor;
+    },
+    checksumDescriptor: async (value) => {
+      assert.equal(value, descriptor);
+      calls.push(["checksum", value.id]);
+      return sha("a");
+    },
+    inspectDescriptor: async (value) => {
+      assert.equal(value, descriptor);
+      calls.push(["inspect", value.id]);
+      return {
+        stat: { isFile: true, mode: 0o400, size: 4_096, device: 1, inode: 2 },
+        imageManifestDigest: manifestDigest,
+        platform: "linux/amd64",
+        blobs: [{ digest: manifestDigest, offset: 1_024, size: manifestBytes.byteLength }],
+      };
+    },
+    readDescriptorRange: async (value, { offset, size }) => {
+      assert.equal(value, descriptor);
+      calls.push(["read", value.id, offset, size]);
+      return manifestBytes;
+    },
+    closeDescriptor: async (value) => {
+      assert.equal(value, descriptor);
+      calls.push(["close", value.id]);
+    },
+  });
+  assert.deepEqual(calls[0], ["open", archivePath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW]);
+  assert.equal(calls.filter(([name]) => name === "open").length, 1);
+  assert.deepEqual(capture.blobs, [{ digest: manifestDigest, offset: 1_024, size: manifestBytes.byteLength }]);
+  assert.equal(Object.hasOwn(capture.blobs[0], "bytes"), false);
+  assert.equal(Buffer.from(await capture.readBlob(manifestDigest)).equals(manifestBytes), true);
+  assert.equal(calls.filter(([name]) => name === "open").length, 1);
+  await capture.dispose();
+  assert.deepEqual(calls.at(-1), ["close", descriptor.id]);
+});
+
 test("028B verifies every archive before the first registry effect and preserves manifest digests", async () => {
   const module = await runtime();
   const { images, targetMap } = publicationFixture();
@@ -219,4 +275,79 @@ test("028B conditionally creates append-only evidence and never masks cleanup fa
     readExisting: async () => preserved,
   }), { code: "PUBLICATION_EVIDENCE_EXISTS" });
   assert.equal(preserved.equals(existing), true);
+});
+
+test("028B rejects cross-port, cross-repository or arbitrary upload Location before bearer PUT", async () => {
+  const { createGhcrRegistryPublicationAdapter } = await import("../../scripts/ghcr-registry-adapter.mjs");
+  const remoteRepository = "ghcr.io/example-owner/orivra-caddy";
+  const manifestDigest = sha("1");
+  const layerDigest = sha("2");
+  const locations = [
+    "https://ghcr.io:444/v2/example-owner/orivra-caddy/blobs/uploads/run-1",
+    "https://ghcr.io/v2/other-owner/other-package/blobs/uploads/run-1",
+    "https://ghcr.io/token",
+  ];
+  for (const location of locations) {
+    let bearerPuts = 0;
+    const response = (status, headers = {}, payload = undefined) => ({
+      status,
+      headers: { get: (name) => headers[name.toLowerCase()] ?? null },
+      json: async () => payload,
+    });
+    const request = async (input, options = {}) => {
+      const url = new URL(input);
+      if (url.pathname === "/token") {
+        return response(200, {}, { token: "t".repeat(32) });
+      }
+      if (options.method === "HEAD") return response(404);
+      if (options.method === "POST") return response(202, { location });
+      if (options.method === "PUT") {
+        bearerPuts += 1;
+        return response(201, {
+          "docker-content-digest": url.pathname.includes("/manifests/") ? manifestDigest : layerDigest,
+        });
+      }
+      throw new Error("unexpected fake registry request");
+    };
+    const adapter = await createGhcrRegistryPublicationAdapter({
+      username: "operator",
+      tokenBytes: Buffer.from("credential-sentinel-028b"),
+      request,
+    });
+    await assert.rejects(() => adapter.copyVerifiedImage({
+      image: { imageManifestDigest: manifestDigest },
+      inspected: {
+        imageManifestDigest: manifestDigest,
+        blobs: [
+          { digest: layerDigest, bytes: Buffer.from("layer") },
+          { digest: manifestDigest, bytes: Buffer.from("manifest") },
+        ],
+      },
+      remoteRepository,
+    }), { code: "GHCR_REGISTRY_FAILED" });
+    assert.equal(bearerPuts, 0);
+    adapter.dispose();
+  }
+});
+
+test("028B never chains staging from a mutable publication object", async () => {
+  const module = await runtime();
+  const { images, targetMap } = publicationFixture();
+  let stagingCalls = 0;
+  const evidence = { kind: "canonical-publication-placeholder" };
+  const result = await module.runGhcrPublication({
+    images,
+    targetMap,
+    inspectArchive: async (image) => ({ imageManifestDigest: image.imageManifestDigest, blobs: [] }),
+    registryAdapter: {
+      copyVerifiedImage: async () => undefined,
+      inspectRemoteDigest: async ({ image }) => image.imageManifestDigest,
+    },
+    createEvidence: async () => evidence,
+    appendEvidence: async (value) => assert.equal(value, evidence),
+    startStaging: async () => { stagingCalls += 1; },
+    cleanup: async () => undefined,
+  });
+  assert.equal(result, evidence);
+  assert.equal(stagingCalls, 0);
 });

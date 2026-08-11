@@ -3,9 +3,20 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import {
+  StagingDeploymentEvidenceV1Schema,
+  canonicalSerializeStagingDeploymentEvidence,
+} from "../../packages/contracts/src/publication-runtime.mjs";
+import { createPublicationHandoffFixture } from "../fixtures/slice028b-publication-handoff.fixture.mjs";
 
 const sha = (value) => `sha256:${value.repeat(64).slice(0, 64)}`;
 const imageIds = ["caddy", "web", "api", "worker", "postgres-recovery"];
+const stagingCommandIds = [
+  "install-read-only-pull-credential", "pull-exact-digests", "inspect-local-digests",
+  "start-postgres", "role-bootstrap", "migrator", "start-api", "start-worker",
+  "start-web", "start-caddy", "healthz", "readyz-real-heartbeat",
+  "hosted-browser-smoke", "spaces-pitr-restore", "persisted-live-coston2",
+];
 const imageEnvironment = {
   caddy: "PROOFLINE_CADDY_IMAGE",
   web: "PROOFLINE_WEB_IMAGE",
@@ -19,25 +30,53 @@ async function runtime() {
 }
 
 function publicationEvidence() {
+  return createPublicationHandoffFixture().evidence;
+}
+
+function stagingTarget() {
   return {
-    version: "1",
-    kind: "oci-publication-evidence",
-    status: "passed",
-    verification: "verified",
-    publicationClaim: true,
-    producer: { commitSha: "a".repeat(40), treeSha: "b".repeat(40) },
-    frozenRelease: { frozenReleaseManifestSha256: sha("1") },
-    images: imageIds.map((id, index) => {
-      const digest = sha(String(index + 1));
-      const repository = `ghcr.io/example-owner/orivra-${id}`;
-      return {
-        id,
-        remoteRepository: repository,
-        remoteReference: `${repository}@${digest}`,
-        remoteDigest: digest,
-      };
-    }),
+    origin: "https://staging.example.test",
+    composeProject: "proofline-staging-01k2q4p6r8t0v2x4z6b8d0f2h4",
+    sshHostKeySha256: sha("8"),
   };
+}
+
+function stagingRun() {
+  return {
+    runId: "stg_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+    operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+    completedAt: "2026-08-12T00:10:00Z",
+  };
+}
+
+function typedObservation(command, evidence) {
+  const common = { status: "passed", sshHostKeySha256: sha("8") };
+  if (command.id === "inspect-local-digests") {
+    return { ...common, images: evidence.images.map(({ id, remoteDigest }) => ({ id, remoteDigest })) };
+  }
+  if (command.id === "migrator") {
+    return { ...common, migrationManifestSha256: sha("6"), targetVersion: 10, schemaVersion: 10 };
+  }
+  if (command.id === "readyz-real-heartbeat") {
+    return { ...common, readyz: { status: "passed" }, workerHeartbeat: { status: "current" } };
+  }
+  if (command.id === "spaces-pitr-restore") {
+    return { ...common, restoreEvidenceSha256: sha("7") };
+  }
+  if (command.id === "persisted-live-coston2") {
+    return { ...common, runId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4" };
+  }
+  if (command.id === "install-read-only-pull-credential") {
+    return { ...common, registry: "ghcr.io", access: "read-only" };
+  }
+  return common;
+}
+
+function legacyObservation(command, evidence) {
+  if (command.id === "inspect-local-digests") {
+    return evidence.images.map(({ id, remoteDigest }) => ({ id, remoteDigest }));
+  }
+  return typedObservation(command, evidence);
 }
 
 test("028B staging accepts only separate file-backed least-authority credentials", async () => {
@@ -84,8 +123,13 @@ test("028B staging accepts only separate file-backed least-authority credentials
 
 test("028B maps only publication-authorized digests into the staging Compose environment", async () => {
   const module = await runtime();
-  const evidence = publicationEvidence();
-  const plan = module.createStagingImagePlan({ publicationEvidence: evidence });
+  const publicationHandoff = createPublicationHandoffFixture();
+  const evidence = publicationHandoff.evidence;
+  const plan = module.createStagingImagePlan({
+    publicationHandoff,
+    publicationEvidence: evidence,
+    publicationEvidenceSha256: publicationHandoff.expectedPublicationEvidenceSha256,
+  });
   assert.deepEqual(Object.keys(plan.environment).sort(), Object.values(imageEnvironment).sort());
   for (const image of evidence.images) {
     assert.equal(plan.environment[imageEnvironment[image.id]], image.remoteReference);
@@ -98,89 +142,264 @@ test("028B maps only publication-authorized digests into the staging Compose env
 
 test("028B staging runs exact pulls, migrations, readiness, browser, PITR and live checks", async () => {
   const module = await runtime();
-  const evidence = publicationEvidence();
+  const publicationHandoff = createPublicationHandoffFixture();
+  const evidence = publicationHandoff.evidence;
   const order = [];
   const sshCommands = [];
   let evidenceWrites = 0;
+  let emittedEvidence;
   const result = await module.runDigitalOceanStaging({
+    publicationHandoff,
     publicationEvidence: evidence,
-    publicationEvidenceSha256: sha("9"),
-    target: {
-      origin: "https://staging.example.test",
-      composeProject: "proofline-staging-01k2q4p6r8t0v2x4z6b8d0f2h4",
-      sshHostKeySha256: sha("8"),
-    },
+    publicationEvidenceSha256: publicationHandoff.expectedPublicationEvidenceSha256,
+    target: stagingTarget(),
+    run: stagingRun(),
     digitalOceanAdapter: {
-      provision: async () => { order.push("provision"); return { deploymentId: "do-staging-1", owned: true }; },
+      provision: async () => { order.push("provision"); return { deploymentId: "do-staging-1", sshHost: "203.0.113.10", owned: true }; },
       applyFirewall: async () => order.push("firewall"),
     },
     sshAdapter: {
       run: async (command) => {
         sshCommands.push(command);
         order.push(command.id);
-        return command.id === "inspect-local-digests"
-          ? evidence.images.map(({ id, remoteDigest }) => ({ id, remoteDigest }))
-          : { status: "passed" };
+        return legacyObservation(command, evidence);
+      },
+      openPinnedSession: async ({ endpoint, expectedHostKeySha256 }) => {
+        order.push("open-pinned-ssh");
+        assert.deepEqual(endpoint, { host: "203.0.113.10", port: 22 });
+        assert.equal(expectedHostKeySha256, sha("8"));
+        return {
+          observedHostKeySha256: sha("8"),
+          run: async (command) => {
+            sshCommands.push(command);
+            order.push(command.id);
+            return typedObservation(command, evidence);
+          },
+          close: async () => order.push("close-pinned-ssh"),
+        };
       },
     },
     appendStagingEvidence: async ({ filename, bytes }) => {
       evidenceWrites += 1;
       assert.equal(filename, "staging-deployment-evidence.v1.json");
-      assert.ok(bytes.length > 0);
+      emittedEvidence = StagingDeploymentEvidenceV1Schema.parse(JSON.parse(new TextDecoder().decode(bytes)));
+      assert.equal(new TextDecoder().decode(bytes), canonicalSerializeStagingDeploymentEvidence(emittedEvidence));
     },
     cleanup: async () => order.push("cleanup"),
   });
   assert.deepEqual(order, [
-    "provision", "firewall", "install-read-only-pull-credential",
+    "provision", "firewall", "open-pinned-ssh", "install-read-only-pull-credential",
     "pull-exact-digests", "inspect-local-digests", "start-postgres",
     "role-bootstrap", "migrator", "start-api", "start-worker", "start-web",
     "start-caddy", "healthz", "readyz-real-heartbeat", "hosted-browser-smoke",
-    "spaces-pitr-restore", "persisted-live-coston2", "cleanup",
+    "spaces-pitr-restore", "persisted-live-coston2", "close-pinned-ssh", "cleanup",
   ]);
   assert.equal(evidenceWrites, 1);
   assert.equal(result.status, "passed");
   assert.equal(result.environment, "staging");
+  assert.equal(emittedEvidence.producer.commitSha, evidence.producer.commitSha);
+  assert.equal(emittedEvidence.frozenReleaseManifestSha256, evidence.frozenRelease.frozenReleaseManifestSha256);
+  assert.equal(emittedEvidence.publicationEvidenceSha256, publicationHandoff.expectedPublicationEvidenceSha256);
+  assert.equal(emittedEvidence.run.sshHostKeySha256, sha("8"));
+  assert.deepEqual(emittedEvidence.pullCredential, { registry: "ghcr.io", access: "read-only" });
+  assert.deepEqual(emittedEvidence.images, evidence.images.map(({ id, remoteRepository, remoteReference, remoteDigest }) => ({
+    id, remoteRepository, remoteReference, remoteDigest,
+  })));
   assert.equal(sshCommands.every((command) =>
     !JSON.stringify(command).match(/token|password|privateKey|:latest|docker build|pg_promote/i)), true);
 });
 
 test("028B staging failure retains publication evidence and cleans only run-owned staging", async () => {
   const module = await runtime();
-  const evidence = publicationEvidence();
+  const publicationHandoff = createPublicationHandoffFixture();
+  const evidence = publicationHandoff.evidence;
   const cleaned = [];
+  let localCloses = 0;
   let stagingEvidenceWrites = 0;
   let productionCalls = 0;
   const cause = await module.runDigitalOceanStaging({
+    publicationHandoff,
     publicationEvidence: evidence,
-    publicationEvidenceSha256: sha("9"),
+    publicationEvidenceSha256: publicationHandoff.expectedPublicationEvidenceSha256,
+    run: stagingRun(),
     target: {
       origin: "https://staging.example.test",
       composeProject: "proofline-staging-failure",
       sshHostKeySha256: sha("8"),
     },
     digitalOceanAdapter: {
-      provision: async () => ({ deploymentId: "do-staging-failure", owned: true }),
+      provision: async () => ({ deploymentId: "do-staging-failure", sshHost: "203.0.113.10", owned: true }),
       applyFirewall: async () => undefined,
       production: async () => { productionCalls += 1; },
     },
     sshAdapter: {
       run: async (command) => {
         if (command.id === "readyz-real-heartbeat") throw new Error("staging-not-ready");
-        return command.id === "inspect-local-digests"
-          ? evidence.images.map(({ id, remoteDigest }) => ({ id, remoteDigest }))
-          : { status: "passed" };
+        return legacyObservation(command, evidence);
       },
+      openPinnedSession: async () => ({
+        observedHostKeySha256: sha("8"),
+        run: async (command) => {
+          if (command.id === "readyz-real-heartbeat") throw new Error("staging-not-ready");
+          return typedObservation(command, evidence);
+        },
+        close: async () => undefined,
+      }),
     },
     appendStagingEvidence: async () => { stagingEvidenceWrites += 1; },
+    closeLocalSession: async () => { localCloses += 1; },
+    teardownStaging: async (resource) => cleaned.push(resource),
     cleanup: async (resource) => cleaned.push(resource),
   }).catch((error) => error);
   assert.equal(cause.code, "DIGITALOCEAN_STAGING_FAILED");
   assert.equal(cause.partial.publicationEvidenceRetained, true);
   assert.equal(cause.partial.stagingEvidenceWritten, false);
-  assert.deepEqual(cleaned, [{ deploymentId: "do-staging-failure", owned: true }]);
+  assert.deepEqual(cleaned, [{ deploymentId: "do-staging-failure", sshHost: "203.0.113.10", owned: true }]);
+  assert.equal(localCloses >= 1, true);
   assert.equal(stagingEvidenceWrites, 0);
   assert.equal(productionCalls, 0);
   assert.doesNotMatch(JSON.stringify(cause), /secret|token|private|password/i);
+});
+
+test("028B rejects a forged canonical five-reference handoff before DigitalOcean or SSH", async () => {
+  const module = await runtime();
+  const valid = createPublicationHandoffFixture();
+  const forgedEvidence = {
+    ...valid.evidence,
+    images: valid.evidence.images.map((image, index) => {
+      const remoteRepository = `ghcr.io/evil-owner/forged-${image.id}`;
+      const remoteDigest = sha(String(index + 1));
+      return { ...image, remoteRepository, remoteDigest, imageManifestDigest: remoteDigest, remoteReference: `${remoteRepository}@${remoteDigest}` };
+    }),
+  };
+  const forgedBytes = new TextEncoder().encode(JSON.stringify(forgedEvidence));
+  let effects = 0;
+  await assert.rejects(() => module.runDigitalOceanStaging({
+    publicationEvidence: forgedEvidence,
+    publicationHandoff: {
+      ...valid,
+      evidence: forgedEvidence,
+      evidenceBytes: forgedBytes,
+      expectedPublicationEvidenceSha256: sha("0"),
+    },
+    publicationEvidenceSha256: sha("0"),
+    target: stagingTarget(),
+    run: stagingRun(),
+    digitalOceanAdapter: { provision: async () => { effects += 1; } },
+    sshAdapter: { openPinnedSession: async () => { effects += 1; } },
+    appendStagingEvidence: async () => { effects += 1; },
+    cleanup: async () => undefined,
+  }));
+  assert.equal(effects, 0);
+});
+
+test("028B rejects failed or ambiguous typed observations before PASS evidence", async () => {
+  const module = await runtime();
+  for (const failedCommandId of stagingCommandIds) {
+    for (const invalidObservation of [{ status: "failed" }, { status: "passed", extra: true }]) {
+    const publicationHandoff = createPublicationHandoffFixture();
+    let evidenceWrites = 0;
+    await assert.rejects(() => module.runDigitalOceanStaging({
+      publicationHandoff,
+      publicationEvidence: publicationHandoff.evidence,
+      publicationEvidenceSha256: publicationHandoff.expectedPublicationEvidenceSha256,
+      target: stagingTarget(),
+      run: stagingRun(),
+      digitalOceanAdapter: {
+        provision: async () => ({ deploymentId: "do-staging-observation", sshHost: "203.0.113.10", owned: true }),
+        applyFirewall: async () => undefined,
+      },
+      sshAdapter: {
+        run: async (command) => command.id === failedCommandId
+          ? invalidObservation
+          : legacyObservation(command, publicationHandoff.evidence),
+        openPinnedSession: async () => ({
+          observedHostKeySha256: sha("8"),
+          run: async (command) => command.id === failedCommandId
+            ? invalidObservation
+            : typedObservation(command, publicationHandoff.evidence),
+          close: async () => undefined,
+        }),
+      },
+      appendStagingEvidence: async () => { evidenceWrites += 1; },
+      cleanup: async () => undefined,
+    }));
+    assert.equal(evidenceWrites, 0);
+    }
+  }
+});
+
+test("028B rejects an SSH host-key mismatch before the first remote command", async () => {
+  const module = await runtime();
+  const publicationHandoff = createPublicationHandoffFixture();
+  let pinnedSessionCalls = 0;
+  let remoteCommands = 0;
+  let evidenceWrites = 0;
+  await assert.rejects(() => module.runDigitalOceanStaging({
+    publicationHandoff,
+    publicationEvidence: publicationHandoff.evidence,
+    publicationEvidenceSha256: publicationHandoff.expectedPublicationEvidenceSha256,
+    target: stagingTarget(),
+    run: stagingRun(),
+    digitalOceanAdapter: {
+      provision: async () => ({ deploymentId: "do-staging-host-key", sshHost: "203.0.113.10", owned: true }),
+      applyFirewall: async () => undefined,
+    },
+    sshAdapter: {
+      run: async (command) => {
+        remoteCommands += 1;
+        return legacyObservation(command, publicationHandoff.evidence);
+      },
+      openPinnedSession: async ({ endpoint, expectedHostKeySha256 }) => {
+        pinnedSessionCalls += 1;
+        assert.deepEqual(endpoint, { host: "203.0.113.10", port: 22 });
+        assert.equal(expectedHostKeySha256, sha("8"));
+        return {
+          observedHostKeySha256: sha("9"),
+          run: async () => { remoteCommands += 1; },
+          close: async () => undefined,
+        };
+      },
+    },
+    appendStagingEvidence: async () => { evidenceWrites += 1; },
+    cleanup: async () => undefined,
+  }));
+  assert.equal(pinnedSessionCalls, 1);
+  assert.equal(remoteCommands, 0);
+  assert.equal(evidenceWrites, 0);
+});
+
+test("028B closes local sessions but preserves successful staging infrastructure", async () => {
+  const module = await runtime();
+  const publicationHandoff = createPublicationHandoffFixture();
+  let localCloses = 0;
+  let stagingTeardowns = 0;
+  const result = await module.runDigitalOceanStaging({
+    publicationHandoff,
+    publicationEvidence: publicationHandoff.evidence,
+    publicationEvidenceSha256: publicationHandoff.expectedPublicationEvidenceSha256,
+    target: stagingTarget(),
+    run: stagingRun(),
+    digitalOceanAdapter: {
+      provision: async () => ({ deploymentId: "do-staging-persist", sshHost: "203.0.113.10", owned: true }),
+      applyFirewall: async () => undefined,
+    },
+    sshAdapter: {
+      run: async (command) => legacyObservation(command, publicationHandoff.evidence),
+      openPinnedSession: async () => ({
+        observedHostKeySha256: sha("8"),
+        run: async (command) => typedObservation(command, publicationHandoff.evidence),
+        close: async () => { localCloses += 1; },
+      }),
+    },
+    appendStagingEvidence: async () => undefined,
+    closeLocalSession: async () => { localCloses += 1; },
+    teardownStaging: async () => { stagingTeardowns += 1; },
+    cleanup: async () => { stagingTeardowns += 1; },
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(localCloses >= 1, true);
+  assert.equal(stagingTeardowns, 0);
 });
 
 test("028B code boundary excludes production promotion and canary", async () => {
