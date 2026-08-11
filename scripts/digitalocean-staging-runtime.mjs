@@ -64,6 +64,34 @@ function deepFreeze(value) {
   return value;
 }
 
+function snapshotStagingTarget(value) {
+  try {
+    if (!exactKeys(value, ["origin", "composeProject", "sshHostKeySha256"]) ||
+      !/^proofline-staging-[a-z0-9-]+$/.test(value.composeProject) || /production/i.test(value.composeProject) ||
+      !/^sha256:[a-f0-9]{64}$/.test(value.sshHostKeySha256)) throw new Error("invalid target");
+    const origin = new URL(value.origin);
+    if (origin.protocol !== "https:" || origin.username || origin.password || origin.hash || origin.origin !== value.origin) {
+      throw new Error("invalid origin");
+    }
+    return deepFreeze({
+      origin: value.origin,
+      composeProject: value.composeProject,
+      sshHostKeySha256: value.sshHostKeySha256,
+    });
+  } catch (cause) {
+    throw failure("STAGING_TARGET_INVALID", "Staging target is invalid", { cause });
+  }
+}
+
+function snapshotStagingRun(value) {
+  if (!exactKeys(value, ["runId", "operatorId", "completedAt"]) ||
+    !/^stg_[0-9A-Z]{26}$/.test(value.runId) || !/^operator_[0-9A-Z]{26}$/.test(value.operatorId) ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value.completedAt)) {
+    throw failure("STAGING_TARGET_INVALID", "Staging run is invalid");
+  }
+  return deepFreeze({ runId: value.runId, operatorId: value.operatorId, completedAt: value.completedAt });
+}
+
 export function createStagingImagePlan(input) {
   const evidence = requirePublicationHandoff(input);
   const environment = {};
@@ -181,36 +209,34 @@ function buildStagingEvidence({ evidence, publicationEvidenceSha256, target, run
 
 export async function runDigitalOceanStaging({ publicationHandoff, publicationEvidence, publicationEvidenceSha256, target, run, digitalOceanAdapter, sshAdapter, appendStagingEvidence, closeLocalSession, teardownStaging, cleanup }) {
   const evidence = requirePublicationHandoff({ publicationHandoff, publicationEvidence, publicationEvidenceSha256 });
-  if (!target || !target.origin?.startsWith("https://") || !/^proofline-staging-[a-z0-9-]+$/.test(target.composeProject ?? "") ||
-    /production/i.test(target.composeProject) || !/^sha256:[a-f0-9]{64}$/.test(target.sshHostKeySha256 ?? "") ||
-    !/^sha256:[a-f0-9]{64}$/.test(publicationEvidenceSha256 ?? "") ||
-    !run || !/^stg_[0-9A-Z]{26}$/.test(run.runId ?? "") || !/^operator_[0-9A-Z]{26}$/.test(run.operatorId ?? "") ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(run.completedAt ?? "")) throw failure("STAGING_TARGET_INVALID", "Staging target is invalid");
+  const stagingTarget = snapshotStagingTarget(target);
+  const stagingRun = snapshotStagingRun(run);
+  if (!/^sha256:[a-f0-9]{64}$/.test(publicationEvidenceSha256 ?? "")) throw failure("STAGING_TARGET_INVALID", "Staging target is invalid");
   let resource;
   let session;
   let original;
   let result;
   let stagingEvidenceWritten = false;
   try {
-    resource = await digitalOceanAdapter.provision({ environment: "staging", target });
+    resource = await digitalOceanAdapter.provision({ environment: "staging", target: stagingTarget });
     await digitalOceanAdapter.applyFirewall({ resource, ingress: [80, 443], environment: "staging" });
     session = await sshAdapter.openPinnedSession({
       endpoint: { host: resource.sshHost, port: 22 },
-      expectedHostKeySha256: target.sshHostKeySha256,
+      expectedHostKeySha256: stagingTarget.sshHostKeySha256,
     });
-    if (session?.observedHostKeySha256 !== target.sshHostKeySha256 || typeof session.run !== "function") {
+    if (session?.observedHostKeySha256 !== stagingTarget.sshHostKeySha256 || typeof session.run !== "function") {
       throw failure("STAGING_SSH_HOST_KEY_MISMATCH", "Staging SSH host key mismatch");
     }
     const observations = {};
     for (const id of commandIds) {
       observations[id] = requireObservation(
         id,
-        await session.run(commandFor(id, evidence, target)),
+        await session.run(commandFor(id, evidence, stagingTarget)),
         evidence,
-        target.sshHostKeySha256,
+        stagingTarget.sshHostKeySha256,
       );
     }
-    const stagingEvidence = buildStagingEvidence({ evidence, publicationEvidenceSha256, target, run, resource, observations });
+    const stagingEvidence = buildStagingEvidence({ evidence, publicationEvidenceSha256, target: stagingTarget, run: stagingRun, resource, observations });
     await appendStagingEvidence({
       filename: "staging-deployment-evidence.v1.json",
       bytes: Buffer.from(canonicalSerializeStagingDeploymentEvidence(stagingEvidence), "utf8"),

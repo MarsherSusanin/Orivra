@@ -730,9 +730,10 @@ same no-follow descriptor/immutable capture with bounded memory; pathname
 reopen is forbidden. Core rejected replacement `7c2ca21` / `34a5751` for a
 mutable evidence alias. The next replacement closed it but Core rejected
 `be3270c` / `0c12d82` because caller-owned target/run values remained mutable
-across provisioning. The correction must synchronously strict-parse, privately
-clone and deeply freeze evidence, target and run before the first await, then
-use only those values for adapters, commands and evidence. Both independent
+across provisioning. The production-author replacement synchronously
+strict-parses, privately clones and deeply freezes evidence, target and run
+before the first await, then uses only those values for adapters, commands and
+evidence. Both independent
 verifiers must PASS the same exact replacement tree before credential use.
 
 Registry upload locations must remain on `ghcr.io:443` under the exact same-

@@ -1,6 +1,6 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Corrective intentional RED after Core rejected exact candidate
+Status: Production-author GREEN after correcting Core-rejected exact candidate
 `be3270c` / `0c12d82`; both independent verifiers and all credentialed
 publication/staging effects are pending.
 
@@ -100,6 +100,6 @@ commands or evidence and otherwise fails before pull/PASS.
 The next replacement closed that evidence alias but Core rejected exact
 `be3270c` / `0c12d82`: caller-owned target/run objects remained mutable across
 provisioning, allowing a production-like Compose project and new SSH pin to
-reach all command seams. Corrective RED requires private strict snapshots of
-both target and run before the first await and exclusive use of them by every
-adapter, command and evidence field.
+reach all command seams. The production-author replacement creates private
+strict snapshots of both target and run before the first await and uses them
+exclusively for every adapter, command and evidence field.

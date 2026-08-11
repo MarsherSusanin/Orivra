@@ -342,8 +342,9 @@ handoff was not transitive and OCI archives were reopened after authentication.
 Core rejected replacement `7c2ca21` / `34a5751` for a mutable evidence alias.
 The next replacement closed it, but Core rejected `be3270c` / `0c12d82`:
 caller-owned target/run values remained mutable across async provisioning and
-could reach production-like command authority. Corrective RED requires private
-strict immutable snapshots of evidence, target and run before the first await.
+could reach production-like command authority. The production-author
+replacement now creates private strict immutable snapshots of evidence, target
+and run before the first await.
 Two independent verifier PASS reports are pending. No credentialed, hosted or
 deployed claim exists.
 

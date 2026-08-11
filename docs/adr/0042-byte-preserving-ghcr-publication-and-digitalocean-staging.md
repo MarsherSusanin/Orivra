@@ -1,6 +1,6 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; corrective RED after Core rejected `be3270c` / `0c12d82` for mutable target/run authority
+- Status: Accepted contract; production-author GREEN replacement pending two independent verifiers after Core rejected `be3270c` / `0c12d82`
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
