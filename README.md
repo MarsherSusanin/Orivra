@@ -182,9 +182,10 @@ and Product independently PASS exact commit `8137970` / tree `8c594cc`; scan
 8852 remains canceled and is not a security PASS. Slice 027D freezes the Orivra
 public display-name cutover before 028A; it does not migrate any Proofline
 technical identifier. Core and Product independently PASS exact `3d57840` /
-`fc7643f`. ADR 0039 is in second corrective RED after Core rejected replacement
-`1d3324d` / `473c534` for deleting a caller-owned pre-existing OCI archive;
-replacement and both verifier PASS reports remain pending.
+`fc7643f`. ADR 0039 has a second corrective locally GREEN production-author
+implementation after Core rejected replacement `1d3324d` / `473c534` for
+deleting a caller-owned pre-existing OCI archive; final freeze and both
+verifier PASS reports remain pending on one replacement tree.
 028A–029B по-прежнему владеют release и production
 promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment

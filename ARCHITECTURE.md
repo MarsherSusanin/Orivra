@@ -318,8 +318,9 @@ layout tar bytes are atomically handed off with a canonical non-circular
 receipt. No prefetch, registry, push or unified 029A authorization is implied.
 Core confirmed the first six filesystem-authority corrections but rejected
 replacement `1d3324d` / `473c534`: OCI exclusive-create failure still deleted
-a pre-existing caller archive. Second corrective RED, replacement and both
-independent verifiers remain pending.
+a pre-existing caller archive. The second corrective production-author
+implementation now preserves that archive; final freeze and both independent
+verifiers remain pending.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

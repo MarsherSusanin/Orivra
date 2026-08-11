@@ -1,8 +1,8 @@
 # Slice 028A — Offline OCI release freeze
 
-Status: Second corrective RED after Core rejected replacement `1d3324d` /
-`473c534` for caller-owned archive deletion; replacement and both independent
-verifiers are pending.
+Status: Second corrective production-author GREEN locally after Core rejected
+replacement `1d3324d` / `473c534`; final freeze and both independent verifiers
+are pending on one replacement tree.
 
 Architecture authority: [ADR 0039](../adr/0039-offline-oci-release-freeze.md).
 

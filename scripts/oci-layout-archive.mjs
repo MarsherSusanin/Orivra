@@ -171,10 +171,12 @@ async function loadVerifiedLayout(layoutRoot) {
 
 export async function writeCanonicalOciArchive({ layoutRoot, outputPath } = {}) {
   let outputHandle;
+  let createdOutput = false;
   try {
     if (typeof outputPath !== "string" || !isAbsolute(outputPath) || outputPath.includes("\0")) fail();
     const layout = await loadVerifiedLayout(layoutRoot);
     outputHandle = await open(outputPath, "wx", 0o600);
+    createdOutput = true;
     const archiveHash = createHash("sha256");
     let archiveSizeBytes = 0;
     const append = async (bytes) => {
@@ -217,7 +219,7 @@ export async function writeCanonicalOciArchive({ layoutRoot, outputPath } = {}) 
     });
   } catch (cause) {
     await outputHandle?.close().catch(() => undefined);
-    if (typeof outputPath === "string") await rm(outputPath, { force: true }).catch(() => undefined);
+    if (createdOutput) await rm(outputPath, { force: true }).catch(() => undefined);
     if (cause?.code === "OCI_RELEASE_ARCHIVE_INVALID") throw cause;
     fail();
   }

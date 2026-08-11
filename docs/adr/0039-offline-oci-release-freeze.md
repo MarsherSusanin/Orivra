@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted contract; second corrective RED. Core confirmed the first six fixes
-but rejected replacement `1d3324d` / `473c534` because OCI `EEXIST` cleanup
-deleted a caller-owned archive. Replacement and both verifiers are pending.
+Accepted contract; second corrective production-author GREEN locally. Core
+confirmed the first six fixes but rejected replacement `1d3324d` / `473c534`
+because OCI `EEXIST` cleanup deleted a caller-owned archive. The archive writer
+now removes only output it created; final freeze and both verifiers are pending.
 
 ## Context
 

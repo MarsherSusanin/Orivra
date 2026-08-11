@@ -1,8 +1,9 @@
 # Slice 028A RED — Offline OCI release freeze
 
-Status: Second corrective RED after Core rejected exact replacement candidate
-`1d3324df0929d11a725de3182cb56c8f75d05808` / tree
-`473c5348db4c0f56aa0340e7aef7b492e3298c80`; replacement pending.
+Status: Second corrective production-author GREEN locally after Core rejected
+exact replacement candidate `1d3324df0929d11a725de3182cb56c8f75d05808`
+/ tree `473c5348db4c0f56aa0340e7aef7b492e3298c80`; final freeze and both
+verifiers pending on one replacement tree.
 
 Date: 2026-08-11 (Asia/Vladivostok)
 
@@ -191,3 +192,13 @@ pre-existing mode-`0400` caller archive, requires the fixed rejection, and
 preserves its exact bytes and mode. The archive writer may remove only an
 output it created during the current invocation. Public release contracts and
 the prior six corrections are unchanged.
+
+## Second corrective GREEN
+
+The archive writer now sets its ownership flag only after `open(outputPath,
+"wx")` succeeds. Its catch removes the path only when that invocation created
+it; an `EEXIST` rejection preserves the caller's exact bytes and mode. The
+focused deployment inventory is 26/26 PASS and package/contracts/domain remains
+46/46 PASS. The final serialized static and real offline freeze run on the
+committed replacement tree; both independent verifiers remain required before
+028A completion.
