@@ -114,7 +114,8 @@ test("029A materializes verified WAL-G at the exact retained offline-build conte
     const receiptBytes = Buffer.from('{"binarySha256":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","binarySize":8,"version":"1"}');
     await mkdir(capturedContext, { mode: 0o700 });
     await mkdir(join(parent, "docker"), { mode: 0o700 });
-    await writeFile(join(capturedContext, "wal-g"), "verified", { mode: 0o555 });
+    await writeFile(join(capturedContext, "wal-g"), "verified", { mode: 0o400 });
+    await chmod(capturedContext, 0o500);
     const releaseRoot = await module.materializeCandidateWalGPrefetch({
       capturedContextRoot: capturedContext,
       prefetchRoot,
@@ -131,6 +132,8 @@ test("029A materializes verified WAL-G at the exact retained offline-build conte
     await assert.rejects(() => lstat(join(prefetchRoot, "receipt.v1.json")), { code: "ENOENT" });
   } finally {
     await chmod(parent, 0o700).catch(() => undefined);
+    await chmod(join(parent, "captured"), 0o700).catch(() => undefined);
+    await chmod(join(parent, "captured/wal-g"), 0o600).catch(() => undefined);
     await rm(parent, { recursive: true, force: true });
   }
 });

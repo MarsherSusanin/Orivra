@@ -129,7 +129,8 @@ export async function materializeCandidateWalGPrefetch({
   if (
     !contextMetadata.isDirectory() || contextMetadata.isSymbolicLink() ||
     !binaryMetadata.isFile() || binaryMetadata.isSymbolicLink() ||
-    (binaryMetadata.mode & 0o777) !== 0o555
+    (contextMetadata.mode & 0o777) !== 0o500 ||
+    (binaryMetadata.mode & 0o777) !== 0o400
   ) invalid();
   const releaseRoot = join(prefetchRoot, "wal_g_release");
   try {
