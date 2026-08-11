@@ -112,3 +112,21 @@ candidate temp root and assigns the path only to the retained recovery command.
 Typecheck, the exact 13-case candidate contract and the serialized 192-case
 deployment inventory pass; the failed attempt left no candidate or scoped
 Docker resources, so the next step is one clean from-scratch unified rerun.
+
+That clean rerun passed the full unit/coverage/PostgreSQL/build/static matrix,
+Docker A and B, the exact 027C recovery drill with all eight real negatives,
+and the fresh five-image OCI freeze on producer `2929510` / `a8514f1`. It then
+failed closed before the recorded-product Compose gate and before candidate
+publication with `Invalid array length`. The candidate wrapper re-opened every
+large OCI archive with `readFile` and passed its hundreds of megabytes through
+the pure in-memory SHA-256 helper, even though the frozen receipt already
+provides exact sizes and digests. Cleanup removed the owned stage, temporary
+WAL-G context and ignored prefetch tree; the caller output remained absent.
+
+The next corrective RED freezes bounded filesystem revalidation instead:
+`lstat` must prove every exact receipt artifact is a regular non-symlink mode-
+0400 file with the recorded size, and a streaming checksum must match the
+receipt digest. The terminal wrapper must never materialize whole OCI archives
+as JavaScript arrays or buffers merely to validate the 028A handoff. This is a
+local evidence scalability defect, not a credential, hosted, security-scan or
+production-deployment claim.

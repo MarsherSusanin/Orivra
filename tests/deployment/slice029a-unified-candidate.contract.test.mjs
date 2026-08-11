@@ -188,6 +188,67 @@ test("029A materializes verified WAL-G at the exact retained offline-build conte
   }
 });
 
+test("029A revalidates large frozen release artifacts by streaming metadata and digests", async () => {
+  const module = await orchestration();
+  assert.equal(typeof module.verifyCandidateFrozenReleaseArtifacts, "function");
+  const releaseRoot = "/private/tmp/proofline-029a/release";
+  const artifacts = [
+    ["frozen-release-manifest.v1.json", 2_048],
+    ["images/01-caddy.linux-amd64.oci.tar", 720_000_000],
+    ["images/02-web.linux-amd64.oci.tar", 710_000_000],
+    ["images/03-api.linux-amd64.oci.tar", 700_000_000],
+    ["images/04-worker.linux-amd64.oci.tar", 690_000_000],
+    ["images/05-postgres-recovery.linux-amd64.oci.tar", 680_000_000],
+  ].map(([filename, sizeBytes], index) => ({
+    filename,
+    sizeBytes,
+    sha256: `sha256:${String(index + 1).repeat(64)}`,
+  }));
+  const inspected = [];
+  const checksummed = [];
+  const inspectArtifact = async (path, artifact) => {
+    inspected.push([path, artifact.filename]);
+    return {
+      isFile: () => true,
+      isSymbolicLink: () => false,
+      mode: 0o100400,
+      size: artifact.sizeBytes,
+    };
+  };
+  const checksumArtifact = async (path, artifact) => {
+    checksummed.push([path, artifact.filename]);
+    return artifact.sha256;
+  };
+  assert.equal(await module.verifyCandidateFrozenReleaseArtifacts({
+    releaseRoot,
+    artifacts,
+    inspectArtifact,
+    checksumArtifact,
+  }), true);
+  assert.deepEqual(inspected.map(([, filename]) => filename), artifacts.map(({ filename }) => filename));
+  assert.deepEqual(checksummed.map(([, filename]) => filename), artifacts.map(({ filename }) => filename));
+
+  for (const mutation of ["symlink", "mode", "size", "digest"]) {
+    await assert.rejects(() => module.verifyCandidateFrozenReleaseArtifacts({
+      releaseRoot,
+      artifacts,
+      inspectArtifact: async (_path, artifact) => ({
+        isFile: () => true,
+        isSymbolicLink: () => mutation === "symlink",
+        mode: mutation === "mode" ? 0o100600 : 0o100400,
+        size: mutation === "size" ? artifact.sizeBytes - 1 : artifact.sizeBytes,
+      }),
+      checksumArtifact: async (_path, artifact) => mutation === "digest"
+        ? `sha256:${"f".repeat(64)}`
+        : artifact.sha256,
+    }), /frozen release artifact/i);
+  }
+
+  const source = await readFile(new URL("../../scripts/mlp-candidate-freeze.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /await readFile\(join\(releaseRoot, artifact\.filename\)\)/);
+  assert.match(source, /verifyCandidateFrozenReleaseArtifacts/);
+});
+
 test("029A runs gates serially, records only fixed PASS ids and fails fast", async () => {
   const module = await orchestration();
   const order = [];
