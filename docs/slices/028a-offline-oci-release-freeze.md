@@ -1,7 +1,7 @@
 # Slice 028A — Offline OCI release freeze
 
-Status: Intentional RED. Architecture and executable contracts are frozen;
-production release code is absent.
+Status: Production-author GREEN locally. Core and Product verification are
+pending on one final committed tree.
 
 Architecture authority: [ADR 0039](../adr/0039-offline-oci-release-freeze.md).
 
@@ -48,19 +48,27 @@ deferred 027C risk remains open.
   receipt) read-only; remove every scoped artifact on any failure;
 - hand immutable bytes to 028B without registry, credentials or rebuild.
 
-## Intentional RED
+## Production-author result
 
-The focused RED contracts require currently absent release feature exports,
-OCI layout inspection/packing, private source/WAL-G capture, offline build
-orchestration and terminal publication. Existing migration, Action, Docker and
-Sites controls remain GREEN and are not release archives.
+The frozen contracts are implemented without changing their public boundary.
+Typecheck, focused contracts, package purity, serialized Docker static, exact
+contracts/domain coverage and the real offline five-image freeze pass. The
+author run used a clean private commit snapshot, a caller-owned verified WAL-G
+input, no pull, no build network, no registry and no credentials. It published
+exactly five deterministic OCI archives plus canonical manifest and receipt,
+then independently rechecked their hashes, modes and bounded tar inventories.
+
+The author result is not either independent verifier PASS, a unified 029A
+matrix, registry publication, hosted deployment or security evidence. A final
+freeze from the documented committed tree is the immutable input to the two
+028A verifiers.
 
 ## Exclusions
 
 No SBOM/scanner/license/SLSA scope, dependency or lock change, Compose/service/
-port/migration change, Docker execution, network/prefetch, registry/GHCR push,
+port/migration change, network/prefetch, registry/GHCR push,
 DigitalOcean/SSH/DNS/Spaces/live-Coston2 effect, hosted claim or unified 029A
-matrix belongs to this RED wave.
+matrix belongs to this slice.
 
 ## Acceptance
 

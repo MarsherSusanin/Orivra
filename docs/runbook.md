@@ -263,16 +263,17 @@ authorization.
 
 ### Slice 028A offline OCI freeze
 
-ADR 0039 freezes intentional RED for exactly five ordered Linux/amd64 OCI
-archives: Caddy, Web, API, worker and PostgreSQL recovery. The future command
-must use one clean private commit snapshot, a caller-supplied private WAL-G
+ADR 0039 implements exactly five ordered Linux/amd64 OCI archives: Caddy, Web,
+API, worker and PostgreSQL recovery. The locally GREEN author command uses one
+clean private commit snapshot, a caller-supplied private WAL-G
 binary/receipt validated at use time, `pull=false`, `network=none`, no
 prefetch/registry/push, and build each image once. It normalizes accepted OCI
 Image Layout directories into deterministic uncompressed ustar, keeps
 `archiveSha256` distinct from the single-platform `imageManifestDigest`, and
 publishes only a canonical manifest plus non-circular checksum receipt after
 all private resources and final Git identity pass. 029A owns the separate
-unified-matrix authorization receipt.
+unified-matrix authorization receipt. Two independent 028A verifiers must still
+PASS one exact final tree before the module is complete.
 
 Production runtime composition always adds `deploy/compose.backup.yaml` through
 the fixed `compose:production -- --runtime` wrapper. When the recovery

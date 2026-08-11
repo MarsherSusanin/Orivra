@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted as the Slice 028A contract. Production is intentionally absent until
-the frozen RED contracts are implemented and independently verified.
+Accepted and implemented locally. The production author gates and a real
+credential-free offline freeze pass; independent Core and Product verification
+on one final committed tree remains pending.
 
 ## Context
 

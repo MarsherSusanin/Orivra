@@ -1,6 +1,7 @@
 # Slice 028A RED — Offline OCI release freeze
 
-Status: Intentional RED contract; production implementation absent.
+Status: RED contract preserved; production-author GREEN locally; independent
+Core and Product verification pending.
 
 Date: 2026-08-11 (Asia/Vladivostok)
 
@@ -104,3 +105,30 @@ temporary parent. Production mode and symlink assertions are unchanged.
 This RED creates no OCI archive and invokes no Docker, buildx, network,
 prefetch, registry, scanner, credential or external effect. It makes no 029A
 unified-matrix or 028B publication claim.
+
+## GREEN author chronology
+
+The implementation kept the frozen public contracts unchanged and added pure
+release contracts/domain derivation plus import-safe source, WAL-G, OCI archive
+and terminal publication orchestration. Final semantic evidence before the
+real freeze was: typecheck PASS; focused package/purity 46/46; deployment
+19/19; serialized Docker static 165/165; contracts/domain 48 files and 561
+tests at exact 100% statements, branches, functions and lines.
+
+The first clean real author freeze ran from commit
+`e2248eacb9b7cbe8cced56a8953ad7ef683c3048` / tree
+`93136ee9b6b161fd27660829f26ac25caa67bc07`. It used the standalone local
+Buildx boundary with `--pull=false`, `--network=none`, no registry, no
+credentials and no prefetch. It built the exact five Linux/amd64 images once
+and published seven read-only artifacts. The canonical manifest SHA-256 was
+`719089b082217392fdaf612f174c4f87f22b4ee1c7e5de9d76e407d36a9de3d8`;
+the receipt SHA-256 was
+`9bda76d3960de6f1e6bff4a7b710a7f639b6dfa7dbeba14f2636725bca3881a1`.
+Independent author rehash and tar inventory checks passed, and the working tree
+remained clean.
+
+That first output is author evidence for the implementation identity, not the
+terminal handoff for this documentation change. After the status documentation
+is committed, the exact final tree must be frozen again and handed unchanged
+to two independent verifiers. No hosted, deployed, registry, 029A unified-
+matrix or security PASS is claimed.

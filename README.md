@@ -182,8 +182,10 @@ and Product independently PASS exact commit `8137970` / tree `8c594cc`; scan
 8852 remains canceled and is not a security PASS. Slice 027D freezes the Orivra
 public display-name cutover before 028A; it does not migrate any Proofline
 technical identifier. Core and Product independently PASS exact `3d57840` /
-`fc7643f`. ADR 0039 now freezes 028A intentional RED for the five exact offline
-OCI archives and non-circular manifest receipt. 028A–029B по-прежнему владеют release и production
+`fc7643f`. ADR 0039 now has a locally GREEN 028A production-author
+implementation for the five exact offline OCI archives and non-circular
+manifest receipt; independent Core and Product verification is pending.
+028A–029B по-прежнему владеют release и production
 promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment
 не provisioned. Sites сохраняется только как

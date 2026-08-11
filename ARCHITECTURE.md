@@ -316,6 +316,9 @@ Each is built once from one clean private commit snapshot, PostgreSQL receives
 only a caller-supplied use-time verified WAL-G context, and deterministic OCI
 layout tar bytes are atomically handed off with a canonical non-circular
 receipt. No prefetch, registry, push or unified 029A authorization is implied.
+The production-author implementation and real offline five-image freeze are
+locally GREEN; independent Core and Product verification on one exact final
+tree remains pending.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна
