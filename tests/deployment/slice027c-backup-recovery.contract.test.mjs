@@ -34,7 +34,7 @@ test("accepts ADR 0037 and freezes Slice 027C C1/C2/C3 without a hosted claim", 
   for (const wave of ["027C1", "027C2", "027C3"]) assert.match(slice, new RegExp(wave));
   assert.match(
     roadmap,
-    /\| 027C \| WAL\/base-backup PITR and local MinIO restore drill \| Security corrective RED frozen after scan ae807f50; production correction pending \|/,
+    /\| 027C \| WAL\/base-backup PITR and local MinIO restore drill \| Local production-author GREEN; two independent reviews pending; scan 8852 user-canceled\/not a PASS with deferred evidence-integrity validation risk \|/,
   );
   const roadmap027c = roadmap.match(/- \*\*027C\*\*[\s\S]*?(?=\n- \*\*028A)/)?.[0] ?? "";
   assert.match(roadmap027c, /exact candidate\s+`1218e589` \/ tree `f0d6e325` is rejected/i);

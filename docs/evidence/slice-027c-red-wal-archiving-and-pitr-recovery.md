@@ -760,6 +760,36 @@ and Sites remains 36/36 PASS. Only this retained test and chronology changed;
 production, package metadata, dependencies, build artifacts, Docker and
 network state remain untouched.
 
+### Production-author status compatibility correction
+
+This tests/evidence-only follow-up starts from exact clean commit
+`ca7eb9d73801affee401bcecf36612148373edf5` / tree
+`5a63d87a94e022415519e3e3ef86b64cc1b62f02`. The local production-author WIP
+was inspected read-only from stash
+`d388cc397bdd2019ef8bc83e537173b064e18675` / tree
+`f37239b28da185f5285544dcb5539d18534cadef`; it was never applied. The retained
+deployment test still demanded the superseded roadmap status saying production
+correction was pending, which would reject the already authorized local
+production-author result for a documentation-only reason.
+
+The corrected contract requires the exact truthful roadmap row: local
+production-author GREEN; two independent reviews pending; scan 8852 was
+user-canceled and is explicitly not a PASS; its deferred evidence-integrity
+risk remains open. That risk is the exact handoff-inventory fixture boundary:
+a safe no-effect terminal handoff can carry backup bytes whose
+`inventory.canonicalSha256` disagrees with the entries, so fresh independent
+validation remains required. Local author GREEN is not accepted recovery,
+security, hosted, live Spaces, production, RPO/RTO or deployment evidence.
+Historical rejection, WAL-G identity, secret, topology, PITR, negative-control,
+V2 authorization and no-hosting assertions remain unchanged.
+
+Syntax and typecheck PASS. The focused backup/recovery file is 15 cases:
+12 retained controls PASS and three intentional RED, exactly the new roadmap
+status plus the two already frozen V2/detail-metadata production seams. Nearest
+027A/027B/027R controls are 45/45 PASS and Sites is 36/36 PASS. Only the
+retained deployment test and this chronology changed; production,
+dependencies, lockfiles, Docker and network state remain untouched.
+
 ## Required GREEN evidence
 
 - 100% statements/branches/functions/lines for pure recovery contracts;
