@@ -349,10 +349,12 @@ only session/explicit local close on success and run-owned teardown on failure;
 the production-author replacement enforces that split.
 Core and Product independently PASS exact commit
 `70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
-`88ec38335ab9630e1fd8c4d5247101bd046f06eb`. The first credentialed GHCR attempt
-failed before publishing any accepted image because the supplied fine-grained
-PAT is not valid GHCR package-write authority. No publication or staging PASS
-evidence exists, so no hosted or deployed claim exists.
+`88ec38335ab9630e1fd8c4d5247101bd046f06eb`. A later authenticated real GHCR
+diagnostic reached upload `POST` 202 and returned singular same-repository
+`/blobs/upload/<opaque-id>`; the adapter accepted only assumed plural
+`/blobs/uploads/` and failed closed. Compatibility correction invalidates the
+prior code-verifier passes. No image, publication/staging PASS evidence,
+hosted or deployed claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

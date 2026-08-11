@@ -2,9 +2,9 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Corrective RED closed by a production-author GREEN replacement after
-Core rejected `9cb839f` / `fcd0d75`; two independent verifier reports and all
-credentialed effects are pending.
+Status: Compatibility intentional RED after real GHCR returned a singular
+same-repository upload Location; zero images, publication evidence or staging
+effects exist.
 
 ## Authorized predecessor
 
@@ -262,3 +262,30 @@ both reports, then failed closed on the first Caddy blob because the supplied
 GitHub fine-grained PAT was not valid GHCR package-write authority. The partial
 result contained zero published image IDs, no publication evidence was written
 and staging was not started. This is not hosted, deployed or security PASS.
+
+## Real GHCR upload-Location compatibility RED
+
+A later authorized diagnostic authenticated successfully and received blob
+upload `POST` 202 without publishing a blob. GHCR returned the relative
+same-origin path
+`/v2/marshersusanin/orivra-caddy/blobs/upload/<opaque-id>` with singular
+`upload`; the adapter froze only plural `blobs/uploads` and failed closed.
+The redacted result remained `publishedImageIds=[]`, failed on `caddy`, wrote
+no publication evidence and did not start staging. No token, query or raw
+credential is recorded here.
+
+The credential-free causal test accepts only that exact default-443,
+same-repository, non-empty opaque-ID form in addition to the retained plural
+Distribution form. Cross-origin/port/repository, empty or nested IDs,
+arbitrary same-host paths, userinfo and fragments remain rejected before any
+bearer/body PUT. The prior `70f63cb` / `88ec383` verifier PASS reports cover
+superseded adapter bytes and cannot authorize another credentialed attempt.
+
+This tests/docs-only wave performs no production, dependency, Docker, network,
+credential, registry, publication-evidence or staging mutation.
+
+Compatibility classification on `3a38a8f` / `c368ea2`: syntax and typecheck
+PASS; the exact contracts/domain/purity focus is 61/61 PASS; the exact
+GHCR/staging/roadmap focus is 34 PASS plus this one intentional RED; serialized
+deployment static is 213 PASS plus the same intentional RED; Sites
+compatibility is 46/46 PASS.

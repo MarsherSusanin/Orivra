@@ -277,14 +277,67 @@ test("028B conditionally creates append-only evidence and never masks cleanup fa
   assert.equal(preserved.equals(existing), true);
 });
 
+test("028B accepts the exact singular same-repository GHCR upload Location", async () => {
+  const { createGhcrRegistryPublicationAdapter } = await import("../../scripts/ghcr-registry-adapter.mjs");
+  const remoteRepository = "ghcr.io/marshersusanin/orivra-caddy";
+  const manifestDigest = sha("1");
+  const layerDigest = sha("2");
+  const uploadPath = "/v2/marshersusanin/orivra-caddy/blobs/upload/4eedf41c-755a-4ad4-9cc8-fc9f83db8b30";
+  const putPaths = [];
+  const response = (status, headers = {}, payload = undefined) => ({
+    status,
+    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
+    json: async () => payload,
+  });
+  const request = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/token") return response(200, {}, { token: "t".repeat(32) });
+    if (options.method === "HEAD") return response(404);
+    if (options.method === "POST") return response(202, { location: uploadPath });
+    if (options.method === "PUT") {
+      putPaths.push(url.pathname);
+      return response(201, {
+        "docker-content-digest": url.pathname.includes("/manifests/") ? manifestDigest : layerDigest,
+      });
+    }
+    throw new Error("unexpected fake registry request");
+  };
+  const adapter = await createGhcrRegistryPublicationAdapter({
+    username: "operator",
+    tokenBytes: Buffer.from("credential-sentinel-028b"),
+    request,
+  });
+  await adapter.copyVerifiedImage({
+    image: { imageManifestDigest: manifestDigest },
+    inspected: {
+      imageManifestDigest: manifestDigest,
+      blobs: [
+        { digest: layerDigest, bytes: Buffer.from("layer") },
+        { digest: manifestDigest, bytes: Buffer.from("manifest") },
+      ],
+    },
+    remoteRepository,
+  });
+  assert.deepEqual(putPaths, [
+    uploadPath,
+    `/v2/marshersusanin/orivra-caddy/manifests/${manifestDigest}`,
+  ]);
+  adapter.dispose();
+});
+
 test("028B rejects cross-port, cross-repository or arbitrary upload Location before bearer PUT", async () => {
   const { createGhcrRegistryPublicationAdapter } = await import("../../scripts/ghcr-registry-adapter.mjs");
   const remoteRepository = "ghcr.io/example-owner/orivra-caddy";
   const manifestDigest = sha("1");
   const layerDigest = sha("2");
   const locations = [
-    "https://ghcr.io:444/v2/example-owner/orivra-caddy/blobs/uploads/run-1",
-    "https://ghcr.io/v2/other-owner/other-package/blobs/uploads/run-1",
+    "https://registry.example.test/v2/example-owner/orivra-caddy/blobs/upload/run-1",
+    "https://ghcr.io:444/v2/example-owner/orivra-caddy/blobs/upload/run-1",
+    "https://ghcr.io/v2/other-owner/other-package/blobs/upload/run-1",
+    "https://ghcr.io/v2/example-owner/orivra-caddy/blobs/upload/",
+    "https://ghcr.io/v2/example-owner/orivra-caddy/blobs/upload/run-1/extra",
+    "https://operator:credential@ghcr.io/v2/example-owner/orivra-caddy/blobs/upload/run-1",
+    "https://ghcr.io/v2/example-owner/orivra-caddy/blobs/upload/run-1#credential-fragment",
     "https://ghcr.io/token",
   ];
   for (const location of locations) {

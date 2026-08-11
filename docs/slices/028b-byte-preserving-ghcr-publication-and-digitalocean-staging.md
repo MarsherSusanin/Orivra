@@ -1,9 +1,9 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Core and Product independently PASS exact commit
-`70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
-`88ec38335ab9630e1fd8c4d5247101bd046f06eb`; credentialed publication and
-staging effects remain pending.
+Status: Compatibility corrective RED after a real GHCR diagnostic exposed the
+singular same-repository upload Location; zero images, publication evidence or
+staging effects exist. Prior Core/Product PASS `70f63cb` / `88ec383` covers the
+superseded adapter bytes and must be repeated after production correction.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 
@@ -123,3 +123,11 @@ The production-author replacement removes the success-path generic finalizer.
 Successful staging closes only its pinned session and an explicit local closer;
 failure-only run-owned teardown and deterministic error aggregation are
 unchanged.
+
+A later credentialed diagnostic authenticated and received GHCR `POST` 202,
+but real GHCR returned the relative same-repository singular path
+`/v2/marshersusanin/orivra-caddy/blobs/upload/<opaque-id>`. The verified adapter
+accepted only the assumed plural `blobs/uploads` form and failed closed on
+Caddy. Compatibility RED adds only that exact singular default-443 same-repo
+form and preserves every redirect/authority rejection. Published image IDs,
+publication evidence and staging remain empty.

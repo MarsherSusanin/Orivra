@@ -1,6 +1,6 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted; Core and Product PASS `70f63cb` / `88ec383`; credentialed publication and staging pending
+- Status: Accepted contract; compatibility RED after real GHCR singular upload Location; zero images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -62,10 +62,13 @@ After each copy the adapter independently reads the GHCR remote digest; it must
 equal only the frozen `imageManifestDigest`. A tag, an index digest,
 `archiveSha256`, mismatch or converted manifest fails closed.
 
-An upload `Location` is accepted only on HTTPS default port 443 and within the
-exact normalized `/v2/<same-repository>/blobs/uploads/…` namespace. Cross-port,
-cross-repository and arbitrary same-host paths are rejected before attaching a
-bearer token or request body.
+An upload `Location` is accepted only on HTTPS default port 443 and within an
+exact normalized same-repository upload namespace. In addition to the retained
+Distribution form `/v2/<same-repository>/blobs/uploads/<opaque-id>`, real GHCR
+returns `/v2/<same-repository>/blobs/upload/<opaque-id>` with singular
+`upload`; that exact non-empty opaque-ID form is accepted. Cross-origin,
+cross-port, cross-repository, empty/nested/arbitrary paths, userinfo and
+fragments are rejected before attaching a bearer token or request body.
 
 No specific Docker, Buildx, Skopeo or ORAS command is accepted by this ADR.
 GREEN must prove that its chosen adapter preserves the single-manifest digest

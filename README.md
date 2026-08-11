@@ -127,12 +127,12 @@ blockchain-операций.
   The production-author replacement now forbids cleanup/teardown on success
   and retains failure-only scoped teardown. Core and Product independently
   PASS exact commit `70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
-  `88ec38335ab9630e1fd8c4d5247101bd046f06eb`. A first real GHCR publication
-  attempt stopped at the first image because GitHub Container Registry rejects
-  fine-grained PATs for package writes; zero image IDs were published and no
-  publication evidence was written. Hosted staging and production remain
-  pending a classic PAT with least-scope package authority and the external
-  runtime credentials listed in the runbook.
+  `88ec38335ab9630e1fd8c4d5247101bd046f06eb`. A later authenticated real GHCR
+  diagnostic reached blob-upload `POST` 202 but exposed GHCR's singular
+  same-repository `/blobs/upload/<opaque-id>` Location, while the adapter froze
+  only plural `/blobs/uploads/`. It failed closed on Caddy: zero image IDs,
+  publication evidence and staging effects. The compatibility correction is
+  intentional RED and requires two fresh same-tree verifier PASS reports.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

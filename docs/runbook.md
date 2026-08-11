@@ -713,14 +713,15 @@ The evidence parent must already be mode 0700 and the output must not exist.
 The command is fixed to candidate `8991e7e4…` and exact Core/Product report
 hashes. It verifies all five archives before the first registry request and
 writes mode-0400 evidence only after five exact remote manifest-digest checks.
-The 028B implementation received two independent PASS reports on exact commit
-`70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
-`88ec38335ab9630e1fd8c4d5247101bd046f06eb`. GitHub Container Registry package
-writes require a Personal Access Token (classic) with least-scope
-`write:packages`; a fine-grained PAT is not accepted for this boundary. Use a
-separate classic token with only `read:packages` on the VDS. DigitalOcean
-staging remains a separate credentialed invocation and must produce its own
-append-only evidence before 029B.
+The earlier 028B implementation received two independent PASS reports on exact
+commit `70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
+`88ec38335ab9630e1fd8c4d5247101bd046f06eb`. A real authenticated diagnostic
+then reached GHCR blob-upload `POST` 202 and returned relative singular
+`/v2/marshersusanin/orivra-caddy/blobs/upload/<opaque-id>`. The adapter failed
+closed because it froze only plural `blobs/uploads`; zero images and no PASS
+evidence/staging were produced. Do not retry publication until this narrow
+compatibility correction and two fresh same-tree verifier reports PASS. Use a
+separate classic token with only `read:packages` on the VDS after publication.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now
@@ -744,8 +745,11 @@ tear down its run-owned resource. The production-author replacement enforces
 that split. Both independent verifiers must PASS the same exact replacement
 tree before credential use.
 
-Registry upload locations must remain on `ghcr.io:443` under the exact same-
-repository upload namespace before authorization or body send. Publication
+Registry upload locations must remain on `ghcr.io:443` under an exact same-
+repository namespace before authorization or body send. Accept the retained
+plural `/v2/<repo>/blobs/uploads/<opaque-id>` and GHCR's observed singular
+`/v2/<repo>/blobs/upload/<opaque-id>` only; reject empty/nested paths, userinfo,
+fragments, cross-origin/port/repository and arbitrary same-host paths. Publication
 never calls staging with an object result; the operator supplies canonical
 evidence bytes/checksum to the separate staging command. On successful staging,
 close only local auth and pinned-session resources and preserve the deployment;
