@@ -62,7 +62,7 @@ const manifest = {
       archiveFilename,
       archiveFormat: "oci-image-layout-v1.0.0+ustar",
       archiveSizeBytes: 1024 + index,
-      archiveSha256: sha(String(9 - index)),
+      archiveSha256: sha(index === 4 ? "0" : String(9 - index)),
       imageManifestDigest,
     };
   }),

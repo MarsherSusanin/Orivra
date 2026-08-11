@@ -79,6 +79,18 @@ production seams. A schema-only receipt producer mismatch was also moved to
 the domain handoff verifier, because a strict pure schema cannot know the
 independently expected producer.
 
+After the RED freeze, a fixture-only contradiction was found in the valid fifth
+`postgres-recovery` entry: both archive and image-manifest digests used the same
+repeated `5` value while the frozen contract correctly requires distinct
+identity namespaces. The fifth valid archive fixture now uses a unique repeated
+`0` digest; production contracts and the explicit digest-reuse rejection remain
+unchanged. The correction rerun kept `npm run typecheck` GREEN, the focused
+contracts/domain/package classification at 31 intentional RED plus 15 PASS,
+and deployment at 18 intentional RED plus one PASS. A concurrent full-static
+attempt produced three incidental retained-control failures; the exact same
+165-case static set rerun with `--test-concurrency=1` restored all 147 controls
+and only the frozen 18 Slice 028A failures remained.
+
 ## Boundaries
 
 This RED creates no OCI archive and invokes no Docker, buildx, network,
