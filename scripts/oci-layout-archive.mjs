@@ -45,7 +45,16 @@ async function loadLayout(layoutRoot) {
   const rootMetadata = await lstat(layoutRoot);
   if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) fail();
   const rootEntries = (await readdir(layoutRoot)).sort();
-  if (rootEntries.join("\0") !== "blobs\0index.json\0oci-layout") fail();
+  const acceptedRootInventories = [
+    "blobs\0index.json\0oci-layout",
+    "blobs\0index.json\0ingest\0oci-layout",
+  ];
+  if (!acceptedRootInventories.includes(rootEntries.join("\0"))) fail();
+  if (rootEntries.includes("ingest")) {
+    const ingestMetadata = await lstat(join(layoutRoot, "ingest"));
+    if (!ingestMetadata.isDirectory() || ingestMetadata.isSymbolicLink() ||
+      (await readdir(join(layoutRoot, "ingest"))).length !== 0) fail();
+  }
   const layout = await readFile(join(layoutRoot, "oci-layout"));
   if (!layout.equals(Buffer.from('{"imageLayoutVersion":"1.0.0"}'))) fail();
   const blobsRoot = join(layoutRoot, "blobs");
@@ -63,7 +72,32 @@ async function loadLayout(layoutRoot) {
   const indexPath = join(layoutRoot, "index.json");
   const indexMetadata = await lstat(indexPath);
   if (!indexMetadata.isFile() || indexMetadata.isSymbolicLink()) fail();
-  return { index: new Uint8Array(await readFile(indexPath)), blobs };
+  const rawIndex = JSON.parse((await readFile(indexPath)).toString("utf8"));
+  const descriptor = rawIndex?.manifests?.[0];
+  const rootKeys = Object.keys(rawIndex ?? {}).sort().join("\0");
+  const descriptorKeys = Object.keys(descriptor ?? {}).sort().join("\0");
+  const acceptedDescriptorKeys = [
+    "digest\0mediaType\0platform\0size",
+    "annotations\0digest\0mediaType\0platform\0size",
+  ];
+  if (rootKeys !== "manifests\0mediaType\0schemaVersion" || rawIndex.manifests.length !== 1 ||
+    !acceptedDescriptorKeys.includes(descriptorKeys) ||
+    (descriptor.annotations && Object.keys(descriptor.annotations).some((key) => ![
+      "io.containerd.image.name",
+      "org.opencontainers.image.created",
+      "org.opencontainers.image.ref.name",
+    ].includes(key)))) fail();
+  const normalizedIndex = Buffer.from(JSON.stringify({
+    schemaVersion: rawIndex.schemaVersion,
+    mediaType: rawIndex.mediaType,
+    manifests: [{
+      mediaType: descriptor.mediaType,
+      digest: descriptor.digest,
+      size: descriptor.size,
+      platform: descriptor.platform,
+    }],
+  }));
+  return { index: new Uint8Array(normalizedIndex), blobs };
 }
 
 export async function writeCanonicalOciArchive({ layoutRoot, outputPath } = {}) {
