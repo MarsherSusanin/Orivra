@@ -121,11 +121,12 @@ blockchain-операций.
   `7c2ca21` / `34a5751`: its verified handoff downgraded to a caller-owned
   mutable object across async staging setup. Its next replacement closed that
   alias, but Core rejected `be3270c` / `0c12d82` because caller-owned target
-  and run values remained mutable across provisioning. The production-author
-  replacement now creates private strict immutable snapshots of evidence,
-  target and run before async
-  effects. No GHCR, DigitalOcean or SSH effect has occurred; two independent
-  PASS reports are still required before credentials are used.
+  and run values remained mutable across provisioning. The next replacement
+  closed those aliases, but Core rejected `9cb839f` / `fcd0d75` because legacy
+  generic cleanup could destroy successful owned staging after PASS evidence.
+  Corrective RED forbids cleanup/teardown on success and retains failure-only
+  scoped teardown. No GHCR, DigitalOcean or SSH effect has occurred; two
+  independent PASS reports are still required before credentials are used.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

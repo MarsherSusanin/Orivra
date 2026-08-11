@@ -1,7 +1,7 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Production-author GREEN after correcting Core-rejected exact candidate
-`be3270c` / `0c12d82`; both independent verifiers and all credentialed
+Status: Corrective intentional RED after Core rejected exact candidate
+`9cb839f` / `fcd0d75`; both independent verifiers and all credentialed
 publication/staging effects are pending.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
@@ -103,3 +103,10 @@ provisioning, allowing a production-like Compose project and new SSH pin to
 reach all command seams. The production-author replacement creates private
 strict snapshots of both target and run before the first await and uses them
 exclusively for every adapter, command and evidence field.
+
+Core then rejected exact `9cb839f` / `fcd0d75`: after canonical PASS evidence
+and pinned-session close, an omitted explicit local closer let legacy generic
+`cleanup` destroy the successful owned staging resource while returning PASS.
+Corrective RED requires zero generic cleanup/teardown calls on success;
+failure-only teardown remains run-owned and preserves deterministic
+original-then-cleanup error ordering.

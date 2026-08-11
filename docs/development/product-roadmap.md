@@ -35,7 +35,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 027D | Orivra public display brand with Proofline technical compatibility | Complete; Core and Product PASS `3d57840` / `fc7643f` |
 | 027E | Orivra verification entry and canonical protected routes | Complete; Core and Product PASS `e42da1f` / `18116a6`, credential-free |
 | 028A | Verified local OCI archives and frozen digest manifest | Complete; Core and Product PASS `bdd09e7` / `5d0acb9`, credential-free |
-| 028B | Byte-preserving GHCR publication and DigitalOcean staging | Production-author GREEN after correcting rejected `be3270c` / `0c12d82`; two independent verifiers and credentialed effects pending |
+| 028B | Byte-preserving GHCR publication and DigitalOcean staging | Corrective RED after Core rejected `9cb839f` / `fcd0d75` for destructive generic success cleanup; two independent verifiers and credentialed effects pending |
 | 029A | Local MLP validation and candidate freeze | Complete; Core and Product PASS `fc2f6e0` / `f7cebc6`, candidate SHA-256 `8991e7e4…0cdda` |
 | 029B | Exact-digest production promotion and seven-day canary | Blocked until 028B hosted evidence |
 

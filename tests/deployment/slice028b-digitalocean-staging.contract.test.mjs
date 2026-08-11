@@ -140,12 +140,15 @@ test("028B maps only publication-authorized digests into the staging Compose env
   assert.doesNotMatch(JSON.stringify(plan), /:latest|build|push|production/i);
 });
 
-test("028B staging runs exact pulls, migrations, readiness, browser, PITR and live checks", async () => {
+test("028B staging runs exact checks and preserves its successful owned resource", async () => {
   const module = await runtime();
   const publicationHandoff = createPublicationHandoffFixture();
   const evidence = publicationHandoff.evidence;
   const order = [];
   const sshCommands = [];
+  const resource = { deploymentId: "do-staging-1", sshHost: "203.0.113.10", owned: true, destroyed: false };
+  let genericCleanupCalls = 0;
+  let stagingTeardownCalls = 0;
   let evidenceWrites = 0;
   let emittedEvidence;
   const result = await module.runDigitalOceanStaging({
@@ -155,7 +158,7 @@ test("028B staging runs exact pulls, migrations, readiness, browser, PITR and li
     target: stagingTarget(),
     run: stagingRun(),
     digitalOceanAdapter: {
-      provision: async () => { order.push("provision"); return { deploymentId: "do-staging-1", sshHost: "203.0.113.10", owned: true }; },
+      provision: async () => { order.push("provision"); return resource; },
       applyFirewall: async () => order.push("firewall"),
     },
     sshAdapter: {
@@ -185,16 +188,28 @@ test("028B staging runs exact pulls, migrations, readiness, browser, PITR and li
       emittedEvidence = StagingDeploymentEvidenceV1Schema.parse(JSON.parse(new TextDecoder().decode(bytes)));
       assert.equal(new TextDecoder().decode(bytes), canonicalSerializeStagingDeploymentEvidence(emittedEvidence));
     },
-    cleanup: async () => order.push("cleanup"),
+    cleanup: async (ownedResource) => {
+      genericCleanupCalls += 1;
+      ownedResource.destroyed = true;
+      order.push("cleanup");
+    },
+    teardownStaging: async (ownedResource) => {
+      stagingTeardownCalls += 1;
+      ownedResource.destroyed = true;
+      order.push("teardown-staging");
+    },
   });
   assert.deepEqual(order, [
     "provision", "firewall", "open-pinned-ssh", "install-read-only-pull-credential",
     "pull-exact-digests", "inspect-local-digests", "start-postgres",
     "role-bootstrap", "migrator", "start-api", "start-worker", "start-web",
     "start-caddy", "healthz", "readyz-real-heartbeat", "hosted-browser-smoke",
-    "spaces-pitr-restore", "persisted-live-coston2", "close-pinned-ssh", "cleanup",
+    "spaces-pitr-restore", "persisted-live-coston2", "close-pinned-ssh",
   ]);
   assert.equal(evidenceWrites, 1);
+  assert.equal(genericCleanupCalls, 0);
+  assert.equal(stagingTeardownCalls, 0);
+  assert.equal(resource.destroyed, false);
   assert.equal(result.status, "passed");
   assert.equal(result.environment, "staging");
   assert.equal(emittedEvidence.producer.commitSha, evidence.producer.commitSha);

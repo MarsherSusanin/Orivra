@@ -730,11 +730,13 @@ same no-follow descriptor/immutable capture with bounded memory; pathname
 reopen is forbidden. Core rejected replacement `7c2ca21` / `34a5751` for a
 mutable evidence alias. The next replacement closed it but Core rejected
 `be3270c` / `0c12d82` because caller-owned target/run values remained mutable
-across provisioning. The production-author replacement synchronously
-strict-parses, privately clones and deeply freezes evidence, target and run
-before the first await, then uses only those values for adapters, commands and
-evidence. Both independent
-verifiers must PASS the same exact replacement tree before credential use.
+across provisioning. The next replacement closed those aliases but Core
+rejected `9cb839f` / `fcd0d75`: an omitted explicit local closer allowed generic
+cleanup to destroy successful staging after PASS. The correction must never
+pass a successful resource to `cleanup` or `teardownStaging`; success closes
+only the pinned session and an explicit local closer, while failure alone may
+tear down its run-owned resource. Both independent verifiers must PASS the same
+exact replacement tree before credential use.
 
 Registry upload locations must remain on `ghcr.io:443` under the exact same-
 repository upload namespace before authorization or body send. Publication

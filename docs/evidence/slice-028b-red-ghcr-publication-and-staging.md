@@ -2,9 +2,8 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Corrective RED closed by a production-author GREEN replacement after
-Core rejected `be3270c` / `0c12d82`; two independent verifier reports and all
-credentialed effects are pending.
+Status: Corrective intentional RED after Core rejected `9cb839f` / `fcd0d75`;
+two independent verifier reports and all credentialed effects are pending.
 
 ## Authorized predecessor
 
@@ -212,3 +211,28 @@ The production-author replacement synchronously validates, clones and deeply
 freezes private target/run snapshots before the first await. The pending-
 provision mutation case and the other 33 GHCR/staging/roadmap cases now PASS.
 This is not an independent verifier, hosted, deployed or security PASS.
+
+## Successful-resource cleanup rejection and corrective RED
+
+Independent Core report
+`/private/tmp/proofline-028b-verifiers/9cb839f/core-verifier.md` has SHA-256
+`23e2535462d7c604abf3511c40291b47bdccd988d6bcc806ab012c6aa84d68ab`
+and rejects exact commit `9cb839fdc628d0ccd8a95bdbd005ed4b73820059` /
+tree `fcd0d75481a6d3c9e5e1cce14d68dc2a4c9cfa55`.
+
+Evidence/target/run isolation is closed, but successful owned staging without
+an explicit `closeLocalSession` still invokes generic `cleanup` after writing
+PASS and can destroy the accepted resource. The corrected happy-path causal
+case supplies both dangerous callbacks, writes canonical PASS evidence, closes
+the pinned session and requires zero generic cleanup/teardown calls plus an
+unchanged live resource. Existing failure-only teardown and deterministic
+original-then-cleanup aggregation remain unchanged.
+
+This tests/docs-only wave performs no registry, Docker, network, SSH,
+DigitalOcean, credential, live or frozen-output effect.
+
+Corrective classification on `9cb839f` / `fcd0d75`: syntax and typecheck PASS;
+the exact contracts/domain/purity focus is 61/61 PASS; the exact
+GHCR/staging/roadmap focus is 33 PASS plus this one intentional RED; serialized
+deployment static is 212 PASS plus the same intentional RED; Sites
+compatibility is 46/46 PASS.
