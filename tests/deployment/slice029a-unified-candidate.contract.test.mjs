@@ -41,6 +41,21 @@ test("029A command inventory includes real PostgreSQL and excludes live/network 
   assert.doesNotMatch(serialized, /test:live:coston2|docker:prefetch|login|push|pull|imagetools/);
 });
 
+test("029A gives only the recovery gate a private caller-owned evidence root", async () => {
+  const module = await orchestration();
+  const recoveryEvidenceOutput = "/private/tmp/proofline-029a/recovery-evidence";
+  const commands = module.createCredentialFreeCandidateCommands({ recoveryEvidenceOutput });
+  const recovery = commands.find(({ id }) => id === "docker-recovery");
+  assert.deepEqual(recovery?.environment, {
+    PROOFLINE_RECOVERY_EVIDENCE_OUTPUT_DIR: recoveryEvidenceOutput,
+  });
+  for (const command of commands.filter(({ id }) => id !== "docker-recovery" && id !== "postgres")) {
+    assert.deepEqual(command.environment, {});
+  }
+  const source = await readFile(new URL("../../scripts/mlp-candidate-freeze.mjs", import.meta.url), "utf8");
+  assert.match(source, /recoveryEvidenceOutput:\s*paths\.recoveryEvidence/);
+});
+
 test("029A child environment is minimal, private and strips ambient credentials", async () => {
   const module = await orchestration();
   const environment = module.createCredentialFreeCandidateEnvironment({

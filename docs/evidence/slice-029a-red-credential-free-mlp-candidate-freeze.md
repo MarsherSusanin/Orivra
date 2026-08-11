@@ -99,3 +99,10 @@ the serialized 191-case deployment inventory pass. A private no-auth config
 smoke resolves Docker Desktop Buildx `v0.25.0-desktop.1` without daemon,
 registry or credential access; the next evidence step is the complete unified
 candidate run from a clean commit.
+
+The clean candidate run then passed Docker A and Docker B but stopped before
+creating the recovery project: the retained 027C gate correctly rejected a
+missing caller-owned evidence root. The next corrective RED contract assigns
+one private mode-0700 directory under the candidate's owned temporary root only
+to `docker-recovery`; all other child environments remain unchanged, and the
+directory is removed by the existing exact-scoped finalizer before publication.
