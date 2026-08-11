@@ -1,4 +1,4 @@
-import { chmod, lstat, readdir, rm } from "node:fs/promises";
+import { chmod, lstat, readdir, rm, rmdir } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 
 const gateDefinitions = Object.freeze([
@@ -126,7 +126,7 @@ export async function removeOwnedCandidatePath(path) {
     for (const entry of await readdir(path)) {
       await removeOwnedCandidatePath(join(path, entry));
     }
-    await rm(path, { recursive: false, force: true });
+    await rmdir(path);
     return;
   }
   if (!metadata.isSymbolicLink()) await chmod(path, 0o600);

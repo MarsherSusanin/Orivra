@@ -77,7 +77,7 @@ function VerificationStarter({
             type="url"
             inputMode="url"
             autoComplete="url"
-            placeholder="https://api.example.com/prices/eth?currency=USD"
+            placeholder="https://weather.example.net/current?city=London"
             value={sourceUrl}
             aria-describedby="landing-source-note"
             aria-invalid={preview?.valid === false ? "true" : undefined}

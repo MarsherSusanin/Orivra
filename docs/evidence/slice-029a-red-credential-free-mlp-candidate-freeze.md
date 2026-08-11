@@ -43,3 +43,16 @@ serialized deployment static 188/188 PASS; contracts/domain coverage 50 files,
 579 tests and exact 100% statements/branches/functions/lines. No credential,
 registry, external-network or hosted claim is made. The one-shot unified run and
 two independent verifier reports remain pending on the final committed tree.
+
+The first terminal attempt on `331cce9` stopped at the full-unit gate before
+Docker or candidate publication because the production landing placeholder
+still contained the forbidden historical `api.example.com` demo marker. The
+candidate lifecycle removed its scoped prefetch/stage and published no PASS.
+The corrective tree replaces only that visible placeholder with a neutral
+reserved example endpoint and must repeat the unified matrix from the start.
+The same failed run also exposed that the owned-tree helper used `fs.rm`
+without recursion for an already emptied directory, leaving private stage/temp
+directories behind. The correction uses `rmdir` only after the no-follow walk
+and strengthens the fixture to prove owned removal plus external symlink-target
+byte/mode preservation. The exact failed-run residues are removed separately;
+no caller-owned path is broadened into cleanup authority.

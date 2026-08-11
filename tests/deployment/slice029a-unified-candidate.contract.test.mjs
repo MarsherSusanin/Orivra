@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -131,8 +131,19 @@ test("029A safe cleanup unlinks symlinks without chmod or traversal", async () =
   const module = await orchestration();
   const parent = await mkdtemp(join(tmpdir(), "proofline-029a-cleanup-"));
   try {
-    assert.equal(typeof module.removeOwnedCandidatePath, "function");
+    const owned = join(parent, "owned");
+    const external = join(parent, "external.txt");
+    await mkdir(join(owned, "nested"), { recursive: true, mode: 0o700 });
+    await writeFile(join(owned, "nested", "owned.txt"), "owned", { mode: 0o400 });
+    await writeFile(external, "external", { mode: 0o400 });
+    await symlink(external, join(owned, "external-link"));
+    await chmod(owned, 0o500);
+    await module.removeOwnedCandidatePath(owned);
+    await assert.rejects(() => lstat(owned), { code: "ENOENT" });
+    assert.equal(await readFile(external, "utf8"), "external");
+    assert.equal((await lstat(external)).mode & 0o777, 0o400);
   } finally {
+    await chmod(parent, 0o700).catch(() => undefined);
     await rm(parent, { recursive: true, force: true });
   }
 });
