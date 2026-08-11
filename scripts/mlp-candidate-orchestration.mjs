@@ -1,4 +1,6 @@
-import { chmod, copyFile, lstat, mkdir, readdir, realpath, rm, rmdir, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { constants } from "node:fs";
+import { chmod, copyFile, lstat, mkdir, open, readdir, realpath, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 
 export const CANDIDATE_COMPOSE_PLUGIN_PATHS = Object.freeze([
@@ -35,6 +37,15 @@ const gateDefinitions = Object.freeze([
   ["docker-recovery", ["run", "test:docker:recovery"]],
   ["release-freeze", ["run", "release:freeze", "--", "--output", "__RELEASE_OUTPUT__", "--wal-g-input", "__WAL_G_INPUT__"]],
   ["product-compose", ["run", "test:docker:product", "--", "--fixture-output", "__FIXTURE_OUTPUT__"]],
+]);
+
+const expectedReleaseArtifactNames = Object.freeze([
+  "frozen-release-manifest.v1.json",
+  "images/01-caddy.linux-amd64.oci.tar",
+  "images/02-web.linux-amd64.oci.tar",
+  "images/03-api.linux-amd64.oci.tar",
+  "images/04-worker.linux-amd64.oci.tar",
+  "images/05-postgres-recovery.linux-amd64.oci.tar",
 ]);
 
 function invalid(message = "Credential-free candidate input is invalid") {
@@ -193,6 +204,49 @@ export async function materializeCandidateWalGPrefetch({
     await removeOwnedCandidatePath(prefetchRoot).catch(() => undefined);
     throw cause;
   }
+}
+
+async function checksumCandidateArtifact(path) {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const hash = createHash("sha256");
+    const stream = handle.createReadStream({ autoClose: false });
+    for await (const chunk of stream) hash.update(chunk);
+    return `sha256:${hash.digest("hex")}`;
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function verifyCandidateFrozenReleaseArtifacts({
+  releaseRoot,
+  artifacts,
+  inspectArtifact = lstat,
+  checksumArtifact = checksumCandidateArtifact,
+} = {}) {
+  if (
+    typeof releaseRoot !== "string" || !isAbsolute(releaseRoot) || releaseRoot.includes("\0") ||
+    !Array.isArray(artifacts) || artifacts.length !== expectedReleaseArtifactNames.length ||
+    typeof inspectArtifact !== "function" || typeof checksumArtifact !== "function" ||
+    JSON.stringify(artifacts.map(({ filename } = {}) => filename)) !==
+      JSON.stringify(expectedReleaseArtifactNames)
+  ) invalid("Frozen release artifact inventory is invalid");
+  for (const artifact of artifacts) {
+    if (
+      !Number.isSafeInteger(artifact.sizeBytes) || artifact.sizeBytes < 1 ||
+      !/^sha256:[a-f0-9]{64}$/.test(artifact.sha256 ?? "")
+    ) invalid("Frozen release artifact inventory is invalid");
+    const path = join(releaseRoot, artifact.filename);
+    const metadata = await inspectArtifact(path, artifact);
+    if (
+      !metadata?.isFile?.() || metadata.isSymbolicLink?.() ||
+      (metadata.mode & 0o777) !== 0o400 || metadata.size !== artifact.sizeBytes
+    ) invalid("Frozen release artifact is invalid");
+    if (await checksumArtifact(path, artifact) !== artifact.sha256) {
+      invalid("Frozen release artifact is invalid");
+    }
+  }
+  return true;
 }
 
 export async function runCredentialFreeCandidateMatrix({ commands, runCommand } = {}) {

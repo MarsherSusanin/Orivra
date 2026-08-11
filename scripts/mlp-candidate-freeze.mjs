@@ -25,7 +25,6 @@ import {
   createCredentialFreeMlpCandidate,
   verifyCredentialFreeMlpCandidateHandoff,
 } from "../packages/domain/src/mlp-candidate-runtime.mjs";
-import { verifyFrozenOciReleaseHandoff } from "../packages/domain/src/oci-release-runtime.mjs";
 import {
   captureVerifiedReleaseWalG,
   removeReleaseCapturedInput,
@@ -40,6 +39,7 @@ import {
   removeOwnedCandidatePath,
   runCredentialFreeCandidateLifecycle,
   runCredentialFreeCandidateMatrix,
+  verifyCandidateFrozenReleaseArtifacts,
 } from "./mlp-candidate-orchestration.mjs";
 import { createRecordedProductFixture } from "./mlp-product-compose-runtime.mjs";
 
@@ -163,12 +163,9 @@ async function readFrozenRelease(releaseRoot, producer) {
   if (manifestBytes.toString("utf8") !== canonicalSerializeFrozenOciReleaseManifest(manifest) ||
     receiptBytes.toString("utf8") !== canonicalSerializeFrozenOciReleaseReceipt(receipt) ||
     manifest.producer.commitSha !== producer.commitSha || manifest.producer.treeSha !== producer.treeSha ||
-    receipt.producer.commitSha !== producer.commitSha || receipt.producer.treeSha !== producer.treeSha) fail();
-  const artifacts = new Map();
-  for (const artifact of receipt.artifacts) {
-    artifacts.set(artifact.filename, await readFile(join(releaseRoot, artifact.filename)));
-  }
-  verifyFrozenOciReleaseHandoff({ manifestBytes, receipt, expectedProducer: producer, artifacts });
+    receipt.producer.commitSha !== producer.commitSha || receipt.producer.treeSha !== producer.treeSha ||
+    receipt.frozenReleaseManifestSha256 !== sha256(manifestBytes)) fail();
+  await verifyCandidateFrozenReleaseArtifacts({ releaseRoot, artifacts: receipt.artifacts });
   return { manifestBytes, receiptBytes, receipt };
 }
 

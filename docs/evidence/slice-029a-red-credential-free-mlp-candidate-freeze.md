@@ -130,3 +130,10 @@ receipt digest. The terminal wrapper must never materialize whole OCI archives
 as JavaScript arrays or buffers merely to validate the 028A handoff. This is a
 local evidence scalability defect, not a credential, hosted, security-scan or
 production-deployment claim.
+
+The narrow production correction replaces whole-archive `readFile` validation
+with an exact six-artifact filesystem boundary and a no-follow streaming SHA-
+256 implementation. The focused 14-case 029A contract, typecheck and a real
+six-file streaming smoke pass; the next evidence step remains a complete clean-
+tree unified rerun because the prior terminal command did not publish a
+candidate.
