@@ -30,7 +30,6 @@ function parseJson(bytes) {
 function requireBlob(blobs, descriptor) {
   const bytes = blobs.get(descriptor.digest);
   const checks = [
-    exactObject(descriptor, ["mediaType", "digest", "size"]),
     SHA256.test(descriptor.digest),
     Number.isSafeInteger(descriptor.size),
     descriptor.size > 0,
