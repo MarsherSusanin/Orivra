@@ -345,7 +345,8 @@ caller-owned target/run values remained mutable across async provisioning and
 could reach production-like command authority. The next replacement closed
 those aliases, but Core rejected `9cb839f` / `fcd0d75`: generic cleanup could
 destroy an accepted owned staging resource after PASS. Corrective RED permits
-only session/explicit local close on success and run-owned teardown on failure.
+only session/explicit local close on success and run-owned teardown on failure;
+the production-author replacement enforces that split.
 Two independent verifier PASS reports are pending. No credentialed, hosted or
 deployed claim exists.
 

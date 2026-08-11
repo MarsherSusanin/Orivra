@@ -1,6 +1,6 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Corrective intentional RED after Core rejected exact candidate
+Status: Production-author GREEN after correcting Core-rejected exact candidate
 `9cb839f` / `fcd0d75`; both independent verifiers and all credentialed
 publication/staging effects are pending.
 
@@ -110,3 +110,8 @@ and pinned-session close, an omitted explicit local closer let legacy generic
 Corrective RED requires zero generic cleanup/teardown calls on success;
 failure-only teardown remains run-owned and preserves deterministic
 original-then-cleanup error ordering.
+
+The production-author replacement removes the success-path generic finalizer.
+Successful staging closes only its pinned session and an explicit local closer;
+failure-only run-owned teardown and deterministic error aggregation are
+unchanged.

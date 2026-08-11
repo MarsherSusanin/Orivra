@@ -256,8 +256,8 @@ export async function runDigitalOceanStaging({ publicationHandoff, publicationEv
   if (typeof closeLocalSession === "function") {
     try { await closeLocalSession(); } catch (cause) { cleanupFailures.push(cause); }
   }
-  if (resource?.owned === true && (original || typeof closeLocalSession !== "function")) {
-    const finalizer = original ? (teardownStaging ?? cleanup) : cleanup;
+  if (resource?.owned === true && original) {
+    const finalizer = teardownStaging ?? cleanup;
     if (typeof finalizer === "function") {
       try { await finalizer(resource); } catch (cause) { cleanupFailures.push(cause); }
     }

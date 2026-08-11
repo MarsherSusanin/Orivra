@@ -735,8 +735,9 @@ rejected `9cb839f` / `fcd0d75`: an omitted explicit local closer allowed generic
 cleanup to destroy successful staging after PASS. The correction must never
 pass a successful resource to `cleanup` or `teardownStaging`; success closes
 only the pinned session and an explicit local closer, while failure alone may
-tear down its run-owned resource. Both independent verifiers must PASS the same
-exact replacement tree before credential use.
+tear down its run-owned resource. The production-author replacement enforces
+that split. Both independent verifiers must PASS the same exact replacement
+tree before credential use.
 
 Registry upload locations must remain on `ghcr.io:443` under the exact same-
 repository upload namespace before authorization or body send. Publication
