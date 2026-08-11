@@ -1,8 +1,9 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Production-author GREEN after correcting Core-rejected exact candidate
-`9cb839f` / `fcd0d75`; both independent verifiers and all credentialed
-publication/staging effects are pending.
+Status: Core and Product independently PASS exact commit
+`70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
+`88ec38335ab9630e1fd8c4d5247101bd046f06eb`; credentialed publication and
+staging effects remain pending.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 
@@ -50,10 +51,13 @@ DigitalOcean staging environment from those exact remote digests.
 
 ## Explicit exclusions
 
-This slice has performed no registry, SSH, DigitalOcean, DNS, Spaces, Coston2, Docker
-or candidate-output effect. It does not select final GHCR repository names,
-claim hosted staging, authorize production promotion, or run a canary. 029B
-owns production promotion/canary after accepted 028B hosted evidence.
+The selected GHCR mapping is recorded in the runbook. One credentialed registry
+attempt reached the first Caddy blob and failed closed because GitHub Container
+Registry does not accept a fine-grained PAT as package-write authority. It
+published zero accepted image IDs, wrote no publication evidence and never
+started staging. This slice does not claim hosted staging, authorize production
+promotion, or run a canary. 029B owns production promotion/canary after accepted
+028B hosted evidence.
 
 ## Local GREEN evidence
 
@@ -68,10 +72,14 @@ owns production promotion/canary after accepted 028B hosted evidence.
 - the five frozen 029A OCI archives pass the single-descriptor parser and exact
   manifest-digest revalidation without registry or external network access.
 
-No GHCR request, DigitalOcean/SSH action or hosted smoke has run. A real 028B
-PASS additionally requires the explicit five-repository target map, approved
-credential files, two independent verifier reports on one exact implementation
-tree and the resulting immutable publication/staging evidence.
+Core report `/private/tmp/proofline-028b-verifiers/70f63cb/core-verifier.md` has
+SHA-256 `8d4175ccad0e19ae5333ad35a4d3edb55204195a6688eee3d13c8d9962f4a38c`.
+Product report `/private/tmp/proofline-028b-verifiers/70f63cb/product-verifier.md`
+has SHA-256
+`f657d9010728ce2e19d8f2cb373daf6e8a4c32dfc26144c786d2c595c4204df6`.
+Both cover the same exact implementation tree. A real hosted 028B PASS still
+requires the approved package-write/package-read credentials and resulting
+immutable publication/staging evidence.
 
 ## Corrective verifier boundary
 

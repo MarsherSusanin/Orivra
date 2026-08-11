@@ -347,8 +347,12 @@ those aliases, but Core rejected `9cb839f` / `fcd0d75`: generic cleanup could
 destroy an accepted owned staging resource after PASS. Corrective RED permits
 only session/explicit local close on success and run-owned teardown on failure;
 the production-author replacement enforces that split.
-Two independent verifier PASS reports are pending. No credentialed, hosted or
-deployed claim exists.
+Core and Product independently PASS exact commit
+`70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
+`88ec38335ab9630e1fd8c4d5247101bd046f06eb`. The first credentialed GHCR attempt
+failed before publishing any accepted image because the supplied fine-grained
+PAT is not valid GHCR package-write authority. No publication or staging PASS
+evidence exists, so no hosted or deployed claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

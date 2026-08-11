@@ -125,9 +125,14 @@ blockchain-операций.
   closed those aliases, but Core rejected `9cb839f` / `fcd0d75` because legacy
   generic cleanup could destroy successful owned staging after PASS evidence.
   The production-author replacement now forbids cleanup/teardown on success
-  and retains failure-only scoped teardown. No GHCR, DigitalOcean or SSH
-  effect has occurred; two independent PASS reports are still required before
-  credentials are used.
+  and retains failure-only scoped teardown. Core and Product independently
+  PASS exact commit `70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
+  `88ec38335ab9630e1fd8c4d5247101bd046f06eb`. A first real GHCR publication
+  attempt stopped at the first image because GitHub Container Registry rejects
+  fine-grained PATs for package writes; zero image IDs were published and no
+  publication evidence was written. Hosted staging and production remain
+  pending a classic PAT with least-scope package authority and the external
+  runtime credentials listed in the runbook.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
@@ -142,8 +147,9 @@ blockchain-операций.
 - В репозитории пока нет `.github/workflows`, production deployment или
   настроенного merge queue. Поэтому deployed live Coston2 PASS ещё не получен и
   не заменяется симулятором.
-- Последний независимо проверенный product candidate: commit `71ac541`, tree
-  `176c6248c8992bbce1a0a31c3db880d7e506d8ed`.
+- Последний независимо проверенный product candidate: commit
+  `70f63cb0c4fac0c7661cb734896575be07edfa70`, tree
+  `88ec38335ab9630e1fd8c4d5247101bd046f06eb`.
 
 ## Быстрый старт
 

@@ -1,6 +1,6 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; production-author GREEN replacement pending two independent verifiers after Core rejected `9cb839f` / `fcd0d75`
+- Status: Accepted; Core and Product PASS `70f63cb` / `88ec383`; credentialed publication and staging pending
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 

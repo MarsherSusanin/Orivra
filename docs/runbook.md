@@ -713,9 +713,14 @@ The evidence parent must already be mode 0700 and the output must not exist.
 The command is fixed to candidate `8991e7e4…` and exact Core/Product report
 hashes. It verifies all five archives before the first registry request and
 writes mode-0400 evidence only after five exact remote manifest-digest checks.
-Do not run it until the 028B implementation receives two independent PASS
-reports. DigitalOcean staging remains a separate credentialed invocation and
-must produce its own append-only evidence before 029B.
+The 028B implementation received two independent PASS reports on exact commit
+`70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
+`88ec38335ab9630e1fd8c4d5247101bd046f06eb`. GitHub Container Registry package
+writes require a Personal Access Token (classic) with least-scope
+`write:packages`; a fine-grained PAT is not accepted for this boundary. Use a
+separate classic token with only `read:packages` on the VDS. DigitalOcean
+staging remains a separate credentialed invocation and must produce its own
+append-only evidence before 029B.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now
@@ -748,6 +753,50 @@ tear down run-owned staging infrastructure only on failure.
 
 029B is the credentialed production promotion and canary. 029B starts only
 after 028B has published and staged the exact frozen candidate.
+
+### Production access inventory (identifiers only)
+
+Never put a password, PAT, API token, private key, database URL or application
+secret in this repository, shell history, command line, evidence or operator
+notes. This inventory records only stable identifiers and storage boundaries.
+
+| Boundary | Canonical value |
+|---|---|
+| Git repository | `https://github.com/MarsherSusanin/Orivra.git` |
+| Default branch | `main` |
+| Public origins | `https://orivra.xyz`, `https://www.orivra.xyz` |
+| VDS | `72.56.81.28` |
+| SSH principal | `orivra@72.56.81.28`, key-only; root login and password auth disabled |
+| Accepted admin key | fingerprint `SHA256:6nF05fkgqcs4y3B39eC97znTYlGWQnyE+mqiQJQF388` |
+| Release root | `/opt/orivra/releases/<commit>`; `/opt/orivra/current` is the active symlink |
+| Server secret root | `/opt/orivra/secrets`, root-owned mode `0500`; secret files mode `0400` |
+| Evidence root | `/opt/orivra/evidence`, root-owned mode `0700` |
+| State root | `/opt/orivra/state`, root-owned and not publicly served |
+| GHCR repositories | `ghcr.io/marshersusanin/orivra-{caddy,web,api,worker,postgres-recovery}` |
+
+The current prepared server source is exact commit
+`70f63cb0c4fac0c7661cb734896575be07edfa70` at
+`/opt/orivra/releases/70f63cb0c4fac0c7661cb734896575be07edfa70`.
+Docker Engine `29.1.3`, Compose `2.40.3`, fail2ban and unattended upgrades are
+active. UFW denies inbound traffic by default, permits public 80/443, rate-limits
+22 and restricts the provider monitoring agent on 10050 to its explicit
+allowlist. PostgreSQL, API, worker and the Docker socket have no public listener.
+No application container is running until exact GHCR publication evidence and
+the required runtime credentials exist.
+
+Credential storage and rotation rules:
+
+1. local publication uses a private mode-0500 operator directory with separate
+   mode-0400 classic PAT files for `write:packages` and `read:packages`;
+2. the VDS receives only the read-only package token and the runtime secret
+   files required by Compose; the write token never reaches the VDS;
+3. GitHub, DigitalOcean, Spaces, verifier and relayer credentials are rotated at
+   their providers; docs record only their scope/owner and the file that consumes
+   them, never their values;
+4. any credential pasted into chat or a terminal is considered exposed and is
+   revoked before the next deployment attempt;
+5. after every update verify `main`, the release commit/tree, publication and
+   staging evidence checksums, UFW, listening ports and exact image digests.
 
 ### Единая полная матрица перед MLP candidate freeze
 

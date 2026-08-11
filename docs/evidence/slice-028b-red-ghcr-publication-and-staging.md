@@ -244,3 +244,21 @@ the exact contracts/domain/purity focus is 61/61 PASS; the exact
 GHCR/staging/roadmap focus is 33 PASS plus this one intentional RED; serialized
 deployment static is 212 PASS plus the same intentional RED; Sites
 compatibility is 46/46 PASS.
+
+## Final replacement verification and first credentialed attempt
+
+Core and Product independently PASS exact commit
+`70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
+`88ec38335ab9630e1fd8c4d5247101bd046f06eb`.
+
+- Core report `/private/tmp/proofline-028b-verifiers/70f63cb/core-verifier.md`,
+  SHA-256 `8d4175ccad0e19ae5333ad35a4d3edb55204195a6688eee3d13c8d9962f4a38c`.
+- Product report
+  `/private/tmp/proofline-028b-verifiers/70f63cb/product-verifier.md`, SHA-256
+  `f657d9010728ce2e19d8f2cb373daf6e8a4c32dfc26144c786d2c595c4204df6`.
+
+The first real publication attempt revalidated the frozen 029A candidate and
+both reports, then failed closed on the first Caddy blob because the supplied
+GitHub fine-grained PAT was not valid GHCR package-write authority. The partial
+result contained zero published image IDs, no publication evidence was written
+and staging was not started. This is not hosted, deployed or security PASS.
