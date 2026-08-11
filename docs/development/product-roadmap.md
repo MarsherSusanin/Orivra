@@ -1,4 +1,4 @@
-# Proofline product roadmap
+# Orivra product roadmap
 
 The product journey is delivered as independently frozen vertical slices:
 
@@ -31,7 +31,8 @@ The product journey is delivered as independently frozen vertical slices:
 | 027B1 | Checksummed migration manifest, login-role bootstrap and migration 010 | Complete; independently verified on `527c561` / `ebdf648` |
 | 027B2 | Process health, strict readiness and persisted production-worker heartbeat | Complete; independently verified on `527c561` / `ebdf648` |
 | 027B3 | Ordered runtime Compose and credential-free PostgreSQL/API lifecycle | Complete; independently verified on `527c561` / `ebdf648` |
-| 027C | WAL/base-backup PITR and local MinIO restore drill | Local production-author GREEN; two independent reviews pending; scan 8852 user-canceled/not a PASS with deferred evidence-integrity validation risk |
+| 027C | WAL/base-backup PITR and local MinIO restore drill | Complete; Core and Product PASS `8137970` / `8c594cc`; scan 8852 user-canceled/not a security PASS; deferred evidence-integrity validation risk remains open |
+| 027D | Orivra public display brand with Proofline technical compatibility | Intentional RED; contracts/docs frozen before 028A |
 | 028A | Verified local OCI archives and frozen digest manifest | Planned, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | Blocked until unified local candidate PASS |
 | 029A | Local MLP validation and candidate freeze | Planned, credential-free |
@@ -118,9 +119,19 @@ Credential-free delivery covers 022–029A:
   draft-to-promotion authority remain open. Corrective RED freezes private
   commit/draft snapshots, lossless exact WAL-G detail metadata, terminal
   canonical backup/restore/handoff publication and V2 promotion authorization
-  bound to both handoff and restore digests; production correction is pending.
+  bound to both handoff and restore digests. The replacement was independently
+  verified by Core and Product on exact `8137970` / `8c594cc`; canceled scan
+  8852 remains not a security PASS and its deferred inventory-digest validation
+  risk remains open.
   This is not hosted, live Spaces/production, actual RPO/RTO or SLA evidence. A
   Droplet backup is secondary host recovery, not database/PITR evidence.
+- **027D** freezes the exact public display-name change to **Orivra** under
+  [ADR 0038](../adr/0038-orivra-public-brand.md). Web/metadata/vector, SIWE,
+  CLI and Action display copy change; the exact Proofline technical
+  compatibility allowlist does not. Old signed Proofline challenges fail closed
+  and users request a new five-minute challenge. This tests/docs-only wave is
+  intentional RED and must reach production, generated-artifact, coverage,
+  browser and two-verifier GREEN before 028A.
 - **028A local release truth** builds and exports OCI archives, then must verify them.
   The frozen release manifest stores per-image `archiveSha256`,
   `imageManifestDigest`, `platform` and `repository`/`reference` fields.

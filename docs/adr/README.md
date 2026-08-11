@@ -40,5 +40,6 @@ ADR фиксирует архитектурное решение, которое
 | [0035](0035-credential-free-container-runtime-boundary.md) | CLI-isolated pinned images, nonblocking Docker-secret files, split private Compose topology and exact HTTPS Caddy/Web routing without fabricated readiness |
 | [0036](0036-checksummed-migrations-and-deployment-readiness.md) | Immutable migration checksums, least-privilege deployment roles and persisted worker heartbeat separate process health from application readiness |
 | [0037](0037-wal-archiving-and-pitr-recovery.md) | Encrypted WAL-G archive, evidence-bound base backup and paused new-volume PITR are proved locally against private MinIO |
+| [0038](0038-orivra-public-brand.md) | Orivra becomes the public display name while Proofline protocol, package, persistence and deployment identifiers remain compatible |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

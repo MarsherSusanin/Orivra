@@ -1,4 +1,4 @@
-# Proofline runbook
+# Orivra runbook
 
 ## 1. Предварительные требования
 
@@ -219,8 +219,9 @@ commit and tree. The prior local gate and security scan therefore do not count
 as accepted 027C evidence. The frozen correction is now local
 production-author GREEN: focused contracts, the unified matrix, real
 PostgreSQL, isolated prefetch, two offline builds and Docker 027A/027B/027C
-gates passed with exact scoped cleanup. Both replacement verifier reports are
-still pending.
+gates passed with exact scoped cleanup. Core and Product independently PASS
+exact commit `8137970091197160c3d002084a2b778a4d262034` / tree
+`8c594cc58820670aba66e7b3cbd6f1f818420a19`.
 
 Later stash candidate `ccccf5d2c2d45415ceb68e6e670a793ee22e0382` is also
 rejected by Codex Security scan `ae807f50-4ceb-4412-94f2-03e8e311bff3`
@@ -243,6 +244,14 @@ or severity classification and not a claim that the production path is fixed.
 This is local credential-free author evidence only. It uses no production
 Spaces, GHCR, DNS, SSH or live Coston2 credential and proves no hosted/VDS
 backup, production restore or promotion, actual RPO/RTO, SLA or readiness.
+
+Slice 027D is the credential-free public display-brand cutover before 028A.
+The accepted public name is Orivra, but operators continue to use every existing
+`PROOFLINE_*`, `@proofline/*`, database/role, Docker/path, evidence and
+`/proofline/v1` identifier. The CLI command and Usage remain `proofline`.
+Existing pre-cutover SIWE challenges fail closed after deployment and users
+request a new challenge; the unchanged expiry bounds disruption to five
+minutes. Do not add a compatibility parser or brand environment variable.
 
 Production runtime composition always adds `deploy/compose.backup.yaml` through
 the fixed `compose:production -- --runtime` wrapper. When the recovery

@@ -1,6 +1,6 @@
-# Proofline
+# Orivra
 
-Proofline — проверочный стенд для Coston2 Web2Json-интеграций. Он показывает,
+Orivra — проверочный стенд для Coston2 Web2Json-интеграций. Он показывает,
 может ли smart contract доверять не только полученному proof, но и источнику
 данных, генерирует безопасный consumer и собирает воспроизводимый пакет
 доказательств для разработчика, аудитора и CI.
@@ -92,7 +92,16 @@ blockchain-операций.
   no-effect fixture published terminal handoff backup bytes whose
   `inventory.canonicalSha256` did not match their entries; the strict parser
   rejected them, while the promotion parser reached its injected effect with
-  the self-consistent triad. Two independent reviews are still pending.
+  the self-consistent triad. Core and Product independently PASS exact commit
+  `8137970091197160c3d002084a2b778a4d262034` / tree
+  `8c594cc58820670aba66e7b3cbd6f1f818420a19`; this does not close or classify
+  the deferred scan risk.
+- [ADR 0038](docs/adr/0038-orivra-public-brand.md) selects **Orivra** as the
+  public display name before 028A. Slice 027D is intentional RED: Web metadata,
+  the local SVG mark, fail-closed SIWE cutover, CLI/Action copy and generated
+  artifacts are frozen in tests but not implemented. `@proofline/*`,
+  `PROOFLINE_*`, database/storage/evidence, CLI, Action, Solidity, Docker and S3
+  identifiers remain compatibility-stable.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
@@ -166,9 +175,12 @@ source snapshot, lossless WAL-G metadata, terminal
 `RecoveryEvidenceHandoffV1` and `RestorePromotionAuthorizationV2`, and passed
 the focused, unified, real-PostgreSQL, offline-build and Docker A/B/C author
 gates. Scan 8852 was user-canceled and is explicitly not a security PASS; its
-deferred inventory-digest/promotion-parser validation risk remains open. Two
-independent PASS reports are still required before 027C acceptance. 028A–029B
-по-прежнему владеют release и production promotion.
+deferred inventory-digest/promotion-parser validation risk remains open. Core
+and Product independently PASS exact commit `8137970` / tree `8c594cc`; scan
+8852 remains canceled and is not a security PASS. Slice 027D freezes the Orivra
+public display-name cutover before 028A; it does not migrate any Proofline
+technical identifier. 028A–029B по-прежнему владеют release и production
+promotion.
 DNS, SSH, GHCR/Spaces credentials, hosted staging и production deployment
 не provisioned. Sites сохраняется только как
 compatibility artifact; это больше не выбранный production host.
@@ -234,9 +246,9 @@ Web2JsonManifestV1
   one-shot checksummed migration под PostgreSQL advisory lock, persistent
   database volume, `/healthz`, `/readyz`, worker heartbeat и off-host
   WAL/base-backup PITR. Локальная credential-free 027B readiness
-  independently verified; 027C backup/recovery is production-author GREEN but
-  remains unaccepted pending two independent reviews, and canceled scan 8852
-  is not a security PASS. GHCR publication,
+  independently verified; 027C backup/recovery is independently verified on
+  exact `8137970` / `8c594cc`, while canceled scan 8852 is not a security PASS
+  and its deferred inventory-digest risk remains open. GHCR publication,
   VDS deployment и использование production Spaces credentials ещё не
   выполнялись. Это не hosted, live-production, фактический RPO/RTO или SLA PASS.
 - Rollback разрешён только на prior schema-compatible verified remote digest,

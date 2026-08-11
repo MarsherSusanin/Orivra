@@ -1,8 +1,12 @@
-# Proofline architecture
+# Orivra architecture
 
 ## Назначение системы
 
-Proofline превращает `Web2JsonManifestV1` в проверяемую цепочку evidence. Пользовательские поверхности не реализуют FDC lifecycle самостоятельно: они работают через общие contracts и persisted run API.
+Orivra превращает `Web2JsonManifestV1` в проверяемую цепочку evidence.
+`Proofline` remains the compatibility identity of packages, environment,
+persistence, evidence and deployment automation. Пользовательские поверхности
+не реализуют FDC lifecycle самостоятельно: они работают через общие contracts и
+persisted run API.
 
 ```mermaid
 flowchart LR
@@ -232,6 +236,22 @@ Production-author evidence is recorded in
 [`slice-026-green-public-product-surface.md`](docs/evidence/slice-026-green-public-product-surface.md);
 independent Core and Product verification remain pending.
 
+## Public display-brand boundary
+
+[ADR 0038](docs/adr/0038-orivra-public-brand.md) selects `Orivra` as the exact
+public display name. Slice 027D changes Web metadata/copy and the local vector
+mark, the server-authored SIWE sentence, CLI headings/errors and GitHub Action
+metadata/summaries/errors. It does not rename packages, `PROOFLINE_*`, database
+or storage namespaces, CLI command/file suffixes, Action IDs, Solidity/media/
+evidence identities, Docker paths/prefixes or `/proofline/v1` object storage.
+
+The SIWE cutover is fail-closed. Only the newly reconstructed Orivra message is
+accepted; an already-issued Proofline challenge is unavailable before recovery
+or session effects and the user requests a new five-minute challenge. No dual
+brand parser or client brand authority exists. The tests/docs are intentional
+RED until production and generated artifacts change, and 027D completes before
+028A.
+
 ## Release architecture and current operational status
 
 - PR contract: caller-supplied canonical replay bundle, без network и secrets.
@@ -315,7 +335,10 @@ reportability/severity and is not a PASS. Its deferred validation risk remains:
 a safe no-effect fixture published terminal handoff backup bytes with an
 inventory digest inconsistent with their entries; the strict parser rejected
 those bytes, while the promotion parser reached its injected effect with the
-self-consistent triad. Two independent reviews remain pending. Нет
+self-consistent triad. Core and Product independently PASS exact commit
+`8137970091197160c3d002084a2b778a4d262034` / tree
+`8c594cc58820670aba66e7b3cbd6f1f818420a19`; canceled scan 8852 remains not a
+security PASS and the deferred inventory-digest validation risk remains open. Нет
 release-ready VDS composition или production
 deployment. В репозитории нет
 `.github/workflows` или настроенного merge queue. Hosting is not yet

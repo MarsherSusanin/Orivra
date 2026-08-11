@@ -42,7 +42,9 @@ handoff and restore. The replacement is now local credential-free
 production-author GREEN: focused 53 and static 146 cases, affected coverage,
 real PostgreSQL (22 files / 163 tests, zero skip), isolated prefetch, two
 offline builds, Docker 027A/027B/027C and the unified author matrix passed with
-exact cleanup. Two independent reviews remain pending.
+exact cleanup. Core and Product independently PASS exact commit
+`8137970091197160c3d002084a2b778a4d262034` / tree
+`8c594cc58820670aba66e7b3cbd6f1f818420a19`.
 
 Codex Security scan 8852 was canceled by the user before final
 reportability/severity and is explicitly not a security PASS. Deferred
