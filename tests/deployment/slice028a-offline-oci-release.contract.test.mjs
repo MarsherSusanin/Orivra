@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -20,6 +20,42 @@ const expectedBuilds = [
     walGContext: true,
   },
 ];
+
+async function writeValidOciLayout(layoutRoot) {
+  await mkdir(join(layoutRoot, "blobs", "sha256"), { recursive: true });
+  const configuration = Buffer.from('{"architecture":"amd64","os":"linux"}');
+  const layer = Buffer.from("release-layer");
+  const digest = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+  const manifest = Buffer.from(JSON.stringify({
+    schemaVersion: 2,
+    mediaType: "application/vnd.oci.image.manifest.v1+json",
+    config: {
+      mediaType: "application/vnd.oci.image.config.v1+json",
+      digest: digest(configuration),
+      size: configuration.length,
+    },
+    layers: [{
+      mediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
+      digest: digest(layer),
+      size: layer.length,
+    }],
+  }));
+  const manifestDigest = digest(manifest);
+  await writeFile(join(layoutRoot, "oci-layout"), '{"imageLayoutVersion":"1.0.0"}');
+  await writeFile(join(layoutRoot, "index.json"), JSON.stringify({
+    schemaVersion: 2,
+    mediaType: "application/vnd.oci.image.index.v1+json",
+    manifests: [{
+      mediaType: "application/vnd.oci.image.manifest.v1+json",
+      digest: manifestDigest,
+      size: manifest.length,
+      platform: { architecture: "amd64", os: "linux" },
+    }],
+  }));
+  for (const value of [configuration, layer, manifest]) {
+    await writeFile(join(layoutRoot, "blobs", "sha256", digest(value).slice(7)), value);
+  }
+}
 
 async function optionalModule(path) {
   return import(`${pathToFileURL(resolve(root, path)).href}?red=028a`).catch(() => ({}));
@@ -242,39 +278,7 @@ test("packs the same accepted OCI layout to byte-identical ustar twice", async (
   const module = await optionalModule("scripts/oci-layout-archive.mjs");
   const layoutRoot = await temporary("proofline-028a-layout-");
   const outputRoot = await temporary("proofline-028a-archives-");
-  await mkdir(join(layoutRoot, "blobs", "sha256"), { recursive: true });
-  const configuration = Buffer.from('{"architecture":"amd64","os":"linux"}');
-  const layer = Buffer.from("release-layer");
-  const digest = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
-  const manifest = Buffer.from(JSON.stringify({
-    schemaVersion: 2,
-    mediaType: "application/vnd.oci.image.manifest.v1+json",
-    config: {
-      mediaType: "application/vnd.oci.image.config.v1+json",
-      digest: digest(configuration),
-      size: configuration.length,
-    },
-    layers: [{
-      mediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
-      digest: digest(layer),
-      size: layer.length,
-    }],
-  }));
-  const manifestDigest = digest(manifest);
-  await writeFile(join(layoutRoot, "oci-layout"), '{"imageLayoutVersion":"1.0.0"}');
-  await writeFile(join(layoutRoot, "index.json"), JSON.stringify({
-    schemaVersion: 2,
-    mediaType: "application/vnd.oci.image.index.v1+json",
-    manifests: [{
-      mediaType: "application/vnd.oci.image.manifest.v1+json",
-      digest: manifestDigest,
-      size: manifest.length,
-      platform: { architecture: "amd64", os: "linux" },
-    }],
-  }));
-  for (const value of [configuration, layer, manifest]) {
-    await writeFile(join(layoutRoot, "blobs", "sha256", digest(value).slice(7)), value);
-  }
+  await writeValidOciLayout(layoutRoot);
   const first = join(outputRoot, "first.oci.tar");
   const second = join(outputRoot, "second.oci.tar");
   const one = await module.writeCanonicalOciArchive({ layoutRoot, outputPath: first });
@@ -283,6 +287,26 @@ test("packs the same accepted OCI layout to byte-identical ustar twice", async (
   assert.equal(one.archiveSha256, two.archiveSha256);
   assert.equal((await stat(first)).mode & 0o777, 0o600);
 });
+
+for (const controlPath of ["blobs", "blobs/sha256", "index.json", "oci-layout"]) {
+  test(`rejects symlinked OCI control path ${controlPath} before output creation`, async () => {
+    const module = await optionalModule("scripts/oci-layout-archive.mjs");
+    const parent = await temporary("proofline-028a-layout-symlink-");
+    const layoutRoot = join(parent, "layout");
+    const externalRoot = join(parent, "external");
+    const outputPath = join(parent, "release.oci.tar");
+    await writeValidOciLayout(layoutRoot);
+    await mkdir(externalRoot, { mode: 0o700 });
+    const source = join(layoutRoot, controlPath);
+    const target = join(externalRoot, controlPath.replaceAll("/", "-"));
+    await rename(source, target);
+    await symlink(target, source);
+    await assert.rejects(module.writeCanonicalOciArchive({ layoutRoot, outputPath }), {
+      code: "OCI_RELEASE_ARCHIVE_INVALID",
+    });
+    assert.equal(await lstat(outputPath).then(() => true, () => false), false);
+  });
+}
 
 test("publishes exactly seven files atomically as a read-only handoff", async () => {
   const module = await optionalModule("scripts/release-freeze-orchestration.mjs");
@@ -330,6 +354,52 @@ test("discards both stage and final output when atomic publication throws after 
   }), /injected publish failure/);
   assert.equal(await stat(stageRoot).then(() => true, () => false), false);
   assert.equal(await stat(outputDirectory).then(() => true, () => false), false);
+});
+
+test("preserves a pre-existing caller output byte-for-byte and mode-for-mode", async () => {
+  const module = await optionalModule("scripts/release-freeze-orchestration.mjs");
+  const parent = await temporary("proofline-028a-existing-output-");
+  const stageRoot = join(parent, ".release-stage");
+  const outputDirectory = join(parent, "release");
+  const sentinel = join(outputDirectory, "caller-owned.txt");
+  const sentinelBytes = Buffer.from("caller-owned-output");
+  await mkdir(stageRoot, { mode: 0o700 });
+  await mkdir(outputDirectory, { mode: 0o700 });
+  await writeFile(sentinel, sentinelBytes, { mode: 0o600 });
+  await chmod(sentinel, 0o400);
+  await chmod(outputDirectory, 0o500);
+  await assert.rejects(module.publishFrozenReleaseOutput({ stageRoot, outputDirectory }),
+    /Release output already exists/);
+  assert.equal((await readFile(sentinel)).equals(sentinelBytes), true);
+  assert.equal((await lstat(sentinel)).mode & 0o777, 0o400);
+  assert.equal((await lstat(outputDirectory)).mode & 0o777, 0o500);
+});
+
+test("unlinks a cleanup symlink without chmod or traversal of its external target", async () => {
+  const module = await optionalModule("scripts/release-freeze-orchestration.mjs");
+  const parent = await temporary("proofline-028a-cleanup-symlink-");
+  const externalParent = await temporary("proofline-028a-cleanup-external-");
+  const stageRoot = join(parent, ".release-stage");
+  const outputDirectory = join(parent, "release");
+  const externalTarget = join(externalParent, "external.txt");
+  const externalBytes = Buffer.from("external-target");
+  await mkdir(stageRoot, { mode: 0o700 });
+  await writeFile(join(stageRoot, "staged.txt"), "staged", { mode: 0o600 });
+  await writeFile(externalTarget, externalBytes, { mode: 0o600 });
+  await chmod(externalTarget, 0o400);
+  await assert.rejects(module.publishFrozenReleaseOutput({
+    stageRoot,
+    outputDirectory,
+    afterRename: async () => {
+      await chmod(outputDirectory, 0o700);
+      await symlink(externalTarget, join(outputDirectory, "external-link"));
+      await chmod(outputDirectory, 0o500);
+      throw new Error("injected post-rename failure");
+    },
+  }), /injected post-rename failure/);
+  assert.equal(await lstat(outputDirectory).then(() => true, () => false), false);
+  assert.equal((await readFile(externalTarget)).equals(externalBytes), true);
+  assert.equal((await lstat(externalTarget)).mode & 0o777, 0o400);
 });
 
 test("runs build and packing once per image, finalizes before one terminal publish", async () => {

@@ -2,9 +2,9 @@
 
 ## Status
 
-Accepted and implemented locally. The production author gates and a real
-credential-free offline freeze pass; independent Core and Product verification
-on one final committed tree remains pending.
+Accepted contract; corrective RED. Independent Core rejected exact candidate
+`5613640` / `6b1d3a0` for caller-output cleanup and OCI control-path symlink
+authority. Replacement production and both independent verifiers are pending.
 
 ## Context
 

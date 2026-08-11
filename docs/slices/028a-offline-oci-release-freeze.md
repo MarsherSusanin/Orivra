@@ -1,7 +1,7 @@
 # Slice 028A — Offline OCI release freeze
 
-Status: Production-author GREEN locally. Core and Product verification are
-pending on one final committed tree.
+Status: Corrective RED after Core rejected exact candidate `5613640` /
+`6b1d3a0`; replacement production and both independent verifiers are pending.
 
 Architecture authority: [ADR 0039](../adr/0039-offline-oci-release-freeze.md).
 

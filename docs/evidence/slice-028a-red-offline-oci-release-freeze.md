@@ -1,7 +1,8 @@
 # Slice 028A RED — Offline OCI release freeze
 
-Status: RED contract preserved; production-author GREEN locally; independent
-Core and Product verification pending.
+Status: Corrective RED after independent Core FAIL on exact candidate
+`5613640d3baba32ec37f9ee2ce75c3ac2c9b2c29` / tree
+`6b1d3a06d0973f9d7f33d6278e1b976f6aa577c8`; replacement pending.
 
 Date: 2026-08-11 (Asia/Vladivostok)
 
@@ -132,3 +133,29 @@ terminal handoff for this documentation change. After the status documentation
 is committed, the exact final tree must be frozen again and handed unchanged
 to two independent verifiers. No hosted, deployed, registry, 029A unified-
 matrix or security PASS is claimed.
+
+## Independent Core rejection and corrective RED
+
+Core report `/private/tmp/proofline-028a-verifiers/5613640/core-verifier.md`
+has SHA-256
+`71bd46709505df7cca9ecf2220c213f52540ecf1e88145ffdc6714864a4a3780`.
+It rejects the exact candidate above for two release-boundary blockers:
+
+- pre-existing caller output was detected but then deleted by the shared error
+  cleanup, while cleanup `chmod` followed a symbolic link and could mutate an
+  external target;
+- OCI packing accepted symbolic links at authority-bearing control paths
+  `blobs`, `blobs/sha256`, `index.json` and `oci-layout`.
+
+Corrective executable RED preserves pre-existing output bytes and modes,
+requires cleanup to unlink without following/chmodding an external target, and
+requires all four OCI control paths to be `lstat`-bound real directories/files
+before archive output creation. The accepted archive format, modes and public
+release schemas are unchanged. The rejected candidate is not independently
+verified and its earlier local author output is not release authorization.
+
+Corrective classification on the rejected candidate: syntax and typecheck
+PASS; package/contracts/domain 46/46 PASS; deployment 19 retained PASS plus six
+causal corrective RED; serialized static 165 retained PASS plus the same six
+RED; Sites 36/36 PASS. No Docker, network, build, credential or production
+effect ran during this corrective wave.
