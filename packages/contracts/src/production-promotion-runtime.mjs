@@ -161,7 +161,9 @@ export const canonicalSerializeProductionTarget = (value) => serialize(Productio
 export const canonicalSerializeProductionPromotionAuthorization = (value) => serialize(ProductionPromotionAuthorizationV1Schema, value);
 export const canonicalSerializeProductionDeploymentEvidence = (value) => serialize(ProductionDeploymentEvidenceV1Schema, value);
 export const canonicalSerializeProductionPromotionEvidence = (value) => serialize(ProductionPromotionEvidenceV1Schema, value);
+export const canonicalSerializeApplicationRollbackAuthorization = (value) => serialize(ApplicationRollbackAuthorizationV1Schema, value);
 export const checksumProductionTarget = (value) => checksum(canonicalSerializeProductionTarget(value));
 export const checksumProductionPromotionAuthorization = (value) => checksum(canonicalSerializeProductionPromotionAuthorization(value));
 export const checksumProductionDeploymentEvidence = (value) => checksum(canonicalSerializeProductionDeploymentEvidence(value));
 export const checksumProductionPromotionEvidence = (value) => checksum(canonicalSerializeProductionPromotionEvidence(value));
+export const checksumApplicationRollbackAuthorization = (value) => checksum(canonicalSerializeApplicationRollbackAuthorization(value));

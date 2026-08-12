@@ -5,8 +5,12 @@ import {
   canonicalSerializeStagingDeploymentEvidence,
 } from "../../contracts/src/publication-runtime.mjs";
 import {
+  ApplicationRollbackAuthorizationV1Schema,
+  ProductionDeploymentEvidenceV1Schema,
   ProductionPromotionAuthorizationV1Schema,
   ProductionTargetV1Schema,
+  canonicalSerializeApplicationRollbackAuthorization,
+  canonicalSerializeProductionDeploymentEvidence,
   canonicalSerializeProductionPromotionAuthorization,
   canonicalSerializeProductionTarget,
 } from "../../contracts/src/production-promotion-runtime.mjs";
@@ -99,15 +103,57 @@ export function createProductionPromotionPlan(authority) {
   });
 }
 
-export function selectSchemaCompatibleRollback({ currentSchemaVersion, prior }) {
-  if (!Number.isSafeInteger(currentSchemaVersion) || !prior || prior.status !== "passed" ||
-    prior.verification !== "verified" || prior.productionClaim !== true ||
-    !/^sha256:[a-f0-9]{64}$/.test(prior.publicationEvidenceSha256 ?? "") ||
-    !/^sha256:[a-f0-9]{64}$/.test(prior.deploymentEvidenceSha256 ?? "") ||
-    !Number.isSafeInteger(prior.minimumCompatibleVersion) || !Number.isSafeInteger(prior.maximumCompatibleVersion) ||
-    currentSchemaVersion < prior.minimumCompatibleVersion || currentSchemaVersion > prior.maximumCompatibleVersion ||
-    prior.schemaVersion !== currentSchemaVersion || !Array.isArray(prior.images) || prior.images.length !== 5) {
-    throw Object.assign(new Error("Production rollback is forbidden"), { code: "PRODUCTION_ROLLBACK_FORBIDDEN" });
+export function selectSchemaCompatibleRollback(input) {
+  try {
+    const authorization = parseCanonical(input.rollbackAuthorizationBytes, ApplicationRollbackAuthorizationV1Schema, canonicalSerializeApplicationRollbackAuthorization);
+    const currentDeployment = parseCanonical(input.currentProductionDeploymentEvidenceBytes, ProductionDeploymentEvidenceV1Schema, canonicalSerializeProductionDeploymentEvidence);
+    const priorDeployment = parseCanonical(input.priorProductionDeploymentEvidenceBytes, ProductionDeploymentEvidenceV1Schema, canonicalSerializeProductionDeploymentEvidence);
+    const currentPublication = parseCanonical(input.currentPublicationEvidenceBytes, PublicationEvidenceV1Schema, canonicalSerializePublicationEvidence);
+    const priorPublication = parseCanonical(input.priorPublicationEvidenceBytes, PublicationEvidenceV1Schema, canonicalSerializePublicationEvidence);
+    const checksums = {
+      authorization: sha256Bytes(input.rollbackAuthorizationBytes),
+      currentDeployment: sha256Bytes(input.currentProductionDeploymentEvidenceBytes),
+      priorDeployment: sha256Bytes(input.priorProductionDeploymentEvidenceBytes),
+      currentPublication: sha256Bytes(input.currentPublicationEvidenceBytes),
+      priorPublication: sha256Bytes(input.priorPublicationEvidenceBytes),
+    };
+    const now = Date.parse(input.now);
+    const invalidChecks = [
+      checksums.authorization !== input.expectedRollbackAuthorizationSha256,
+      checksums.currentDeployment !== input.expectedCurrentProductionDeploymentEvidenceSha256,
+      checksums.priorDeployment !== input.expectedPriorProductionDeploymentEvidenceSha256,
+      checksums.currentPublication !== input.expectedCurrentPublicationEvidenceSha256,
+      checksums.priorPublication !== input.expectedPriorPublicationEvidenceSha256,
+      authorization.currentProductionDeploymentEvidenceSha256 !== checksums.currentDeployment,
+      authorization.priorProductionDeploymentEvidenceSha256 !== checksums.priorDeployment,
+      authorization.priorPublicationEvidenceSha256 !== checksums.priorPublication,
+      currentDeployment.publicationEvidenceSha256 !== checksums.currentPublication,
+      priorDeployment.publicationEvidenceSha256 !== checksums.priorPublication,
+      currentDeployment.frozenReleaseManifestSha256 !== currentPublication.frozenRelease.frozenReleaseManifestSha256,
+      priorDeployment.frozenReleaseManifestSha256 !== priorPublication.frozenRelease.frozenReleaseManifestSha256,
+      !equalProducer(currentDeployment.producer, currentPublication.producer),
+      !equalProducer(priorDeployment.producer, priorPublication.producer),
+      !equalImages(currentDeployment.images, currentPublication.images),
+      !equalImages(priorDeployment.images, priorPublication.images),
+      authorization.operatorId !== currentDeployment.run.operatorId,
+      authorization.operatorId !== priorDeployment.run.operatorId,
+      authorization.currentSchemaVersion !== currentDeployment.database.schemaVersion,
+      priorDeployment.database.schemaVersion < authorization.priorMinimumCompatibleVersion,
+      priorDeployment.database.schemaVersion > authorization.priorMaximumCompatibleVersion,
+      authorization.currentSchemaVersion < authorization.priorMinimumCompatibleVersion,
+      authorization.currentSchemaVersion > authorization.priorMaximumCompatibleVersion,
+      !Number.isFinite(now) || now < Date.parse(authorization.authorizedAt) || now >= Date.parse(authorization.expiresAt),
+    ];
+    if (invalidChecks.includes(true)) throw new Error("rollback binding mismatch");
+    return deepFreeze({
+      authorization,
+      currentDeployment,
+      priorDeployment,
+      currentPublication,
+      priorPublication,
+      images: priorPublication.images.map(({ id, remoteRepository, remoteReference, remoteDigest }) => ({ id, remoteRepository, remoteReference, remoteDigest })),
+    });
+  } catch (cause) {
+    throw Object.assign(new Error("Production rollback is forbidden"), { code: "PRODUCTION_ROLLBACK_FORBIDDEN", cause });
   }
-  return deepFreeze(structuredClone(prior));
 }

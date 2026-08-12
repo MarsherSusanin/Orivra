@@ -234,11 +234,12 @@ export async function runDigitalOceanProductionPromotion(input) {
   return result;
 }
 
-export async function runApplicationRollback({ currentSchemaVersion, prior, apply }) {
+export async function runApplicationRollback(input) {
   try {
-    const selected = selectSchemaCompatibleRollback({ currentSchemaVersion, prior });
-    if (typeof apply !== "function") throw new Error("missing apply");
-    return await apply(selected);
+    const selected = selectSchemaCompatibleRollback(input);
+    if (typeof input.apply !== "function") throw new Error("missing apply");
+    await input.apply(selected);
+    return Object.freeze({ status: "passed", rollback: true });
   } catch (cause) {
     if (cause?.code === "PRODUCTION_ROLLBACK_FORBIDDEN") throw cause;
     throw failure("PRODUCTION_ROLLBACK_FORBIDDEN", "Production rollback is forbidden", { cause });

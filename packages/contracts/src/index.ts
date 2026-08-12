@@ -232,10 +232,12 @@ export {
   canonicalSerializeProductionPromotionAuthorization,
   canonicalSerializeProductionPromotionEvidence,
   canonicalSerializeProductionTarget,
+  canonicalSerializeApplicationRollbackAuthorization,
   checksumProductionDeploymentEvidence,
   checksumProductionPromotionAuthorization,
   checksumProductionPromotionEvidence,
   checksumProductionTarget,
+  checksumApplicationRollbackAuthorization,
 } from "./production-promotion";
 export type {
   ApplicationRollbackAuthorizationV1,

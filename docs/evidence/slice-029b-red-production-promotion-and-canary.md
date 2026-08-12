@@ -108,3 +108,12 @@ contracts/domain/worker purity has 38 retained controls PASS and 5 intentional
 RED; deployment focus has 5 retained controls PASS and 2 intentional rollback
 RED; serialized deployment static has 219 retained controls PASS and the same
 2 intentional rollback RED; Sites compatibility has 46/46 PASS.
+
+The production author correction derives rollback authority exclusively from
+the five canonical byte handoffs and independently supplied checksums, binds
+authorization/operator/expiry/schema and the ordered five immutable image
+tuples, then passes only the recursively frozen private authority to `apply`.
+Final local gates PASS: typecheck; focused purity/contracts/domain 43/43;
+deployment 7/7; contracts/domain coverage 100% in all four metrics; serialized
+deployment static 221/221; Sites 46/46. No external or production effect ran;
+two fresh same-tree verifier reports are required.

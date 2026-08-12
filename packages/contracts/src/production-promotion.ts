@@ -9,10 +9,12 @@ import {
   canonicalSerializeProductionPromotionAuthorization,
   canonicalSerializeProductionPromotionEvidence,
   canonicalSerializeProductionTarget,
+  canonicalSerializeApplicationRollbackAuthorization,
   checksumProductionDeploymentEvidence,
   checksumProductionPromotionAuthorization,
   checksumProductionPromotionEvidence,
   checksumProductionTarget,
+  checksumApplicationRollbackAuthorization,
 } from "./production-promotion-runtime.mjs";
 
 export {
@@ -25,10 +27,12 @@ export {
   canonicalSerializeProductionPromotionAuthorization,
   canonicalSerializeProductionPromotionEvidence,
   canonicalSerializeProductionTarget,
+  canonicalSerializeApplicationRollbackAuthorization,
   checksumProductionDeploymentEvidence,
   checksumProductionPromotionAuthorization,
   checksumProductionPromotionEvidence,
   checksumProductionTarget,
+  checksumApplicationRollbackAuthorization,
 };
 
 export type ProductionTargetV1 = z.infer<typeof ProductionTargetV1Schema>;
