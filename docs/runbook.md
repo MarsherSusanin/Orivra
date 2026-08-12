@@ -818,9 +818,29 @@ notes. This inventory records only stable identifiers and storage boundaries.
 | State root | `/opt/orivra/state`, root-owned and not publicly served |
 | GHCR repositories | `ghcr.io/marshersusanin/orivra-{caddy,web,api,worker,postgres-recovery}` |
 
-The current prepared server source identity must be recorded here only after
-the post-publication documentation commit is synchronized to
-`/opt/orivra/releases/<commit>` and `/opt/orivra/current` is atomically updated.
+The prepared VDS source is synchronized from GitHub `main` into immutable
+`/opt/orivra/releases/<commit>` directories and selected through the atomic
+`/opt/orivra/current` symlink. The first post-publication checkpoint installed
+exact main commit `69e5567b5c84a4eba97c6d7045d3b427d2e1f5ac`; later docs-only commits must be
+synced with the same archive/hash/symlink procedure before the final start.
+The exact mode-0400 publication-evidence bytes are installed at
+`/opt/orivra/evidence/publication-evidence.v1.json` and have SHA-256
+`1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
+The VDS has pulled all five `ghcr.io/marshersusanin/orivra-*` images by their
+publication-authorized immutable digest; no mutable tags are used. Its Docker
+registry config is root-only mode `0600`; the underlying token has only
+`read:packages`. The GHCR write token is never copied to the VDS.
+
+The dedicated Coston2 relayer public address is
+`0xf7726036892E1278a3dDC270098ddf9003cA05eb`; only its private key file is
+root-owned mode `0400`. The address may receive only testnet C2FLR. The public
+Flare testnet verifier key is installed separately. Production start remains
+fail-closed until an accepted replay bundle/preflight pair, one non-zero
+canonical safe-consumer address and DigitalOcean Spaces storage authority are
+installed. Spaces uses one private bucket and distinct writer, reader and
+retention access-key pairs, plus the separately generated WAL-G encryption key.
+Do not substitute fixtures, reuse one broad key for the three roles, or start a
+worker that cannot produce live persisted evidence.
 Docker Engine `29.1.3`, Compose `2.40.3`, fail2ban and unattended upgrades are
 active. UFW denies inbound traffic by default, permits public 80/443, rate-limits
 22 and restricts the provider monitoring agent on 10050 to its explicit
