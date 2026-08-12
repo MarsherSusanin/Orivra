@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -372,6 +373,157 @@ test("post-cutover observation, checkpoint and deployment-evidence failures roll
     assert.equal(events.at(-1), "rollback-caddy", failingPhase);
     assert.equal(events.filter((entry) => entry === "rollback-caddy").length, 1, failingPhase);
     assert.equal(deploymentPass.length, 0, failingPhase);
+  }
+});
+
+test("the concrete pinned host session remains alive through rollback and closes exactly once afterward", async () => {
+  const [module, adapterModule] = await Promise.all([
+    runtime(),
+    import("../../scripts/timeweb-production-pilot-adapters.mjs").catch(() => ({})),
+  ]);
+  assert.equal(typeof adapterModule.createProductionPilotAdapters, "function");
+  const temporary = await mkdtemp(join(tmpdir(), "orivra-session-lifecycle-"));
+  const fakeBin = join(temporary, "bin");
+  const keyBytes = Buffer.from("orivra-production-test-host-key", "utf8");
+  const hostKey = digest(keyBytes);
+  const rollbackFailureMarker = join(temporary, "rollback-failure");
+  const oldEnvironment = new Map();
+  const environment = {
+    PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+    PROOFLINE_PRODUCTION_SECRET_ROOT: join(temporary, "secrets"),
+    PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: join(temporary, "replay.json"),
+    PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE: join(temporary, "preflight.json"),
+    PROOFLINE_BACKUP_EVIDENCE_FILE: join(temporary, "backup.json"),
+    PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE: join(temporary, "relayer.key"),
+  };
+  const secretFiles = {
+    ghcrPullToken: join(temporary, "ghcr.token"),
+    sshPrivateKey: join(temporary, "ssh.key"),
+    timewebAccessKey: join(temporary, "timeweb.access"),
+    timewebSecretKey: join(temporary, "timeweb.secret"),
+    backupEncryptionKey: join(temporary, "backup.key"),
+  };
+  const flattenErrors = (error) => error instanceof AggregateError
+    ? error.errors.flatMap(flattenErrors)
+    : [error];
+  try {
+    await mkdir(fakeBin, { mode: 0o700 });
+    await writeFile(join(fakeBin, "ssh-keyscan"), `#!/usr/bin/env node\nprocess.stdout.write(process.argv.at(-1) + " ssh-ed25519 ${keyBytes.toString("base64")}\\n");\n`, { mode: 0o700 });
+    await writeFile(join(fakeBin, "ssh"), `#!/usr/bin/env node\nimport { existsSync } from "node:fs";\nconst envelope = JSON.parse(Buffer.from(process.argv.at(-1), "base64url").toString("utf8"));\nif (envelope.id === "rollback-caddy" && existsSync(${JSON.stringify(rollbackFailureMarker)})) { process.stderr.write("rollback-failed"); process.exit(17); }\nconst value = envelope.id === "activate-caddy" ? { id: envelope.id, status: "passed", cutover: { status: "passed", publicOrigin: envelope.payload.publicOrigin, activatedAt: "2026-08-12T03:00:00Z" }, external: { status: "passed", publicOrigin: envelope.payload.publicOrigin, observedAt: "2026-08-12T03:00:01Z" } } : { id: envelope.id, status: "passed" };\nprocess.stdout.write(JSON.stringify(value));\n`, { mode: 0o700 });
+    await chmod(fakeBin, 0o700);
+    for (const [key, value] of Object.entries(environment)) {
+      oldEnvironment.set(key, process.env[key]);
+      process.env[key] = value;
+    }
+
+    const invoke = async ({ failBeforeCutover = false, failCheckpoint = false, failRollback = false, failClose = false } = {}) => {
+      const value = await fixture();
+      value.target = {
+        ...value.target,
+        sshEndpoint: { ...value.target.sshEndpoint, hostKeySha256: hostKey },
+      };
+      value.productionTargetBytes = bytes(value.target);
+      value.authorization = {
+        ...value.authorization,
+        productionTargetSha256: digest(value.productionTargetBytes),
+      };
+      value.promotionAuthorizationBytes = bytes(value.authorization);
+      const adapters = await adapterModule.createProductionPilotAdapters({ secretFiles });
+      const events = [];
+      let closes = 0;
+      let sessionOpen = false;
+      if (failRollback) await writeFile(rollbackFailureMarker, "1", { mode: 0o600 });
+      else await rm(rollbackFailureMarker, { force: true });
+      const commandResult = (command) => {
+        if (command.id === "inspect-local-digests") return { status: "passed", images: value.publication.images.map(({ id, remoteDigest }) => ({ id, remoteDigest })) };
+        if (command.id === "migrator") return { status: "passed", migrationManifestSha256: sha("4"), targetVersion: 10, schemaVersion: 10 };
+        if (command.id === "safe-consumer-deployer") return { status: "passed", registry, deployments: registry.entries.map((entry, index) => ({ ...entry, transactionHash: `0x${String(index + 3).repeat(64)}` })) };
+        if (command.id === "write-safe-consumer-registry") return { status: "passed", path: SAFE_CONSUMER_REGISTRY_OUTPUT, mode: 0o400, noReplace: true, registrySha256: digest(bytes(registry)) };
+        if (command.id === "readyz-real-heartbeat") {
+          if (failBeforeCutover) throw new Error("pre-cutover-failed");
+          return { status: "passed", readyz: { status: "passed" }, workerHeartbeat: { status: "current" } };
+        }
+        if (command.id === "timeweb-pitr-production") return { status: "passed", restoreEvidenceSha256: sha("5"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 };
+        if (command.id === "persisted-live-coston2") return LIVE_RUNS;
+        if (command.id === "canary-observe") return checkpoint("cutover", "2026-08-12T03:00:00Z", "2026-08-12T03:00:01Z");
+        return { status: "passed" };
+      };
+      const input = {
+        ...commonInput(value),
+        clock: { now: () => "2026-08-12T03:00:00Z" },
+        inspectFile: async (path) => path === SAFE_CONSUMER_REGISTRY_OUTPUT ? null : ({ isFile: () => path !== fileInputs.productionSecretRoot, isDirectory: () => path === fileInputs.productionSecretRoot, isSymbolicLink: () => false, mode: path === fileInputs.productionSecretRoot ? 0o40500 : 0o100400, size: 32 }),
+        preflightAdapter: { verify: async (id) => id === "ssh-host-key"
+          ? { ...preflight(value, id), expectedHostKeySha256: hostKey, observedHostKeySha256: hostKey }
+          : preflight(value, id) },
+        productionAdapter: { provision: async () => ({ owned: failBeforeCutover, deploymentId: value.target.deploymentId, sshHost: value.target.sshEndpoint.host }), applyFirewall: async () => undefined },
+        sshAdapter: { openPinnedSession: async (options) => {
+          const concrete = await adapters.sshAdapter.openPinnedSession(options);
+          sessionOpen = true;
+          return {
+            observedHostKeySha256: concrete.observedHostKeySha256,
+            run: async (command) => commandResult(command),
+            close: async () => {
+              events.push("close");
+              closes += 1;
+              await concrete.close();
+              sessionOpen = false;
+              if (failClose) throw new Error("close-failed");
+            },
+          };
+        } },
+        cutoverAdapter: {
+          activateCaddy: adapters.cutoverAdapter.activateCaddy,
+          observeExternalHttps: async ({ publicOrigin }) => ({ status: "passed", publicOrigin, observedAt: "2026-08-12T03:00:01Z" }),
+          rollbackCaddy: async (options) => {
+            events.push("rollback");
+            return adapters.cutoverAdapter.rollbackCaddy(options);
+          },
+        },
+        checkpointStore: { append: async () => {
+          if (failCheckpoint) throw new Error("checkpoint-failed");
+        } },
+        appendProductionEvidence: async () => undefined,
+        teardownCandidate: async () => {
+          events.push("teardown");
+          if (!sessionOpen) throw new Error("teardown-after-close");
+        },
+      };
+      try {
+        return { result: await module.runTimewebDirectProductionPilot(input), events, closes };
+      } catch (error) {
+        return { error, events, closes };
+      }
+    };
+
+    const success = await invoke();
+    assert.equal(success.result?.status, "canary-pending");
+    assert.deepEqual(success.events, ["close"]);
+    assert.equal(success.closes, 1);
+
+    const rollback = await invoke({ failCheckpoint: true });
+    assert.match(flattenErrors(rollback.error)[0]?.message ?? "", /DigitalOcean production promotion failed/);
+    assert.deepEqual(rollback.events, ["rollback", "close"]);
+    assert.equal(rollback.closes, 1);
+
+    const teardown = await invoke({ failBeforeCutover: true });
+    assert.match(flattenErrors(teardown.error)[0]?.message ?? "", /DigitalOcean production promotion failed/);
+    assert.deepEqual(teardown.events, ["teardown", "close"]);
+    assert.equal(teardown.closes, 1);
+
+    const aggregate = await invoke({ failCheckpoint: true, failRollback: true, failClose: true });
+    assert.deepEqual(flattenErrors(aggregate.error).map((error) => error.message), [
+      "DigitalOcean production promotion failed",
+      "Production host command failed",
+      "close-failed",
+    ]);
+    assert.deepEqual(aggregate.events, ["rollback", "close"]);
+    assert.equal(aggregate.closes, 1);
+  } finally {
+    for (const [key, value] of oldEnvironment) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(temporary, { recursive: true, force: true });
   }
 });
 

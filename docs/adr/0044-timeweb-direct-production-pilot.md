@@ -1,6 +1,6 @@
 # ADR 0044: Timeweb direct-production pilot and resumable 24-hour acceptance
 
-- Status: Accepted boundary; corrective production-author GREEN, exact-tree verification pending
+- Status: Accepted boundary; corrective RED after Core/Product FAIL on exact 4c828ea / 8f2e086
 - Date: 2026-08-12
 - Supersedes active production portions of: ADR 0037, ADR 0042, ADR 0043
 - Retains: all V1 schemas as historical compatibility data types
@@ -50,6 +50,18 @@ implementation closes those seams locally and preserves a separate historical
 Spaces parser while active production backup evidence requires literal
 `orivra-backet`. Exact-tree Core/Product verification is still pending; no
 hosted, Timeweb, Coston2, cutover or 24-hour PASS exists.
+
+The next production-author candidate was independently rejected at exact commit
+`4c828eac838d4dd0c977c39587dfb23431ff01b2` / tree
+`8f2e0865fea465d43f2ed208b80729033a7f7d19`. Product report
+`/private/tmp/proofline-029c-verifiers/4c828ea/product-verifier.md` has SHA-256
+`efdcca3e7a76dedc1463a7a7f625e4a8ede0b5aaa9b29e63a4bf4cc1a131f832`;
+Core report `/private/tmp/proofline-029c-verifiers/4c828ea/core-verifier.md`
+has SHA-256
+`008e5c5edf4d05922dfaa9d14eeb73bd8f287fcb2ffad9f5df26d8270ac6be0a`.
+The orchestrator closed the only pinned production session before asking the
+concrete adapter to roll Caddy back. Corrective RED is current; no verifier,
+hosted or production PASS exists.
 
 The pilot object store is Timeweb S3-compatible storage. Swift is an operator
 option outside the application runtime, not a release dependency.
@@ -208,6 +220,12 @@ canonical checkpoint bytes and deployment evidence be appended. Strict
 `cutover: {status:"passed", publicOrigin, activatedAt}`. An external
 observation, checkpoint or evidence failure after cutover requires
 `rollbackCaddy` and leaves zero deployment PASS.
+The concrete pinned session is one lifecycle authority: on post-cutover failure
+rollback runs through that still-open session before its exact-once close; on
+pre-cutover owned-resource failure teardown likewise precedes close. Successful
+completion closes exactly once. Causal failure is retained first, followed by
+rollback or teardown failure and then close failure in deterministic aggregate
+order. A separately injected rollback stub cannot satisfy this contract.
 
 The resumable append-only canary has exactly `cutover`,
 `post-cutover-15m`, `post-cutover-1h`, `post-cutover-24h`. Each checkpoint is

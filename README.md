@@ -160,16 +160,17 @@ blockchain-операций.
   Explicit Caddy cutover and its canonical checkpoint precede deployment evidence; trusted-clock
   cutover/15m/1h/24h checkpoints are resumable and cannot terminal-PASS early.
   Historical V1 contracts and canonical rollback binding remain parseable but
-  cannot authorize V2 effects. Exact candidate `97aae69` / tree `5d8965e` was
-  rejected by both Core and Product verification. The corrective replacement
-  is local production-author GREEN: nested activation retains rollback
+  cannot authorize V2 effects. Exact candidate `4c828ea` / tree `8f2e086` was
+  rejected by both Core and Product verification because its concrete pinned
+  session closed before post-cutover rollback. Corrective RED requires
+  rollback/teardown before one exact close. The earlier replacement locally
+  showed nested activation retains rollback
   authority, cutover consumes pre-deployment live evidence, UID 1000 writes
   only run-scoped staging that root seals, and terminal promotion resumes
   idempotently. Browser PASS must come from a canonical
   acceptance artifact, and active backup evidence fixes Timeweb bucket
   `orivra-backet` while historical Spaces parsing stays separate. Exact commit
-  and two fresh verifier reports remain pending; no hosted or production PASS
-  exists.
+  and two fresh verifier reports remain required; no hosted or production PASS exists.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

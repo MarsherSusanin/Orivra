@@ -856,6 +856,11 @@ PASS requires canonical pre-cutover browser-acceptance bytes and an independent
 checksum; HTTP fetches are not browser acceptance. Any malformed activation or
 later failure calls `rollbackCaddy` exactly once and leaves zero deployment
 PASS.
+The real adapter uses the same pinned session for activation and rollback.
+Rollback (or pre-cutover owned-candidate teardown) must finish before that
+session closes exactly once. Preserve deterministic error order: causal
+failure, rollback/teardown failure, close failure. A standalone injected
+rollback callback is not lifecycle evidence.
 Trusted-clock resume records exact cutover/15m/1h/24h checkpoints; only the
 86400-second final checkpoint may append canonical V2 promotion evidence with
 `status:passed`, `promotionClaim:true` and the exact deployment digest; a

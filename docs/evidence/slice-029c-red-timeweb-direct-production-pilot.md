@@ -497,3 +497,31 @@ the recovery gate restored a fresh volume and passed all eight exact negatives
 with scoped resource cleanup. No provider, registry, SSH, DNS, VDS, Timeweb or
 live Coston2 credential/effect was used. Exact-tree independent verification
 is pending, and this is not a hosted/deployed/security PASS.
+
+## Concrete pinned-session lifecycle corrective RED
+
+Both independent verifiers rejected exact clean candidate
+`4c828eac838d4dd0c977c39587dfb23431ff01b2` / tree
+`8f2e0865fea465d43f2ed208b80729033a7f7d19`. Product report
+`/private/tmp/proofline-029c-verifiers/4c828ea/product-verifier.md` has SHA-256
+`efdcca3e7a76dedc1463a7a7f625e4a8ede0b5aaa9b29e63a4bf4cc1a131f832`;
+Core report `/private/tmp/proofline-029c-verifiers/4c828ea/core-verifier.md`
+has SHA-256
+`008e5c5edf4d05922dfaa9d14eeb73bd8f287fcb2ffad9f5df26d8270ac6be0a`.
+
+The real adapter cleared its only `activeSession` before the orchestrator called
+its session-bound `rollbackCaddy`, so a post-cutover failure could leave the
+public effect active. The new credential-free integration RED composes the
+actual adapter factory and orchestrator with local fake SSH transport. It
+requires success to close exactly once; rollback or owned-resource teardown to
+run while the pinned session is alive and before that close; and aggregate
+errors to retain causal, rollback/teardown and close order. An independent
+rollback stub cannot satisfy it. No SSH, DNS, provider, chain, credential,
+Docker, hosted or production effect is part of this tests/docs-only wave.
+
+Classification on exact rejected base
+`4c828eac838d4dd0c977c39587dfb23431ff01b2` / tree
+`8f2e0865fea465d43f2ed208b80729033a7f7d19`: syntax and typecheck PASS; the
+five-file deployment focus is 37 retained controls PASS plus one causal
+intentional RED; serialized deployment static is 260 PASS plus the same one
+RED; Sites is 46/46 PASS. Diff-check is clean.

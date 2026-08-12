@@ -1,6 +1,6 @@
 # Slice 029C — Timeweb direct-production pilot
 
-Status: Corrective production-author GREEN; exact-tree Core/Product verification pending
+Status: Corrective RED after exact-tree Core/Product FAIL on `4c828ea` / `8f2e086`
 
 Decision: [ADR 0044](../adr/0044-timeweb-direct-production-pilot.md)
 
@@ -60,6 +60,9 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
   direct code cannot manufacture PASS checks;
 - normalize the exact nested host activation result, mark the public effect
   before validation and roll back exactly once after every later failure;
+- keep the concrete pinned session alive through rollback or owned-resource
+  teardown, then close it exactly once; aggregate causal, rollback/teardown and
+  close failures in that order rather than using a lifetime-independent stub;
 - supply the cutover observation with the already persisted exact two run IDs
   and manifest SHAs, without circularly reading unpublished deployment
   evidence; HTTP probes cannot synthesize browser PASS, which requires a
