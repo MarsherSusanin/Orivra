@@ -726,10 +726,11 @@ then its monolithic PUT of the 15,923,972-byte Caddy layer failed with
 `publishedImageIds=[]`, `failedImageId=caddy`, no publication evidence and no
 staging. Its fixed 4 MiB replacement then passed auth/token/POST but failed on
 the first PATCH with `UND_ERR_SOCKET` after 4,194,726 bytes written and zero
-read. The fixed 1 MiB production-author replacement is GREEN on RED base
-`a34b424` / `bdc1d48`; do not retry credentials until two fresh same-tree
-verifier reports PASS. Use a separate classic token with only `read:packages`
-on the VDS after publication.
+read. The fixed 1 MiB attempt then passed its first PATCH, but rejected GHCR's
+unchanged current upload Location as stale. Do not retry credentials until the
+stable-current corrective replacement and two fresh same-tree verifier reports
+PASS. Use a separate classic token with only `read:packages` on the VDS after
+publication.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now
@@ -767,7 +768,9 @@ For each missing blob, send `POST` with `Content-Length: 0`, then ordered fixed
 1 MiB `PATCH` chunks (`application/octet-stream`, exact body length, inclusive
 `Content-Range: start-end`). Require each `PATCH` to return `202`, the exact
 cumulative `Range: 0-end`, and a Location that passes the same authority/path
-parser; only that latest Location may be used next. Complete with an empty PUT
+parser. An unchanged current Location is valid when the exact Range advances;
+after the current URL changes, any return to an older URL is stale. Only that
+current Location may be used next. Complete with an empty PUT
 to the latest Location plus the whole `sha256:` digest and require `201`. Reject
 an invalid `OCI-Chunk-Min-Length` or one above 1 MiB. Missing/bad/stale Location,
 bad range, `416`, non-accepted status or socket ambiguity aborts without blind

@@ -1,8 +1,7 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; fixed 1 MiB GHCR chunk production-author GREEN on
-  corrective RED base; fresh Core/Product verification pending; zero
-  images/evidence/staging
+- Status: Accepted contract; stable-current GHCR upload Location corrective
+  RED after a real first-PATCH response; zero images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -76,9 +75,11 @@ Missing blobs use a bounded OCI Distribution upload session, never one
 monolithic layer PUT: `POST` carries an explicit zero content length; ordered
 `PATCH` requests carry at most 1 MiB with exact inclusive `Content-Range`,
 content length and octet-stream type; every `202` must return the exact
-cumulative `Range` and a newly validated same-authority/repository `Location`;
-and one empty terminal `PUT` to the latest Location carries only the whole-blob
-digest query and must return `201`. An advertised `OCI-Chunk-Min-Length`
+cumulative `Range` and a newly validated same-authority/repository `Location`.
+That returned Location may equal the current request URL when the exact Range
+advances, but may never revert to an older URL after the current Location
+changes. One empty terminal `PUT` to the latest Location carries only the
+whole-blob digest query and must return `201`. An advertised `OCI-Chunk-Min-Length`
 greater than the 1 MiB safety bound, a missing or malformed cursor/Location,
 an earlier superseded Location, `416`, mid-chunk transport ambiguity or any
 non-accepted status fails closed. The client does not automatically replay a
@@ -99,9 +100,11 @@ the 15,923,972-byte Caddy layer failed with `UND_ERR_SOCKET`. It published zero
 images and no evidence/staging. Its fixed 4 MiB replacement then passed auth,
 token and POST, but the first PATCH failed with `UND_ERR_SOCKET` after 4,194,726
 bytes written and zero bytes read. The production-author replacement therefore
-fixes the bound at 1 MiB on RED base `a34b424` / `bdc1d48`. Both failed attempts
-remain non-authorizing; fresh two-verifier acceptance is mandatory before
-another credentialed attempt.
+fixes the bound at 1 MiB on RED base `a34b424` / `bdc1d48`. A real run then
+passed auth, POST and its first PATCH, but GHCR returned the same current upload
+Location; the adapter classified that valid stable Location as stale and
+failed. All attempts remain non-authorizing; fresh two-verifier acceptance is
+mandatory before another credentialed attempt.
 
 ### Publication evidence
 

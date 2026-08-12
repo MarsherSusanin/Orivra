@@ -1,8 +1,8 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Fixed 1 MiB GHCR chunk production-author GREEN on corrective RED base
-`a34b424` / `bdc1d48`; fresh Core/Product verification pending; zero images,
-publication evidence or staging effects exist. Prior Core/Product PASS
+Status: Stable-current GHCR upload Location corrective RED after a real first
+PATCH response; zero images, publication evidence or staging effects exist.
+Prior Core/Product PASS
 `70f63cb` / `88ec383` covers superseded adapter bytes and cannot authorize publication.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
@@ -160,3 +160,10 @@ replacement fixes the bound at 1 MiB: the exact 15,923,972-byte Caddy layer is
 existing Location/cursor, bodyless-finalizer and no-replay contracts remain
 unchanged; author gates are typecheck, pure 61/61, focused 35/35, static
 214/214 and Sites 46/46 PASS.
+
+The real 1 MiB attempt passed auth, POST and its first PATCH, then GHCR returned
+the same current upload Location with an advanced Range. The adapter rejected
+that stable current URL at its duplicate-history check. Corrective RED allows
+same-current plus the exact advancing cursor, while a return to any older URL
+after the current Location changes remains stale and fail-closed. The outcome
+still has `publishedImageIds=[]`, no evidence and no staging.

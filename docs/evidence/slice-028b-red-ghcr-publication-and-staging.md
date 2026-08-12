@@ -2,9 +2,8 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Fixed 1 MiB GHCR chunk production-author GREEN on corrective RED base
-`a34b424` / `bdc1d48`; fresh Core/Product verification pending; zero images,
-publication evidence or staging effects exist.
+Status: Stable-current GHCR upload Location corrective RED after a real first
+PATCH response; zero images, publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -336,6 +335,26 @@ typecheck, exact pure focus 61/61, GHCR/staging/roadmap 35/35, serialized
 deployment static 214/214 and Sites 46/46 PASS. No credential, registry,
 publication-evidence or staging effect was used for this local author gate;
 fresh same-tree Core and Product verification remains mandatory.
+
+## Stable-current GHCR Location compatibility RED
+
+The real fixed 1 MiB attempt passed auth, token, POST and its first PATCH. GHCR
+returned the same current upload Location with the exact advanced Range; the
+adapter rejected it at the duplicate-history check before another chunk. The
+redacted result remained `publishedImageIds=[]`, publication evidence absent
+and staging false. No credential, token or Location query is recorded here.
+
+The causal success variation keeps the current URL unchanged after PATCH 1 and
+advances the exact Range. Returning that same current URL is permitted; after a
+later response changes the current URL, returning to any earlier seen URL is
+still rejected as stale. All fixed 1 MiB, cursor, bodyless finalizer and
+no-replay contracts remain unchanged. This tests/docs wave has no production,
+credential, network, registry, evidence or staging effect.
+
+Intentional RED classification on exact base `d767fcf` / `ce0bf30`: syntax and
+typecheck PASS; focused GHCR/staging/roadmap is 34 PASS plus this one causal
+RED at the production duplicate-history check; serialized deployment static is
+213 PASS plus the same RED; Sites is 46/46 PASS.
 
 ## Real first-PATCH 4 MiB compatibility RED
 

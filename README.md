@@ -137,8 +137,10 @@ blockchain-операций.
   PUT of the 15,923,972-byte Caddy layer failed with `UND_ERR_SOCKET`; still
   zero image IDs, publication evidence or staging. Its fixed 4 MiB replacement
   then failed on the first PATCH with `UND_ERR_SOCKET` after 4,194,726 bytes
-  written and zero read. The fixed 1 MiB ordered-chunk replacement is locally
-  production-author GREEN on RED base `a34b424` / `bdc1d48`; two fresh
+  written and zero read. The fixed 1 MiB replacement then passed its first
+  PATCH, but rejected GHCR's unchanged current upload Location as stale. Zero
+  images/evidence/staging remain. Corrective RED allows only same-current plus
+  advancing Range and still rejects any older superseded URL; two fresh
   same-tree verifier PASS reports remain required before publication resumes.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.

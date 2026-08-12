@@ -297,6 +297,7 @@ test("028B uploads blobs in ordered fixed 1 MiB chunks without unsafe replay", a
   const requests = [];
   let acceptedEnd = -1;
   let patchIndex = 0;
+  let expectedUploadPath = `${repositoryPath}/blobs/upload/chunk-0`;
   const request = async (input, options = {}) => {
     const url = new URL(input);
     const method = options.method ?? "GET";
@@ -319,7 +320,7 @@ test("028B uploads blobs in ordered fixed 1 MiB chunks without unsafe replay", a
       });
     }
     if (method === "PATCH") {
-      assert.equal(url.pathname, `${repositoryPath}/blobs/upload/chunk-${patchIndex}`);
+      assert.equal(url.pathname, expectedUploadPath);
       assert.equal(url.search, "");
       const start = patchIndex * chunkSize;
       const end = Math.min(start + chunkSize, layerBytes.byteLength) - 1;
@@ -330,13 +331,16 @@ test("028B uploads blobs in ordered fixed 1 MiB chunks without unsafe replay", a
       assert.equal(Buffer.from(options.body).equals(expected), true);
       acceptedEnd = end;
       patchIndex += 1;
+      expectedUploadPath = patchIndex === 1
+        ? `${repositoryPath}/blobs/upload/chunk-0`
+        : `${repositoryPath}/blobs/upload/chunk-${patchIndex}`;
       return response(202, {
-        location: `${repositoryPath}/blobs/upload/chunk-${patchIndex}`,
+        location: expectedUploadPath,
         range: `0-${acceptedEnd}`,
       });
     }
     if (method === "PUT" && url.pathname.includes("/blobs/upload/")) {
-      assert.equal(url.pathname, `${repositoryPath}/blobs/upload/chunk-${patchIndex}`);
+      assert.equal(url.pathname, expectedUploadPath);
       assert.equal(url.searchParams.get("digest"), layerDigest);
       assert.deepEqual([...url.searchParams.keys()], ["digest"]);
       assert.equal(header(options.headers, "content-length"), "0");
@@ -371,7 +375,7 @@ test("028B uploads blobs in ordered fixed 1 MiB chunks without unsafe replay", a
   for (let index = 0; index < 15; index += 1) {
     assert.deepEqual(patchRequests[index], {
       method: "PATCH",
-      pathname: `${repositoryPath}/blobs/upload/chunk-${index}`,
+      pathname: `${repositoryPath}/blobs/upload/chunk-${index === 1 ? 0 : index}`,
       search: "",
       contentLength: String(chunkSize),
       contentRange: `${index * chunkSize}-${((index + 1) * chunkSize) - 1}`,
