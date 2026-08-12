@@ -134,6 +134,7 @@ const ALLOWED_IDS = [
   "timeweb-pitr-production",
   "persisted-live-coston2",
   "activate-caddy",
+  "rollback-caddy",
   "append-production-evidence",
   "append-canary-checkpoint",
   "canary-observe",
@@ -359,6 +360,40 @@ test("keeps candidate Caddy private until one explicit activation and exact exte
     encodedCommand: command("activate-caddy", { publicOrigin: PUBLIC_ORIGIN }),
     adapters: { caddy: { inspectCandidate: async () => ({ status: "missing" }), activate: async () => { throw new Error("must not run"); } } },
   }), /TIMEWEB_HOST_CADDY_CANDIDATE_INVALID|Caddy candidate/i);
+});
+
+test("rolls an exact active Caddy state back through one fixed adapter call with no caller arguments", async () => {
+  const module = await feature();
+  const calls = [];
+  const state = {
+    candidate: { status: "staged", publicIngress: false },
+    active: { status: "active", publicOrigin: PUBLIC_ORIGIN },
+  };
+  const result = await module.runTimewebProductionHostCommand({
+    encodedCommand: command("rollback-caddy"),
+    adapters: { caddy: {
+      inspectState: async () => state,
+      rollbackExact: async (input) => { calls.push(input); return { status: "passed", publicOrigin: PUBLIC_ORIGIN }; },
+    } },
+  });
+  assert.deepEqual(calls, [{ publicOrigin: PUBLIC_ORIGIN, candidateStatus: "staged", activeStatus: "active" }]);
+  assert.deepEqual(result, { id: "rollback-caddy", status: "passed", publicOrigin: PUBLIC_ORIGIN });
+  for (const invalid of [
+    { candidate: { status: "missing" }, active: state.active },
+    { candidate: state.candidate, active: { status: "inactive", publicOrigin: PUBLIC_ORIGIN } },
+    { candidate: state.candidate, active: { status: "active", publicOrigin: "https://evil.invalid" } },
+  ]) {
+    let effects = 0;
+    await assert.rejects(module.runTimewebProductionHostCommand({
+      encodedCommand: command("rollback-caddy"),
+      adapters: { caddy: { inspectState: async () => invalid, rollbackExact: async () => { effects += 1; } } },
+    }), /TIMEWEB_HOST_CADDY_ROLLBACK_INVALID|Caddy rollback/i);
+    assert.equal(effects, 0);
+  }
+  await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("rollback-caddy", { publicOrigin: "https://evil.invalid" }),
+    adapters: { caddy: { inspectState: async () => state, rollbackExact: async () => { throw new Error("must not run"); } } },
+  }), /TIMEWEB_HOST_COMMAND_INVALID|payload/i);
 });
 
 test("appends canonical evidence/checkpoints only to fixed mode-0400 no-replace paths", async () => {

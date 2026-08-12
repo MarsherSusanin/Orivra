@@ -233,3 +233,15 @@ Gate classification: syntax and typecheck PASS; the exact host-command file is
 46/46 PASS. One first serialized static attempt also hit the retained 027C
 TERM-reap timing control under load; its isolated file passed 26/26 and the
 unchanged full serialized rerun produced the exact 215/29 classification.
+
+Compatibility correction on exact clean `59fdf50270642a21e2813ac265c6e9ac5f85e97e`
+adds the already-required orchestration command `rollback-caddy` immediately
+after activation in the host allowlist. One additional causal RED requires the
+exact staged-candidate/active-origin state, one fixed rollback adapter call and
+no payload or caller-selected arguments. The production stash remains
+uninspected and untouched.
+Syntax/typecheck PASS; host-command focus is now exactly 12 intentional RED;
+serialized static rerun is 215 retained PASS plus 30 intentional RED; Sites is
+46/46 PASS. The first static attempt again hit the unchanged retained 027C
+TERM-reap timing control under load; its isolated 26/26 PASS and clean rerun
+classify it as infrastructure timing, not a new contract failure.

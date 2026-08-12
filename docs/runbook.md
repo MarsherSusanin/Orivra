@@ -878,7 +878,10 @@ command in `sh -c`, interpolate it into another command or print it.
 Caddy 80/443 allowed and 5432/8080 forbidden. `pull-exact-digests` opens the
 fixed read-only GHCR token file, pulls and independently inspects the ordered
 five `@sha256` references. Database/app service phases are fixed and Caddy is a
-non-public candidate until the explicit activation command. Safe-consumer
+non-public candidate until the explicit activation command. `rollback-caddy`
+accepts no payload, first verifies the expected staged candidate and active
+exact public origin, then makes one fixed rollback call; caller-selected origin,
+service or argument is invalid. Safe-consumer
 outputs transition from absent to the exact regular mode-0400 pair before
 worker. Timeweb recovery always uses a fresh volume. Ready/live results require
 current heartbeat and the exact two persisted Coston2 runs. Evidence and

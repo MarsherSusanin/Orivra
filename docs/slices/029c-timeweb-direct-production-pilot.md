@@ -74,7 +74,8 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 - fix current/secrets/evidence roots, Compose project/files/phases and the
   ordered five immutable GHCR references;
 - derive SSH firewall authority from `SSH_CONNECTION`, keep only Caddy 80/443
-  public, and stage Caddy without cutover until explicit activation;
+  public, stage Caddy without cutover until explicit activation, and retain one
+  payload-free exact-state `rollback-caddy` command for post-cutover failure;
 - enforce safe-consumer absent-to-mode-0400 lifecycle, fresh-volume Timeweb
   PITR, current heartbeat, exact two live runs and no-replace evidence/canary;
 - return only strict typed results and bounded redacted failure codes.
@@ -99,7 +100,7 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 5. Retained 027A/027B deployment tests freeze the eight-service Compose
    inventory and two-phase safe-consumer evidence lifecycle.
 6. `tests/deployment/slice029c-timeweb-production-host-command.contract.test.mjs`
-   freezes the production-used SSH host command in 11 credential-free causal
+   freezes the production-used SSH host command in 12 credential-free causal
    cases without invoking a shell, Docker, provider or live network.
 
 ## Gates

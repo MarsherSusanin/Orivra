@@ -215,7 +215,11 @@ source for SSH and public TCP 80/443 only, and never publishes 5432/8080. GHCR
 uses the fixed token file through a read-only session, pulls five exact digest
 references and independently inspects the same ordered digests. Candidate
 Caddy has public ingress disabled until the separate activate command confirms
-the staged candidate and exact external HTTPS origin.
+the staged candidate and exact external HTTPS origin. The immediately following
+fixed `rollback-caddy` authority is also explicit: it accepts no payload,
+requires the expected staged candidate plus active exact public origin and
+invokes exactly one rollback adapter call. It cannot accept a caller-selected
+origin, service or command.
 
 The deployer command requires both canonical safe-consumer outputs absent,
 runs the fixed one-shot service, then requires the regular non-symlink
