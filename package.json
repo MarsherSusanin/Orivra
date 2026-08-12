@@ -28,7 +28,7 @@
     "preview": "vite preview",
     "test:sites": "node --test tests/*.test.mjs",
     "test:solidity": "vitest run contracts/test",
-    "test:docker:static": "node --test tests/deployment/*.contract.test.mjs",
+    "test:docker:static": "node --test --test-concurrency=1 tests/deployment/*.contract.test.mjs",
     "docker:prefetch": "node scripts/docker-prefetch.mjs",
     "test:docker": "node scripts/docker-gate.mjs",
     "test:docker:runtime": "node scripts/docker-runtime-smoke.mjs",

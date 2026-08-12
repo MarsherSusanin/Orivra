@@ -159,7 +159,7 @@ test("exposes separate static, controlled-prefetch and real Docker gates", async
   const packageJson = JSON.parse(await source("package.json"));
   assert.equal(
     packageJson.scripts?.["test:docker:static"],
-    "node --test tests/deployment/*.contract.test.mjs",
+    "node --test --test-concurrency=1 tests/deployment/*.contract.test.mjs",
   );
   assert.equal(packageJson.scripts?.["docker:prefetch"], "node scripts/docker-prefetch.mjs");
   assert.equal(packageJson.scripts?.["test:docker"], "node scripts/docker-gate.mjs");

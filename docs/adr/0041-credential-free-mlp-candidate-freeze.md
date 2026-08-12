@@ -23,7 +23,7 @@ journey and a fresh offline OCI freeze all agree.
    is not release authority.
 3. The exact gate inventory is typecheck, full tests, contracts/domain
    coverage, backend coverage, Web coverage, real PostgreSQL, Solidity, E2E,
-   production build, Sites, Action byte-sync, serialized Docker static, offline
+   production build, Sites, Action byte-sync, file-serialized Docker static, offline
    Docker image/HTTPS, runtime persistence, recovery, fresh OCI release freeze
    and the recorded-product Compose journey. Missing, duplicate, reordered or
    failed gates are invalid.

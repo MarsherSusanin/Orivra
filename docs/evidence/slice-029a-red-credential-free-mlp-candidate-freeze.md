@@ -236,3 +236,13 @@ These reports authorize the separate 028B credential gate; they are not hosted,
 deployment or security-scan evidence. Scan 8852 remains user-canceled and is
 not a security PASS; the documented deferred evidence-integrity risk remains
 open.
+
+## Terminal static-gate serialization correction
+
+The exact `e007995` candidate freeze twice completed its unit, coverage and
+real PostgreSQL gates, then exposed one retained 027C process-group reaping
+timeout while deployment contract files were still competing in parallel.
+The identical complete deployment inventory immediately passed 263/263 when
+run alone. The terminal `test:docker:static` command now fixes Node test-file
+concurrency to one. This preserves every assertion and timeout while making the
+documented serialized gate literal and reproducible after the heavy matrix.
