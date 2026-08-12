@@ -39,6 +39,8 @@ const runtimeComposeEnvironment = {
   PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
   PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
   PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT: "/opt/orivra/evidence",
+  PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT:
+    "/opt/orivra/absent-safe-consumer-deployer-stage",
   PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE:
     "/opt/orivra/worker-evidence/safe-consumer-registry.v1.json",
   PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/proofline-worker-replay-bundle.json",
@@ -348,16 +350,19 @@ test("runs the safe-consumer deployer once and hands one no-replace evidence roo
   assert.deepEqual(deployer.environment, {
     PROOFLINE_COSTON2_PRIVATE_KEY_FILE: "/run/secrets/worker_coston2_private_key",
     PROOFLINE_COSTON2_RPC_URL: "https://coston2-api.flare.network/ext/C/rpc",
+    PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_DIR: "/run/proofline/safe-consumer-stage",
   });
   assert.equal(deployer.depends_on?.migrator?.condition, "service_completed_successfully");
   assert.equal(services.worker?.depends_on?.["safe-consumer-deployer"]?.condition, "service_completed_successfully");
-  const outputMount = (deployer.volumes ?? []).find((mount) => mount.target === "/opt/orivra/evidence");
+  const outputMount = (deployer.volumes ?? []).find((mount) =>
+    mount.target === "/run/proofline/safe-consumer-stage");
   assert.deepEqual(outputMount, {
     type: "bind",
-    source: runtimeComposeEnvironment.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT,
-    target: "/opt/orivra/evidence",
+    source: runtimeComposeEnvironment.PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT,
+    target: "/run/proofline/safe-consumer-stage",
     bind: {},
   });
+  assert.equal((deployer.volumes ?? []).some((mount) => mount.target === "/opt/orivra/evidence"), false);
   const registryMount = (services.worker?.volumes ?? []).find((mount) =>
     mount.target === "/run/proofline/evidence/safe-consumer-registry.v1.json");
   assert.equal(registryMount?.source, runtimeComposeEnvironment.PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE);

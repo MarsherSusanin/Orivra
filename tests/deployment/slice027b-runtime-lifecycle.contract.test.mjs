@@ -296,12 +296,11 @@ test("passes one complete typed worker configuration and three read-only evidenc
   assert.doesNotMatch(runtimeSource, /\$\{PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT[^\n]*safe-consumer-registry/);
 });
 
-test("fails render when any required worker policy, evidence root or host replay file is absent", () => {
+test("fails render when any required worker policy, handoff or host replay file is absent", () => {
   for (const name of [
     "PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI",
     "PROOFLINE_RELAYER_BALANCE_FLOOR_WEI",
     "PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA",
-    "PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT",
     "PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE",
     "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
     "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",

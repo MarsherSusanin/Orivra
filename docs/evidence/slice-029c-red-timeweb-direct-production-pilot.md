@@ -466,3 +466,12 @@ causal intentional RED; contracts/worker recovery compatibility is 25 PASS
 plus three causal intentional RED; serialized deployment static is 253 PASS
 plus the same seven deployment RED; the unchanged TERM-resistant process-group
 control passes 12/12 in isolation; Sites is 46/46 PASS. Diff-check is clean.
+## Retained Compose compatibility correction
+
+The corrective RED exposed one retained 027A/027B contradiction: the old
+Compose contract still required the UID-1000 deployer to mount the canonical
+root-private evidence directory directly, while the frozen 029C boundary
+requires a run-scoped staging mount that root seals into the canonical pair.
+The retained contract now requires the staging mount and keeps the worker's
+mode-0400 handoff mount. The canonical evidence root remains a host-lifecycle
+authority and is no longer treated as a Compose interpolation prerequisite.
