@@ -2,9 +2,8 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Compatibility production-author GREEN after real GHCR returned a
-singular same-repository upload Location; fresh Core/Product verification is
-pending and zero images, publication evidence or staging effects exist.
+Status: GHCR chunked-upload corrective RED after a real authenticated
+diagnostic; zero images, publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -297,3 +296,33 @@ Every frozen authority/path negative remains fail-closed. Post-correction
 typecheck, pure focus 61/61, GHCR/staging/roadmap 35/35, serialized deployment
 static 214/214 and Sites 46/46 PASS. Publication remains paused until two fresh
 independent verifiers PASS one exact replacement tree.
+
+## Real GHCR chunked-upload compatibility RED
+
+After the singular Location correction, an authorized diagnostic passed GHCR
+authentication, token exchange and upload `POST` 202. The monolithic PUT of
+the 15,923,972-byte Caddy layer then failed with `UND_ERR_SOCKET` after
+15,924,448 bytes were written. The redacted outcome remained
+`publishedImageIds=[]`, `failedImageId=caddy`, publication evidence absent and
+staging absent. No credential, bearer token or opaque Location query is
+recorded here.
+
+The credential-free causal RED replaces monolithic PUT with the bounded OCI
+Distribution flow: explicit zero-length POST; fixed ordered 4 MiB PATCH chunks
+with exact inclusive Content-Range; validation of every `202` Range and latest
+Location; and one empty terminal PUT with the whole digest. It also freezes
+zero terminal/manifest/evidence authority for missing, malformed, stale,
+cross-authority or cross-repository Location, invalid or oversized advertised
+minimum, wrong cursor, `416` and ambiguous mid-chunk failure. No automatic
+chunk replay is allowed in this slice.
+
+This tests/docs-only correction performs no production, dependency, Docker,
+network, credential, registry, publication-evidence or staging mutation. The
+prior verifier PASS reports cover superseded bytes and cannot authorize a
+retry; fresh Core and Product PASS on one exact replacement tree are required.
+
+Intentional RED classification on exact base `63000baf` / `3a0994a`: syntax
+and typecheck PASS; focused GHCR/staging/roadmap is 34 PASS plus this one causal
+RED; serialized deployment static is 213 PASS plus the same RED; Sites is
+46/46 PASS. The RED fails at the missing explicit zero-length POST contract in
+the unchanged monolithic adapter, before any PATCH or external effect.

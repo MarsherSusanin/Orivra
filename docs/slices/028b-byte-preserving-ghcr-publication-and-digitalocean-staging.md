@@ -1,9 +1,9 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Singular GHCR Location production-author GREEN after a real diagnostic;
-zero images, publication evidence or staging effects exist. Prior Core/Product
-PASS `70f63cb` / `88ec383` covers superseded adapter bytes; fresh same-tree
-verification is pending before publication resumes.
+Status: GHCR chunked-upload corrective RED after a real authenticated
+diagnostic; zero images, publication evidence or staging effects exist. Prior
+Core/Product PASS `70f63cb` / `88ec383` covers superseded adapter bytes and
+cannot authorize publication.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 
@@ -136,4 +136,16 @@ The production-author correction accepts only the exact retained plural and
 observed singular same-origin/default-443/same-repository forms with one
 non-empty non-nested opaque ID. Typecheck, pure 61/61, focused 35/35,
 deployment static 214/214 and Sites 46/46 PASS. Fresh Core/Product verification
-is required before another credentialed attempt.
+was required before another credentialed attempt.
+
+That authorized attempt proved auth, `POST` 202 and the singular Location, then
+the monolithic PUT of the 15,923,972-byte Caddy layer failed with
+`UND_ERR_SOCKET` after 15,924,448 bytes were written. No image ID, publication
+evidence or staging effect exists. Corrective RED now requires explicit
+zero-length `POST`, fixed ordered 4 MiB `PATCH` chunks with inclusive ranges,
+validation and exclusive use of every latest returned Location, and an empty
+terminal `PUT` carrying the whole digest. Missing/bad/stale/cross-authority or
+cross-repository Location, invalid cursor, a minimum above 4 MiB, `416` or
+ambiguous mid-chunk failure stops without replay, manifest PUT, PASS evidence
+or staging. Fresh same-tree Core and Product verification is required before
+credential use resumes.

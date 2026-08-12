@@ -353,9 +353,12 @@ Core and Product independently PASS exact commit
 diagnostic reached upload `POST` 202 and returned singular same-repository
 `/blobs/upload/<opaque-id>`; the adapter accepted only assumed plural
 `/blobs/uploads/` and failed closed. The narrow production-author correction
-accepts both exact forms without widening host, port, repository or path
-authority; focused gates pass and fresh Core/Product verification is pending.
-No image, publication/staging PASS evidence, hosted or deployed claim exists.
+accepted both exact forms without widening authority. A subsequent authorized
+attempt passed auth/POST/Location, but the monolithic PUT of the 15,923,972-byte
+Caddy layer failed with `UND_ERR_SOCKET`; still no image or evidence/staging
+effect. Corrective RED replaces that PUT with fixed ordered 4 MiB PATCH chunks,
+strict cursor/Location validation and an empty digest finalizer. Fresh
+Core/Product verification is required; no hosted or deployed claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

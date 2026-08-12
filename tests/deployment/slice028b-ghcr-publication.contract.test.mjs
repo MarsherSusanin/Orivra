@@ -277,30 +277,77 @@ test("028B conditionally creates append-only evidence and never masks cleanup fa
   assert.equal(preserved.equals(existing), true);
 });
 
-test("028B accepts the exact singular same-repository GHCR upload Location", async () => {
+test("028B uploads blobs in ordered fixed 4 MiB chunks without unsafe replay", async () => {
   const { createGhcrRegistryPublicationAdapter } = await import("../../scripts/ghcr-registry-adapter.mjs");
   const remoteRepository = "ghcr.io/marshersusanin/orivra-caddy";
+  const repositoryPath = "/v2/marshersusanin/orivra-caddy";
+  const chunkSize = 4 * 1024 * 1024;
+  const layerBytes = Buffer.alloc((2 * chunkSize) + 17, 0x2a);
+  const layerDigest = shaBytes(layerBytes);
   const manifestDigest = sha("1");
-  const layerDigest = sha("2");
-  const uploadPath = "/v2/marshersusanin/orivra-caddy/blobs/upload/4eedf41c-755a-4ad4-9cc8-fc9f83db8b30";
-  const putPaths = [];
+  const manifestBytes = Buffer.from("manifest");
+  const header = (headers, name) => Object.entries(headers ?? {})
+    .find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1];
   const response = (status, headers = {}, payload = undefined) => ({
     status,
     headers: { get: (name) => headers[name.toLowerCase()] ?? null },
     json: async () => payload,
   });
+
+  const requests = [];
+  let acceptedEnd = -1;
+  let patchIndex = 0;
   const request = async (input, options = {}) => {
     const url = new URL(input);
+    const method = options.method ?? "GET";
+    requests.push({
+      method,
+      pathname: url.pathname,
+      search: url.search,
+      contentLength: header(options.headers, "content-length"),
+      contentRange: header(options.headers, "content-range"),
+      contentType: header(options.headers, "content-type"),
+      bodyLength: options.body?.byteLength ?? 0,
+    });
     if (url.pathname === "/token") return response(200, {}, { token: "t".repeat(32) });
-    if (options.method === "HEAD") return response(404);
-    if (options.method === "POST") return response(202, { location: uploadPath });
-    if (options.method === "PUT") {
-      putPaths.push(url.pathname);
-      return response(201, {
-        "docker-content-digest": url.pathname.includes("/manifests/") ? manifestDigest : layerDigest,
+    if (method === "HEAD") return response(404);
+    if (method === "POST") {
+      assert.equal(header(options.headers, "content-length"), "0");
+      assert.equal(options.body?.byteLength ?? 0, 0);
+      return response(202, {
+        location: `${repositoryPath}/blobs/upload/chunk-0`,
       });
     }
-    throw new Error("unexpected fake registry request");
+    if (method === "PATCH") {
+      assert.equal(url.pathname, `${repositoryPath}/blobs/upload/chunk-${patchIndex}`);
+      assert.equal(url.search, "");
+      const start = patchIndex * chunkSize;
+      const end = Math.min(start + chunkSize, layerBytes.byteLength) - 1;
+      const expected = layerBytes.subarray(start, end + 1);
+      assert.equal(header(options.headers, "content-length"), String(expected.byteLength));
+      assert.equal(header(options.headers, "content-range"), `${start}-${end}`);
+      assert.equal(header(options.headers, "content-type"), "application/octet-stream");
+      assert.equal(Buffer.from(options.body).equals(expected), true);
+      acceptedEnd = end;
+      patchIndex += 1;
+      return response(202, {
+        location: `${repositoryPath}/blobs/upload/chunk-${patchIndex}`,
+        range: `0-${acceptedEnd}`,
+      });
+    }
+    if (method === "PUT" && url.pathname.includes("/blobs/upload/")) {
+      assert.equal(url.pathname, `${repositoryPath}/blobs/upload/chunk-${patchIndex}`);
+      assert.equal(url.searchParams.get("digest"), layerDigest);
+      assert.deepEqual([...url.searchParams.keys()], ["digest"]);
+      assert.equal(header(options.headers, "content-length"), "0");
+      assert.equal(options.body?.byteLength ?? 0, 0);
+      return response(201, { "docker-content-digest": layerDigest });
+    }
+    if (method === "PUT" && url.pathname === `${repositoryPath}/manifests/${manifestDigest}`) {
+      assert.equal(Buffer.from(options.body).equals(manifestBytes), true);
+      return response(201, { "docker-content-digest": manifestDigest });
+    }
+    throw new Error(`unexpected fake registry request: ${method} ${url.pathname}`);
   };
   const adapter = await createGhcrRegistryPublicationAdapter({
     username: "operator",
@@ -312,17 +359,92 @@ test("028B accepts the exact singular same-repository GHCR upload Location", asy
     inspected: {
       imageManifestDigest: manifestDigest,
       blobs: [
-        { digest: layerDigest, bytes: Buffer.from("layer") },
-        { digest: manifestDigest, bytes: Buffer.from("manifest") },
+        { digest: layerDigest, bytes: layerBytes },
+        { digest: manifestDigest, bytes: manifestBytes },
       ],
     },
     remoteRepository,
   });
-  assert.deepEqual(putPaths, [
-    uploadPath,
-    `/v2/marshersusanin/orivra-caddy/manifests/${manifestDigest}`,
-  ]);
+  assert.equal(patchIndex, 3);
+  assert.deepEqual(
+    requests.filter(({ method }) => method === "PATCH").map(({ bodyLength, contentRange }) => ({ bodyLength, contentRange })),
+    [
+      { bodyLength: chunkSize, contentRange: `0-${chunkSize - 1}` },
+      { bodyLength: chunkSize, contentRange: `${chunkSize}-${(2 * chunkSize) - 1}` },
+      { bodyLength: 17, contentRange: `${2 * chunkSize}-${(2 * chunkSize) + 16}` },
+    ],
+  );
   adapter.dispose();
+
+  const failureCases = [
+    { name: "missing-location", patch: 1, headers: { range: `0-${chunkSize - 1}` } },
+    { name: "missing-range", patch: 1, headers: { location: `${repositoryPath}/blobs/upload/next` } },
+    { name: "bad-range", patch: 1, headers: { location: `${repositoryPath}/blobs/upload/next`, range: "1-2" } },
+    { name: "cross-authority", patch: 1, headers: { location: `https://registry.invalid${repositoryPath}/blobs/upload/next`, range: `0-${chunkSize - 1}` } },
+    { name: "cross-repository", patch: 1, headers: { location: "/v2/other/repository/blobs/upload/next", range: `0-${chunkSize - 1}` } },
+    { name: "stale-location", patch: 2, headers: { location: `${repositoryPath}/blobs/upload/chunk-0`, range: `0-${(2 * chunkSize) - 1}` } },
+    { name: "mid-chunk-416", patch: 2, status: 416, headers: { range: `0-${chunkSize - 1}` } },
+    { name: "mid-chunk-socket", patch: 2, throws: true },
+    { name: "oversize-minimum", patch: 0, minimum: String(chunkSize + 1) },
+    { name: "invalid-minimum", patch: 0, minimum: "4MiB" },
+  ];
+  for (const failureCase of failureCases) {
+    let patchCalls = 0;
+    let finalizeCalls = 0;
+    let manifestCalls = 0;
+    const failureRequest = async (input, options = {}) => {
+      const url = new URL(input);
+      const method = options.method ?? "GET";
+      if (url.pathname === "/token") return response(200, {}, { token: "t".repeat(32) });
+      if (method === "HEAD") return response(404);
+      if (method === "POST") {
+        return response(202, {
+          location: `${repositoryPath}/blobs/upload/chunk-0`,
+          ...(failureCase.minimum === undefined ? {} : { "oci-chunk-min-length": failureCase.minimum }),
+        });
+      }
+      if (method === "PATCH") {
+        patchCalls += 1;
+        if (patchCalls < failureCase.patch) {
+          return response(202, {
+            location: `${repositoryPath}/blobs/upload/chunk-${patchCalls}`,
+            range: `0-${(patchCalls * chunkSize) - 1}`,
+          });
+        }
+        if (failureCase.throws) throw Object.assign(new Error("synthetic socket ambiguity"), { code: "UND_ERR_SOCKET" });
+        return response(failureCase.status ?? 202, failureCase.headers ?? {});
+      }
+      if (method === "PUT" && url.pathname.includes("/blobs/upload/")) {
+        finalizeCalls += 1;
+        return response(201, { "docker-content-digest": layerDigest });
+      }
+      if (method === "PUT" && url.pathname.includes("/manifests/")) {
+        manifestCalls += 1;
+        return response(201, { "docker-content-digest": manifestDigest });
+      }
+      throw new Error("unexpected fake registry request");
+    };
+    const failureAdapter = await createGhcrRegistryPublicationAdapter({
+      username: "operator",
+      tokenBytes: Buffer.from("credential-sentinel-028b"),
+      request: failureRequest,
+    });
+    await assert.rejects(() => failureAdapter.copyVerifiedImage({
+      image: { imageManifestDigest: manifestDigest },
+      inspected: {
+        imageManifestDigest: manifestDigest,
+        blobs: [
+          { digest: layerDigest, bytes: layerBytes },
+          { digest: manifestDigest, bytes: manifestBytes },
+        ],
+      },
+      remoteRepository,
+    }), undefined, failureCase.name);
+    assert.equal(patchCalls, failureCase.patch, failureCase.name);
+    assert.equal(finalizeCalls, 0, failureCase.name);
+    assert.equal(manifestCalls, 0, failureCase.name);
+    failureAdapter.dispose();
+  }
 });
 
 test("028B rejects cross-port, cross-repository or arbitrary upload Location before bearer PUT", async () => {

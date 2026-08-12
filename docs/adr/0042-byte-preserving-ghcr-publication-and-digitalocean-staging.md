@@ -1,6 +1,7 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; singular GHCR Location production-author GREEN; fresh Core/Product verification pending; zero images/evidence/staging
+- Status: Accepted contract; GHCR chunked-upload corrective RED after a real
+  authenticated diagnostic; zero images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -70,17 +71,33 @@ returns `/v2/<same-repository>/blobs/upload/<opaque-id>` with singular
 cross-port, cross-repository, empty/nested/arbitrary paths, userinfo and
 fragments are rejected before attaching a bearer token or request body.
 
+Missing blobs use a bounded OCI Distribution upload session, never one
+monolithic layer PUT: `POST` carries an explicit zero content length; ordered
+`PATCH` requests carry at most 4 MiB with exact inclusive `Content-Range`,
+content length and octet-stream type; every `202` must return the exact
+cumulative `Range` and a newly validated same-authority/repository `Location`;
+and one empty terminal `PUT` to the latest Location carries only the whole-blob
+digest query and must return `201`. An advertised `OCI-Chunk-Min-Length`
+greater than the 4 MiB safety bound, a missing or malformed cursor/Location,
+an earlier superseded Location, `416`, mid-chunk transport ambiguity or any
+non-accepted status fails closed. The client does not automatically replay a
+chunk or finalize a partially observed upload.
+
 No specific Docker, Buildx, Skopeo or ORAS command is accepted by this ADR.
 GREEN must prove that its chosen adapter preserves the single-manifest digest
 against GHCR before it may produce evidence.
 
 The local implementation selects the OCI Distribution HTTP API directly. It
-uploads only missing reachable blobs, writes the exact frozen OCI manifest by
-its digest, and re-reads `Docker-Content-Digest`; it performs no Docker load,
-build, repack, tag or index creation. `release:publish` is fixed to the exact
-accepted 029A candidate and verifier report checksums. This code boundary is
-locally GREEN, but it is not registry evidence until an approved package-write
-credential and explicit canonical target map complete a real GHCR run.
+must upload only missing reachable blobs through the bounded session above,
+write the exact frozen OCI manifest by its digest, and re-read
+`Docker-Content-Digest`; it performs no Docker load, build, repack, tag or
+index creation. `release:publish` is fixed to the exact accepted 029A candidate
+and verifier report checksums. A real authorized attempt proved authentication,
+upload `POST` and the singular Location correction, then its monolithic PUT of
+the 15,923,972-byte Caddy layer failed with `UND_ERR_SOCKET`. It published zero
+images and no evidence/staging. The bounded chunked replacement is intentional
+RED and requires fresh two-verifier acceptance before another credentialed
+attempt.
 
 ### Publication evidence
 

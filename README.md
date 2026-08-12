@@ -132,9 +132,12 @@ blockchain-операций.
   same-repository `/blobs/upload/<opaque-id>` Location, while the adapter froze
   only plural `/blobs/uploads/`. It failed closed on Caddy: zero image IDs,
   publication evidence and staging effects. The narrow production-author
-  correction now accepts only the exact singular and retained plural
-  same-repository forms; focused gates pass and two fresh same-tree verifier
-  PASS reports are pending before publication resumes.
+  correction accepted only the exact singular and retained plural forms. A
+  subsequent authorized attempt passed auth/POST/Location, then its monolithic
+  PUT of the 15,923,972-byte Caddy layer failed with `UND_ERR_SOCKET`; still
+  zero image IDs, publication evidence or staging. 028B is corrective RED for
+  fixed 4 MiB ordered chunk upload and requires two fresh same-tree verifier
+  PASS reports before publication resumes.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
