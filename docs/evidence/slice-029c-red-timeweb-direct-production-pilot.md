@@ -245,3 +245,34 @@ serialized static rerun is 215 retained PASS plus 30 intentional RED; Sites is
 46/46 PASS. The first static attempt again hit the unchanged retained 027C
 TERM-reap timing control under load; its isolated 26/26 PASS and clean rerun
 classify it as infrastructure timing, not a new contract failure.
+
+## Host envelope and concrete observation corrective RED
+
+Read-only audit of the stopped production WIP after exact clean base
+`c7d10266703e3d87d9f5f7ef04adf01cbd9bdb02` / tree
+`c1465337fc47c4ce588153b1398445e125446186` found four integration gaps. The
+host safe-consumer commands returned path-only records while the direct runtime
+requires the canonical registry/deployment authority and exact registry
+checksum marker; migrator returned generic PASS without manifest/schema
+identity. The local SSH adapter used an unversioned `--request` envelope and
+did not map internal IDs/payloads to the frozen host grammar. Finally its
+default PITR, live-run and canary adapters referenced three scripts which were
+not checked in, while retained RED exercised only injected fakes.
+
+Corrective RED now requires bounded no-follow canonical reads and exact
+cross-binding for the safe-consumer pair, detailed migrator output, one
+canonical `--command` mapping over the current verified five images/run ID, and
+an effect-free local credential-install marker. Three concrete import-safe
+entrypoints freeze fresh-volume Timeweb PITR, exact two persisted live runs and
+typed trusted-clock canary observation with no secret output. This wave changes
+tests/docs only; the production stash remains untouched and no credential,
+Docker, SSH, provider, registry or Coston2 effect is performed.
+
+Classification on the clean RED base: syntax and typecheck PASS; the four 029C
+deployment files contain exactly 28 intentional RED and no retained control;
+the contracts/domain/Slice009 focus contains 18 retained PASS plus 14 existing
+intentional RED. Serialized deployment static emits 215 named retained PASS and
+36 named intentional RED (eight retained Compose/lifecycle cases and 28 029C
+cases). Sites remains 46/46 PASS. All new failures are caused by the absent
+production adapter/host/effect entrypoints or their frozen result fields; there
+is no fixture, syntax or unexpected assertion failure.

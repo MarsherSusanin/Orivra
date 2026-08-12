@@ -78,6 +78,14 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
   payload-free exact-state `rollback-caddy` command for post-cutover failure;
 - enforce safe-consumer absent-to-mode-0400 lifecycle, fresh-volume Timeweb
   PITR, current heartbeat, exact two live runs and no-replace evidence/canary;
+- parse and cross-bind the canonical safe-consumer registry/deployment bytes
+  through bounded no-follow reads, return the exact direct-runtime envelopes,
+  and return manifest/schema details from migrator rather than generic PASS;
+- map internal pilot IDs to canonical `--command` host envelopes using the
+  current verified five images and run ID; the credential-install marker is a
+  local no-effect step;
+- require checked-in import-safe PITR, persisted-live-run and typed canary
+  observation entrypoints for every default host effect;
 - return only strict typed results and bounded redacted failure codes.
 
 ## Frozen RED
@@ -100,13 +108,17 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 5. Retained 027A/027B deployment tests freeze the eight-service Compose
    inventory and two-phase safe-consumer evidence lifecycle.
 6. `tests/deployment/slice029c-timeweb-production-host-command.contract.test.mjs`
-   freezes the production-used SSH host command in 12 credential-free causal
+   freezes the production-used SSH host command in 13 credential-free causal
    cases without invoking a shell, Docker, provider or live network.
+7. `tests/deployment/slice029c-timeweb-production-adapter-effects.contract.test.mjs`
+   freezes canonical internal-to-host mapping and the three concrete
+   production observation entrypoints in five credential-free causal cases.
 
 ## Gates
 
-RED runs typecheck, the three focused files plus retained 029B and Slice009
-purity controls, serialized deployment static and Sites compatibility. The
+RED runs typecheck, the contracts/domain and four 029C deployment focused files
+plus retained 029B and Slice009 purity controls, serialized deployment static
+and Sites compatibility. The
 expected failures are absent V2 schemas/domain methods/runtime entrypoints;
 retained V1 rollback and production controls remain GREEN.
 

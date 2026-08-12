@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -84,6 +85,37 @@ const safeConsumers = {
     { templateId: "open-meteo-current-weather", revision: 1, manifestSha256: OPEN_METEO, consumerAddress: "0x1111111111111111111111111111111111111111" },
     { templateId: "eth-usd", revision: 1, manifestSha256: ETH_USD, consumerAddress: "0x2222222222222222222222222222222222222222" },
   ],
+};
+const safeConsumerDeployments = safeConsumers.entries.map((entry, index) => ({
+  ...entry,
+  contractName: index === 0 ? "OrivraOpenMeteoCurrentWeatherConsumer" : "OrivraEthUsdConsumer",
+  compiledSourceSha256: sha(index === 0 ? "a" : "b"),
+  bytecodeSha256: sha(index === 0 ? "c" : "d"),
+  transactionHash: `0x${String(index + 3).repeat(64)}`,
+  blockNumber: String(100 + index),
+  runtimeCodeSha256: sha(index === 0 ? "e" : "f"),
+}));
+const safeConsumerDeploymentEvidence = {
+  version: "1", kind: "safe-consumer-deployment-evidence", status: "passed", chainId: 114,
+  compiler: { name: "solc", version: "0.8.36", importAuthority: "official-coston2-contract-registry" },
+  relayer: {
+    address: "0x3333333333333333333333333333333333333333",
+    balanceBeforeWei: "1000000000000000000",
+    requiredBalanceWei: "4000000000000000",
+  },
+  registrySha256: digest(Buffer.from(canonicalJson(safeConsumers), "utf8")),
+  deployments: safeConsumerDeployments,
+  completedAt: "2026-08-12T03:00:00Z",
+};
+const safeConsumerPair = {
+  deploymentEvidence: {
+    type: "regular", mode: 0o400,
+    bytes: Buffer.from(canonicalJson(safeConsumerDeploymentEvidence), "utf8"),
+  },
+  registry: {
+    type: "regular", mode: 0o400,
+    bytes: Buffer.from(canonicalJson(safeConsumers), "utf8"),
+  },
 };
 const productionEvidence = {
   version: "2", kind: "digitalocean-production-deployment-evidence",
@@ -231,20 +263,29 @@ test("opens one read-only GHCR session, pulls exact five digests and independent
 test("maps fixed database-first Compose phases without public Caddy cutover or caller-selected services", async () => {
   const module = await feature();
   const phases = [
-    ["postgres", ["postgres"]],
-    ["db-role-bootstrap", ["db-role-bootstrap"]],
-    ["migrator", ["migrator"]],
-    ["start-api", ["api"]],
-    ["start-worker", ["worker"]],
-    ["start-web", ["web"]],
-    ["start-caddy-candidate", ["caddy"]],
+    ["postgres", ["postgres"], { id: "postgres", status: "passed" }],
+    ["db-role-bootstrap", ["db-role-bootstrap"], { id: "db-role-bootstrap", status: "passed" }],
+    ["migrator", ["migrator"], {
+      id: "migrator", status: "passed", migrationManifestSha256: sha("8"),
+      targetVersion: 10, schemaVersion: 10,
+    }],
+    ["start-api", ["api"], { id: "start-api", status: "passed" }],
+    ["start-worker", ["worker"], { id: "start-worker", status: "passed" }],
+    ["start-web", ["web"], { id: "start-web", status: "passed" }],
+    ["start-caddy-candidate", ["caddy"], { id: "start-caddy-candidate", status: "passed" }],
   ];
   const calls = [];
-  for (const [id, services] of phases) {
-    await module.runTimewebProductionHostCommand({
+  for (const [id, services, expected] of phases) {
+    const result = await module.runTimewebProductionHostCommand({
       encodedCommand: command(id, { images }),
-      adapters: { compose: { runExactPhase: async (value) => { calls.push(value); return { status: "passed" }; } } },
+      adapters: { compose: { runExactPhase: async (value) => {
+        calls.push(value);
+        return id === "migrator"
+          ? { status: "passed", migrationManifestSha256: sha("8"), targetVersion: 10, schemaVersion: 10 }
+          : { status: "passed" };
+      } } },
     });
+    assert.deepEqual(result, expected);
     assert.deepEqual(calls.at(-1), {
       project: PROJECT, currentRoot: CURRENT_ROOT, composeFiles: COMPOSE_FILES,
       phase: id, services, imageEnvironment, pullPolicy: "never",
@@ -253,16 +294,20 @@ test("maps fixed database-first Compose phases without public Caddy cutover or c
   }
   assert.equal(calls.some(({ publicIngress }) => publicIngress === "active"), false);
   await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("migrator", { images }),
+    adapters: { compose: { runExactPhase: async () => ({ status: "passed" }) } },
+  }), /TIMEWEB_HOST_OBSERVATION_INVALID|migration/i);
+  await assert.rejects(module.runTimewebProductionHostCommand({
     encodedCommand: command("start-api", { images, services: ["api", "worker"] }),
     adapters: { compose: { runExactPhase: async () => { throw new Error("must not run"); } } },
   }), /TIMEWEB_HOST_COMMAND_INVALID|services/i);
 });
 
-test("requires both safe-consumer outputs absent before deployer and a regular mode-0400 pair before worker", async () => {
+test("strictly parses and cross-binds the canonical safe-consumer pair into the direct-runtime result envelope", async () => {
   const module = await feature();
   const states = [
     { deploymentEvidence: "absent", registry: "absent" },
-    { deploymentEvidence: { type: "regular", mode: 0o400 }, registry: { type: "regular", mode: 0o400 } },
+    structuredClone(safeConsumerPair),
   ];
   const calls = [];
   const result = await module.runTimewebProductionHostCommand({
@@ -274,15 +319,24 @@ test("requires both safe-consumer outputs absent before deployer and a regular m
   });
   assert.deepEqual(calls.map(([id]) => id), ["inspect", "compose", "inspect"]);
   assert.deepEqual(calls[0][1], { evidenceRoot: EVIDENCE_ROOT, deploymentEvidencePath: DEPLOYMENT_PATH, registryPath: REGISTRY_PATH });
-  assert.deepEqual(result, { id: "safe-consumer-deployer", status: "passed", deploymentEvidencePath: DEPLOYMENT_PATH, registryPath: REGISTRY_PATH, mode: 0o400 });
+  assert.deepEqual(result, {
+    id: "safe-consumer-deployer", status: "passed",
+    registry: safeConsumers, deployments: safeConsumerDeployments,
+  });
   assert.deepEqual(await module.runTimewebProductionHostCommand({
     encodedCommand: command("write-safe-consumer-registry"),
-    adapters: { evidence: { inspectSafeConsumerPair: async () => ({ deploymentEvidence: { type: "regular", mode: 0o400 }, registry: { type: "regular", mode: 0o400 } }) } },
-  }), { id: "write-safe-consumer-registry", status: "passed", deploymentEvidencePath: DEPLOYMENT_PATH, registryPath: REGISTRY_PATH, mode: 0o400 });
+    adapters: { evidence: { inspectSafeConsumerPair: async () => structuredClone(safeConsumerPair) } },
+  }), {
+    id: "write-safe-consumer-registry", status: "passed", path: REGISTRY_PATH,
+    mode: 0o400, noReplace: true,
+    registrySha256: digest(Buffer.from(canonicalJson(safeConsumers), "utf8")),
+  });
   for (const invalidStates of [
     [{ deploymentEvidence: "absent", registry: { type: "regular", mode: 0o400 } }],
-    [{ deploymentEvidence: "absent", registry: "absent" }, { deploymentEvidence: { type: "regular", mode: 0o600 }, registry: { type: "regular", mode: 0o400 } }],
-    [{ deploymentEvidence: "absent", registry: "absent" }, { deploymentEvidence: { type: "symlink", mode: 0o400 }, registry: { type: "regular", mode: 0o400 } }],
+    [{ deploymentEvidence: "absent", registry: "absent" }, { ...structuredClone(safeConsumerPair), deploymentEvidence: { ...safeConsumerPair.deploymentEvidence, mode: 0o600 } }],
+    [{ deploymentEvidence: "absent", registry: "absent" }, { ...structuredClone(safeConsumerPair), registry: { ...safeConsumerPair.registry, type: "symlink" } }],
+    [{ deploymentEvidence: "absent", registry: "absent" }, { ...structuredClone(safeConsumerPair), registry: { ...safeConsumerPair.registry, bytes: Buffer.from(JSON.stringify(safeConsumers, null, 2)) } }],
+    [{ deploymentEvidence: "absent", registry: "absent" }, { ...structuredClone(safeConsumerPair), deploymentEvidence: { ...safeConsumerPair.deploymentEvidence, bytes: Buffer.from(canonicalJson({ ...safeConsumerDeploymentEvidence, registrySha256: sha("9") })) } }],
   ]) await assert.rejects(module.runTimewebProductionHostCommand({
     encodedCommand: command("safe-consumer-deployer", { images }),
     adapters: {
@@ -290,6 +344,38 @@ test("requires both safe-consumer outputs absent before deployer and a regular m
       compose: { runExactPhase: async () => ({ status: "passed" }) },
     },
   }), /TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID|safe-consumer evidence/i);
+});
+
+test("reads the safe-consumer authority from bounded no-follow mode-0400 descriptors", async () => {
+  const module = await feature();
+  assert.equal(typeof module.readCanonicalSafeConsumerEvidencePair, "function");
+  const directory = await mkdtemp(`${tmpdir()}/orivra-029c-host-pair-`);
+  const deploymentEvidencePath = resolve(directory, "safe-consumer-deployment-evidence.v1.json");
+  const registryPath = resolve(directory, "safe-consumer-registry.v1.json");
+  try {
+    await writeFile(deploymentEvidencePath, safeConsumerPair.deploymentEvidence.bytes, { mode: 0o400 });
+    await writeFile(registryPath, safeConsumerPair.registry.bytes, { mode: 0o400 });
+    await chmod(deploymentEvidencePath, 0o400);
+    await chmod(registryPath, 0o400);
+    assert.deepEqual(await module.readCanonicalSafeConsumerEvidencePair({
+      deploymentEvidencePath, registryPath, maximumBytes: 1024 * 1024,
+    }), { registry: safeConsumers, deployments: safeConsumerDeployments });
+    await assert.rejects(module.readCanonicalSafeConsumerEvidencePair({
+      deploymentEvidencePath, registryPath, maximumBytes: 32,
+    }), /TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID|safe-consumer evidence/i);
+    await chmod(registryPath, 0o600);
+    await assert.rejects(module.readCanonicalSafeConsumerEvidencePair({
+      deploymentEvidencePath, registryPath, maximumBytes: 1024 * 1024,
+    }), /TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID|safe-consumer evidence/i);
+    await rm(registryPath);
+    await symlink(deploymentEvidencePath, registryPath);
+    await assert.rejects(module.readCanonicalSafeConsumerEvidencePair({
+      deploymentEvidencePath, registryPath, maximumBytes: 1024 * 1024,
+    }), /TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID|safe-consumer evidence/i);
+  } finally {
+    await chmod(directory, 0o700).catch(() => undefined);
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("accepts readiness only with current real heartbeat and exactly two persisted live Coston2 runs", async () => {

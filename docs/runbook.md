@@ -873,6 +873,13 @@ Compose files/services and all evidence filenames. It rejects unknown IDs,
 fields, paths, tags and cross-repository refs before effect. Do not wrap this
 command in `sh -c`, interpolate it into another command or print it.
 
+The adapter must use `--command`, not the obsolete `--request` shape. It maps
+internal `start-postgres` to host `postgres`, binds every image-bearing phase to
+the currently verified ordered five publication references and binds the PITR
+phase to the verified production run ID. The internal
+`install-read-only-pull-credential` marker performs no separate host command;
+the read-only session opened for exact digest pull is its only authority.
+
 `configure-firewall` derives the administrator source only from
 `SSH_CONNECTION`; inbound defaults to deny, with source-restricted SSH and
 Caddy 80/443 allowed and 5432/8080 forbidden. `pull-exact-digests` opens the
@@ -888,6 +895,18 @@ current heartbeat and the exact two persisted Coston2 runs. Evidence and
 checkpoint appends are canonical, mode 0400 and no-replace. Any command failure
 prints only `TIMEWEB_PRODUCTION_HOST_COMMAND_FAILED` and performs bounded
 run-owned cleanup; secret values, paths and encoded payload remain redacted.
+
+After the deployer exits, the host opens the registry and deployment-evidence
+files with bounded `O_NOFOLLOW` reads, requires canonical schemas, exact
+registry-checksum/deployment binding and mode 0400, then returns the registry
+and deployments expected by the direct runtime. The next registry marker is
+read-only and returns only the fixed path, mode, `noReplace:true` and canonical
+registry checksum. Migrator returns the migration-manifest checksum plus exact
+target/schema version 10. Default PITR, persisted-live and canary observations
+must execute the checked-in `timeweb-production-pitr.mjs`,
+`timeweb-production-live-runs.mjs` and
+`timeweb-production-canary-observation.mjs`; a missing entrypoint or generic
+PASS blocks publication.
 
 Every argument above is an absolute file path; no secret value is permitted in
 argv or stdout. The first command uses the real production adapter factory and

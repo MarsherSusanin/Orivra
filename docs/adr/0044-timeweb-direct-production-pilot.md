@@ -223,12 +223,39 @@ origin, service or command.
 
 The deployer command requires both canonical safe-consumer outputs absent,
 runs the fixed one-shot service, then requires the regular non-symlink
-mode-0400 pair. PITR requires a new Timeweb base backup and a fresh restore
+mode-0400 pair. The host reads both files once through bounded private
+`O_NOFOLLOW` descriptors, requires canonical UTF-8
+`SafeConsumerRegistryV1`/`SafeConsumerDeploymentEvidenceV1`, cross-checks the
+registry checksum and exact ordered deployments, and returns the parsed
+registry plus deployments to the direct runtime. The following compatibility
+marker is observation-only: it returns the fixed registry path, mode 0400,
+`noReplace:true` and the checksum of those same canonical bytes; it never
+rewrites the deployer output. The migrator result likewise carries the exact
+migration-manifest checksum and schema/target version 10 rather than a generic
+PASS. PITR requires a new Timeweb base backup and a fresh restore
 volume, never the production volume. Readiness requires current real worker
 heartbeat; live acceptance requires the exact two persisted Coston2 run IDs.
 Evidence and checkpoint writes use fixed paths, canonical bytes, mode 0400 and
 atomic no-replace. Every command is bounded; failures emit only a fixed
 redacted code and cannot expose the encoded command, secret paths or values.
+
+The local production adapter maps the internal pilot command vocabulary to the
+host vocabulary before SSH. It emits only the exact canonical base64url V1
+envelope through `/usr/bin/node <fixed-runner> --command <encoded>`: in
+particular `start-postgres` maps to host `postgres`, each image-using phase is
+bound to the current verified ordered five publication references, and PITR is
+bound to the verified production run ID. The internal
+`install-read-only-pull-credential` marker is satisfied locally by the already
+opened read-only credential boundary and causes no second host effect.
+`--request`, unversioned objects and caller-selected IDs/payload are invalid.
+
+The default host adapters may invoke only three checked-in import-safe
+production entrypoints: `timeweb-production-pitr.mjs` for a new base backup and
+fresh-volume restore, `timeweb-production-live-runs.mjs` for the exact two
+persisted completed Coston2 runs, and
+`timeweb-production-canary-observation.mjs` for a typed trusted-host-clock
+checkpoint. Missing scripts, generic status objects or secret-bearing output
+cannot satisfy the host observation contract.
 
 ### Rollback V2
 
