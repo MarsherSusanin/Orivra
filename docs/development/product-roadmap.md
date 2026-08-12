@@ -37,7 +37,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 028A | Verified local OCI archives and frozen digest manifest | Complete; Core and Product PASS `bdd09e7` / `5d0acb9`, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | GHCR publication Complete: Core/Product PASS `e274441` / `907fa93`; five exact remote digests verified; publication evidence SHA-256 `1fe40038…ea10`; isolated DigitalOcean staging pending |
 | 029A | Local MLP validation and candidate freeze | Complete; Core and Product PASS `fc2f6e0` / `f7cebc6`, candidate SHA-256 `8991e7e4…0cdda` |
-| 029B | Exact-digest production promotion and seven-day canary | Blocked until 028B hosted evidence |
+| 029B | Exact-digest production promotion and seven-day canary | Intentional RED frozen under ADR 0043; blocked until accepted 028B staging evidence |
 
 ## Completed pre-infrastructure product journey
 
@@ -189,6 +189,17 @@ the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
   records schema/backup/readiness evidence and runs the seven-day canary. A code
   change returns the plan to focused RED/GREEN and requires a new unified
   matrix and two-PASS freeze before another credentialed deployment.
+
+  ADR 0043 freezes the exact production boundary without executing it. The
+  current canonical publication evidence SHA-256 is
+  `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`
+  and its five remote references are immutable. Accepted staging evidence is
+  still absent, so production authorization fails before DNS/SSH/Docker or
+  Coston2 effect. When available, production must remain distinct from
+  staging, start database/bootstrap/migration before applications, expose only
+  Caddy 80/443, append deployment evidence, then complete exact 15m/1h/24h/72h/
+  7d canary checkpoints. Rollback is limited to prior verified deployment plus
+  publication evidence whose schema range contains current schema 10.
 
 ## Validation policy
 

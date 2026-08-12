@@ -45,5 +45,6 @@ ADR фиксирует архитектурное решение, которое
 | [0040](0040-orivra-verification-entry.md) | Public Orivra URL preview hands a bounded local draft to protected canonical `/app/*` routes without fetching the source or changing ShareLinkV1 |
 | [0041](0041-credential-free-mlp-candidate-freeze.md) | One clean tree binds the complete credential-free matrix, recorded-fixture Compose journey and fresh offline OCI freeze into a canonical candidate receipt |
 | [0042](0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md) | Explicit GHCR targets, byte-preserving image publication and isolated DigitalOcean staging consume one verified frozen candidate without rebuild or production promotion |
+| [0043](0043-exact-digest-production-promotion-and-canary.md) | Exact publication and staging evidence authorize an isolated production deployment, seven-day canary and schema-compatible evidence-bound rollback |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

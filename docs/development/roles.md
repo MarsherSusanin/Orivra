@@ -108,6 +108,14 @@ pull credential and an isolated DigitalOcean project. Publication evidence and
 staging evidence are separate append-only records; neither is production
 promotion authority, which remains 029B.
 
+ADR 0043 makes 029B authority explicit: exact canonical publication and
+accepted staging evidence, an independently checksummed production target and
+an unexpired operator authorization must agree before any production effect.
+Deployment and seven-day canary evidence are separate append-only records.
+Fixtures, a prepared host, pulled images or partial canary observations cannot
+be described as production PASS. Production authors and both stopped-tree
+verifiers remain distinct.
+
 Rollback verification must prove that a prior schema-compatible verified
 remote digest is present in immutable publication/deployment evidence bound to
 its `frozenReleaseManifestSha256`. The release manifest provides compatibility

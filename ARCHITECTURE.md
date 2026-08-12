@@ -378,6 +378,17 @@ evidence SHA-256 is
 This closes only registry publication. Isolated staging and 029B production
 promotion/canary remain incomplete; no hosted claim exists.
 
+[ADR 0043](docs/adr/0043-exact-digest-production-promotion-and-canary.md)
+freezes the remaining production trust boundary. Exact canonical publication
+and staging evidence plus separate target/operator authorization derive one
+private immutable five-digest plan. PostgreSQL/bootstrap/migration precede
+applications; Caddy alone exposes 80/443; readiness, real-worker heartbeat,
+production PITR and persisted live evidence precede deployment evidence. A
+separate terminal record requires the complete seven-day canary. Rollback may
+select only prior schema-compatible verified deployment plus publication
+evidence. The contract is intentional RED and effects remain blocked because
+accepted staging evidence is absent.
+
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна
 выполнять MinIO restore drill в отдельный volume. Droplet backup не является
