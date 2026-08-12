@@ -207,3 +207,29 @@ controls plus the same 18 intentional RED (eight Compose/lifecycle and ten
 existing/new 029C effect seams). Sites remains 46/46 PASS. Failures are the
 missing production contracts/services/helpers only; no fixture, syntax or
 unexpected control failure remains.
+
+## Production host command corrective RED
+
+On exact clean base `896fac921ea58b00be85286adce9906a77e3cb7d` /
+tree `bf84d20dc3a60e4116e73519d455426ea6173feb`, the local production adapter
+boundary still lacked a production-used, bounded VDS command entrypoint.
+Eleven causal credential-free cases now freeze strict canonical base64url
+decoding, the exact ID allowlist, SSH-derived UFW policy, read-only exact-digest
+GHCR pull/inspection, fixed Compose phases, safe-consumer evidence lifecycle,
+typed readiness/live/PITR, explicit Caddy activation, no-replace append, typed
+canary observation and bounded redaction. Arbitrary shell/eval/exec authority,
+caller-selected paths/services, mutable tags, public 5432/8080, reused restore
+volumes and premature cutover are forbidden.
+
+This is intentional RED because
+`scripts/timeweb-production-host-command.mjs` is absent on the stopped tree.
+No production, Docker, firewall, registry, Timeweb, Coston2, SSH or credential
+effect ran. The production stash was not inspected, applied, modified or
+dropped.
+
+Gate classification: syntax and typecheck PASS; the exact host-command file is
+11 intentional RED with no harness exception; serialized deployment static is
+215 retained PASS plus 29 intentional RED (the prior 18 and these 11); Sites is
+46/46 PASS. One first serialized static attempt also hit the retained 027C
+TERM-reap timing control under load; its isolated file passed 26/26 and the
+unchanged full serialized rerun produced the exact 215/29 classification.

@@ -67,6 +67,18 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
   early terminal result; terminal output is canonical
   `ProductionPromotionEvidenceV2`, never a non-PASS test receipt.
 
+### 029C4 — Bounded VDS host runner
+
+- decode one bounded strict canonical base64url command; expose no arbitrary
+  shell, executable, service, path or environment authority;
+- fix current/secrets/evidence roots, Compose project/files/phases and the
+  ordered five immutable GHCR references;
+- derive SSH firewall authority from `SSH_CONNECTION`, keep only Caddy 80/443
+  public, and stage Caddy without cutover until explicit activation;
+- enforce safe-consumer absent-to-mode-0400 lifecycle, fresh-volume Timeweb
+  PITR, current heartbeat, exact two live runs and no-replace evidence/canary;
+- return only strict typed results and bounded redacted failure codes.
+
 ## Frozen RED
 
 1. `packages/contracts/test/slice029c-timeweb-direct-production-pilot.contract.test.ts`
@@ -86,6 +98,9 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
    atomic-append failures remain credential-free injected cases.
 5. Retained 027A/027B deployment tests freeze the eight-service Compose
    inventory and two-phase safe-consumer evidence lifecycle.
+6. `tests/deployment/slice029c-timeweb-production-host-command.contract.test.mjs`
+   freezes the production-used SSH host command in 11 credential-free causal
+   cases without invoking a shell, Docker, provider or live network.
 
 ## Gates
 

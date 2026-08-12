@@ -858,6 +858,34 @@ npm run production:pilot:deploy -- --publication-evidence /opt/orivra/evidence/p
 npm run production:canary:resume
 ```
 
+Every pinned-SSH application command is encoded by the local adapter and
+executed only as:
+
+```bash
+/usr/bin/node /opt/orivra/current/scripts/timeweb-production-host-command.mjs --command '<canonical-base64url-json>'
+```
+
+The encoded value is at most 32,768 base64url characters and decodes to the
+strict V1 host-command envelope. It is data, never a shell fragment. The host
+runner fixes `/opt/orivra/current`, `/opt/orivra/secrets`,
+`/opt/orivra/evidence`, project `proofline-production-primary`, the accepted
+Compose files/services and all evidence filenames. It rejects unknown IDs,
+fields, paths, tags and cross-repository refs before effect. Do not wrap this
+command in `sh -c`, interpolate it into another command or print it.
+
+`configure-firewall` derives the administrator source only from
+`SSH_CONNECTION`; inbound defaults to deny, with source-restricted SSH and
+Caddy 80/443 allowed and 5432/8080 forbidden. `pull-exact-digests` opens the
+fixed read-only GHCR token file, pulls and independently inspects the ordered
+five `@sha256` references. Database/app service phases are fixed and Caddy is a
+non-public candidate until the explicit activation command. Safe-consumer
+outputs transition from absent to the exact regular mode-0400 pair before
+worker. Timeweb recovery always uses a fresh volume. Ready/live results require
+current heartbeat and the exact two persisted Coston2 runs. Evidence and
+checkpoint appends are canonical, mode 0400 and no-replace. Any command failure
+prints only `TIMEWEB_PRODUCTION_HOST_COMMAND_FAILED` and performs bounded
+run-owned cleanup; secret values, paths and encoded payload remain redacted.
+
 Every argument above is an absolute file path; no secret value is permitted in
 argv or stdout. The first command uses the real production adapter factory and
 the dedicated safe-consumer deployer. That deployer opens a regular non-symlink

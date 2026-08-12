@@ -194,6 +194,38 @@ the production adapter set before invoking
 values through argv/stdout. The systemd CLI similarly delegates to the bounded
 canary tick runtime rather than fabricating checkpoint observations.
 
+### Production host command boundary
+
+Pinned SSH may invoke only
+`/opt/orivra/current/scripts/timeweb-production-host-command.mjs --command
+<base64url-json>`. The decoded canonical UTF-8 JSON is bounded to 32,768
+base64url characters, strict `{version:"1", kind, id, payload}` and recursively
+frozen before any effect. The fixed command allowlist covers firewall, exact
+digest pull/inspection, database-first Compose phases, safe-consumer deploy,
+readiness/heartbeat, Timeweb PITR, two persisted live runs, explicit Caddy
+activation, canonical append and typed canary observation. No shell fragment,
+executable, service name, path, environment variable or arbitrary argument is
+caller-selectable; `eval`, string-command `exec` and `shell:true` are forbidden.
+
+The runner fixes `/opt/orivra/current`, `/opt/orivra/secrets`,
+`/opt/orivra/evidence`, Compose project `proofline-production-primary` and the
+three accepted Compose files. Firewall SSH authority derives only from the
+first address in `SSH_CONNECTION`; UFW denies inbound by default, permits that
+source for SSH and public TCP 80/443 only, and never publishes 5432/8080. GHCR
+uses the fixed token file through a read-only session, pulls five exact digest
+references and independently inspects the same ordered digests. Candidate
+Caddy has public ingress disabled until the separate activate command confirms
+the staged candidate and exact external HTTPS origin.
+
+The deployer command requires both canonical safe-consumer outputs absent,
+runs the fixed one-shot service, then requires the regular non-symlink
+mode-0400 pair. PITR requires a new Timeweb base backup and a fresh restore
+volume, never the production volume. Readiness requires current real worker
+heartbeat; live acceptance requires the exact two persisted Coston2 run IDs.
+Evidence and checkpoint writes use fixed paths, canonical bytes, mode 0400 and
+atomic no-replace. Every command is bounded; failures emit only a fixed
+redacted code and cannot expose the encoded command, secret paths or values.
+
 ### Rollback V2
 
 Rollback retains the canonical current/prior deployment and publication byte
