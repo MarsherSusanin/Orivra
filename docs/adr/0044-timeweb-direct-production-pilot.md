@@ -25,6 +25,15 @@ terminal evidence immediately from caller-selected future timestamps. Report
 `/private/tmp/proofline-029b-verifiers/99918ab/product-verifier.md` has SHA-256
 `2186ed3400ac917409f26c2fde6653d9a70dd8b6dd015233970ba32e0811ead9`.
 
+A final read-only default-effect audit on exact clean base
+`acd72de47875d589e5807e605596b3e331a7aeb8` / tree
+`f36a96375415fc370d9ee3fb57e70f4db95c6843` rejected the saved production
+candidate before credentials or host effects. The direct runtime manufactured
+the cutover checkpoint checks locally; the default live-run and canary
+entrypoints threw; the default PITR path stopped before restore; and canonical
+safe-consumer files owned by the service UID could not satisfy the required
+root-owned evidence boundary.
+
 The pilot object store is Timeweb S3-compatible storage. Swift is an operator
 option outside the application runtime, not a release dependency.
 
@@ -117,13 +126,19 @@ authoritative pair. Secret bytes and paths never enter either artifact.
 
 Production Compose contains an eighth one-shot `safe-consumer-deployer`
 service sharing the worker image but not worker database/verifier authority.
-One host `PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT` is mounted read/write only at
-`/opt/orivra/evidence` in that deployer; the worker mounts only the derived
-`safe-consumer-registry.v1.json` read-only at its internal registry path. Both
-final evidence files must be absent before deployer execution and regular,
-non-symlink mode-0400 files before worker startup. Worker depends on successful
-deployer completion. A second host registry-path variable and the legacy
-global address remain forbidden.
+One canonical `PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT` is mounted read/write
+only at `/opt/orivra/evidence` in that deployer. After schema/checksum
+verification, the root host seals the directory `root:root` mode `0700` and
+both final files `root:root` mode `0400`. Because the non-root worker cannot
+read a root-owned mode-0400 bind, the host also creates one run-scoped,
+byte-identical registry handoff at the fixed
+`PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE`; it is owned by worker UID/GID
+1000, mode `0400`, checksum-equal to the canonical registry and mounted
+read-only. It is runtime input, never a second evidence authority. Both
+canonical files and the handoff must be absent before deployer execution and
+complete before worker startup. Worker depends on successful deployer and seal
+completion. The legacy global address and caller-selected registry path remain
+forbidden.
 
 ### Complete typed preflight authority
 
@@ -153,8 +168,12 @@ heartbeat, Timeweb PITR and both persisted live runs.
 
 Caddy cutover is an explicit adapter effect before deployment evidence append.
 After it returns strict origin and trusted activation time, a separate external
-HTTPS observation must confirm that exact public origin. Only then may the
-cutover checkpoint and deployment evidence be appended. Strict
+HTTPS observation confirms that origin and the same pinned host session must
+run `canary-observe` for the real `cutover` checkpoint. That strict host result
+derives external HTTPS, internal health/schema, current heartbeat, disk and
+clock synchronization, Timeweb backup/PITR and the exact two persisted run IDs.
+The direct runtime may not synthesize any PASS check. Only then may those exact
+canonical checkpoint bytes and deployment evidence be appended. Strict
 `ProductionDeploymentEvidenceV2` binds exactly
 `cutover: {status:"passed", publicOrigin, activatedAt}`. An external
 observation, checkpoint or evidence failure after cutover requires
@@ -249,12 +268,19 @@ bound to the verified production run ID. The internal
 opened read-only credential boundary and causes no second host effect.
 `--request`, unversioned objects and caller-selected IDs/payload are invalid.
 
-The default host adapters may invoke only three checked-in import-safe
-production entrypoints: `timeweb-production-pitr.mjs` for a new base backup and
-fresh-volume restore, `timeweb-production-live-runs.mjs` for the exact two
-persisted completed Coston2 runs, and
-`timeweb-production-canary-observation.mjs` for a typed trusted-host-clock
-checkpoint. Missing scripts, generic status objects or secret-bearing output
+The default host adapters invoke three checked-in import-safe production
+entrypoints and none may default to a throw or synthetic PASS:
+`timeweb-production-pitr.mjs` performs a new encrypted Timeweb base backup,
+selected-backup restore into a fresh scoped PostgreSQL volume, strict verify
+and finally cleanup; `timeweb-production-live-runs.mjs` uses `docker compose
+exec -T worker` to run the worker-image live-gate entrypoint; and
+`timeweb-production-canary-observation.mjs` produces a typed trusted-host-clock
+checkpoint. The live gate uses the worker-owned relayer signer only for exact
+chain-114 SIWE, obtains API session/project mutation authority transiently,
+submits the two manifest runs through API idempotent commands and accepts only
+their terminal persisted API records. It never imports the direct live-effect
+runtime or database, prints a token/key/signature, or adds a ninth long-lived
+service. Missing scripts, generic status objects or secret-bearing output
 cannot satisfy the host observation contract.
 
 ### Rollback V2

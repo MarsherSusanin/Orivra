@@ -222,6 +222,7 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
   const module = await runtime();
   const value = await fixture();
   const events = [];
+  const checkpointEntries = [];
   let deploymentEntry;
   const result = await module.runTimewebDirectProductionPilot({
     ...commonInput(value),
@@ -244,6 +245,10 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
       if (command.id === "readyz-real-heartbeat") return { status: "passed", readyz: { status: "passed" }, workerHeartbeat: { status: "current" } };
       if (command.id === "timeweb-pitr-production") return { status: "passed", restoreEvidenceSha256: sha("5"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 };
       if (command.id === "persisted-live-coston2") return { status: "passed", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] };
+      if (command.id === "canary-observe") {
+        assert.deepEqual(command, { id: "canary-observe", checkpointId: "cutover", dueAt: "2026-08-12T03:00:00Z" });
+        return checkpoint("cutover", "2026-08-12T03:00:00Z", "2026-08-12T03:00:01Z");
+      }
       return { status: "passed" };
     }, close: async () => events.push("close") }) },
     appendProductionEvidence: async (entry) => { deploymentEntry = entry; events.push("append-deployment"); },
@@ -252,7 +257,7 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
       observeExternalHttps: async ({ publicOrigin }) => { events.push("external-https"); return { status: "passed", publicOrigin, observedAt: "2026-08-12T03:00:01Z" }; },
       rollbackCaddy: async () => events.push("rollback-caddy"),
     },
-    checkpointStore: { append: async (entry) => events.push(`checkpoint:${entry.id}`) },
+    checkpointStore: { append: async (entry) => { checkpointEntries.push(entry); events.push(`checkpoint:${entry.id}`); } },
   });
   assert.equal(result.status, "canary-pending");
   assert.equal(Object.hasOwn(fileInputs, "doApiTokenFile"), false);
@@ -264,8 +269,10 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
     "migrator", "start-api", "safe-consumer-deployer", "write-safe-consumer-registry", "start-worker",
   ]);
   assert.ok(events.indexOf("caddy-cutover") < events.indexOf("external-https"));
-  assert.ok(events.indexOf("external-https") < events.indexOf("checkpoint:cutover"));
+  assert.ok(events.indexOf("external-https") < events.indexOf("canary-observe"));
+  assert.ok(events.indexOf("canary-observe") < events.indexOf("checkpoint:cutover"));
   assert.ok(events.indexOf("checkpoint:cutover") < events.indexOf("append-deployment"));
+  assert.deepEqual(checkpointEntries, [checkpoint("cutover", "2026-08-12T03:00:00Z", "2026-08-12T03:00:01Z")]);
   assert.equal(events.includes("rollback-caddy"), false);
   const deployment = JSON.parse(Buffer.from(deploymentEntry.bytes).toString("utf8"));
   assert.equal(deployment.version, "2");
@@ -281,12 +288,14 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
   assert.deepEqual(deployment.safeConsumers, registry);
   assert.equal(deployment.objectStore.authorityMode, "shared-pilot");
   assert.equal(deployment.stagingDeploymentEvidenceSha256, undefined);
+  const productionSource = await readFile(resolve(root, "scripts/digitalocean-production-promotion-runtime.mjs"), "utf8").catch(() => "");
+  assert.doesNotMatch(productionSource, /directCheckpointChecks/);
 });
 
 test("post-cutover observation, checkpoint and deployment-evidence failures roll Caddy back with zero deployment PASS", async () => {
   const module = await runtime();
   const value = await fixture();
-  for (const failingPhase of ["external-https", "checkpoint", "deployment-evidence"]) {
+  for (const failingPhase of ["external-https", "host-observation", "checkpoint", "deployment-evidence"]) {
     const events = [];
     const deploymentPass = [];
     await assert.rejects(module.runTimewebDirectProductionPilot({
@@ -303,6 +312,11 @@ test("post-cutover observation, checkpoint and deployment-evidence failures roll
         if (command.id === "readyz-real-heartbeat") return { status: "passed", readyz: { status: "passed" }, workerHeartbeat: { status: "current" } };
         if (command.id === "timeweb-pitr-production") return { status: "passed", restoreEvidenceSha256: sha("5"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 };
         if (command.id === "persisted-live-coston2") return { status: "passed", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] };
+        if (command.id === "canary-observe") {
+          events.push("host-observation");
+          if (failingPhase === "host-observation") throw new Error("host cutover observation failed");
+          return checkpoint("cutover", "2026-08-12T03:00:00Z", "2026-08-12T03:00:01Z");
+        }
         return { status: "passed" };
       }, close: async () => undefined }) },
       cutoverAdapter: {

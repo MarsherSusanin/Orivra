@@ -38,7 +38,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | GHCR publication Complete: Core/Product PASS `e274441` / `907fa93`; five exact remote digests verified; publication evidence SHA-256 `1fe40038…ea10`; isolated DigitalOcean staging pending |
 | 029A | Local MLP validation and candidate freeze | Complete; Core and Product PASS `fc2f6e0` / `f7cebc6`, candidate SHA-256 `8991e7e4…0cdda` |
 | 029B | Exact-digest production promotion and seven-day canary | Historical V1 retained; active effect path superseded by ADR 0044 |
-| 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Corrective intentional RED after host-envelope/effect audit; no hosted/deployed claim |
+| 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Final default-effect corrective RED on `acd72de` / `f36a963`; no hosted/deployed claim |
 
 ## Completed pre-infrastructure product journey
 
@@ -192,6 +192,13 @@ the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
   deployment evidence, explicit Caddy cutover and trusted-clock 0/15m/1h/24h
   checkpoints. A code change returns the plan to focused RED/GREEN and two
   fresh stopped-tree verifiers.
+
+  The final default-effect RED requires the pinned host—not the direct runtime—
+  to produce the cutover checkpoint; executable worker/API persisted-run,
+  encrypted fresh-volume Timeweb PITR and due canary defaults; and a root-only
+  canonical safe-consumer pair with one checksum-identical non-root worker
+  runtime handoff. These are one-shot/exec effects and do not add a ninth
+  long-lived Compose service.
 
   029B remains the historical credentialed production promotion and canary
   contract that runs only after 028B. ADR 0044 preserves its V1 data types while

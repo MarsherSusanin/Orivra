@@ -1,6 +1,6 @@
 # Slice 029C — Timeweb direct-production pilot
 
-Status: Intentional RED after Product rejection of `99918ab` / `a24d08a`
+Status: Final default-effect corrective RED on `acd72de` / `f36a963`; no production effect
 
 Decision: [ADR 0044](../adr/0044-timeweb-direct-production-pilot.md)
 
@@ -39,8 +39,9 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 - deploy Open-Meteo then ETH/USD consumers deterministically and write the
   canonical worker registry before worker startup;
 - extend retained runtime Compose to exactly eight services with one hardened
-  one-shot deployer; use one evidence root, require both outputs absent before
-  deploy and regular mode 0400 before worker;
+  one-shot deployer; use one canonical evidence root, root-seal its pair
+  `root:root` mode 0400, create one SHA-identical worker-owned mode-0400
+  runtime handoff, and add no ninth long-lived service;
 - run the production-used deployer with pinned solc, official Coston2 registry
   imports, one mode-0400 relayer-key file, chain/balance checks, two receipts and
   two nonempty runtime-code observations; atomically publish registry plus
@@ -52,8 +53,9 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 
 ### 029C3 — Explicit cutover and resumable acceptance
 
-- invoke explicit Caddy cutover and external HTTPS observation before
-  deployment evidence becomes authoritative;
+- invoke explicit Caddy cutover, external HTTPS and a real pinned-host cutover
+  checkpoint observation before deployment evidence becomes authoritative;
+  direct code cannot manufacture PASS checks;
 - append 0/15m/1h/24h checkpoint evidence only when a trusted clock reaches
   each due time;
 - include an exact production-host synchronization observation in every
@@ -85,7 +87,8 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
   current verified five images and run ID; the credential-install marker is a
   local no-effect step;
 - require checked-in import-safe PITR, persisted-live-run and typed canary
-  observation entrypoints for every default host effect;
+  observation entrypoints whose defaults execute the encrypted fresh-volume
+  restore, worker-container API-persisted two-run gate and due host checks;
 - return only strict typed results and bounded redacted failure codes.
 
 ## Frozen RED
@@ -113,6 +116,11 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 7. `tests/deployment/slice029c-timeweb-production-adapter-effects.contract.test.mjs`
    freezes canonical internal-to-host mapping and the three concrete
    production observation entrypoints in five credential-free causal cases.
+8. `tests/deployment/slice029c-production-default-effects.contract.test.mjs`
+   freezes the executable worker/API live gate, encrypted fresh-volume Timeweb
+   restore/cleanup and real trusted-clock canary defaults. Direct-pilot,
+   host-command and retained 027A/027B cases freeze the real cutover observation
+   and root-only canonical pair plus byte-identical non-root worker handoff.
 
 ## Gates
 

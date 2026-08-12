@@ -823,20 +823,26 @@ pulls/re-inspects by digest and starts:
 `postgres → db-role-bootstrap → migrator → api → safe-consumer-deployer → write-safe-consumer-registry → worker → web → caddy-candidate`.
 
 The runtime overlay has exactly eight services: the retained seven plus the
-one-shot `safe-consumer-deployer`. The host provides only
+one-shot `safe-consumer-deployer`. The canonical authority remains
 `PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT=/opt/orivra/evidence`. Before deployer
 execution, both `safe-consumer-deployment-evidence.v1.json` and
 `safe-consumer-registry.v1.json` are absent. Before worker startup, both are
-regular non-symlink mode-0400 files; the worker registry bind derives from that
-root and is read-only. The phases are separate so Compose does not create the
-worker bind source before the deployer commits it.
+regular non-symlink `root:root` mode-0400 files under a root-private directory.
+The root host makes one byte-identical, checksum-bound mode-0400 copy owned by
+UID/GID 1000 at fixed `PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE`; only that
+runtime copy is bound read-only into the non-root worker. It is not evidence and
+is removed with the run. The phases are separate so Compose does not create a
+bind source before the deployer and root seal commit it.
 
 Only Caddy publishes 80/443. PostgreSQL 5432 and API/worker ports remain
 private, with no Docker socket. Stage V2 deployment evidence only after schema
 10/10, `/readyz`, current real-worker heartbeat, Timeweb PITR,
 the canonical two-entry worker registry and both persisted live observations
 pass. Caddy then cuts over, a separate external HTTPS probe confirms the exact
-origin, and the cutover checkpoint is appended before deployment evidence is
+origin, and the pinned host executes `canary-observe` for the cutover checkpoint
+covering external/internal health, schema, current heartbeat, disk/clock,
+Timeweb PITR and both persisted runs. Those returned canonical checks, never a
+locally constructed PASS object, are appended before deployment evidence is
 published. Any post-cutover failure calls `rollbackCaddy` and leaves zero
 deployment PASS.
 Trusted-clock resume records exact cutover/15m/1h/24h checkpoints; only the
@@ -903,10 +909,19 @@ and deployments expected by the direct runtime. The next registry marker is
 read-only and returns only the fixed path, mode, `noReplace:true` and canonical
 registry checksum. Migrator returns the migration-manifest checksum plus exact
 target/schema version 10. Default PITR, persisted-live and canary observations
-must execute the checked-in `timeweb-production-pitr.mjs`,
+execute the checked-in `timeweb-production-pitr.mjs`,
 `timeweb-production-live-runs.mjs` and
-`timeweb-production-canary-observation.mjs`; a missing entrypoint or generic
-PASS blocks publication.
+`timeweb-production-canary-observation.mjs`; a default throw, missing
+entrypoint or generic PASS blocks publication. PITR creates an encrypted
+Timeweb base backup, restores only the selected backup into a fresh run-scoped
+volume, verifies schema/evidence and removes that volume in `finally`.
+Persisted live acceptance executes the bounded worker-image live gate with
+`docker compose exec -T worker`; it uses chain-114 SIWE and API-owned session,
+project and idempotent-command paths, then returns only the exact two terminal
+persisted run IDs. No token, signature or relayer key appears in argv, stdout or
+evidence, and no ninth long-lived service is added. Canary uses the host clock
+and real external HTTPS, internal health/schema, heartbeat, disk, Timeweb and
+persisted-run observations.
 
 Every argument above is an absolute file path; no secret value is permitted in
 argv or stdout. The first command uses the real production adapter factory and

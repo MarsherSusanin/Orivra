@@ -35,6 +35,7 @@ const COMPOSE_FILES = [
 ];
 const REGISTRY_PATH = `${EVIDENCE_ROOT}/safe-consumer-registry.v1.json`;
 const DEPLOYMENT_PATH = `${EVIDENCE_ROOT}/safe-consumer-deployment-evidence.v1.json`;
+const WORKER_HANDOFF_PATH = "/opt/orivra/worker-evidence/safe-consumer-registry.v1.json";
 const GHCR_TOKEN_PATH = `${SECRET_ROOT}/ghcr-pull-token`;
 const PUBLIC_ORIGIN = "https://orivra.xyz";
 const OPEN_METEO = "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8";
@@ -323,14 +324,41 @@ test("strictly parses and cross-binds the canonical safe-consumer pair into the 
     id: "safe-consumer-deployer", status: "passed",
     registry: safeConsumers, deployments: safeConsumerDeployments,
   });
+  const seals = [];
   assert.deepEqual(await module.runTimewebProductionHostCommand({
     encodedCommand: command("write-safe-consumer-registry"),
-    adapters: { evidence: { inspectSafeConsumerPair: async () => structuredClone(safeConsumerPair) } },
+    adapters: { evidence: {
+      inspectSafeConsumerPair: async () => structuredClone(safeConsumerPair),
+      sealCanonicalPair: async (input) => { seals.push(input); return { status: "passed" }; },
+    } },
   }), {
     id: "write-safe-consumer-registry", status: "passed", path: REGISTRY_PATH,
     mode: 0o400, noReplace: true,
     registrySha256: digest(Buffer.from(canonicalJson(safeConsumers), "utf8")),
   });
+  assert.deepEqual(seals, [{
+    evidenceRoot: EVIDENCE_ROOT,
+    deploymentEvidencePath: DEPLOYMENT_PATH,
+    registryPath: REGISTRY_PATH,
+    canonicalOwner: { uid: 0, gid: 0 },
+    directoryMode: 0o700,
+    fileMode: 0o400,
+    noFollow: true,
+    noReplace: true,
+    workerHandoff: {
+      path: WORKER_HANDOFF_PATH,
+      owner: { uid: 1000, gid: 1000 },
+      mode: 0o400,
+      registrySha256: digest(Buffer.from(canonicalJson(safeConsumers), "utf8")),
+    },
+  }]);
+  await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("write-safe-consumer-registry"),
+    adapters: { evidence: {
+      inspectSafeConsumerPair: async () => structuredClone(safeConsumerPair),
+      sealCanonicalPair: async () => { throw new Error("worker handoff seal failed"); },
+    } },
+  }), /TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID|worker handoff seal failed/);
   for (const invalidStates of [
     [{ deploymentEvidence: "absent", registry: { type: "regular", mode: 0o400 } }],
     [{ deploymentEvidence: "absent", registry: "absent" }, { ...structuredClone(safeConsumerPair), deploymentEvidence: { ...safeConsumerPair.deploymentEvidence, mode: 0o600 } }],

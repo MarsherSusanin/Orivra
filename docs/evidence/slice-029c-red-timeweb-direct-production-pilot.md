@@ -276,3 +276,33 @@ intentional RED. Serialized deployment static emits 215 named retained PASS and
 cases). Sites remains 46/46 PASS. All new failures are caused by the absent
 production adapter/host/effect entrypoints or their frozen result fields; there
 is no fixture, syntax or unexpected assertion failure.
+
+## Real production default-effect corrective RED
+
+Read-only inspection of the saved production candidate after exact clean base
+`acd72de47875d589e5807e605596b3e331a7aeb8` / tree
+`f36a96375415fc370d9ee3fb57e70f4db95c6843` found four final false-acceptance
+gaps before any credential or host effect. Direct code built cutover PASS checks
+locally instead of consuming the real pinned-host checkpoint. The live-run and
+canary defaults threw, and PITR stopped before restore. The service-owned
+safe-consumer output also could not simultaneously be canonical `root:root`
+mode 0400 and directly readable by the UID-1000 worker.
+
+This tests/docs-only correction freezes a real host `canary-observe` result
+before deployment publication; a worker-container entrypoint that performs
+SIWE and API-owned idempotent persisted-run flow for the exact two manifests;
+an encrypted Timeweb base backup plus selected fresh-volume restore,
+verification and cleanup; and real due host-clock canary observations. The
+canonical pair is root-only, while one SHA-identical run-scoped UID-1000
+mode-0400 handoff is the worker's read-only runtime input and never evidence
+authority. No ninth long-lived service, token/key/signature output, Docker,
+network, credential or production effect is permitted. The production stash
+remains read-only and unapplied.
+
+Classification: syntax, typecheck and diff-check PASS. The new default-effect
+file is exactly three intentional RED cases; the direct-pilot file remains five
+intentional RED and the host-command file remains 13 intentional RED. Retained
+027A/027B focus remains 24 PASS plus eight intentional RED. Serialized
+deployment static is 215 PASS plus 39 intentional RED, exactly the prior 36
+plus these three new production defaults. Sites remains 46/46 PASS. No harness,
+fixture or unexpected retained-control failure remains.

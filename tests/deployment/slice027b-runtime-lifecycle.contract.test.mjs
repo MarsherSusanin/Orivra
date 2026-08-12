@@ -41,6 +41,7 @@ const environment = {
   PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT: "/tmp/safe-consumer-evidence",
   PROOFLINE_SAFE_CONSUMER_ADDRESS: "0x5555555555555555555555555555555555555555",
   PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: "/tmp/safe-consumer-registry.v1.json",
+  PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE: "/tmp/safe-consumer-worker-handoff.json",
   PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/worker-replay-bundle.json",
   PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
     "/tmp/worker-replay-preflight-report.json",
@@ -58,6 +59,7 @@ const runtimeFileVariables = [
   "PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE",
   "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
   "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",
+  "PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE",
   "PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE",
   "PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE",
   "PROOFLINE_POSTGRES_PASSWORD_FILE",
@@ -264,7 +266,7 @@ test("passes one complete typed worker configuration and three read-only evidenc
   assert.deepEqual(evidenceMounts, [
     {
       type: "bind",
-      source: `${environment.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT}/safe-consumer-registry.v1.json`,
+      source: environment.PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE,
       target: "/run/proofline/evidence/safe-consumer-registry.v1.json",
       read_only: true,
       bind: {},
@@ -298,6 +300,7 @@ test("fails render when any required worker policy, evidence root or host replay
     "PROOFLINE_RELAYER_BALANCE_FLOOR_WEI",
     "PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA",
     "PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT",
+    "PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE",
     "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
     "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",
   ]) {
@@ -330,27 +333,39 @@ test("requires an empty canonical evidence root before deployer and an exact mod
     const module = await import(`${pathToFileURL(resolve(root, "scripts/compose-production.mjs")).href}?safe-consumer=${Date.now()}`);
     const deploymentEvidencePath = join(evidenceRoot, "safe-consumer-deployment-evidence.v1.json");
     const registryPath = join(evidenceRoot, "safe-consumer-registry.v1.json");
+    const workerHandoffPath = join(directory, "safe-consumer-worker-handoff.v1.json");
     assert.deepEqual(await module.validateSafeConsumerEvidenceLifecycle({
       evidenceRoot,
+      workerHandoffPath,
       phase: "before-deployer",
-    }), { evidenceRoot, deploymentEvidencePath, registryPath });
+    }), { evidenceRoot, deploymentEvidencePath, registryPath, workerHandoffPath });
     await writeFile(registryPath, "{}", { mode: 0o400 });
     await assert.rejects(module.validateSafeConsumerEvidenceLifecycle({
       evidenceRoot,
+      workerHandoffPath,
       phase: "before-deployer",
     }), /SAFE_CONSUMER_EVIDENCE_PREEXISTS|safe-consumer evidence/i);
     await assert.rejects(module.validateSafeConsumerEvidenceLifecycle({
       evidenceRoot,
+      workerHandoffPath,
       phase: "before-worker",
     }), /SAFE_CONSUMER_EVIDENCE_INCOMPLETE|safe-consumer evidence/i);
     await writeFile(deploymentEvidencePath, "{}", { mode: 0o400 });
+    await assert.rejects(module.validateSafeConsumerEvidenceLifecycle({
+      evidenceRoot,
+      workerHandoffPath,
+      phase: "before-worker",
+    }), /SAFE_CONSUMER_EVIDENCE_INCOMPLETE|safe-consumer evidence/i);
+    await writeFile(workerHandoffPath, "{}", { mode: 0o400 });
     assert.deepEqual(await module.validateSafeConsumerEvidenceLifecycle({
       evidenceRoot,
+      workerHandoffPath,
       phase: "before-worker",
-    }), { evidenceRoot, deploymentEvidencePath, registryPath });
+    }), { evidenceRoot, deploymentEvidencePath, registryPath, workerHandoffPath });
     await chmod(registryPath, 0o600);
     await assert.rejects(module.validateSafeConsumerEvidenceLifecycle({
       evidenceRoot,
+      workerHandoffPath,
       phase: "before-worker",
     }), /SAFE_CONSUMER_EVIDENCE_INVALID|safe-consumer evidence/i);
   } finally {
