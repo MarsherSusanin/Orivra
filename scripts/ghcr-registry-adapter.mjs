@@ -126,7 +126,7 @@ export async function createGhcrRegistryPublicationAdapter({ username, tokenByte
       const nextLocation = patched.headers.get("location");
       if (!nextLocation) fail();
       const nextUpload = requireUploadLocation(nextLocation, remoteRepository);
-      if (seenUploads.has(nextUpload.href)) fail();
+      if (nextUpload.href !== upload.href && seenUploads.has(nextUpload.href)) fail();
       requireAcceptedRange(patched.headers.get("range"), end);
       seenUploads.add(nextUpload.href);
       upload = nextUpload;

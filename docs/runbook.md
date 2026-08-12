@@ -727,10 +727,10 @@ then its monolithic PUT of the 15,923,972-byte Caddy layer failed with
 staging. Its fixed 4 MiB replacement then passed auth/token/POST but failed on
 the first PATCH with `UND_ERR_SOCKET` after 4,194,726 bytes written and zero
 read. The fixed 1 MiB attempt then passed its first PATCH, but rejected GHCR's
-unchanged current upload Location as stale. Do not retry credentials until the
-stable-current corrective replacement and two fresh same-tree verifier reports
-PASS. Use a separate classic token with only `read:packages` on the VDS after
-publication.
+unchanged current upload Location as stale. The stable-current replacement is
+production-author GREEN on RED base `566e4b8` / `6e63468`; do not retry
+credentials until two fresh same-tree verifier reports PASS. Use a separate
+classic token with only `read:packages` on the VDS after publication.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now

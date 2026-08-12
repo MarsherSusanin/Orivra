@@ -1,7 +1,8 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; stable-current GHCR upload Location corrective
-  RED after a real first-PATCH response; zero images/evidence/staging
+- Status: Accepted contract; stable-current GHCR upload Location
+  production-author GREEN on corrective RED base; fresh Core/Product
+  verification pending; zero images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -103,8 +104,9 @@ bytes written and zero bytes read. The production-author replacement therefore
 fixes the bound at 1 MiB on RED base `a34b424` / `bdc1d48`. A real run then
 passed auth, POST and its first PATCH, but GHCR returned the same current upload
 Location; the adapter classified that valid stable Location as stale and
-failed. All attempts remain non-authorizing; fresh two-verifier acceptance is
-mandatory before another credentialed attempt.
+failed. The production-author correction accepts only the unchanged current
+URL with its exact advanced Range. All attempts remain non-authorizing; fresh
+two-verifier acceptance is mandatory before another credentialed attempt.
 
 ### Publication evidence
 

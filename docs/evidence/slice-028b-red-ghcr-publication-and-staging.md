@@ -2,8 +2,9 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Stable-current GHCR upload Location corrective RED after a real first
-PATCH response; zero images, publication evidence or staging effects exist.
+Status: Stable-current GHCR upload Location production-author GREEN on
+corrective RED base `566e4b8` / `6e63468`; fresh Core/Product verification
+pending; zero images, publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -355,6 +356,13 @@ Intentional RED classification on exact base `d767fcf` / `ce0bf30`: syntax and
 typecheck PASS; focused GHCR/staging/roadmap is 34 PASS plus this one causal
 RED at the production duplicate-history check; serialized deployment static is
 213 PASS plus the same RED; Sites is 46/46 PASS.
+
+The production-author correction changes only the duplicate-history predicate:
+the response may reuse the exact current Location when the exact cumulative
+Range advances, but a previously superseded non-current URL remains rejected.
+Post-correction typecheck, pure 61/61, focused 35/35, serialized static 214/214
+and Sites 46/46 PASS. No credential, registry, evidence or staging effect was
+used; fresh same-tree Core and Product verification remains mandatory.
 
 ## Real first-PATCH 4 MiB compatibility RED
 
