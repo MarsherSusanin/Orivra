@@ -9,6 +9,7 @@ import { spawnSync } from "node:child_process";
 import {
   createRecordedProductFixture,
   createRecordedProductObservation,
+  runRecordedProductLifecycle,
   verifyRecordedProductObservation,
 } from "./mlp-product-compose-runtime.mjs";
 import { canonicalSerializeSafeConsumerRegistry } from "../packages/contracts/src/safe-consumer-registry-runtime.mjs";
@@ -205,57 +206,58 @@ async function main() {
   const fixtureOutput = parseArguments(process.argv.slice(2));
   const fixtureBytes = await createRecordedProductFixture();
   await writeFile(fixtureOutput, fixtureBytes, { mode: 0o600, flag: "wx" });
-  let succeeded = false;
   const temporaryDirectory = await mkdtemp(join(tmpdir(), `${project}-`));
   const environment = await createEnvironment(temporaryDirectory);
-  try {
-    await assertExactTlsPortAvailable({
-      bindExactTlsPort,
-      startDockerReservation: () => startDockerReservation(environment),
-      removeDockerReservation: () => removeDockerReservation(environment),
-    });
-    compose([
-      "up", "--detach", "--pull", "never", "--no-build", "caddy", "web", "postgres", "api",
-    ], environment);
-    const fixture = JSON.parse(fixtureBytes.toString("utf8"));
-    if (fixture.template.apiCatalogPath !== publicProductPaths.catalog ||
-      fixture.template.apiDetailPath !== publicProductPaths.detail ||
-      fixture.template.productPath !== publicProductPaths.product) fail();
-    const [landing, catalogResponse, detailResponse, routeResponse] = await Promise.all([
-      waitFor(fixture.landing.route),
-      waitFor(fixture.template.apiCatalogPath),
-      waitFor(fixture.template.apiDetailPath),
-      waitFor(fixture.template.productPath),
-    ]);
-    const catalog = JSON.parse(catalogResponse.body);
-    const detail = JSON.parse(detailResponse.body);
-    if (!landing.body.includes(`<title>${fixture.landing.documentTitle}</title>`) ||
-      !routeResponse.body.includes(`<title>${fixture.landing.documentTitle}</title>`) ||
-      catalog.templates?.[0]?.id !== fixture.template.id ||
-      detail.template?.id !== fixture.template.id) fail();
-    const entries = parseComposePs(compose(["ps", "--format", "json"], environment, true));
-    const services = entries.map((entry) => entry.Service).filter(Boolean).sort();
-    verifyRecordedProductObservation({
-      services,
-      origin: publicOrigin,
-      fixtureSha256: sha256(fixtureBytes),
-    });
-    await chmod(fixtureOutput, 0o400);
-    succeeded = true;
-    process.stdout.write(`${JSON.stringify(createRecordedProductObservation({
-      fixtureSha256: sha256(fixtureBytes),
-    }))}\n`);
-  } finally {
-    compose(["down", "--volumes", "--remove-orphans"], environment);
-    const leftovers = [
-      docker(["ps", "-aq", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
-      docker(["network", "ls", "-q", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
-      docker(["volume", "ls", "-q", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
-    ].join("").trim();
-    await rm(temporaryDirectory, { recursive: true, force: true });
-    if (!succeeded) await rm(fixtureOutput, { force: true });
-    if (leftovers) fail("Recorded product Compose cleanup is incomplete");
-  }
+  await runRecordedProductLifecycle({
+    execute: async () => {
+      await assertExactTlsPortAvailable({
+        bindExactTlsPort,
+        startDockerReservation: () => startDockerReservation(environment),
+        removeDockerReservation: () => removeDockerReservation(environment),
+      });
+      compose([
+        "up", "--detach", "--pull", "never", "--no-build", "caddy", "web", "postgres", "api",
+      ], environment);
+      const fixture = JSON.parse(fixtureBytes.toString("utf8"));
+      if (fixture.template.apiCatalogPath !== publicProductPaths.catalog ||
+        fixture.template.apiDetailPath !== publicProductPaths.detail ||
+        fixture.template.productPath !== publicProductPaths.product) fail();
+      const [landing, catalogResponse, detailResponse, routeResponse] = await Promise.all([
+        waitFor(fixture.landing.route),
+        waitFor(fixture.template.apiCatalogPath),
+        waitFor(fixture.template.apiDetailPath),
+        waitFor(fixture.template.productPath),
+      ]);
+      const catalog = JSON.parse(catalogResponse.body);
+      const detail = JSON.parse(detailResponse.body);
+      if (!landing.body.includes(`<title>${fixture.landing.documentTitle}</title>`) ||
+        !routeResponse.body.includes(`<title>${fixture.landing.documentTitle}</title>`) ||
+        catalog.templates?.[0]?.id !== fixture.template.id ||
+        detail.template?.id !== fixture.template.id) fail();
+      const entries = parseComposePs(compose(["ps", "--format", "json"], environment, true));
+      const services = entries.map((entry) => entry.Service).filter(Boolean).sort();
+      verifyRecordedProductObservation({
+        services,
+        origin: publicOrigin,
+        fixtureSha256: sha256(fixtureBytes),
+      });
+      await chmod(fixtureOutput, 0o400);
+      process.stdout.write(`${JSON.stringify(createRecordedProductObservation({
+        fixtureSha256: sha256(fixtureBytes),
+      }))}\n`);
+    },
+    cleanupCompose: async () => compose(["down", "--volumes", "--remove-orphans"], environment),
+    inspectResidue: async () => {
+      const leftovers = [
+        docker(["ps", "-aq", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
+        docker(["network", "ls", "-q", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
+        docker(["volume", "ls", "-q", "--filter", `label=com.docker.compose.project=${project}`], environment, true),
+      ].join("").trim();
+      if (leftovers) fail("Recorded product Compose cleanup is incomplete");
+    },
+    removeTemporary: async () => rm(temporaryDirectory, { recursive: true, force: true }),
+    removeFailedFixture: async () => rm(fixtureOutput, { force: true }),
+  });
 }
 
 main().catch(() => {

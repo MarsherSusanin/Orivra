@@ -21,6 +21,16 @@ fails. The current implementation is intentionally RED because that lifecycle
 entrypoint is absent. Candidate and OCI bytes remain unchanged but cannot be
 published; no credential, registry, host or production effect is authorized.
 
+The GREEN correction exports that lifecycle from the pure recorded-product
+runtime and makes the executable gate delegate all four terminal phases to it.
+It continues after each cleanup failure, removes a non-PASS fixture whenever
+any phase fails, and returns the sole causal error or an ordered
+`AggregateError`. Typecheck, the focused recorded-product/unified inventory
+24/24, real product Compose gate and serialized deployment static 263/263 are
+PASS after the correction; a fresh full candidate and two new same-tree
+verifier PASS reports remain mandatory because the rejected candidate cannot
+be reused.
+
 ## 2026-08-13 current-tree release compatibility correction
 
 The first authorized freeze of `b77c9a5` passed the full matrix, recovery and

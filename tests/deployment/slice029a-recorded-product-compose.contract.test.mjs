@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -86,7 +86,7 @@ test("029A removes failed fixture and generated secrets even when Compose cleanu
   const parent = await mkdtemp(join(tmpdir(), "proofline-029a-product-cleanup-"));
   const temporaryDirectory = join(parent, "private-runtime");
   const fixtureOutput = join(parent, "recorded-product-fixture.v1.json");
-  await import("node:fs/promises").then(({ mkdir }) => mkdir(temporaryDirectory, { mode: 0o700 }));
+  await mkdir(temporaryDirectory, { mode: 0o700 });
   await writeFile(join(temporaryDirectory, "generated-database-secret"), "private", { mode: 0o600 });
   await writeFile(fixtureOutput, "non-pass", { mode: 0o600 });
   const phases = [];

@@ -54,3 +54,34 @@ export function verifyRecordedProductObservation({
   ) invalid();
   return true;
 }
+
+export async function runRecordedProductLifecycle({
+  execute,
+  cleanupCompose,
+  inspectResidue,
+  removeTemporary,
+  removeFailedFixture,
+}) {
+  const operations = [execute, cleanupCompose, inspectResidue, removeTemporary];
+  if (operations.some((operation) => typeof operation !== "function") ||
+    typeof removeFailedFixture !== "function") invalid();
+  const failures = [];
+  for (const operation of operations) {
+    try {
+      await operation();
+    } catch (cause) {
+      failures.push(cause);
+    }
+  }
+  if (failures.length > 0) {
+    try {
+      await removeFailedFixture();
+    } catch (cause) {
+      failures.push(cause);
+    }
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new AggregateError(failures, "Recorded product Compose lifecycle failed");
+  }
+}
