@@ -2,9 +2,8 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: GHCR chunked-upload production-author GREEN on corrective RED base
-`756a4aa` / `7a064e0`; fresh Core/Product verification pending; zero images,
-publication evidence or staging effects exist.
+Status: Fixed 1 MiB GHCR chunk corrective RED after a real first-PATCH socket
+failure; zero images, publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -336,3 +335,25 @@ typecheck, exact pure focus 61/61, GHCR/staging/roadmap 35/35, serialized
 deployment static 214/214 and Sites 46/46 PASS. No credential, registry,
 publication-evidence or staging effect was used for this local author gate;
 fresh same-tree Core and Product verification remains mandatory.
+
+## Real first-PATCH 4 MiB compatibility RED
+
+The authorized chunked attempt revalidated its frozen inputs and passed GHCR
+authentication, token exchange and zero-length upload POST. Its first fixed
+4 MiB PATCH failed with `UND_ERR_SOCKET` after 4,194,726 bytes written and zero
+bytes read. The redacted result remained `publishedImageIds=[]`,
+`failedImageId=caddy`, publication evidence absent and staging absent. No
+credential, token or Location query is recorded here.
+
+The causal tests/docs correction fixes the safety bound at 1 MiB while keeping
+all accepted POST, inclusive range, latest Location, exact cursor, empty digest
+finalizer and no-replay rules. The exact 15,923,972-byte Caddy layer must yield
+16 PATCHes: 15 full 1,048,576-byte chunks and one 195,332-byte final chunk. An
+advertised minimum above 1 MiB still fails before PATCH. This wave has no
+production, credential, network, registry, evidence or staging effect.
+
+Intentional RED classification on exact base `9f82c26` / `ac4339f`: syntax and
+typecheck PASS; focused GHCR/staging/roadmap is 34 PASS plus this one causal
+RED; serialized deployment static is 213 PASS plus the same RED; Sites is
+46/46 PASS. The first PATCH exposes the unchanged 4 MiB body (`4194304`) where
+the frozen bound requires `1048576`, before finalization or PASS authority.

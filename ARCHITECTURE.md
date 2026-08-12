@@ -356,10 +356,11 @@ diagnostic reached upload `POST` 202 and returned singular same-repository
 accepted both exact forms without widening authority. A subsequent authorized
 attempt passed auth/POST/Location, but the monolithic PUT of the 15,923,972-byte
 Caddy layer failed with `UND_ERR_SOCKET`; still no image or evidence/staging
-effect. The production-author replacement uses fixed ordered 4 MiB PATCH
-chunks, strict cursor/Location validation and an empty digest finalizer on RED
-base `756a4aa` / `7a064e0`. Fresh Core/Product verification is required; no
-hosted or deployed claim exists.
+effect. Its fixed 4 MiB replacement then failed on the first PATCH after
+4,194,726 bytes written and zero read. Corrective RED reduces the fixed bound to
+1 MiB while retaining strict cursor/Location validation, empty digest finalizer
+and no replay. Fresh Core/Product verification is required; no hosted or
+deployed claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

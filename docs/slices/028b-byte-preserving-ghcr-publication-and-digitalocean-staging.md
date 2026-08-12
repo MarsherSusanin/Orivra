@@ -1,8 +1,7 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: GHCR chunked-upload production-author GREEN on corrective RED base
-`756a4aa` / `7a064e0`; fresh Core/Product verification is pending and zero
-images, publication evidence or staging effects exist. Prior Core/Product PASS
+Status: Fixed 1 MiB GHCR chunk corrective RED after a real first-PATCH socket
+failure; zero images, publication evidence or staging effects exist. Prior Core/Product PASS
 `70f63cb` / `88ec383` covers superseded adapter bytes and cannot authorize
 publication.
 
@@ -143,11 +142,19 @@ That authorized attempt proved auth, `POST` 202 and the singular Location, then
 the monolithic PUT of the 15,923,972-byte Caddy layer failed with
 `UND_ERR_SOCKET` after 15,924,448 bytes were written. No image ID, publication
 evidence or staging effect exists. The production-author replacement provides
-explicit zero-length `POST`, fixed ordered 4 MiB `PATCH` chunks with inclusive ranges,
+explicit zero-length `POST`, fixed ordered 1 MiB `PATCH` chunks with inclusive ranges,
 validation and exclusive use of every latest returned Location, and an empty
 terminal `PUT` carrying the whole digest. Missing/bad/stale/cross-authority or
-cross-repository Location, invalid cursor, a minimum above 4 MiB, `416` or
+cross-repository Location, invalid cursor, a minimum above 1 MiB, `416` or
 ambiguous mid-chunk failure stops without replay, manifest PUT, PASS evidence
 or staging. Typecheck, pure 61/61, focused 35/35, deployment static 214/214 and
 Sites 46/46 PASS. Fresh same-tree Core and Product verification is required
 before credential use resumes.
+
+The authorized 4 MiB chunk attempt passed auth, token and POST, then its first
+PATCH failed with `UND_ERR_SOCKET` after 4,194,726 bytes written and zero bytes
+read. The result remained `publishedImageIds=[]`, failed on `caddy`, wrote no
+publication evidence and never started staging. Corrective RED fixes the bound
+at 1 MiB: the exact 15,923,972-byte Caddy layer is 16 ordered PATCHes (15 full
+1,048,576-byte chunks plus 195,332 bytes). All existing Location/cursor,
+bodyless-finalizer and no-replay contracts remain unchanged.
