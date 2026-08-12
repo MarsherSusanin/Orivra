@@ -61,3 +61,22 @@ six intentional RED cases; the 029C pure/purity set remains 19 PASS and ten
 intentional RED. Serialized static exposed only those intentional failures plus
 the retained TERM-reap timing control under load; its isolated 12/12 rerun PASS.
 Sites remains 46/46 PASS.
+
+## Production-effect seam correction
+
+The next implementation pause showed that the orchestration-level injected
+`safe-consumer-deployer` and canary resume function did not freeze two actual
+production entrypoints. Corrective RED now requires a pinned-solc, official
+Coston2 import, mode-0400 relayer-file deployer with exact chain/balance/two
+receipt/two runtime-code evidence and atomic canonical registry/deployment
+publication. A second boundary requires absolute file-only direct-pilot CLI
+authority plus a root-owned systemd oneshot/timer that resumes from the real
+host clock, appends only one due checkpoint and cannot terminal-pass before 24
+hours. All failures use injected adapters or local temporary files; no network,
+credential, Docker, systemd installation or production effect is performed.
+
+Classification after this correction: syntax/typecheck PASS; the 029C
+pure/purity focus has 19 retained PASS and 11 intentional RED; the combined
+027B/029B/029C deployment focus has 17 retained PASS and 11 intentional RED;
+nearest compiler/Solidity controls are 4/4 PASS; serialized deployment static
+is 218 PASS plus the same 11 intentional RED; Sites is 46/46 PASS.

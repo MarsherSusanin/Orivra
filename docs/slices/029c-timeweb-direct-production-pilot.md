@@ -27,6 +27,10 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 - preserve database-first composition and Caddy-only 80/443 ingress;
 - deploy Open-Meteo then ETH/USD consumers deterministically and write the
   canonical worker registry before worker startup;
+- run the production-used deployer with pinned solc, official Coston2 registry
+  imports, one mode-0400 relayer-key file, chain/balance checks, two receipts and
+  two nonempty runtime-code observations; atomically publish registry plus
+  deployment evidence with zero final registry on failure;
 - append deployment evidence only after schema/readiness/heartbeat/Timeweb
   PITR and two persisted-live observations pass.
 
@@ -39,6 +43,9 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
   replaying checkpoints;
 - forbid terminal promotion before the full 86400 seconds;
 - keep canonical rollback V2 binding and no-effect denials.
+- install one root-owned hardened systemd oneshot/timer which uses only the host
+  clock, writes the first missing due checkpoint mode 0400 and cannot publish an
+  early terminal result.
 
 ## Frozen RED
 
@@ -52,6 +59,11 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
    causally rejects generic preflight success, freezes deterministic consumer
    deployment/Caddy cutover order and proves trusted-clock resume cannot PASS
    early through import-safe injected adapters.
+4. `tests/deployment/slice029c-production-effect-seams.contract.test.mjs`
+   freezes the production-used safe-consumer deployer, strict evidence pair,
+   file-only CLI boundary and root-owned systemd resume path. Compiler, chain,
+   balance, receipt, code, duplicate-address, path/mode/symlink, clock-skew and
+   atomic-append failures remain credential-free injected cases.
 
 ## Gates
 

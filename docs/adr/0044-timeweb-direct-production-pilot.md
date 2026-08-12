@@ -87,6 +87,23 @@ starts. Worker selection is by manifest SHA through that file; one global safe
 consumer address is forbidden. Partial deployment writes neither registry nor
 deployment PASS.
 
+The production command owns compilation and deployment; the generic promotion
+runtime cannot accept a caller-authored registry as success. It loads the two
+built-in manifests, generates Open-Meteo then ETH/USD source and compiles with
+pinned `solc-0.8.36` against the official Coston2 `ContractRegistry` import
+semantics. It opens the funded relayer key only from an absolute, regular,
+non-symlink mode-0400 file, verifies chain 114 and sufficient balance for both
+estimated deployments, sends exactly two transactions, waits successful exact
+receipts and requires nonempty runtime bytecode at two distinct addresses.
+
+`SafeConsumerDeploymentEvidenceV1` binds compiler/import authority, relayer
+public address and balance requirement, exact registry checksum, both manifest,
+source, bytecode, transaction, block, address and runtime-code identities. The
+canonical registry and deployment evidence are staged together as mode-0400
+files; deployment evidence is published first and the registry is the atomic
+no-replace commit marker. Any failure leaves no final registry and therefore no
+authoritative pair. Secret bytes and paths never enter either artifact.
+
 ### Database, cutover and 24-hour acceptance
 
 Order is PostgreSQL, role bootstrap, checksummed migrator, API, deterministic
@@ -108,6 +125,22 @@ restart validates the canonical accepted prefix and executes only the first
 missing due checkpoint. Gaps, duplicates, substitution, an early trusted time
 or an echoed caller time fail closed. Terminal V2 PASS is impossible before
 86400 elapsed seconds and all four accepted checkpoints.
+
+The production resume entrypoint is a root-owned systemd oneshot triggered by a
+one-minute persistent timer. The unit invokes only
+`/opt/orivra/current/scripts/resume-production-canary.mjs --state-root
+/var/lib/orivra/production-canary`, with umask 0077 and that root as its only
+writable path. It reads canonical state, trusts the real host clock, rejects
+clock regression and caller-supplied future time, and atomically appends only
+the first missing due mode-0400 checkpoint. Terminal promotion remains
+impossible before the host clock reaches cutover plus 86400 seconds. A failed
+append removes its stage and does not advance the accepted prefix.
+
+The direct-pilot CLI accepts only absolute canonical evidence/authority and
+secret-file paths. It constructs the production adapter set before invoking
+`runTimewebDirectProductionPilot`; it cannot pass raw status objects or secret
+values through argv/stdout. The systemd CLI similarly delegates to the bounded
+canary tick runtime rather than fabricating checkpoint observations.
 
 ### Rollback V2
 

@@ -52,6 +52,7 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       "ApplicationRollbackAuthorizationV1Schema",
       "TimewebS3PilotAuthorityV1Schema",
       "SafeConsumerRegistryV1Schema",
+      "SafeConsumerDeploymentEvidenceV1Schema",
       "ProductionPilotPreflightEvidenceV1Schema",
       "ProductionTargetV2Schema",
       "ProductionPromotionAuthorizationV2Schema",
@@ -93,6 +94,50 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       { ...safeConsumers, entries: safeConsumers.entries.map((entry, index) => index ? { ...entry, consumerAddress: safeConsumers.entries[0].consumerAddress } : entry) },
       { ...safeConsumers, entries: safeConsumers.entries.map((entry, index) => index ? { ...entry, consumerAddress: "0x0000000000000000000000000000000000000000" } : entry) },
     ]) expect(() => module.SafeConsumerRegistryV1Schema.parse(invalid)).toThrow();
+  });
+
+  it("binds canonical deployment evidence to pinned solc, official Coston2 imports and the exact registry", async () => {
+    const module = await feature();
+    const evidence = {
+      version: "1",
+      kind: "safe-consumer-deployment-evidence",
+      status: "passed",
+      chainId: 114,
+      compiler: {
+        name: "solc",
+        version: "0.8.36",
+        importAuthority: "official-coston2-contract-registry",
+      },
+      relayer: {
+        address: "0x3333333333333333333333333333333333333333",
+        balanceBeforeWei: "1000000000000000000",
+        requiredBalanceWei: "4000000000000000",
+      },
+      registrySha256: checksum(safeConsumers),
+      deployments: safeConsumers.entries.map((entry, index) => ({
+        ...entry,
+        contractName: index === 0
+          ? "OrivraOpenMeteoCurrentWeatherConsumer"
+          : "OrivraEthUsdConsumer",
+        compiledSourceSha256: sha(String(index + 1)),
+        bytecodeSha256: sha(String(index + 3)),
+        transactionHash: `0x${String(index + 5).repeat(64)}`,
+        blockNumber: String(index + 100),
+        runtimeCodeSha256: sha(String(index + 7)),
+      })),
+      completedAt: "2026-08-12T04:00:00Z",
+    };
+    expect(module.SafeConsumerDeploymentEvidenceV1Schema.parse(evidence)).toEqual(evidence);
+    expect(module.canonicalSerializeSafeConsumerDeploymentEvidence(evidence)).toBe(canonicalJson(evidence));
+    expect(module.checksumSafeConsumerDeploymentEvidence(evidence)).toBe(checksum(evidence));
+    for (const invalid of [
+      { ...evidence, chainId: 1 },
+      { ...evidence, deployments: [...evidence.deployments].reverse() },
+      { ...evidence, registrySha256: sha("9") },
+      { ...evidence, compiler: { ...evidence.compiler, version: "0.8.35" } },
+      { ...evidence, relayer: { ...evidence.relayer, privateKey: "forbidden" } },
+      { ...evidence, deployments: evidence.deployments.map((entry, index) => index ? { ...entry, consumerAddress: evidence.deployments[0].consumerAddress } : entry) },
+    ]) expect(() => module.SafeConsumerDeploymentEvidenceV1Schema.parse(invalid)).toThrow();
   });
 
   it("removes staging from strict direct-pilot V2 authorization while retaining exact publication authority", async () => {

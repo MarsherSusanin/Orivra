@@ -832,6 +832,37 @@ authorization and evidence cross-bind the exact ordered five prior immutable
 digests; expiry, operator and schema compatibility pass before apply.
 Object-only input and `:latest` are forbidden.
 
+The accepted implementation must expose two production-used commands rather
+than only import-safe test runtimes:
+
+```bash
+npm run production:pilot:deploy -- --publication-evidence /opt/orivra/evidence/publication-evidence.v1.json --publication-evidence-sha256-file /opt/orivra/evidence/publication-evidence.v1.sha256 --production-target /opt/orivra/authority/production-target.v2.json --production-target-sha256-file /opt/orivra/authority/production-target.v2.sha256 --object-store-authority /opt/orivra/authority/timeweb-s3-pilot-authority.v1.json --object-store-authority-sha256-file /opt/orivra/authority/timeweb-s3-pilot-authority.v1.sha256 --promotion-authorization /opt/orivra/authority/production-promotion-authorization.v2.json --promotion-authorization-sha256-file /opt/orivra/authority/production-promotion-authorization.v2.sha256 --run /opt/orivra/authority/production-run.v1.json --digitalocean-token-file /opt/orivra/secrets/digitalocean-token --ghcr-pull-token-file /opt/orivra/secrets/ghcr-pull-token --ssh-private-key-file /opt/orivra/secrets/production-ssh-key --timeweb-access-key-file /opt/orivra/secrets/timeweb-access-key --timeweb-secret-key-file /opt/orivra/secrets/timeweb-secret-key --backup-encryption-key-file /opt/orivra/secrets/backup-encryption-key
+npm run production:canary:resume
+```
+
+Every argument above is an absolute file path; no secret value is permitted in
+argv or stdout. The first command uses the real production adapter factory and
+the dedicated safe-consumer deployer. That deployer opens a regular non-symlink
+mode-0400 relayer-key file, checks chain 114 and balance, compiles the exact
+Open-Meteo then ETH/USD built-ins with solc 0.8.36 and official Coston2
+`ContractRegistry` imports, waits two successful receipts and nonempty code,
+then atomically publishes the mode-0400 registry/deployment-evidence pair.
+
+The canary resume command is installed only after its RED/GREEN and two
+stopped-tree reviews:
+
+```bash
+install -o root -g root -m 0644 deploy/systemd/orivra-production-canary.service /etc/systemd/system/orivra-production-canary.service
+install -o root -g root -m 0644 deploy/systemd/orivra-production-canary.timer /etc/systemd/system/orivra-production-canary.timer
+```
+
+The service is a root-owned hardened oneshot with umask 0077 and only
+`/var/lib/orivra/production-canary` writable. Its persistent one-minute timer
+uses the host clock and may append only the first missing due checkpoint. It
+must reject clock regression and caller future-time input; no invocation may
+append promotion evidence before 86400 real seconds after cutover. These are
+frozen commands, not installation or production-PASS claims.
+
 ### Production access inventory (identifiers only)
 
 Never put a password, PAT, API token, private key, database URL or application
@@ -869,11 +900,10 @@ The dedicated Coston2 relayer public address is
 `0xf7726036892E1278a3dDC270098ddf9003cA05eb`; only its private key file is
 root-owned mode `0400`. The address may receive only testnet C2FLR. The public
 Flare testnet verifier key is installed separately. Production start remains
-fail-closed until an accepted replay bundle/preflight pair, one non-zero
-canonical safe-consumer address and DigitalOcean Spaces storage authority are
-installed. Spaces uses one private bucket and distinct writer, reader and
-retention access-key pairs, plus the separately generated WAL-G encryption key.
-Do not substitute fixtures, reuse one broad key for the three roles, or start a
+fail-closed until an accepted replay bundle/preflight pair, the exact two-entry
+mode-0400 safe-consumer registry and the ADR 0044 Timeweb shared-pilot storage
+authority are installed. The shared pilot is an explicit temporary exception
+rather than a least-authority claim. Do not substitute fixtures or start a
 worker that cannot produce live persisted evidence.
 Docker Engine `29.1.3`, Compose `2.40.3`, fail2ban and unattended upgrades are
 active. UFW denies inbound traffic by default, permits public 80/443, rate-limits
