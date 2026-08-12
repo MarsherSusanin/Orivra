@@ -39,6 +39,8 @@ const environment = {
   PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
   PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
   PROOFLINE_SAFE_CONSUMER_ADDRESS: "0x5555555555555555555555555555555555555555",
+  PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE:
+    "/tmp/safe-consumer-registry.v1.json",
   PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/worker-replay-bundle.json",
   PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
     "/tmp/worker-replay-preflight-report.json",
@@ -56,6 +58,7 @@ const runtimeFileVariables = [
   "PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE",
   "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
   "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",
+  "PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE",
   "PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE",
   "PROOFLINE_POSTGRES_PASSWORD_FILE",
 ];
@@ -198,7 +201,7 @@ test("passes exact nonsecret deployment/tree identity to API and worker only", (
   }
 });
 
-test("passes one complete typed worker configuration and two read-only replay inputs", () => {
+test("passes one complete typed worker configuration and three read-only evidence inputs", () => {
   const worker = rendered.model.services?.worker;
   assert.ok(worker);
   for (const sourceContract of [
@@ -211,6 +214,12 @@ test("passes one complete typed worker configuration and two read-only replay in
     `      - type: bind
         source: \${PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:?PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE is required}
         target: /run/proofline/replay/preflight-report.json
+        read_only: true
+        bind:
+          create_host_path: false`,
+    `      - type: bind
+        source: \${PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE:?PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE is required}
+        target: /run/proofline/evidence/safe-consumer-registry.v1.json
         read_only: true
         bind:
           create_host_path: false`,
@@ -235,17 +244,25 @@ test("passes one complete typed worker configuration and two read-only replay in
     PROOFLINE_REPLAY_BUNDLE_PATH: "/run/proofline/replay/bundle.json",
     PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH:
       "/run/proofline/replay/preflight-report.json",
-    PROOFLINE_SAFE_CONSUMER_ADDRESS: environment.PROOFLINE_SAFE_CONSUMER_ADDRESS,
+    PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE:
+      "/run/proofline/evidence/safe-consumer-registry.v1.json",
     PROOFLINE_VERIFIER_API_KEY_FILE: "/run/secrets/worker_verifier_api_key",
     PROOFLINE_VERIFIER_URL: "https://fdc-verifiers-testnet.flare.network",
     PROOFLINE_WORKER_DB_POOL_SIZE: "4",
     PROOFLINE_WORKER_LEASE_HEARTBEAT_MS: "10000",
     PROOFLINE_WORKER_MAX_ATTEMPTS: "8",
   });
-  const replayMounts = (worker.volumes ?? [])
+  const evidenceMounts = (worker.volumes ?? [])
     .filter((mount) => mount.type === "bind")
     .sort((left, right) => String(left.target).localeCompare(String(right.target)));
-  assert.deepEqual(replayMounts, [
+  assert.deepEqual(evidenceMounts, [
+    {
+      type: "bind",
+      source: environment.PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE,
+      target: "/run/proofline/evidence/safe-consumer-registry.v1.json",
+      read_only: true,
+      bind: {},
+    },
     {
       type: "bind",
       source: environment.PROOFLINE_WORKER_REPLAY_BUNDLE_FILE,
@@ -266,14 +283,15 @@ test("passes one complete typed worker configuration and two read-only replay in
     "worker_database_url",
     "worker_verifier_api_key",
   ]);
+  assert.doesNotMatch(runtimeSource, /PROOFLINE_SAFE_CONSUMER_ADDRESS/);
 });
 
-test("fails render when any required worker policy, address or host replay file is absent", () => {
+test("fails render when any required worker policy, registry or host replay file is absent", () => {
   for (const name of [
     "PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI",
     "PROOFLINE_RELAYER_BALANCE_FLOOR_WEI",
     "PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA",
-    "PROOFLINE_SAFE_CONSUMER_ADDRESS",
+    "PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE",
     "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
     "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",
   ]) {

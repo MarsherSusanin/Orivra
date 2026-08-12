@@ -42,3 +42,22 @@ the runtime. No network, Docker, production or hosted effect runs in RED.
   credentialed promotion/canary statement.
 
 Only tests and canonical documentation belong to this commit.
+
+## Retained 027B compatibility correction
+
+The first GREEN implementation pause exposed stale retained 027B assertions:
+they still authorized one global `PROOFLINE_SAFE_CONSUMER_ADDRESS` and exactly
+two worker bind mounts. The corrected contract requires the host
+`PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE`, mounted read-only at
+`/run/proofline/evidence/safe-consumer-registry.v1.json`, as the third evidence
+input. A missing registry file must fail in the production wrapper before its
+Docker adapter is invoked. The old address is absent from the rendered worker
+environment. The paused production stash was inspected read-only and was
+neither applied nor modified.
+
+The corrected retained 027B file classifies 10 controls PASS and three causal
+RED cases. The combined focused deployment set classifies 17 controls PASS and
+six intentional RED cases; the 029C pure/purity set remains 19 PASS and ten
+intentional RED. Serialized static exposed only those intentional failures plus
+the retained TERM-reap timing control under load; its isolated 12/12 rerun PASS.
+Sites remains 46/46 PASS.
