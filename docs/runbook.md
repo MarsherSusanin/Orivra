@@ -669,9 +669,9 @@ and a failed run leaves no published candidate PASS. Preserve a successful
 read-only output for both independent verifiers; do not edit the candidate tree
 or output between their reports.
 
-The corrected terminal 029A candidate is complete. Core and Product
-independently PASS exact commit `fc2f6e0` / tree `f7cebc6`; candidate SHA-256 is
-`8991e7e49f4570702436c269c8f6bd0af7b8f186997bff2a52e6da22f7a0cdda`.
+The current terminal candidate is complete. Core and Product independently
+PASS exact commit `0813628` / tree `5e661b9`; candidate SHA-256 is
+`d00f9ebd20f027bbad54c3f8d946ae3f7e7bb1c6739928aca9c0eb8e65b937fb`.
 
 028B begins only from those immutable candidate bytes and the two exact report
 receipts. Its credentialed preflight requires an explicit canonical mapping
@@ -710,7 +710,7 @@ lowercase `ghcr.io/<owner>/<package>` repositories in frozen image order. The
 token file is a regular non-symlink mode-0400 file under a private operator
 root; do not paste its value into the shell, environment, Git or Codex chat.
 The evidence parent must already be mode 0700 and the output must not exist.
-The command is fixed to candidate `8991e7e4…` and exact Core/Product report
+The command is fixed to candidate `d00f9ebd…` and exact Core/Product report
 hashes. It verifies all five archives before the first registry request and
 writes mode-0400 evidence only after five exact remote manifest-digest checks.
 The earlier 028B implementation received two independent PASS reports on exact

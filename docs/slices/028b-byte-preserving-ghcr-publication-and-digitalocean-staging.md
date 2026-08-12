@@ -76,6 +76,12 @@ promotion, or run a canary. 029B owns production promotion/canary after accepted
 - the five frozen 029A OCI archives pass the single-descriptor parser and exact
   manifest-digest revalidation without registry or external network access.
 
+The active publication handoff was refreshed after the Timeweb direct-pilot
+release corrections. Exact producer `0813628` / tree `5e661b9`, candidate
+`d00f9ebd...`, Core report `67c16579...` and Product report `500b43e5...` are
+the only accepted authority for the next real GHCR publication. This refresh
+does not rebuild or mutate any of the five frozen OCI archives.
+
 Core report `/private/tmp/proofline-028b-verifiers/70f63cb/core-verifier.md` has
 SHA-256 `8d4175ccad0e19ae5333ad35a4d3edb55204195a6688eee3d13c8d9962f4a38c`.
 Product report `/private/tmp/proofline-028b-verifiers/70f63cb/product-verifier.md`

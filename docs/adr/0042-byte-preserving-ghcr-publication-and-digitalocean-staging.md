@@ -7,10 +7,10 @@
 
 ## Context
 
-Slice 029A is complete on exact commit
-`fc2f6e0677c64dc4f2ee90a85219bcc9f8c9bfbc` / tree
-`f7cebc6ed3842f296b3be1c96645e2dd8cdfe5bd`. Its canonical candidate SHA-256
-is `8991e7e49f4570702436c269c8f6bd0af7b8f186997bff2a52e6da22f7a0cdda`.
+The current release candidate is complete on exact commit
+`081362877e6f05a94368c60cc0dc4ea20d338fba` / tree
+`5e661b933aeb53a0fa87c5e7d50ed2659d0a6542`. Its canonical candidate SHA-256
+is `d00f9ebd20f027bbad54c3f8d946ae3f7e7bb1c6739928aca9c0eb8e65b937fb`.
 Core and Product independently PASS that exact tree. This authorizes an
 operator to provide narrowly scoped 028B credentials, but does not itself
 publish a registry image, provision a VDS or prove hosted staging.
