@@ -38,7 +38,9 @@ const runtimeComposeEnvironment = {
   PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
   PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
   PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
+  PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT: "/opt/orivra/evidence",
   PROOFLINE_SAFE_CONSUMER_ADDRESS: "0x5555555555555555555555555555555555555555",
+  PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: "/tmp/safe-consumer-registry.v1.json",
   PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/proofline-worker-replay-bundle.json",
   PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
     "/tmp/proofline-worker-replay-preflight-report.json",
@@ -183,11 +185,11 @@ test("binds QA only to exact loopback HTTPS 443 without random HTTP authority", 
   assert.doesNotMatch(caddy, /target:\s*80|PROOFLINE_QA_HTTP_PORT|PROOFLINE_CADDY_SITE_ADDRESS|:\s*80/);
 });
 
-test("renders one semantic production Compose model with the exact 027B service inventory", () => {
+test("renders one semantic production Compose model with the exact eight-service runtime inventory", () => {
   assert.equal(rendered.status, 0, rendered.stderr || "docker compose config must pass");
   assert.deepEqual(
     Object.keys(rendered.model.services ?? {}).sort(),
-    ["api", "caddy", "db-role-bootstrap", "migrator", "postgres", "web", "worker"],
+    ["api", "caddy", "db-role-bootstrap", "migrator", "postgres", "safe-consumer-deployer", "web", "worker"],
   );
 });
 
@@ -208,7 +210,7 @@ test("activates only Caddy and Web when no runtime profile is requested", () => 
 
 test("promotes the 027B runtime without a hidden Compose profile", () => {
   const services = rendered.model.services ?? {};
-  for (const name of ["caddy", "web", "postgres", "db-role-bootstrap", "migrator", "api", "worker"]) {
+  for (const name of ["caddy", "web", "postgres", "db-role-bootstrap", "migrator", "api", "safe-consumer-deployer", "worker"]) {
     assert.deepEqual(services[name]?.profiles ?? [], []);
   }
   assert.deepEqual(services.caddy?.depends_on ?? {}, {
@@ -216,15 +218,6 @@ test("promotes the 027B runtime without a hidden Compose profile", () => {
     web: { condition: "service_started", required: true },
   });
   assert.equal(services.caddy?.depends_on?.worker, undefined);
-  assert.deepEqual(Object.keys(rendered.model.services ?? {}).sort(), [
-    "api",
-    "caddy",
-    "db-role-bootstrap",
-    "migrator",
-    "postgres",
-    "web",
-    "worker",
-  ]);
 });
 
 test("enforces the exact five-network membership and internal boundaries", () => {
@@ -343,6 +336,33 @@ test("rejects privileged, Docker-socket, host-network and unbounded service defa
       String(typeof entry === "string" ? entry : entry.target).startsWith("/tmp")),
     "Caddy must receive a bounded /tmp tmpfs",
   );
+});
+
+test("runs the safe-consumer deployer once and hands one no-replace evidence root to the worker", () => {
+  const services = rendered.model.services ?? {};
+  const deployer = services["safe-consumer-deployer"];
+  assert.ok(deployer, "safe-consumer-deployer must be an exact runtime service");
+  assert.equal(deployer.image, services.worker?.image);
+  assert.deepEqual(deployer.command, ["node", "/app/apps/worker/dist/safe-consumer-deployer.js"]);
+  assert.equal(deployer.restart, "no");
+  assert.deepEqual(deployer.environment, {
+    PROOFLINE_COSTON2_PRIVATE_KEY_FILE: "/run/secrets/worker_coston2_private_key",
+    PROOFLINE_COSTON2_RPC_URL: "https://coston2-api.flare.network/ext/C/rpc",
+  });
+  assert.equal(deployer.depends_on?.migrator?.condition, "service_completed_successfully");
+  assert.equal(services.worker?.depends_on?.["safe-consumer-deployer"]?.condition, "service_completed_successfully");
+  const outputMount = (deployer.volumes ?? []).find((mount) => mount.target === "/opt/orivra/evidence");
+  assert.deepEqual(outputMount, {
+    type: "bind",
+    source: runtimeComposeEnvironment.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT,
+    target: "/opt/orivra/evidence",
+    bind: {},
+  });
+  const registryMount = (services.worker?.volumes ?? []).find((mount) =>
+    mount.target === "/run/proofline/evidence/safe-consumer-registry.v1.json");
+  assert.equal(registryMount?.source, `${runtimeComposeEnvironment.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT}/safe-consumer-registry.v1.json`);
+  assert.equal(registryMount?.read_only, true);
+  assert.doesNotMatch(runtimeComposeSource, /PROOFLINE_SAFE_CONSUMER_ADDRESS|PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE/);
 });
 
 test("requires immutable production application images and pull never", () => {

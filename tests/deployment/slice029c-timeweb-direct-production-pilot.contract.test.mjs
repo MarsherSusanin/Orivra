@@ -33,10 +33,11 @@ async function runtime() {
   return import("../../scripts/digitalocean-production-promotion-runtime.mjs").catch(() => ({}));
 }
 
-async function fixture() {
-  const publication = JSON.parse(await readFile(resolve(root, "tests/fixtures/slice029b-publication-evidence.v1.json"), "utf8"));
+async function fixture(transform = (publication) => publication) {
+  const historical = JSON.parse(await readFile(resolve(root, "tests/fixtures/slice029b-publication-evidence.v1.json"), "utf8"));
+  const publication = transform(structuredClone(historical));
   const publicationEvidenceBytes = bytes(publication);
-  assert.equal(digest(publicationEvidenceBytes), PUBLICATION_SHA);
+  const publicationEvidenceSha256 = digest(publicationEvidenceBytes);
   const objectStore = {
     version: "1", kind: "timeweb-s3-pilot-authority", provider: "timeweb-s3",
     endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet",
@@ -53,12 +54,12 @@ async function fixture() {
   const productionTargetBytes = bytes(target);
   const authorization = {
     version: "2", kind: "production-promotion-authorization", status: "authorized", promote: true,
-    deploymentMode: "direct-pilot", publicationEvidenceSha256: PUBLICATION_SHA,
+    deploymentMode: "direct-pilot", publicationEvidenceSha256,
     productionTargetSha256: digest(productionTargetBytes), objectStoreAuthoritySha256: digest(objectStoreAuthorityBytes),
     operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
     authorizedAt: "2026-08-12T02:10:00Z", expiresAt: "2026-08-12T02:40:00Z",
   };
-  return { publication, publicationEvidenceBytes, objectStore, objectStoreAuthorityBytes, target, productionTargetBytes, authorization, promotionAuthorizationBytes: bytes(authorization) };
+  return { publication, publicationEvidenceBytes, publicationEvidenceSha256, objectStore, objectStoreAuthorityBytes, target, productionTargetBytes, authorization, promotionAuthorizationBytes: bytes(authorization) };
 }
 
 const fileInputs = Object.freeze({
@@ -75,7 +76,7 @@ const fileInputs = Object.freeze({
 
 const commonInput = (value) => ({
   publicationEvidenceBytes: value.publicationEvidenceBytes,
-  expectedPublicationEvidenceSha256: PUBLICATION_SHA,
+  expectedPublicationEvidenceSha256: value.publicationEvidenceSha256,
   productionTargetBytes: value.productionTargetBytes,
   expectedProductionTargetSha256: digest(value.productionTargetBytes),
   objectStoreAuthorityBytes: value.objectStoreAuthorityBytes,
@@ -137,7 +138,7 @@ function productionDeploymentEvidenceV2(value) {
     version: "2", kind: "digitalocean-production-deployment-evidence",
     status: "passed", verification: "verified", productionClaim: true,
     producer: value.publication.producer,
-    publicationEvidenceSha256: PUBLICATION_SHA,
+    publicationEvidenceSha256: value.publicationEvidenceSha256,
     frozenReleaseManifestSha256: value.publication.frozenRelease.frozenReleaseManifestSha256,
     promotionAuthorizationSha256: digest(value.promotionAuthorizationBytes),
     preflightEvidenceSha256: sha("6"), target: value.target,
@@ -190,6 +191,31 @@ test("direct pilot rejects generic status-only preflight before one production e
     }), /PRODUCTION_PREFLIGHT_INVALID|Production pilot preflight is invalid/, label);
     assert.equal(effects, 0, label);
   }
+});
+
+test("direct pilot rejects historical GHCR observations against newly published canonical evidence", async () => {
+  const module = await runtime();
+  const historical = await fixture();
+  assert.equal(historical.publicationEvidenceSha256, PUBLICATION_SHA);
+  const current = await fixture((publication) => ({
+    ...publication,
+    producer: { commitSha: "a".repeat(40), treeSha: "b".repeat(40) },
+    images: publication.images.map((image, index) => {
+      const remoteDigest = sha(String.fromCharCode(97 + index));
+      return { ...image, imageManifestDigest: remoteDigest, remoteDigest, remoteReference: `${image.remoteRepository}@${remoteDigest}` };
+    }),
+  }));
+  assert.notEqual(current.publicationEvidenceSha256, PUBLICATION_SHA);
+  let effects = 0;
+  await assert.rejects(module.runTimewebDirectProductionPilot({
+    ...commonInput(current),
+    clock: { now: () => "2026-08-12T02:20:00Z" },
+    preflightAdapter: { verify: async (id) => id === "read-only-ghcr"
+      ? preflight(historical, id)
+      : preflight(current, id) },
+    productionAdapter: { provision: async () => { effects += 1; } },
+  }), /PRODUCTION_PREFLIGHT_INVALID|Production pilot preflight is invalid/);
+  assert.equal(effects, 0);
 });
 
 test("direct pilot deploys exactly two manifest-bound consumers and writes the registry before worker", async () => {

@@ -800,10 +800,12 @@ from the exact 028B publication; historical staging evidence is not fabricated
 or accepted as V2 authority.
 
 ADR 0044 is intentional RED after Product rejected candidate `99918ab` /
-`a24d08a`; no production effect is eligible for verification. The current exact publication
-checkpoint is the canonical 4285-byte `PublicationEvidenceV1` with SHA-256
+`a24d08a`; no production effect is eligible for verification. The historical
+publication checkpoint is the canonical 4285-byte `PublicationEvidenceV1` with SHA-256
 `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
-The operator must pass those bytes and checksum together with canonical V2
+It is compatibility evidence and cannot authorize 029C bytes produced after
+its tree. The operator must create a fresh verified 028A/029A/028B publication,
+then pass its new canonical bytes and checksum together with canonical V2
 production target, exact Timeweb authority bytes/checksum and unexpired V2
 authorization. V2 contains no staging field.
 
@@ -819,6 +821,15 @@ publication references exactly to the five `PROOFLINE_*_IMAGE` variables,
 pulls/re-inspects by digest and starts:
 
 `postgres → db-role-bootstrap → migrator → api → safe-consumer-deployer → write-safe-consumer-registry → worker → web → caddy-candidate`.
+
+The runtime overlay has exactly eight services: the retained seven plus the
+one-shot `safe-consumer-deployer`. The host provides only
+`PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT=/opt/orivra/evidence`. Before deployer
+execution, both `safe-consumer-deployment-evidence.v1.json` and
+`safe-consumer-registry.v1.json` are absent. Before worker startup, both are
+regular non-symlink mode-0400 files; the worker registry bind derives from that
+root and is read-only. The phases are separate so Compose does not create the
+worker bind source before the deployer commits it.
 
 Only Caddy publishes 80/443. PostgreSQL 5432 and API/worker ports remain
 private, with no Docker socket. Stage V2 deployment evidence only after schema

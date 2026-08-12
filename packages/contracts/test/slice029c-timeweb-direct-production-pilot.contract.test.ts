@@ -6,7 +6,14 @@ import { describe, expect, it } from "vitest";
 const OPEN_METEO = "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8";
 const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
 const sha = (digit: string) => `sha256:${digit.repeat(64).slice(0, 64)}`;
-const ghcrImages = [
+const repositories = [
+  ["caddy", "ghcr.io/marshersusanin/orivra-caddy"],
+  ["web", "ghcr.io/marshersusanin/orivra-web"],
+  ["api", "ghcr.io/marshersusanin/orivra-api"],
+  ["worker", "ghcr.io/marshersusanin/orivra-worker"],
+  ["postgres-recovery", "ghcr.io/marshersusanin/orivra-postgres-recovery"],
+] as const;
+const historicalGhcrImages = [
   ["caddy", "ghcr.io/marshersusanin/orivra-caddy", "cc394659cd7962ef02cfb2faf341334f4baef1f16f0fd776bbd8354e10270fe1"],
   ["web", "ghcr.io/marshersusanin/orivra-web", "581d85c7ca0e8445843cce0e1d948a09a2a7b8a4b523d694f717ca1769934513"],
   ["api", "ghcr.io/marshersusanin/orivra-api", "c1a4e45a3982c45259ecbec48bf449ccdb5e9817b364bed7e6cf01f41eaddd33"],
@@ -16,6 +23,11 @@ const ghcrImages = [
   id,
   remoteReference: `${remoteRepository}@sha256:${digest}`,
   remoteDigest: `sha256:${digest}`,
+}));
+const currentGhcrImages = repositories.map(([id, remoteRepository], index) => ({
+  id,
+  remoteReference: `${remoteRepository}@${sha(String.fromCharCode(97 + index))}`,
+  remoteDigest: sha(String.fromCharCode(97 + index)),
 }));
 const timewebCapabilities = ["PUT", "HEAD", "LIST", "GET", "DELETE"]
   .map((operation) => ({ operation, status: "passed" }));
@@ -186,7 +198,7 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       checks: [
         { check: "dns-target", status: "passed", dnsName: "orivra.xyz", addresses: ["72.56.81.28"] },
         { check: "ssh-host-key", status: "passed", host: "72.56.81.28", port: 22, expectedHostKeySha256: sha("2"), observedHostKeySha256: sha("2") },
-        { check: "read-only-ghcr", status: "passed", registry: "ghcr.io", access: "read-only", images: ghcrImages },
+        { check: "read-only-ghcr", status: "passed", registry: "ghcr.io", access: "read-only", images: currentGhcrImages },
         { check: "secret-files", status: "passed", fileIdsSha256: sha("3"), valuesExposed: false },
         {
           check: "timeweb-s3-authority", status: "passed", authoritySha256: checksum(timewebAuthority),
@@ -205,6 +217,12 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       ],
     };
     expect(module.ProductionPilotPreflightEvidenceV1Schema.parse(evidence)).toEqual(evidence);
+    expect(module.ProductionPilotPreflightEvidenceV1Schema.parse({
+      ...evidence,
+      checks: evidence.checks.map((value) => value.check === "read-only-ghcr"
+        ? { ...value, images: historicalGhcrImages }
+        : value),
+    })).toBeDefined();
     expect(() => module.ProductionPilotPreflightEvidenceV1Schema.parse({ ...evidence, checks: evidence.checks.map(() => ({ status: "passed" })) })).toThrow();
     expect(() => module.ProductionPilotPreflightEvidenceV1Schema.parse({ ...evidence, checks: evidence.checks.slice(0, 7) })).toThrow();
     const replaceCheck = (id: string, transform: (value: any) => any) => ({
@@ -228,6 +246,48 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       replaceCheck("live-coston2", (value) => ({ ...value, dataAvailabilityUrl: "https://example.invalid" })),
       replaceCheck("live-coston2", (value) => ({ ...value, balanceWei: "1e18" })),
     ]) expect(() => module.ProductionPilotPreflightEvidenceV1Schema.parse(invalid)).toThrow();
+  });
+
+  it("keeps V2 publication identity dynamic while fixing only ordered canonical GHCR repositories", async () => {
+    const module = await feature();
+    const target = {
+      version: "2", kind: "digitalocean-production-target", provider: "digitalocean", environment: "production",
+      deploymentMode: "direct-pilot", deploymentId: "orivra-production-primary", composeProject: "proofline-production-primary",
+      publicOrigin: "https://orivra.xyz", dnsName: "orivra.xyz",
+      sshEndpoint: { host: "72.56.81.28", port: 22, hostKeySha256: sha("1") }, ingress: [80, 443], objectStore: timewebAuthority,
+    };
+    for (const publicationEvidenceSha256 of [sha("2"), sha("9")]) {
+      expect(module.ProductionPromotionAuthorizationV2Schema.parse({
+        version: "2", kind: "production-promotion-authorization", status: "authorized", promote: true,
+        deploymentMode: "direct-pilot", publicationEvidenceSha256,
+        productionTargetSha256: checksum(target), objectStoreAuthoritySha256: checksum(timewebAuthority),
+        operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+        authorizedAt: "2026-08-12T02:10:00Z", expiresAt: "2026-08-12T02:40:00Z",
+      })).toBeDefined();
+    }
+    const currentEvidence = {
+      version: "1", kind: "production-pilot-preflight-evidence", status: "passed",
+      targetSha256: sha("1"), objectStoreAuthoritySha256: checksum(timewebAuthority),
+      checks: [
+        { check: "dns-target", status: "passed", dnsName: "orivra.xyz", addresses: ["72.56.81.28"] },
+        { check: "ssh-host-key", status: "passed", host: "72.56.81.28", port: 22, expectedHostKeySha256: sha("2"), observedHostKeySha256: sha("2") },
+        { check: "read-only-ghcr", status: "passed", registry: "ghcr.io", access: "read-only", images: currentGhcrImages },
+        { check: "secret-files", status: "passed", fileIdsSha256: sha("3"), valuesExposed: false },
+        { check: "timeweb-s3-authority", status: "passed", authoritySha256: checksum(timewebAuthority), authorityMode: "shared-pilot", endpoint: timewebAuthority.endpoint, region: timewebAuthority.region, bucket: timewebAuthority.bucket, pathStyle: true, capabilities: timewebCapabilities },
+        { check: "replay-bundle", status: "passed", bundleSha256: sha("4"), reportSha256: sha("5") },
+        { check: "safe-consumer-manifests", status: "passed", registrySha256: checksum(safeConsumers), manifests: [["open-meteo-current-weather", OPEN_METEO], ["eth-usd", ETH_USD]] },
+        { check: "live-coston2", status: "passed", chainId: 114, rpcUrl: "https://coston2-api.flare.network/ext/C/rpc", dataAvailabilityUrl: "https://ctn2-data-availability.flare.network", relayerAddress: "0x3333333333333333333333333333333333333333", balanceWei: "1000000000000000000", authorization: "configured" },
+      ],
+    };
+    expect(module.ProductionPilotPreflightEvidenceV1Schema.parse(currentEvidence)).toEqual(currentEvidence);
+    for (const invalid of [
+      currentGhcrImages.map((image, index) => index ? image : { ...image, remoteReference: historicalGhcrImages[0].remoteReference }),
+      currentGhcrImages.map((image, index) => index ? image : { ...image, remoteDigest: historicalGhcrImages[0].remoteDigest }),
+      currentGhcrImages.map((image, index) => index ? image : { ...image, remoteReference: image.remoteReference.replace("orivra-caddy", "other") }),
+    ]) expect(() => module.ProductionPilotPreflightEvidenceV1Schema.parse({
+      ...currentEvidence,
+      checks: currentEvidence.checks.map((value) => value.check === "read-only-ghcr" ? { ...value, images: invalid } : value),
+    })).toThrow();
   });
 
   it("retains rollback V1 as data but requires a separately canonical V2 authority for V2 effect", async () => {

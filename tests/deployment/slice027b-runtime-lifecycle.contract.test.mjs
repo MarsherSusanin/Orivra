@@ -38,9 +38,9 @@ const environment = {
   PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
   PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
   PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
+  PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT: "/tmp/safe-consumer-evidence",
   PROOFLINE_SAFE_CONSUMER_ADDRESS: "0x5555555555555555555555555555555555555555",
-  PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE:
-    "/tmp/safe-consumer-registry.v1.json",
+  PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: "/tmp/safe-consumer-registry.v1.json",
   PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/worker-replay-bundle.json",
   PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
     "/tmp/worker-replay-preflight-report.json",
@@ -65,6 +65,9 @@ const runtimeFileVariables = [
 
 async function materializeRuntimeFiles(directory) {
   const result = { ...environment };
+  const evidenceRoot = join(directory, "safe-consumer-evidence");
+  await mkdir(evidenceRoot, { mode: 0o700 });
+  result.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT = evidenceRoot;
   for (const name of runtimeFileVariables) {
     const path = join(directory, name.toLowerCase());
     await writeFile(path, `fixture for ${name}\n`, { mode: 0o600 });
@@ -100,7 +103,7 @@ function secretTargets(service) {
 
 const rendered = render();
 
-test("renders exact seven-service runtime without the 027A profile block", () => {
+test("renders exact eight-service runtime without the 027A profile block", () => {
   assert.equal(rendered.status, 0, rendered.stderr || "runtime compose config must render");
   assert.deepEqual(Object.keys(rendered.model.services ?? {}).sort(), [
     "api",
@@ -108,6 +111,7 @@ test("renders exact seven-service runtime without the 027A profile block", () =>
     "db-role-bootstrap",
     "migrator",
     "postgres",
+    "safe-consumer-deployer",
     "web",
     "worker",
   ]);
@@ -123,7 +127,7 @@ test("keeps the independently renderable base limited to Caddy and Web", () => {
   assert.deepEqual(Object.keys(base.model.services ?? {}).sort(), ["caddy", "web"]);
 });
 
-test("orders engine health, role bootstrap, migration and both application processes exactly", () => {
+test("orders engine health, migration, safe-consumer deployment and both application processes exactly", () => {
   const services = rendered.model.services ?? {};
   assert.deepEqual(services["db-role-bootstrap"]?.depends_on, {
     postgres: { condition: "service_healthy", required: true },
@@ -139,6 +143,8 @@ test("orders engine health, role bootstrap, migration and both application proce
     );
     assert.equal(services[name]?.depends_on?.postgres?.condition, "service_healthy");
   }
+  assert.equal(services["safe-consumer-deployer"]?.depends_on?.migrator?.condition, "service_completed_successfully");
+  assert.equal(services.worker?.depends_on?.["safe-consumer-deployer"]?.condition, "service_completed_successfully");
   assert.deepEqual(services.caddy?.depends_on, {
     api: { condition: "service_healthy", required: true },
     web: { condition: "service_started", required: true },
@@ -196,7 +202,7 @@ test("passes exact nonsecret deployment/tree identity to API and worker only", (
     assert.equal(services[name]?.environment?.PROOFLINE_DEPLOYMENT_ID, environment.PROOFLINE_DEPLOYMENT_ID);
     assert.equal(services[name]?.environment?.PROOFLINE_RELEASE_TREE_SHA, environment.PROOFLINE_RELEASE_TREE_SHA);
   }
-  for (const name of ["caddy", "web", "postgres", "db-role-bootstrap", "migrator"]) {
+  for (const name of ["caddy", "web", "postgres", "db-role-bootstrap", "migrator", "safe-consumer-deployer"]) {
     assert.equal(services[name]?.environment?.PROOFLINE_DEPLOYMENT_ID, undefined);
   }
 });
@@ -218,7 +224,7 @@ test("passes one complete typed worker configuration and three read-only evidenc
         bind:
           create_host_path: false`,
     `      - type: bind
-        source: \${PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE:?PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE is required}
+        source: \${PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT:?PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT is required}/safe-consumer-registry.v1.json
         target: /run/proofline/evidence/safe-consumer-registry.v1.json
         read_only: true
         bind:
@@ -258,7 +264,7 @@ test("passes one complete typed worker configuration and three read-only evidenc
   assert.deepEqual(evidenceMounts, [
     {
       type: "bind",
-      source: environment.PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE,
+      source: `${environment.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT}/safe-consumer-registry.v1.json`,
       target: "/run/proofline/evidence/safe-consumer-registry.v1.json",
       read_only: true,
       bind: {},
@@ -286,12 +292,12 @@ test("passes one complete typed worker configuration and three read-only evidenc
   assert.doesNotMatch(runtimeSource, /PROOFLINE_SAFE_CONSUMER_ADDRESS/);
 });
 
-test("fails render when any required worker policy, registry or host replay file is absent", () => {
+test("fails render when any required worker policy, evidence root or host replay file is absent", () => {
   for (const name of [
     "PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI",
     "PROOFLINE_RELAYER_BALANCE_FLOOR_WEI",
     "PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA",
-    "PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE",
+    "PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT",
     "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
     "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",
   ]) {
@@ -313,6 +319,42 @@ test("fails render when any required worker policy, registry or host replay file
     );
     assert.notEqual(result.status, 0, `${name} must fail before Compose effects`);
     assert.match(result.stderr, new RegExp(name));
+  }
+});
+
+test("requires an empty canonical evidence root before deployer and an exact mode-0400 pair before worker", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "proofline-safe-consumer-lifecycle-"));
+  try {
+    const evidenceRoot = join(directory, "evidence");
+    await mkdir(evidenceRoot, { mode: 0o700 });
+    const module = await import(`${pathToFileURL(resolve(root, "scripts/compose-production.mjs")).href}?safe-consumer=${Date.now()}`);
+    const deploymentEvidencePath = join(evidenceRoot, "safe-consumer-deployment-evidence.v1.json");
+    const registryPath = join(evidenceRoot, "safe-consumer-registry.v1.json");
+    assert.deepEqual(await module.validateSafeConsumerEvidenceLifecycle({
+      evidenceRoot,
+      phase: "before-deployer",
+    }), { evidenceRoot, deploymentEvidencePath, registryPath });
+    await writeFile(registryPath, "{}", { mode: 0o400 });
+    await assert.rejects(module.validateSafeConsumerEvidenceLifecycle({
+      evidenceRoot,
+      phase: "before-deployer",
+    }), /SAFE_CONSUMER_EVIDENCE_PREEXISTS|safe-consumer evidence/i);
+    await assert.rejects(module.validateSafeConsumerEvidenceLifecycle({
+      evidenceRoot,
+      phase: "before-worker",
+    }), /SAFE_CONSUMER_EVIDENCE_INCOMPLETE|safe-consumer evidence/i);
+    await writeFile(deploymentEvidencePath, "{}", { mode: 0o400 });
+    assert.deepEqual(await module.validateSafeConsumerEvidenceLifecycle({
+      evidenceRoot,
+      phase: "before-worker",
+    }), { evidenceRoot, deploymentEvidencePath, registryPath });
+    await chmod(registryPath, 0o600);
+    await assert.rejects(module.validateSafeConsumerEvidenceLifecycle({
+      evidenceRoot,
+      phase: "before-worker",
+    }), /SAFE_CONSUMER_EVIDENCE_INVALID|safe-consumer evidence/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

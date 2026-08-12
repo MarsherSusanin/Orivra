@@ -29,12 +29,18 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
   PUT/HEAD/LIST/GET/DELETE capability observations, and live Coston2 to chain
   114, canonical RPC/DA, public relayer address, decimal balance and configured
   authorization;
+- keep five IDs/order/repositories fixed but derive digests/references from the
+  newly authorized canonical publication; the old 028B fixture is parsing
+  compatibility only;
 - use the existing VDS only through pinned SSH, with no DigitalOcean API token;
 - exclude the generated registry from input inventory, prove its fixed output
   path absent before deploy, then publish it atomically mode 0400/no-replace;
 - preserve database-first composition and Caddy-only 80/443 ingress;
 - deploy Open-Meteo then ETH/USD consumers deterministically and write the
   canonical worker registry before worker startup;
+- extend retained runtime Compose to exactly eight services with one hardened
+  one-shot deployer; use one evidence root, require both outputs absent before
+  deploy and regular mode 0400 before worker;
 - run the production-used deployer with pinned solc, official Coston2 registry
   imports, one mode-0400 relayer-key file, chain/balance checks, two receipts and
   two nonempty runtime-code observations; atomically publish registry plus
@@ -78,6 +84,8 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
    file-only CLI boundary and root-owned systemd resume path. Compiler, chain,
    balance, receipt, code, duplicate-address, path/mode/symlink, clock-skew and
    atomic-append failures remain credential-free injected cases.
+5. Retained 027A/027B deployment tests freeze the eight-service Compose
+   inventory and two-phase safe-consumer evidence lifecycle.
 
 ## Gates
 

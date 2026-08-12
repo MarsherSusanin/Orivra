@@ -175,3 +175,35 @@ intentional RED; the exact two deployment files remain nine intentional RED;
 serialized deployment static remains 218 controls plus 12 intentional RED
 (nine 029C and three retained 027B); Sites is 46/46 PASS. No credential,
 provider, host, registry or live effect ran.
+
+## Compose lifecycle and publication rebinding correction
+
+Read-only audit on exact clean base
+`d0b076abc66e6e9c7e7609d7ce991a4cf277e02e` / tree
+`1c2599053197f060be5cf9c3c2d7ed596ce17200` found two retained gaps. The
+027A/027B suites capped runtime Compose at seven services and modeled the
+generated registry as an independent host input. Corrective RED requires the
+eighth hardened one-shot `safe-consumer-deployer`, one canonical evidence root,
+both final files absent before deployer execution and the exact regular
+mode-0400 pair before worker startup. The worker bind derives from that root
+and remains read-only.
+
+The old 028B publication SHA
+`1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`
+is retained only as a compatibility fixture. Corrective pure and deployment
+tests synthesize a second canonical five-image publication, bind a fresh V2
+authorization to its independently computed checksum, require the plan to use
+only its ordered digest references, and reject the old otherwise-valid GHCR
+observation before provisioning. IDs/order/repositories remain fixed; digests
+are not hard-coded into the V2 schema. This tests/docs-only wave performs no
+Docker, registry, credential, host or Coston2 effect, and the saved production
+stash is not inspected, applied, modified or dropped.
+
+Classification for this correction: syntax and typecheck PASS; the exact
+contracts/domain focus is one retained control plus 12 intentional RED; the
+029C deployment file is five intentional RED; retained 027A/027B focus is 24
+controls plus eight intentional RED. Serialized deployment static is 215
+controls plus the same 18 intentional RED (eight Compose/lifecycle and ten
+existing/new 029C effect seams). Sites remains 46/46 PASS. Failures are the
+missing production contracts/services/helpers only; no fixture, syntax or
+unexpected control failure remains.

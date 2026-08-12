@@ -19,12 +19,13 @@ async function feature(): Promise<Record<string, any>> {
   return import(/* @vite-ignore */ path).catch(() => ({}));
 }
 
-async function fixture() {
-  const publication = JSON.parse(await readFile(
+async function fixture(transform: (publication: any) => any = (publication) => publication) {
+  const historical = JSON.parse(await readFile(
     new URL("../../../tests/fixtures/slice029b-publication-evidence.v1.json", import.meta.url), "utf8",
   ));
+  const publication = transform(structuredClone(historical));
   const publicationEvidenceBytes = utf8(publication);
-  expect(checksum(publicationEvidenceBytes)).toBe(PUBLICATION_SHA);
+  const publicationEvidenceSha256 = checksum(publicationEvidenceBytes);
   const objectStore = {
     version: "1", kind: "timeweb-s3-pilot-authority", provider: "timeweb-s3",
     endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet",
@@ -41,17 +42,17 @@ async function fixture() {
   const targetBytes = utf8(target);
   const authorization = {
     version: "2", kind: "production-promotion-authorization", status: "authorized", promote: true,
-    deploymentMode: "direct-pilot", publicationEvidenceSha256: PUBLICATION_SHA,
+    deploymentMode: "direct-pilot", publicationEvidenceSha256,
     productionTargetSha256: checksum(targetBytes), objectStoreAuthoritySha256: checksum(objectStoreBytes),
     operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
     authorizedAt: "2026-08-12T02:10:00Z", expiresAt: "2026-08-12T02:40:00Z",
   };
-  return { publication, publicationEvidenceBytes, objectStore, objectStoreBytes, target, targetBytes, authorization, authorizationBytes: utf8(authorization) };
+  return { publication, publicationEvidenceBytes, publicationEvidenceSha256, objectStore, objectStoreBytes, target, targetBytes, authorization, authorizationBytes: utf8(authorization) };
 }
 
 const input = (value: any) => ({
   publicationEvidenceBytes: value.publicationEvidenceBytes,
-  expectedPublicationEvidenceSha256: PUBLICATION_SHA,
+  expectedPublicationEvidenceSha256: value.publicationEvidenceSha256,
   productionTargetBytes: value.targetBytes,
   expectedProductionTargetSha256: checksum(value.targetBytes),
   objectStoreAuthorityBytes: value.objectStoreBytes,
@@ -66,13 +67,41 @@ describe("Slice 029C direct-production pilot authority", () => {
     const module = await feature();
     const value = await fixture();
     const authority = module.verifyDirectProductionPilotHandoff(input(value));
-    expect(authority.publicationEvidenceSha256).toBe(PUBLICATION_SHA);
+    expect(value.publicationEvidenceSha256).toBe(PUBLICATION_SHA);
+    expect(authority.publicationEvidenceSha256).toBe(value.publicationEvidenceSha256);
     expect(authority.target.deploymentMode).toBe("direct-pilot");
     expect(authority.objectStore).toEqual(value.objectStore);
     expect(authority).not.toHaveProperty("staging");
     expect(authority.authorization).not.toHaveProperty("stagingDeploymentEvidenceSha256");
     expect(Object.isFrozen(authority)).toBe(true);
     expect(Object.isFrozen(authority.images[0])).toBe(true);
+  });
+
+  it("cross-binds a newly published five-image set and rejects historical publication authority", async () => {
+    const module = await feature();
+    const value = await fixture((publication) => ({
+      ...publication,
+      producer: { commitSha: "a".repeat(40), treeSha: "b".repeat(40) },
+      images: publication.images.map((image: any, index: number) => {
+        const remoteDigest = sha(String.fromCharCode(97 + index));
+        return { ...image, imageManifestDigest: remoteDigest, remoteDigest, remoteReference: `${image.remoteRepository}@${remoteDigest}` };
+      }),
+    }));
+    expect(value.publicationEvidenceSha256).not.toBe(PUBLICATION_SHA);
+    const authority = module.verifyDirectProductionPilotHandoff(input(value));
+    expect(authority.images.map((image: any) => image.remoteReference)).toEqual(
+      value.publication.images.map((image: any) => image.remoteReference),
+    );
+    expect(authority.images.map((image: any) => image.remoteReference)).not.toEqual(
+      (await fixture()).publication.images.map((image: any) => image.remoteReference),
+    );
+    const historicalAuthorization = { ...value.authorization, publicationEvidenceSha256: PUBLICATION_SHA };
+    const historicalAuthorizationBytes = utf8(historicalAuthorization);
+    expect(() => module.verifyDirectProductionPilotHandoff({
+      ...input(value),
+      promotionAuthorizationBytes: historicalAuthorizationBytes,
+      expectedPromotionAuthorizationSha256: checksum(historicalAuthorizationBytes),
+    })).toThrow();
   });
 
   it("plans exact five digests, typed preflights and one deterministic two-consumer deployer before worker", async () => {

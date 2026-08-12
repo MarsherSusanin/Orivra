@@ -7,12 +7,15 @@
 
 ## Context
 
-The five immutable GHCR images are published under canonical
+The first five immutable GHCR images were published under canonical
 `PublicationEvidenceV1` SHA-256
 `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
-There is no accepted staging deployment. The pilot therefore deploys that
-published release directly to the existing DigitalOcean VDS production
-boundary; it does not fabricate staging evidence.
+That record remains a compatibility fixture, not authority for production code
+changed after its producer tree. A deployable 029C candidate requires a fresh
+028A/029A/028B publication and fresh V2 authorization bound to those exact
+canonical bytes. There is no accepted staging deployment; the pilot deploys a
+newly authorized release directly to the existing DigitalOcean VDS production
+boundary and does not fabricate staging evidence.
 
 Product verification rejected exact candidate
 `99918ab43c2186286f8fd0f116dcff6e13f7aba6` / tree
@@ -40,8 +43,9 @@ staging-evidence field. Unknown fields, object-only input and caller mutation
 after verification fail before effect.
 
 The compute target remains one DigitalOcean VDS with Caddy-only public ports
-80/443 and private API, worker and PostgreSQL networks. The exact five ordered
-GHCR digest references remain unchanged.
+80/443 and private API, worker and PostgreSQL networks. Image IDs, order and
+canonical GHCR repositories are fixed; digest references derive only from the
+currently authorized canonical `PublicationEvidenceV1`.
 
 ### Timeweb shared-pilot storage
 
@@ -111,6 +115,16 @@ files; deployment evidence is published first and the registry is the atomic
 no-replace commit marker. Any failure leaves no final registry and therefore no
 authoritative pair. Secret bytes and paths never enter either artifact.
 
+Production Compose contains an eighth one-shot `safe-consumer-deployer`
+service sharing the worker image but not worker database/verifier authority.
+One host `PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT` is mounted read/write only at
+`/opt/orivra/evidence` in that deployer; the worker mounts only the derived
+`safe-consumer-registry.v1.json` read-only at its internal registry path. Both
+final evidence files must be absent before deployer execution and regular,
+non-symlink mode-0400 files before worker startup. Worker depends on successful
+deployer completion. A second host registry-path variable and the legacy
+global address remain forbidden.
+
 ### Complete typed preflight authority
 
 `ProductionPilotPreflightEvidenceV1` is strict and binds the effect authority,
@@ -123,7 +137,11 @@ observations. The Coston2 observation binds chain 114, canonical RPC
 `https://coston2-api.flare.network/ext/C/rpc`, canonical DA
 `https://ctn2-data-availability.flare.network`, public relayer address,
 decimal balance and configured authorization. Missing, extra, reordered or
-mismatched authority fails before provisioning.
+mismatched authority fails before provisioning. The five GHCR records accept a
+new immutable digest only when IDs, order and repositories are exact and every
+reference is internally consistent. Effect authorization cross-binds the full
+tuple to parsed publication bytes; a valid observation for the historical
+fixture cannot authorize a newer publication.
 
 ### Database, cutover and 24-hour acceptance
 
