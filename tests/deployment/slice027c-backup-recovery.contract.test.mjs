@@ -128,37 +128,52 @@ test("extends credential-isolated prefetch and both offline build passes with th
   assert.match(build, /for\s*\([^)]*(?:1|repetition)[\s\S]*(?:2|repetition)/);
 });
 
-test("parses exact backup configuration and returns only fixed redacted errors", async () => {
-  const module = await optionalImport("scripts/backup-configuration.mjs");
+test("retains exact historical Spaces recovery data without making it active production authority", async () => {
+  const [module, adr0037, adr0044] = await Promise.all([
+    optionalImport("scripts/backup-configuration.mjs"),
+    source("docs/adr/0037-wal-archiving-and-pitr-recovery.md"),
+    source("docs/adr/0044-timeweb-direct-production-pilot.md"),
+  ]);
   assert.equal(typeof module.parseProductionBackupConfiguration, "function");
   assert.equal(typeof module.parseRestorePlan, "function");
-  const base = {
+  const historicalSpacesConfiguration = Object.freeze({
     PROOFLINE_BACKUP_SLOT: "production",
     PROOFLINE_BACKUP_ENDPOINT: "https://nyc3.digitaloceanspaces.com",
     PROOFLINE_BACKUP_REGION: "nyc3",
     PROOFLINE_BACKUP_BUCKET: "proofline-production-backups",
-  };
-  assert.deepEqual(module.parseProductionBackupConfiguration(base), {
-    slot: "production",
-    endpoint: "https://nyc3.digitaloceanspaces.com",
-    region: "nyc3",
-    bucket: "proofline-production-backups",
   });
-  for (const environment of [
-    { ...base, PROOFLINE_BACKUP_SLOT: "qa" },
-    { ...base, PROOFLINE_BACKUP_ENDPOINT: "http://nyc3.digitaloceanspaces.com" },
-    { ...base, PROOFLINE_BACKUP_ENDPOINT: "https://user@nyc3.digitaloceanspaces.com" },
-    { ...base, PROOFLINE_BACKUP_REGION: "ams3" },
-    { ...base, PROOFLINE_BACKUP_BUCKET: "Invalid_Bucket" },
-    { ...base, AWS_SECRET_ACCESS_KEY: "ambient-secret" },
-  ]) {
-    assert.throws(
-      () => module.parseProductionBackupConfiguration(environment),
-      (error) => error?.code === "BACKUP_CONFIGURATION_INVALID" &&
-        error?.message === "Backup configuration is invalid" &&
-        !JSON.stringify(error).includes("ambient-secret"),
-    );
-  }
+  assert.deepEqual(historicalSpacesConfiguration, {
+    PROOFLINE_BACKUP_SLOT: "production",
+    PROOFLINE_BACKUP_ENDPOINT: "https://nyc3.digitaloceanspaces.com",
+    PROOFLINE_BACKUP_REGION: "nyc3",
+    PROOFLINE_BACKUP_BUCKET: "proofline-production-backups",
+  });
+  assert.match(adr0037, /DigitalOcean Spaces endpoint/);
+  assert.match(adr0037, /https:\/\/<region>\.digitaloceanspaces\.com/);
+  assert.match(adr0044, /DigitalOcean-Spaces `BackupEvidenceV1` remains historical/);
+  assert.match(adr0044, /endpoint `https:\/\/s3\.twcstorage\.ru`, region `ru-1`/);
+  assert.throws(
+    () => module.parseProductionBackupConfiguration({
+      ...historicalSpacesConfiguration,
+      AWS_SECRET_ACCESS_KEY: "ambient-secret",
+    }),
+    (error) => error?.code === "BACKUP_CONFIGURATION_INVALID" &&
+      error?.message === "Backup configuration is invalid" &&
+      !JSON.stringify(error).includes("ambient-secret"),
+  );
+
+  const restore = {
+    PROOFLINE_RESTORE_BACKUP_ID: "base_0123456789ABCDEF01234567",
+    PROOFLINE_RESTORE_BACKUP_EVIDENCE_SHA256: `sha256:${"a".repeat(64)}`,
+    PROOFLINE_RECOVERY_TARGET_TIME: "2026-08-12T00:00:00.000000Z",
+    PROOFLINE_RECOVERY_TARGET_TIMELINE: "1",
+  };
+  assert.deepEqual(module.parseRestorePlan(restore), {
+    backupId: restore.PROOFLINE_RESTORE_BACKUP_ID,
+    backupEvidenceSha256: restore.PROOFLINE_RESTORE_BACKUP_EVIDENCE_SHA256,
+    targetTime: restore.PROOFLINE_RECOVERY_TARGET_TIME,
+    timeline: 1,
+  });
 });
 
 test("adds exact file-only backup secrets without exposing values or arbitrary files", async () => {

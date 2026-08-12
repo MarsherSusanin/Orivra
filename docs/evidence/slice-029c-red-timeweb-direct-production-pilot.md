@@ -350,3 +350,19 @@ the retained 027A/027B focus is 13 PASS plus 19 intentional RED; serialized
 deployment static is 204 PASS plus 50 intentional RED; Sites is 46/46 PASS.
 The one corrected generic runtime lifecycle control moved from fixture-caused
 RED to PASS while the absent production deployer/seal boundaries remain RED.
+
+## Historical Spaces parser compatibility correction
+
+The retained 027C deployment test no longer sends the historical DigitalOcean
+Spaces configuration through the active production parser selected by 029C.
+It preserves the exact ADR0037 Spaces record and `BackupEvidenceV1` history as
+data, keeps the strict restore-plan parser executable, and separately proves
+ADR0044 selects exact Timeweb shared-pilot authority. Historical evidence stays
+readable without restoring obsolete Spaces deployment authority.
+
+Classification on exact base `d9fb6091c6c5ac5d3c989a867f7a800a6671222a`
+/ tree `e1fe37c73bb9888e2c1a285ce4ef95c96c564887`: syntax and typecheck PASS;
+isolated retained 027C is 15/15 PASS; exact serialized static rerun is 204 PASS
+plus 50 intentional 029C/compatibility RED; Sites is 46/46 PASS. The first
+static run had two unchanged timing-sensitive retained failures under load;
+the unchanged rerun and isolated affected suite classify the correction.
