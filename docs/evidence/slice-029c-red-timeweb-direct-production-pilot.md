@@ -80,3 +80,24 @@ pure/purity focus has 19 retained PASS and 11 intentional RED; the combined
 027B/029B/029C deployment focus has 17 retained PASS and 11 intentional RED;
 nearest compiler/Solidity controls are 4/4 PASS; serialized deployment static
 is 218 PASS plus the same 11 intentional RED; Sites is 46/46 PASS.
+
+## Worker registry fixture compatibility
+
+A later GREEN pause exposed two retained worker suites whose success fixtures
+still constructed `PROOFLINE_SAFE_CONSUMER_ADDRESS`. They now share one
+canonical exact two-entry registry fixture written mode 0400 and provide only
+`PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE`. Success expectations carry the parsed
+registry authority, never the legacy address or host path. Missing, relative,
+symlinked, wrong-mode and malformed registry files fail before Pool, schema,
+heartbeat, claim or network effects. The production source and built worker
+remain forbidden from using the legacy variable or a NODE_ENV test bridge. The
+paused GREEN stash was not inspected, applied, modified or dropped.
+
+On exact compatibility base `460d9c697fc50e87449d12720a4643f690183b97`
+the two retained worker files classify as 31 controls plus 22 intentional RED:
+the accepted registry-file boundary is absent from the stopped production
+source, so rejection happens before Pool or network authority. The 029C/purity
+focus remains 18 controls plus 12 intentional RED, serialized deployment
+static is 217 controls plus the same 12 intentional RED, and Sites remains
+46/46 PASS. Typecheck and diff-check PASS. These are RED evidence, not a
+production, hosted or live-Coston2 claim.

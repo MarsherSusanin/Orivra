@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -28,6 +28,11 @@ import {
   testLiveCoston2RuntimeConfig,
   testWorkerAuthoritySlices,
 } from "./live-runtime-config.fixture";
+import {
+  testSafeConsumerRegistry,
+  testSafeConsumerRegistryCanonicalJson,
+  writeTestSafeConsumerRegistry,
+} from "./safe-consumer-registry.fixture";
 
 const mocks = vi.hoisted(() => {
   const databaseResult = () => ({
@@ -88,6 +93,7 @@ import {
 let replayDirectory = "";
 let replayBundlePath = "";
 let replayPreflightReportPath = "";
+let safeConsumerRegistryPath = "";
 
 function environment(overrides: Record<string, string | undefined> = {}) {
   return {
@@ -99,8 +105,7 @@ function environment(overrides: Record<string, string | undefined> = {}) {
     PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000",
     PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
     PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
-    PROOFLINE_SAFE_CONSUMER_ADDRESS:
-      "0x5555555555555555555555555555555555555555",
+    PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: safeConsumerRegistryPath,
     PROOFLINE_REPLAY_BUNDLE_PATH: replayBundlePath,
     PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: replayPreflightReportPath,
     PROOFLINE_DEPLOYMENT_ID: `deployment_${"a".repeat(64)}`,
@@ -113,6 +118,7 @@ beforeAll(async () => {
   replayDirectory = await mkdtemp(join(tmpdir(), "proofline-slice005-replay-"));
   replayBundlePath = join(replayDirectory, "bundle.json");
   replayPreflightReportPath = join(replayDirectory, "preflight-report.json");
+  safeConsumerRegistryPath = join(replayDirectory, "safe-consumer-registry.v1.json");
   const input = makeBundleInput();
   const manifest = {
     ...exactTrustManifest,
@@ -155,10 +161,12 @@ beforeAll(async () => {
       replayPreflightReportPath,
       canonicalSerializePreflightReport(report),
     ),
+    writeTestSafeConsumerRegistry(safeConsumerRegistryPath),
   ]);
 });
 
 afterAll(async () => {
+  if (safeConsumerRegistryPath) await chmod(safeConsumerRegistryPath, 0o600).catch(() => {});
   if (replayDirectory) await rm(replayDirectory, { recursive: true, force: true });
 });
 
@@ -198,6 +206,11 @@ const replayEvidence = Object.freeze({
   bundleSha256: `sha256:${"a".repeat(64)}`,
   preflightReportCanonicalJson: '{"version":"1"}',
   preflightReportSha256: `sha256:${"b".repeat(64)}`,
+  safeConsumerRegistry: testSafeConsumerRegistry,
+  safeConsumerRegistryCanonicalJson: testSafeConsumerRegistryCanonicalJson,
+  safeConsumerRegistrySha256: `sha256:${createHash("sha256")
+    .update(testSafeConsumerRegistryCanonicalJson)
+    .digest("hex")}`,
 });
 
 function serializeForRedaction(value: unknown): string {
@@ -385,7 +398,8 @@ describe("Slice 005 production worker process lifecycle", () => {
   );
 
   it.each([
-    ["safe consumer", { PROOFLINE_SAFE_CONSUMER_ADDRESS: "" }],
+    ["safe consumer registry", { PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: "" }],
+    ["relative safe consumer registry", { PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: "safe-consumer-registry.json" }],
     ["replay bundle", { PROOFLINE_REPLAY_BUNDLE_PATH: "" }],
     ["replay report", { PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: "" }],
     ["verifier endpoint", { PROOFLINE_VERIFIER_URL: "http://verifier.invalid" }],
@@ -406,6 +420,27 @@ describe("Slice 005 production worker process lifecycle", () => {
     );
     expectNoStartupEffects();
     expect(mocks.pool.end).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing, symlinked, wrong-mode and malformed consumer registry before Pool or claims", async () => {
+    const missing = join(replayDirectory, "missing-safe-consumer-registry.json");
+    const link = join(replayDirectory, "safe-consumer-registry-link.json");
+    await symlink(safeConsumerRegistryPath, link);
+    const wrongMode = join(replayDirectory, "safe-consumer-registry-wrong-mode.json");
+    await writeFile(wrongMode, testSafeConsumerRegistryCanonicalJson, { mode: 0o600 });
+    await chmod(wrongMode, 0o600);
+    const malformed = join(replayDirectory, "safe-consumer-registry-malformed.json");
+    await writeFile(malformed, '{"kind":"safe-consumer-registry"}', { mode: 0o400 });
+    await chmod(malformed, 0o400);
+    for (const path of [missing, link, wrongMode, malformed]) {
+      await expectRedactedRuntimeConfigurationError(
+        () => startProductionWorker(environment({
+          PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: path,
+        })),
+        [path],
+      );
+      expectNoStartupEffects();
+    }
   });
 
   it("rejects invalid relayer policy before creating Pool or temporary readiness authority", async () => {
@@ -462,7 +497,7 @@ describe("Slice 005 production worker process lifecycle", () => {
       "relayerAccount",
       "relayerPolicy",
       "rpcUrl",
-      "safeConsumerAddress",
+      "safeConsumerRegistry",
     ]);
     expect(Object.isFrozen(liveInput.runtimeConfig)).toBe(true);
     expect(Object.isFrozen(liveInput.runtimeConfig.relayerPolicy)).toBe(true);
@@ -476,6 +511,7 @@ describe("Slice 005 production worker process lifecycle", () => {
       "verifier-key",
       replayBundlePath,
       replayPreflightReportPath,
+      safeConsumerRegistryPath,
       `deployment_${"a".repeat(64)}`,
       "b".repeat(40),
     ]) {

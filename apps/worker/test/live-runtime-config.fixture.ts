@@ -4,6 +4,7 @@ import type {
   WorkerReplayEvidence,
 } from "../src/worker-runtime-configuration";
 import { privateKeyToAccount } from "viem/accounts";
+import { testSafeConsumerRegistry } from "./safe-consumer-registry.fixture";
 
 const TEST_PRIVATE_KEY = `0x${"1".repeat(64)}` as const;
 
@@ -34,10 +35,10 @@ export function testLiveCoston2RuntimeConfig(
     receiptPollTimeoutMs: 25_000,
     daTimeoutMs: 15_000,
     relayerAccount: Object.freeze(privateKeyToAccount(TEST_PRIVATE_KEY)),
-    safeConsumerAddress: "0x5555555555555555555555555555555555555555",
+    safeConsumerRegistry: testSafeConsumerRegistry,
     ...remainingOverrides,
     relayerPolicy,
-  });
+  } as unknown as LiveCoston2RuntimeConfig);
 }
 
 export function testWorkerAuthoritySlices() {

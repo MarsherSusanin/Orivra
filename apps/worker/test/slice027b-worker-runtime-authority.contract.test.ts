@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { constants } from "node:fs";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -25,6 +26,11 @@ import {
   canonicalSerializeProofBundle,
   createProofBundle,
 } from "@proofline/domain";
+import {
+  testSafeConsumerRegistry,
+  testSafeConsumerRegistryCanonicalJson,
+  writeTestSafeConsumerRegistry,
+} from "./safe-consumer-registry.fixture";
 
 type Environment = Record<string, string | undefined>;
 type RuntimeModule = {
@@ -60,8 +66,8 @@ function environment(overrides: Environment = {}): Environment {
     PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
     PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
     PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
-    PROOFLINE_SAFE_CONSUMER_ADDRESS:
-      "0x5555555555555555555555555555555555555555",
+    PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE:
+      "/run/proofline/evidence/safe-consumer-registry.v1.json",
     PROOFLINE_REPLAY_BUNDLE_PATH: "/run/proofline/replay/bundle.json",
     PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH:
       "/run/proofline/replay/preflight-report.json",
@@ -123,15 +129,18 @@ async function replayFiles(input: {
   temporaryDirectories.push(directory);
   const bundlePath = join(directory, "bundle.json");
   const reportPath = join(directory, "preflight-report.json");
+  const registryPath = join(directory, "safe-consumer-registry.v1.json");
   const source = replaySource();
   const report = boundReport(source);
   const bundleCanonicalJson = canonicalSerializeProofBundle(source);
   const preflightReportCanonicalJson = canonicalSerializePreflightReport(report);
   await writeFile(bundlePath, input.bundle ?? bundleCanonicalJson);
   await writeFile(reportPath, input.report ?? preflightReportCanonicalJson);
+  await writeTestSafeConsumerRegistry(registryPath);
   return {
     bundlePath,
     reportPath,
+    registryPath,
     source,
     report,
     bundleCanonicalJson,
@@ -188,9 +197,12 @@ describe("Slice 027B worker runtime configuration authority", () => {
   });
 
   it("parses one immutable typed configuration with fixed Coston2 authority and no raw key", async () => {
+    const fixture = await replayFiles();
     const module = await runtimeModule();
     expect(module.parseWorkerRuntimeConfig).toBeTypeOf("function");
-    const config = module.parseWorkerRuntimeConfig!(environment());
+    const config = module.parseWorkerRuntimeConfig!(environment({
+      PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: fixture.registryPath,
+    }));
 
     expect(config).toMatchObject({
       chainId: 114,
@@ -208,7 +220,7 @@ describe("Slice 027B worker runtime configuration authority", () => {
         balanceFloorWei: 1_000n,
         dailyProjectQuota: 4,
       },
-      safeConsumerAddress: "0x5555555555555555555555555555555555555555",
+      safeConsumerRegistryPath: fixture.registryPath,
     });
     expect(config.relayerAccount?.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
     expect(serializeForRedaction(config)).not.toContain(PRIVATE_KEY);
@@ -225,10 +237,8 @@ describe("Slice 027B worker runtime configuration authority", () => {
     ["global cap", { PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "01" }],
     ["balance floor", { PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "-1" }],
     ["quota", { PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "0" }],
-    ["zero safe consumer", {
-      PROOFLINE_SAFE_CONSUMER_ADDRESS:
-        "0x0000000000000000000000000000000000000000",
-    }],
+    ["missing registry", { PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: "" }],
+    ["relative registry", { PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: "registry.json" }],
     ["relative bundle", { PROOFLINE_REPLAY_BUNDLE_PATH: "bundle.json" }],
     ["relative report", {
       PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: "preflight-report.json",
@@ -282,6 +292,7 @@ describe("Slice 027B worker runtime configuration authority", () => {
     const config = module.parseWorkerRuntimeConfig!(environment({
       PROOFLINE_REPLAY_BUNDLE_PATH: fixture.bundlePath,
       PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: fixture.reportPath,
+      PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: fixture.registryPath,
     }));
     const evidence = await module.loadWorkerReplayEvidence!(config);
 
@@ -293,6 +304,11 @@ describe("Slice 027B worker runtime configuration authority", () => {
       preflightReportCanonicalJson: fixture.preflightReportCanonicalJson,
       preflightReportSha256: `sha256:${createHash("sha256")
         .update(fixture.preflightReportCanonicalJson)
+        .digest("hex")}`,
+      safeConsumerRegistry: testSafeConsumerRegistry,
+      safeConsumerRegistryCanonicalJson: testSafeConsumerRegistryCanonicalJson,
+      safeConsumerRegistrySha256: `sha256:${createHash("sha256")
+        .update(testSafeConsumerRegistryCanonicalJson)
         .digest("hex")}`,
     });
     expect(Object.isFrozen(evidence)).toBe(true);
@@ -344,6 +360,7 @@ describe("Slice 027B worker runtime configuration authority", () => {
     const config = module.parseWorkerRuntimeConfig!(environment({
       PROOFLINE_REPLAY_BUNDLE_PATH: fixture.bundlePath,
       PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: fixture.reportPath,
+      PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: fixture.registryPath,
     }));
     await expectConfigurationFailure(
       () => module.loadWorkerReplayEvidence!(config),
@@ -366,10 +383,36 @@ describe("Slice 027B worker runtime configuration authority", () => {
       const config = module.parseWorkerRuntimeConfig!(environment({
         PROOFLINE_REPLAY_BUNDLE_PATH: bundlePath,
         PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: fixture.reportPath,
+        PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: fixture.registryPath,
       }));
       await expectConfigurationFailure(
         () => module.loadWorkerReplayEvidence!(config),
         [bundlePath],
+      );
+    }
+  });
+
+  it("rejects missing, symlinked, wrong-mode and malformed registry evidence before authority", async () => {
+    const fixture = await replayFiles();
+    const link = join(dirname(fixture.registryPath), "registry-link.json");
+    await symlink(fixture.registryPath, link);
+    const wrongMode = join(dirname(fixture.registryPath), "registry-wrong-mode.json");
+    await writeFile(wrongMode, testSafeConsumerRegistryCanonicalJson, { mode: 0o600 });
+    await chmod(wrongMode, 0o600);
+    const malformed = join(dirname(fixture.registryPath), "registry-malformed.json");
+    await writeFile(malformed, '{"kind":"safe-consumer-registry"}', { mode: 0o400 });
+    await chmod(malformed, 0o400);
+    const missing = join(dirname(fixture.registryPath), "registry-missing.json");
+    const module = await runtimeModule();
+    for (const registryPath of [missing, link, wrongMode, malformed]) {
+      const config = module.parseWorkerRuntimeConfig!(environment({
+        PROOFLINE_REPLAY_BUNDLE_PATH: fixture.bundlePath,
+        PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: fixture.reportPath,
+        PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: registryPath,
+      }));
+      await expectConfigurationFailure(
+        () => module.loadWorkerReplayEvidence!(config),
+        [registryPath],
       );
     }
   });
@@ -387,6 +430,8 @@ describe("Slice 027B worker runtime configuration authority", () => {
     expect(moduleSource).toMatch(/O_RDONLY/);
     expect(moduleSource).toMatch(/O_NOFOLLOW/);
     expect(moduleSource).toMatch(/O_NONBLOCK/);
+    expect(moduleSource).toMatch(/PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE/);
+    expect(moduleSource).not.toMatch(/PROOFLINE_SAFE_CONSUMER_ADDRESS/);
     expect(moduleSource).not.toMatch(
       /parseLegacyLiveCoston2RuntimeConfig|legacyRequired|legacyCanonicalUint256|legacyPositiveInteger/,
     );
