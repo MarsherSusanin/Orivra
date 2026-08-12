@@ -366,3 +366,32 @@ isolated retained 027C is 15/15 PASS; exact serialized static rerun is 204 PASS
 plus 50 intentional 029C/compatibility RED; Sites is 46/46 PASS. The first
 static run had two unchanged timing-sensitive retained failures under load;
 the unchanged rerun and isolated affected suite classify the correction.
+
+## V2 export and registry-selected worker fixture correction
+
+The retained 029B feature inventory now freezes the exact combined V1/V2
+production-promotion exports, root identity and effect-free feature wrapper
+instead of treating the original fifteen V1 names as permanently exhaustive.
+The worker port success fixture now uses the canonical built-in ETH/USD
+manifest, its exact registry manifest SHA and selected consumer address. Wrong
+URL and canonical-vulnerable negatives remain unchanged in authority and the
+safe read must target the registry-selected address; the legacy arbitrary
+`validManifest` plus `"safe"` success shortcut is no longer accepted.
+
+Classification on exact base `a5d945cd6563d11e814061c31f6e2f4100123f3b`
+/ tree `9cc9770e6c26caa70bc22eea9132080f79c68ae0`: typecheck PASS; the exact
+two-file focus is 26 PASS plus two causal intentional RED. Retained
+contracts/domain coverage, excluding the fourteen already frozen 029C/export
+RED cases, remains exactly 100% statements, branches, functions and lines
+(`1623/1623`, `777/777`, `366/366`, `1469/1469`). The authoritative worker
+coverage command is intentionally non-green on this pre-GREEN tree because 24
+frozen registry/V2 tests are the coverage-bearing paths; a filtered 241-PASS
+control run cannot meet the release threshold while those paths are skipped
+(77.64% lines / 74.01% branches). Worker coverage must be rerun unfiltered
+after the production stash satisfies the frozen authority; this RED commit
+does not claim the threshold.
+
+Serialized deployment static remains 204 PASS plus 50 intentional RED and
+Sites remains 46/46 PASS. Syntax/diff checks are clean; no production,
+dependency, Docker, network, credential or generated-output change is part of
+this correction.

@@ -15,13 +15,18 @@ import {
   expectedCanonicalUrl,
   validManifest,
 } from "../../../packages/contracts/test/fixtures";
-import { projectRun } from "@proofline/domain";
+import {
+  canonicalizeManifestUrl,
+  getWeb2JsonTemplateDetail,
+  projectRun,
+} from "@proofline/domain";
 import { createLiveCoston2PipelinePorts } from "../src/live-runtime";
 import {
   createProductionCommandHandlers,
   createRunWorker,
 } from "../src/worker";
 import { testLiveCoston2RuntimeConfig } from "./live-runtime-config.fixture";
+import { testSafeConsumerRegistry } from "./safe-consumer-registry.fixture";
 
 const ADDRESSES = {
   FdcHub: "0x3333333333333333333333333333333333333333",
@@ -32,8 +37,16 @@ const ADDRESSES = {
 } as const;
 const TRANSACTION_HASH = `0x${"2".repeat(64)}`;
 const BLOCK_HASH = `0x${"3".repeat(64)}`;
+const registryTemplate = getWeb2JsonTemplateDetail("eth-usd");
+if (!registryTemplate) throw new Error("ETH/USD registry template fixture is missing");
+const registryManifest = registryTemplate.manifest;
+const registryConsumer = testSafeConsumerRegistry.entries.find(
+  (entry) => entry.manifestSha256 === registryTemplate.template.manifestSha256,
+);
+if (!registryConsumer) throw new Error("ETH/USD safe-consumer fixture is missing");
+const registryCanonicalUrl = canonicalizeManifestUrl(registryManifest);
 
-function encodedResponse(url = expectedCanonicalUrl): Hex {
+function encodedResponse(url = expectedCanonicalUrl, manifest = validManifest): Hex {
   const verify = (fdcVerificationAbi as Abi).find(
     (item) => item.type === "function" && item.name === "verifyWeb2Json",
   ) as Extract<Abi[number], { type: "function" }>;
@@ -53,8 +66,8 @@ function encodedResponse(url = expectedCanonicalUrl): Hex {
           headers: "{}",
           queryParams: "{}",
           body: "{}",
-          postProcessJq: validManifest.request.jq,
-          abiSignature: validManifest.request.abiSignature,
+          postProcessJq: manifest.request.jq,
+          abiSignature: manifest.request.abiSignature,
         },
         responseBody: { abiEncodedData: "0x" },
       },
@@ -592,21 +605,21 @@ describe("live Coston2 pipeline port coverage", () => {
   it("diagnoses wrong URLs, the vulnerable consumer, and calls the safe consumer", async () => {
     const fixture = harness();
     const evidence = (url: string) => ({
-      proof: { response: encodedResponse(url), merkleProof: [] },
+      proof: { response: encodedResponse(url, registryManifest), merkleProof: [] },
       attestationType: "Web2Json",
       relayRoot: "0x",
     });
     await expect(
       fixture.ports.verifyConsumer({
         proof: evidence("https://mirror.invalid/prices/eth"),
-        manifest: validManifest,
-        consumer: "safe",
+        manifest: registryManifest,
+        consumer: registryConsumer.consumerAddress,
       }),
     ).resolves.toMatchObject({ passed: false, diagnostics: expect.any(Array) });
     await expect(
       fixture.ports.verifyConsumer({
-        proof: evidence(expectedCanonicalUrl),
-        manifest: validManifest,
+        proof: evidence(registryCanonicalUrl),
+        manifest: registryManifest,
         consumer: "canonical-vulnerable",
       }),
     ).resolves.toMatchObject({
@@ -615,18 +628,19 @@ describe("live Coston2 pipeline port coverage", () => {
     });
     await expect(
       fixture.ports.verifyConsumer({
-        proof: evidence(expectedCanonicalUrl),
-        manifest: validManifest,
-        consumer: "safe",
+        proof: evidence(registryCanonicalUrl),
+        manifest: registryManifest,
+        consumer: registryConsumer.consumerAddress,
       }),
     ).resolves.toEqual({
       passed: true,
       diagnostics: [],
-      requestUrl: "https://api.example.com/prices/eth?currency=USD&source=primary&window=1h",
+      requestUrl: registryCanonicalUrl,
     });
     expect(
       fixture.publicClient.readContract.mock.calls.some(
-        ([request]) => request.functionName === "consume",
+        ([request]) => request.functionName === "consume" &&
+          request.address === registryConsumer.consumerAddress,
       ),
     ).toBe(true);
   });
