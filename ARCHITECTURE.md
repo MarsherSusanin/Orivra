@@ -386,9 +386,11 @@ Open-Meteo/ETH consumer deployment, worker registry and applications; Caddy
 alone exposes 80/443. Typed readiness, heartbeat, Timeweb PITR and both live
 runs precede deployment evidence. Explicit Caddy cutover precedes resumable
 trusted-clock 0/15m/1h/24h evidence. V1 history and canonical rollback remain,
-but cannot authorize V2 effects. The implementation is local
-production-author GREEN; exact-tree independent verification and all
-credentialed provider/chain/host acceptance remain pending.
+but cannot authorize V2 effects. Exact `97aae69` / `5d8965e` failed both
+independent verifiers: the corrected boundary requires nested activation
+normalization with immediate rollback authority, a non-circular cutover live
+observation, UID-1000-only staging followed by root no-replace sealing, and
+resumable terminal promotion. HTTP checks cannot self-assert browser PASS.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

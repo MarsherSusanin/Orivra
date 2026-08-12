@@ -157,14 +157,16 @@ blockchain-операций.
   the exact publication to DigitalOcean compute, Timeweb S3 shared-pilot
   authority (`https://s3.twcstorage.ru`, `ru-1`, `orivra-backet`, path-style),
   strict typed preflights and deterministic Open-Meteo/ETH consumer registry.
-  Deployment evidence precedes explicit Caddy cutover; trusted-clock
+  Explicit Caddy cutover and its canonical checkpoint precede deployment evidence; trusted-clock
   cutover/15m/1h/24h checkpoints are resumable and cannot terminal-PASS early.
   Historical V1 contracts and canonical rollback binding remain parseable but
-  cannot authorize V2 effects. The implementation is now local
-  production-author GREEN across focused/static/full tests, coverage, real
-  PostgreSQL, build, Sites and Action sync. Exact-tree Core/Product verification
-  and all credentialed Timeweb/Coston2/VDS effects remain pending, so no hosted
-  or production PASS exists.
+  cannot authorize V2 effects. Exact candidate `97aae69` / tree `5d8965e` was
+  rejected by both Core and Product verification: activation/rollback,
+  cutover-live authority, UID-1000 evidence staging and terminal-promotion
+  resume require corrective RED. Browser PASS must come from a canonical
+  acceptance artifact, and active backup evidence fixes Timeweb bucket
+  `orivra-backet` while historical Spaces parsing stays separate. No hosted or
+  production PASS exists.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

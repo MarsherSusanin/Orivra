@@ -1,6 +1,6 @@
 # ADR 0044: Timeweb direct-production pilot and resumable 24-hour acceptance
 
-- Status: Accepted; local production-author GREEN, independent verification pending
+- Status: Accepted boundary; corrective RED after independent Core/Product FAIL on exact 97aae69 / 5d8965e
 - Date: 2026-08-12
 - Supersedes active production portions of: ADR 0037, ADR 0042, ADR 0043
 - Retains: all V1 schemas as historical compatibility data types
@@ -34,13 +34,20 @@ entrypoints threw; the default PITR path stopped before restore; and canonical
 safe-consumer files owned by the service UID could not satisfy the required
 root-owned evidence boundary.
 
-The replacement implementation closes those RED boundaries locally. Its
-production-author matrix passes strict V2 contracts/domain coverage, typed
-host orchestration, the eight-service Compose model, real PostgreSQL,
-credential-free MinIO recovery controls, Sites compatibility and the exact
-worker/API persistence path. This status is not a hosted, Timeweb, Coston2,
-cutover or 24-hour PASS. The exact committed tree and two independent verifier
-reports remain required before credentials or production effects are used.
+The replacement implementation reached local production-author GREEN, but both
+independent verifiers rejected exact commit
+`97aae69bdbc4bc2944204f8d071ac953ac155cd8` / tree
+`5d8965eed3149853a17959829422f0bac9f0a5e6`. Core report
+`/private/tmp/proofline-029c-verifiers/97aae69/core-verifier.md` has SHA-256
+`19bbdf15c7101c2e82977f0c1f0a8d1b01ef7404d17f4625d28aba78b446f367`;
+Product report `/private/tmp/proofline-029c-verifiers/97aae69/product-verifier.md`
+has SHA-256
+`70a6475d77ad27a2a8b736deb8e6ea9fc26eebae28310610b58f646d3213981a`.
+The candidate could leave Caddy active after an envelope failure, made the
+cutover checkpoint circular, could not write its root-private evidence as UID
+1000 and wedged terminal promotion after a partial append. Corrective RED is
+therefore the current state; no hosted, Timeweb, Coston2, cutover or 24-hour
+PASS exists.
 
 The pilot object store is Timeweb S3-compatible storage. Swift is an operator
 option outside the application runtime, not a release dependency.
@@ -79,7 +86,10 @@ separate object-store identities. It is never presented as least-privilege
 production storage. No credential value, key ID, rotation deadline or secret
 path enters canonical evidence. Rotation/separation is required before this
 pilot can become a general production profile. Existing ADR0037
-DigitalOcean-Spaces `BackupEvidenceV1` remains historical; V2 deployment
+DigitalOcean-Spaces `BackupEvidenceV1` remains historical and readable through a separately
+named strict historical parser and cannot become active authority. Active
+production `BackupEvidenceV1` fixes bucket `orivra-backet` as well as the exact
+Timeweb endpoint, region, path-style and shared-pilot fields. V2 deployment
 evidence records the Timeweb authority checksum and typed PITR observation.
 
 ### Strict typed preflight
@@ -134,9 +144,11 @@ authoritative pair. Secret bytes and paths never enter either artifact.
 
 Production Compose contains an eighth one-shot `safe-consumer-deployer`
 service sharing the worker image but not worker database/verifier authority.
-One canonical `PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT` is mounted read/write
-only at `/opt/orivra/evidence` in that deployer. After schema/checksum
-verification, the root host seals the directory `root:root` mode `0700` and
+UID 1000 receives only a fresh run-scoped writable staging directory; it never
+mounts or writes the root-private canonical evidence root. After bounded
+no-follow reads and exact cross-binding, the root host atomically publishes the
+pair no-replace into `PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT`, seals that
+directory `root:root` mode `0700` and
 both final files `root:root` mode `0400`. Because the non-root worker cannot
 read a root-owned mode-0400 bind, the host also creates one run-scoped,
 byte-identical registry handoff at the fixed
@@ -175,11 +187,19 @@ authority, exact five images, exact registry, schema 10, readiness, real
 heartbeat, Timeweb PITR and both persisted live runs.
 
 Caddy cutover is an explicit adapter effect before deployment evidence append.
-After it returns strict origin and trusted activation time, a separate external
+The production adapter normalizes the exact nested host result and records that
+activation occurred before validating any returned field. A malformed nested
+result therefore retains rollback authority. After it returns strict origin
+and trusted activation time, a separate external
 HTTPS observation confirms that origin and the same pinned host session must
-run `canary-observe` for the real `cutover` checkpoint. That strict host result
-derives external HTTPS, internal health/schema, current heartbeat, disk and
-clock synchronization, Timeweb backup/PITR and the exact two persisted run IDs.
+run `canary-observe` for the real `cutover` checkpoint. That command consumes
+the already-observed exact two persisted run IDs and ordered manifest SHAs; it
+must not read deployment evidence which does not exist yet. Its browser result
+is authorized only by a canonical pre-cutover browser-acceptance artifact and
+independent checksum, never by HTTP fetches relabelled as browser PASS. The
+strict host result derives external HTTPS, internal health/schema, current
+heartbeat, disk and clock synchronization, Timeweb backup/PITR and the exact
+two persisted run IDs.
 The direct runtime may not synthesize any PASS check. Only then may those exact
 canonical checkpoint bytes and deployment evidence be appended. Strict
 `ProductionDeploymentEvidenceV2` binds exactly
@@ -213,6 +233,9 @@ The timer consumes canonical `ProductionDeploymentEvidenceV2` bytes plus an
 independent checksum. At 24 hours it appends canonical
 `ProductionPromotionEvidenceV2` with `status:passed`, `promotionClaim:true` and
 the exact deployment digest. A non-PASS test receipt is not acceptance.
+Four canonical checkpoints plus absent promotion evidence remain resumable:
+retry appends the same canonical promotion, an existing checksum-identical
+promotion is idempotently complete, and any mismatch fails closed.
 
 ### Daily backup and archive freshness
 

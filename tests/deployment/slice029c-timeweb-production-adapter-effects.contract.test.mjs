@@ -90,6 +90,44 @@ test("maps every internal pilot command to one canonical --command host envelope
   await assert.rejects(adapter.run({ id: "arbitrary", command: "id" }), /PRODUCTION_HOST_COMMAND|invalid/i);
 });
 
+test("normalizes the real nested Caddy host result while retaining post-effect rollback authority", async () => {
+  const module = await load("../../scripts/timeweb-production-pilot-adapters.mjs");
+  assert.equal(typeof module.normalizeTimewebCaddyActivationResult, "function");
+  const hostResult = {
+    id: "activate-caddy",
+    status: "passed",
+    cutover: {
+      status: "passed",
+      publicOrigin: "https://orivra.xyz",
+      activatedAt: "2026-08-13T03:00:00Z",
+    },
+    external: {
+      status: "passed",
+      publicOrigin: "https://orivra.xyz",
+      observedAt: "2026-08-13T03:00:01Z",
+    },
+  };
+  assert.deepEqual(module.normalizeTimewebCaddyActivationResult(hostResult, {
+    expectedPublicOrigin: "https://orivra.xyz",
+  }), {
+    status: "passed",
+    publicOrigin: "https://orivra.xyz",
+    activatedAt: "2026-08-13T03:00:00Z",
+    effectApplied: true,
+  });
+  for (const invalid of [
+    { ...hostResult, cutover: { ...hostResult.cutover, publicOrigin: "https://evil.invalid" } },
+    { ...hostResult, cutover: { ...hostResult.cutover, activatedAt: "not-a-time" } },
+    { ...hostResult, external: { ...hostResult.external, status: "failed" } },
+  ]) {
+    await assert.rejects(async () => module.normalizeTimewebCaddyActivationResult(invalid, {
+      expectedPublicOrigin: "https://orivra.xyz",
+    }), (error) => error?.cutoverApplied === true);
+  }
+  const source = await readFile(resolve(root, "scripts/timeweb-production-pilot-adapters.mjs"), "utf8");
+  assert.match(source, /activateCaddy[\s\S]*normalizeTimewebCaddyActivationResult/);
+});
+
 test("exposes a concrete fresh-volume Timeweb base-backup and PITR entrypoint", async () => {
   const module = await load("../../scripts/timeweb-production-pitr.mjs");
   assert.equal(typeof module.runTimewebProductionPitr, "function");

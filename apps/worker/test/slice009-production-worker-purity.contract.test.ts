@@ -63,6 +63,7 @@ const deploymentContractRuntimeExports = [
 
 const recoveryContractRuntimeExports = [
   "BackupEvidenceV1Schema",
+  "HistoricalSpacesBackupEvidenceV1Schema",
   "RestoreDrillEvidenceV1Schema",
   "RestorePromotionAuthorizationV1Schema",
   "RestorePromotionAuthorizationV2Schema",
@@ -642,7 +643,7 @@ describe("Slice 009 production worker purity", () => {
         /parseLegacyLiveCoston2RuntimeConfig|\bLiveRuntimeFactoryInput\b|\bLiveEnvironment\b/,
       );
       expect(freshArtifact).not.toMatch(
-        /BackupEvidenceV1Schema|RestoreDrillEvidenceV1Schema|RestorePromotionAuthorizationV1Schema|RestorePromotionAuthorizationV2Schema|RecoveryEvidenceHandoffV1Schema|canonicalSerializeBackupEvidence|canonicalSerializeRecoveryEvidenceHandoff|canonicalSerializeRestoreDrillEvidence|checksumBackupEvidence|checksumRecoveryEvidenceHandoff|checksumRestoreDrillEvidence/,
+        /BackupEvidenceV1Schema|HistoricalSpacesBackupEvidenceV1Schema|RestoreDrillEvidenceV1Schema|RestorePromotionAuthorizationV1Schema|RestorePromotionAuthorizationV2Schema|RecoveryEvidenceHandoffV1Schema|canonicalSerializeBackupEvidence|canonicalSerializeRecoveryEvidenceHandoff|canonicalSerializeRestoreDrillEvidence|checksumBackupEvidence|checksumRecoveryEvidenceHandoff|checksumRestoreDrillEvidence/,
       );
       expect(freshArtifact).not.toMatch(
         /FrozenOciReleaseManifestV1Schema|FrozenOciReleaseReceiptV1Schema|imageManifestDigest|archiveSha256|artifactInventorySha256/,

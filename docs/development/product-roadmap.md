@@ -191,7 +191,11 @@ the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
   preflights, exact two-consumer registry, schema/readiness/Timeweb-PITR/live
   deployment evidence, explicit Caddy cutover and trusted-clock 0/15m/1h/24h
   checkpoints. A code change returns the plan to focused RED/GREEN and two
-  fresh stopped-tree verifiers.
+  fresh stopped-tree verifiers. Exact candidate `97aae69` / tree `5d8965e`
+  failed both Core and Product verification; current corrective RED covers
+  nested Caddy activation/rollback, non-circular cutover live authority,
+  UID-1000 staging to root-private no-replace sealing, terminal promotion
+  resume, canonical browser acceptance and exact Timeweb backup bucket.
 
   The final default-effect RED requires the pinned host—not the direct runtime—
   to produce the cutover checkpoint; executable worker/API persisted-run,

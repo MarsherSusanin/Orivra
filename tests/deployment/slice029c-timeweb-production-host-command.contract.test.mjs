@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -373,6 +373,65 @@ test("strictly parses and cross-binds the canonical safe-consumer pair into the 
       compose: { runExactPhase: async () => ({ status: "passed" }) },
     },
   }), /TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID|safe-consumer evidence/i);
+});
+
+test("seals one UID-1000 run-scoped staging pair into the root-private canonical evidence root", async () => {
+  const module = await feature();
+  const directory = await mkdtemp(`${tmpdir()}/orivra-029c-staging-seal-`);
+  const canonicalRoot = resolve(directory, "canonical-evidence");
+  const stagingRoot = resolve(directory, "deployer-staging");
+  const runId = "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4";
+  const runStage = resolve(stagingRoot, runId);
+  const stagedDeployment = resolve(runStage, "safe-consumer-deployment-evidence.v1.json");
+  const stagedRegistry = resolve(runStage, "safe-consumer-registry.v1.json");
+  try {
+    await mkdir(canonicalRoot, { mode: 0o700 });
+    await mkdir(runStage, { recursive: true, mode: 0o700 });
+    await writeFile(stagedDeployment, safeConsumerPair.deploymentEvidence.bytes, { mode: 0o400 });
+    await writeFile(stagedRegistry, safeConsumerPair.registry.bytes, { mode: 0o400 });
+    await chmod(stagedDeployment, 0o400);
+    await chmod(stagedRegistry, 0o400);
+    await chmod(canonicalRoot, 0o500);
+    await assert.rejects(writeFile(resolve(canonicalRoot, "uid-1000-must-not-write"), "forbidden"), /EACCES|EPERM/);
+
+    assert.equal(typeof module.sealSafeConsumerEvidenceFromStaging, "function");
+    const stagingOwner = await lstat(runStage);
+    const result = await module.sealSafeConsumerEvidenceFromStaging({
+      stagingRoot,
+      canonicalRoot,
+      runId,
+      expectedStagingOwner: { uid: stagingOwner.uid, gid: stagingOwner.gid },
+      canonicalOwner: { uid: 0, gid: 0 },
+      workerHandoffPath: WORKER_HANDOFF_PATH,
+      maximumBytes: 1024 * 1024,
+    });
+    const canonicalDeployment = resolve(canonicalRoot, "safe-consumer-deployment-evidence.v1.json");
+    const canonicalRegistry = resolve(canonicalRoot, "safe-consumer-registry.v1.json");
+    assert.deepEqual(result, {
+      status: "passed", runId, noReplace: true,
+      deploymentEvidencePath: canonicalDeployment,
+      registryPath: canonicalRegistry,
+      registrySha256: digest(safeConsumerPair.registry.bytes),
+      workerHandoffPath: WORKER_HANDOFF_PATH,
+    });
+    assert.equal((await lstat(canonicalRoot)).mode & 0o777, 0o700);
+    assert.equal((await lstat(canonicalDeployment)).mode & 0o777, 0o400);
+    assert.equal((await lstat(canonicalRegistry)).mode & 0o777, 0o400);
+    assert.equal(await lstat(runStage).then(() => false, () => true), true);
+
+    const compose = await readFile(resolve(root, "deploy/compose.runtime.yaml"), "utf8");
+    assert.match(compose, /safe-consumer-deployer:[\s\S]*user:\s*["']1000:1000["']/);
+    assert.match(compose, /PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_DIR/);
+    assert.match(compose, /\/run\/proofline\/safe-consumer-stage/);
+    assert.doesNotMatch(compose.match(/safe-consumer-deployer:[\s\S]*?(?=\n  [a-z][a-z0-9-]+:|\nnetworks:)/)?.[0] ?? "", /\/opt\/orivra\/evidence/);
+  } finally {
+    await chmod(canonicalRoot, 0o700).catch(() => undefined);
+    await chmod(stagingRoot, 0o700).catch(() => undefined);
+    await chmod(runStage, 0o700).catch(() => undefined);
+    await chmod(stagedDeployment, 0o600).catch(() => undefined);
+    await chmod(stagedRegistry, 0o600).catch(() => undefined);
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("reads the safe-consumer authority from bounded no-follow mode-0400 descriptors", async () => {

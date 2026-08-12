@@ -72,6 +72,34 @@ const BACKUP = {
   status: "completed",
 } as const;
 
+const TIMEWEB_BACKUP = {
+  ...BACKUP,
+  database: { ...BACKUP.database, slot: "production" },
+  storage: {
+    provider: "timeweb-s3",
+    endpointOrigin: "https://s3.twcstorage.ru",
+    region: "ru-1",
+    addressing: "path-style",
+    authorityMode: "shared-pilot",
+    bucket: "orivra-backet",
+    prefix: `s3://orivra-backet/proofline/v1/production/${BACKUP.database.systemIdentifier}`,
+    encryption: "wal-g-libsodium",
+    encryptionKeyIdSha256: sha("e"),
+  },
+} as const;
+
+const HISTORICAL_SPACES_BACKUP = {
+  ...TIMEWEB_BACKUP,
+  storage: {
+    provider: "digitalocean-spaces",
+    endpointOrigin: "https://fra1.digitaloceanspaces.com",
+    bucket: "proofline-production-backups",
+    prefix: `s3://proofline-production-backups/proofline/v1/production/${BACKUP.database.systemIdentifier}`,
+    encryption: "wal-g-libsodium",
+    encryptionKeyIdSha256: sha("e"),
+  },
+} as const;
+
 const RESTORE = {
   version: "1",
   kind: "pitr-restore-drill",
@@ -120,6 +148,7 @@ describe("Slice 027C strict recovery evidence contracts", () => {
     expect(packageJson.exports?.["./recovery"]).toBe("./src/recovery.ts");
     for (const name of [
       "BackupEvidenceV1Schema",
+      "HistoricalSpacesBackupEvidenceV1Schema",
       "RestoreDrillEvidenceV1Schema",
       "RestorePromotionAuthorizationV1Schema",
       "RestorePromotionAuthorizationV2Schema",
@@ -151,6 +180,23 @@ describe("Slice 027C strict recovery evidence contracts", () => {
       { ...BACKUP, producer: { ...BACKUP.producer, commitSha: BACKUP.producer.treeSha } },
       { ...BACKUP, inventory: { ...BACKUP.inventory, canonicalSha256: `sha256:${"A".repeat(64)}` } },
     ]) expect(() => schema.parse(invalid)).toThrow();
+  });
+
+  it("binds active production backup evidence to exact Timeweb bucket while parsing historical Spaces separately", async () => {
+    const module = await recoveryContracts();
+    expect(module.BackupEvidenceV1Schema.parse(TIMEWEB_BACKUP)).toEqual(TIMEWEB_BACKUP);
+    expect(() => module.BackupEvidenceV1Schema.parse({
+      ...TIMEWEB_BACKUP,
+      storage: {
+        ...TIMEWEB_BACKUP.storage,
+        bucket: "attacker-controlled",
+        prefix: `s3://attacker-controlled/proofline/v1/production/${BACKUP.database.systemIdentifier}`,
+      },
+    })).toThrow();
+    expect(() => module.BackupEvidenceV1Schema.parse(HISTORICAL_SPACES_BACKUP)).toThrow();
+    expect(module.HistoricalSpacesBackupEvidenceV1Schema.parse(HISTORICAL_SPACES_BACKUP))
+      .toEqual(HISTORICAL_SPACES_BACKUP);
+    expect(() => module.HistoricalSpacesBackupEvidenceV1Schema.parse(TIMEWEB_BACKUP)).toThrow();
   });
 
   it("requires exact UTC microseconds, ordered WAL bounds and honest inventory", async () => {

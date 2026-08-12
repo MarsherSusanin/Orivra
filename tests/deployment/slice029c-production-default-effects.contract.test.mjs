@@ -203,9 +203,13 @@ test("the canary default derives every PASS field from real due host observation
       diskPressure: async () => { calls.push(["disk"]); return { status: "passed" }; },
       timewebBackup: async () => { calls.push(["timeweb"]); return { status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 }; },
       persistedLiveRuns: async () => { calls.push(["live"]); return { status: "persisted", runIds: RUN_IDS, manifests: MANIFESTS }; },
+      hostedBrowserAcceptance: async () => { calls.push(["browser"]); return {
+        status: "passed", publicOrigin: PUBLIC_ORIGIN,
+        artifactSha256: sha256(Buffer.from("canonical-hosted-browser-acceptance", "utf8")),
+      }; },
     },
   });
-  assert.deepEqual(calls.map(([id]) => id), ["external", "internal", "disk", "timeweb", "live"]);
+  assert.deepEqual(calls.map(([id]) => id), ["external", "internal", "disk", "timeweb", "live", "browser"]);
   assert.deepEqual(observation, {
     version: "2", kind: "production-canary-checkpoint", id: "post-cutover-15m",
     dueAt: "2026-08-12T03:15:00Z", observedAt: "2026-08-12T03:15:01Z", status: "passed",
@@ -230,8 +234,21 @@ test("the canary default derives every PASS field from real due host observation
       diskPressure: async () => ({ status: "passed" }),
       timewebBackup: async () => ({ status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 61 }),
       persistedLiveRuns: async () => ({ status: "persisted", runIds: RUN_IDS, manifests: MANIFESTS }),
+      hostedBrowserAcceptance: async () => ({ status: "passed", publicOrigin: PUBLIC_ORIGIN, artifactSha256: sha256(Buffer.from("canonical-hosted-browser-acceptance", "utf8")) }),
     },
   }), /TIMEWEB_PRODUCTION_CANARY_INVALID|archive freshness/i);
+  await assert.rejects(module.observeTimewebProductionCanary({
+    id: "post-cutover-15m", dueAt: "2026-08-12T03:15:00Z", publicOrigin: PUBLIC_ORIGIN,
+    clock: { readSynchronizedHostTime: async () => ({ now: "2026-08-12T03:15:01Z", source: "production-host", maximumSkewSeconds: 5, observedSkewSeconds: 1 }) },
+    adapters: {
+      externalHttps: async () => ({ status: "passed", rootHtml: true, sameOriginApi: true }),
+      internalHealth: async () => ({ healthz: { status: "passed" }, readyz: { status: "passed", schemaVersion: 10 }, workerHeartbeat: { status: "current" } }),
+      diskPressure: async () => ({ status: "passed" }),
+      timewebBackup: async () => ({ status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 }),
+      persistedLiveRuns: async () => ({ status: "persisted", runIds: RUN_IDS, manifests: MANIFESTS }),
+      hostedBrowserAcceptance: async () => ({ status: "passed", publicOrigin: "https://evil.invalid", artifactSha256: "sha256:" + "0".repeat(64) }),
+    },
+  }), /TIMEWEB_PRODUCTION_CANARY_INVALID|browser acceptance/i);
   let effects = 0;
   await assert.rejects(module.observeTimewebProductionCanary({
     id: "post-cutover-15m", dueAt: "2026-08-12T03:15:00Z", publicOrigin: PUBLIC_ORIGIN,
@@ -239,4 +256,37 @@ test("the canary default derives every PASS field from real due host observation
     adapters: new Proxy({}, { get: () => async () => { effects += 1; } }),
   }), /TIMEWEB_PRODUCTION_CANARY_NOT_DUE|host clock/i);
   assert.equal(effects, 0);
+});
+
+test("the cutover observation consumes exact pre-deployment live runs without reading deployment evidence", async () => {
+  const module = await moduleOrEmpty("../../scripts/timeweb-production-canary-observation.mjs");
+  const browserAcceptance = {
+    status: "passed", publicOrigin: PUBLIC_ORIGIN,
+    artifactSha256: sha256(Buffer.from("canonical-hosted-browser-acceptance", "utf8")),
+  };
+  const forbiddenReads = [];
+  const observation = await module.observeTimewebProductionCanary({
+    id: "cutover", dueAt: "2026-08-12T03:00:00Z", publicOrigin: PUBLIC_ORIGIN,
+    persistedLiveRuns: { status: "persisted", runIds: RUN_IDS, manifests: MANIFESTS },
+    browserAcceptance,
+    clock: { readSynchronizedHostTime: async () => ({ now: "2026-08-12T03:00:01Z", source: "production-host", maximumSkewSeconds: 5, observedSkewSeconds: 1 }) },
+    adapters: {
+      externalHttps: async () => ({ status: "passed", rootHtml: true, sameOriginApi: true }),
+      internalHealth: async () => ({ healthz: { status: "passed" }, readyz: { status: "passed", schemaVersion: 10 }, workerHeartbeat: { status: "current" } }),
+      diskPressure: async () => ({ status: "passed" }),
+      timewebBackup: async () => ({ status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 }),
+      persistedLiveRuns: async () => { forbiddenReads.push("deployment-evidence"); throw new Error("circular read"); },
+      hostedBrowserAcceptance: async () => { forbiddenReads.push("browser-reread"); throw new Error("must use supplied artifact"); },
+    },
+  });
+  assert.equal(observation.id, "cutover");
+  assert.deepEqual(observation.checks.liveCoston2.runIds, RUN_IDS);
+  assert.deepEqual(forbiddenReads, []);
+  await assert.rejects(module.observeTimewebProductionCanary({
+    id: "cutover", dueAt: "2026-08-12T03:00:00Z", publicOrigin: PUBLIC_ORIGIN,
+    persistedLiveRuns: { status: "persisted", runIds: RUN_IDS.slice(0, 1), manifests: MANIFESTS.slice(0, 1) },
+    browserAcceptance,
+    clock: { readSynchronizedHostTime: async () => ({ now: "2026-08-12T03:00:01Z", source: "production-host", maximumSkewSeconds: 5, observedSkewSeconds: 1 }) },
+    adapters: {},
+  }), /TIMEWEB_PRODUCTION_CANARY_INVALID|live runs/i);
 });

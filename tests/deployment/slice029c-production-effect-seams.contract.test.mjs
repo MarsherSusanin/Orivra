@@ -515,3 +515,63 @@ test("systemd resume trusts only the host clock, appends one due checkpoint atom
   assert.equal(checkpoints.length, beforeFailure);
   assert.ok(cleanup.length > 0);
 });
+
+test("four canonical checkpoints resume the missing terminal promotion idempotently and reject mismatch", async () => {
+  const module = await canaryRuntime();
+  const contracts = await import("../../packages/contracts/src/production-promotion-runtime.mjs");
+  const deployment = await productionDeploymentEvidenceV2();
+  const deploymentEvidenceBytes = Buffer.from(
+    contracts.canonicalSerializeProductionDeploymentEvidenceV2(deployment),
+    "utf8",
+  );
+  const expectedDeploymentEvidenceSha256 = sha(deploymentEvidenceBytes);
+  const cutover = deployment.cutover.activatedAt;
+  const terminalState = [
+    checkpoint("cutover", cutover, "2026-08-12T03:00:01Z"),
+    checkpoint("post-cutover-15m", "2026-08-12T03:15:00Z"),
+    checkpoint("post-cutover-1h", "2026-08-12T04:00:00Z"),
+    checkpoint("post-cutover-24h", "2026-08-13T03:00:00Z"),
+  ];
+  let promotionEntry;
+  let promotionReads = 0;
+  const invoke = (loadCanonicalPromotionEvidence, appendPromotionEvidence) =>
+    module.runProductionCanarySystemdTick({
+      stateRoot: CANARY_STATE_ROOT,
+      deploymentEvidenceBytes,
+      expectedDeploymentEvidenceSha256,
+      clock: { now: () => "2026-08-13T03:00:01Z" },
+      loadCanonicalState: async () => structuredClone(terminalState),
+      loadCanonicalPromotionEvidence: async () => {
+        promotionReads += 1;
+        return loadCanonicalPromotionEvidence;
+      },
+      observe: async () => { throw new Error("terminal resume must not observe again"); },
+      appendCheckpoint: async () => { throw new Error("terminal resume must not append a checkpoint"); },
+      appendPromotionEvidence,
+      cleanupStage: async () => undefined,
+    });
+
+  const resumed = await invoke(null, async (entry) => {
+    promotionEntry = entry;
+    return { status: "passed", sha256: entry.sha256 };
+  });
+  assert.equal(resumed.status, "promotion-complete");
+  assert.equal(promotionReads, 1);
+  assert.equal(promotionEntry.mode, 0o400);
+  assert.equal(promotionEntry.noReplace, true);
+  const promotionText = Buffer.from(promotionEntry.bytes).toString("utf8");
+  const promotion = contracts.ProductionPromotionEvidenceV2Schema.parse(JSON.parse(promotionText));
+  assert.equal(contracts.canonicalSerializeProductionPromotionEvidenceV2(promotion), promotionText);
+  assert.deepEqual(promotion.canary.checkpoints, terminalState);
+
+  let idempotentAppends = 0;
+  const idempotent = await invoke({ bytes: promotionEntry.bytes, sha256: promotionEntry.sha256 }, async () => {
+    idempotentAppends += 1;
+  });
+  assert.equal(idempotent.status, "complete");
+  assert.equal(idempotentAppends, 0);
+  await assert.rejects(invoke({
+    bytes: Buffer.from("{}", "utf8"),
+    sha256: sha(Buffer.from("{}", "utf8")),
+  }, async () => { throw new Error("mismatch must not append"); }), /CANARY_PROMOTION_EVIDENCE_INVALID|promotion evidence/i);
+});

@@ -828,11 +828,14 @@ pulls/re-inspects by digest and starts:
 `postgres → db-role-bootstrap → migrator → api → safe-consumer-deployer → write-safe-consumer-registry → worker → web → caddy-candidate`.
 
 The runtime overlay has exactly eight services: the retained seven plus the
-one-shot `safe-consumer-deployer`. The canonical authority remains
+one-shot `safe-consumer-deployer`. The UID-1000 deployer writes only a fresh
+run-scoped staging directory and never mounts the root-private canonical root.
+The canonical authority remains
 `PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT=/opt/orivra/evidence`. Before deployer
-execution, both `safe-consumer-deployment-evidence.v1.json` and
-`safe-consumer-registry.v1.json` are absent. Before worker startup, both are
-regular non-symlink `root:root` mode-0400 files under a root-private directory.
+execution, both canonical files are absent. The root host reads the staging
+pair through bounded no-follow descriptors, cross-binds it and atomically
+publishes no-replace. Before worker startup, both are regular non-symlink
+`root:root` mode-0400 files under a root-private directory.
 The root host makes one byte-identical, checksum-bound mode-0400 copy owned by
 UID/GID 1000 at fixed `PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE`; only that
 runtime copy is bound read-only into the non-root worker. It is not evidence and
@@ -843,17 +846,21 @@ Only Caddy publishes 80/443. PostgreSQL 5432 and API/worker ports remain
 private, with no Docker socket. Stage V2 deployment evidence only after schema
 10/10, `/readyz`, current real-worker heartbeat, Timeweb PITR,
 the canonical two-entry worker registry and both persisted live observations
-pass. Caddy then cuts over, a separate external HTTPS probe confirms the exact
-origin, and the pinned host executes `canary-observe` for the cutover checkpoint
-covering external/internal health, schema, current heartbeat, disk/clock,
-Timeweb PITR and both persisted runs. Those returned canonical checks, never a
-locally constructed PASS object, are appended before deployment evidence is
-published. Any post-cutover failure calls `rollbackCaddy` and leaves zero
-deployment PASS.
+pass. Caddy then cuts over. The adapter normalizes the exact nested host result
+and records activation before validating any post-effect field. A separate
+external HTTPS probe confirms the origin, and the pinned host executes
+`canary-observe` for the cutover checkpoint using the already-observed exact two
+persisted run IDs/manifests, never unpublished deployment evidence. Browser
+PASS requires canonical pre-cutover browser-acceptance bytes and an independent
+checksum; HTTP fetches are not browser acceptance. Any malformed activation or
+later failure calls `rollbackCaddy` exactly once and leaves zero deployment
+PASS.
 Trusted-clock resume records exact cutover/15m/1h/24h checkpoints; only the
 86400-second final checkpoint may append canonical V2 promotion evidence with
 `status:passed`, `promotionClaim:true` and the exact deployment digest; a
-non-PASS test receipt is rejected. Failure removes
+non-PASS test receipt is rejected. Four checkpoints plus absent promotion
+resume by appending the same canonical promotion; an existing exact digest is
+idempotently complete and mismatch fails closed. Failure removes
 only a run-owned pre-cutover candidate. Post-cutover rollback requires
 canonical authorization bytes, current/prior deployment-evidence bytes and
 current/prior publication-evidence bytes, all with independent checksums. The

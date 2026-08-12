@@ -434,4 +434,35 @@ branches; worker 91.39%/86.22%; Web 92.57%/85.91%; Testcontainers PostgreSQL
 PASS. The local matrix used no Timeweb, Swift, GHCR, SSH, DNS, VDS or live
 Coston2 credentials/effects. It is not a hosted/deployed/security PASS; scan
 8852 remains user-canceled and the accepted deferred 027C integrity risk stays
-open. Exact-tree Core and Product verification are pending.
+open. Exact-tree Core and Product verification rejected the candidate below.
+
+## Independent verifier FAIL and corrective RED
+
+Both independent verifiers rejected exact clean candidate
+`97aae69bdbc4bc2944204f8d071ac953ac155cd8` / tree
+`5d8965eed3149853a17959829422f0bac9f0a5e6`. Core report
+`/private/tmp/proofline-029c-verifiers/97aae69/core-verifier.md` has SHA-256
+`19bbdf15c7101c2e82977f0c1f0a8d1b01ef7404d17f4625d28aba78b446f367`;
+Product report `/private/tmp/proofline-029c-verifiers/97aae69/product-verifier.md`
+has SHA-256
+`70a6475d77ad27a2a8b736deb8e6ea9fc26eebae28310610b58f646d3213981a`.
+
+Corrective RED rejects the real nested activation-envelope mismatch and keeps
+rollback authority from the moment Caddy is activated; removes the cutover
+checkpoint's circular deployment-evidence read by supplying the exact two live
+run IDs/manifests; separates UID-1000 run staging from root-private canonical
+evidence; resumes an absent terminal promotion after four committed
+checkpoints; forbids HTTP-only fabrication of browser PASS; and binds active
+production backup evidence to exact Timeweb bucket `orivra-backet` while a
+separate parser preserves historical Spaces bytes. No production, provider,
+chain, browser, backup, Docker, credential or network effect is part of this
+tests/docs-only wave.
+
+Classification on exact rejected base
+`97aae69bdbc4bc2944204f8d071ac953ac155cd8` / tree
+`5d8965eed3149853a17959829422f0bac9f0a5e6`: syntax and typecheck PASS;
+the five deployment focus files are 30 retained controls PASS plus seven
+causal intentional RED; contracts/worker recovery compatibility is 25 PASS
+plus three causal intentional RED; serialized deployment static is 253 PASS
+plus the same seven deployment RED; the unchanged TERM-resistant process-group
+control passes 12/12 in isolation; Sites is 46/46 PASS. Diff-check is clean.

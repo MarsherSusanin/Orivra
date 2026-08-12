@@ -14,6 +14,20 @@ const SAFE_CONSUMER_REGISTRY_OUTPUT =
 const COSTON2_RPC_URL = "https://coston2-api.flare.network/ext/C/rpc";
 const COSTON2_DA_URL = "https://ctn2-data-availability.flare.network";
 const RELAYER_ADDRESS = "0x3333333333333333333333333333333333333333";
+const LIVE_RUNS = Object.freeze({
+  status: "persisted",
+  runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"],
+  manifests: [OPEN_METEO, ETH_USD],
+});
+const BROWSER_ACCEPTANCE = Object.freeze({
+  version: "1", kind: "hosted-browser-acceptance", status: "passed",
+  publicOrigin: "https://orivra.xyz",
+  checks: {
+    desktop: "passed", mobile: "passed", keyboard: "passed",
+    axeSeriousCritical: 0, consoleErrors: 0, networkErrors: 0,
+    reloadBackForward: "passed",
+  },
+});
 const TIMEWEB_CAPABILITIES = ["PUT", "HEAD", "LIST", "GET", "DELETE"]
   .map((operation) => ({ operation, status: "passed" }));
 const CLOCK_CHECK = Object.freeze({
@@ -28,6 +42,8 @@ const canonicalJson = (value) => value === null || typeof value !== "object"
     : `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
 const bytes = (value) => Buffer.from(canonicalJson(value), "utf8");
 const digest = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+const BROWSER_ACCEPTANCE_BYTES = bytes(BROWSER_ACCEPTANCE);
+const BROWSER_ACCEPTANCE_SHA = digest(BROWSER_ACCEPTANCE_BYTES);
 
 async function runtime() {
   return import("../../scripts/digitalocean-production-promotion-runtime.mjs").catch(() => ({}));
@@ -84,6 +100,8 @@ const commonInput = (value) => ({
   promotionAuthorizationBytes: value.promotionAuthorizationBytes,
   expectedPromotionAuthorizationSha256: digest(value.promotionAuthorizationBytes),
   runBytes: bytes({ runId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4", operatorId: value.authorization.operatorId }),
+  browserAcceptanceBytes: BROWSER_ACCEPTANCE_BYTES,
+  expectedBrowserAcceptanceSha256: BROWSER_ACCEPTANCE_SHA,
   fileInputs,
   now: "2026-08-12T02:20:00Z",
 });
@@ -244,9 +262,13 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
       if (command.id === "write-safe-consumer-registry") return { status: "passed", path: SAFE_CONSUMER_REGISTRY_OUTPUT, mode: 0o400, noReplace: true, registrySha256: digest(bytes(registry)) };
       if (command.id === "readyz-real-heartbeat") return { status: "passed", readyz: { status: "passed" }, workerHeartbeat: { status: "current" } };
       if (command.id === "timeweb-pitr-production") return { status: "passed", restoreEvidenceSha256: sha("5"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 };
-      if (command.id === "persisted-live-coston2") return { status: "passed", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] };
+      if (command.id === "persisted-live-coston2") return LIVE_RUNS;
       if (command.id === "canary-observe") {
-        assert.deepEqual(command, { id: "canary-observe", checkpointId: "cutover", dueAt: "2026-08-12T03:00:00Z" });
+        assert.deepEqual(command, {
+          id: "canary-observe", checkpointId: "cutover", dueAt: "2026-08-12T03:00:00Z",
+          persistedLiveRuns: LIVE_RUNS,
+          browserAcceptanceSha256: BROWSER_ACCEPTANCE_SHA,
+        });
         return checkpoint("cutover", "2026-08-12T03:00:00Z", "2026-08-12T03:00:01Z");
       }
       return { status: "passed" };
@@ -295,7 +317,7 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
 test("post-cutover observation, checkpoint and deployment-evidence failures roll Caddy back with zero deployment PASS", async () => {
   const module = await runtime();
   const value = await fixture();
-  for (const failingPhase of ["external-https", "host-observation", "checkpoint", "deployment-evidence"]) {
+  for (const failingPhase of ["malformed-activation", "external-https", "host-observation", "checkpoint", "deployment-evidence"]) {
     const events = [];
     const deploymentPass = [];
     await assert.rejects(module.runTimewebDirectProductionPilot({
@@ -320,7 +342,15 @@ test("post-cutover observation, checkpoint and deployment-evidence failures roll
         return { status: "passed" };
       }, close: async () => undefined }) },
       cutoverAdapter: {
-        activateCaddy: async ({ publicOrigin }) => { events.push("caddy-cutover"); return { status: "passed", publicOrigin, activatedAt: "2026-08-12T03:00:00Z" }; },
+        activateCaddy: async ({ publicOrigin }) => {
+          events.push("caddy-cutover");
+          if (failingPhase === "malformed-activation") {
+            throw Object.assign(new Error("nested activation result was malformed after effect"), {
+              cutoverApplied: true,
+            });
+          }
+          return { status: "passed", publicOrigin, activatedAt: "2026-08-12T03:00:00Z", effectApplied: true };
+        },
         observeExternalHttps: async ({ publicOrigin }) => {
           events.push("external-https");
           if (failingPhase === "external-https") throw new Error("external HTTPS failed");

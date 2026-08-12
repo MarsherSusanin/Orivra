@@ -1,6 +1,6 @@
 # Slice 029C — Timeweb direct-production pilot
 
-Status: Local production-author GREEN; exact commit and two independent verifiers pending
+Status: Corrective RED after independent Core/Product FAIL on exact `97aae69` / `5d8965e`
 
 Decision: [ADR 0044](../adr/0044-timeweb-direct-production-pilot.md)
 
@@ -39,7 +39,9 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 - deploy Open-Meteo then ETH/USD consumers deterministically and write the
   canonical worker registry before worker startup;
 - extend retained runtime Compose to exactly eight services with one hardened
-  one-shot deployer; use one canonical evidence root, root-seal its pair
+  one-shot deployer; give UID 1000 only a dedicated run-scoped staging
+  directory, then have the root host cross-bind and no-replace seal its pair
+  into one canonical evidence root
   `root:root` mode 0400, create one SHA-identical worker-owned mode-0400
   runtime handoff, and add no ninth long-lived service;
 - run the production-used deployer with pinned solc, official Coston2 registry
@@ -56,6 +58,12 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 - invoke explicit Caddy cutover, external HTTPS and a real pinned-host cutover
   checkpoint observation before deployment evidence becomes authoritative;
   direct code cannot manufacture PASS checks;
+- normalize the exact nested host activation result, mark the public effect
+  before validation and roll back exactly once after every later failure;
+- supply the cutover observation with the already persisted exact two run IDs
+  and manifest SHAs, without circularly reading unpublished deployment
+  evidence; HTTP probes cannot synthesize browser PASS, which requires a
+  canonical pre-cutover acceptance artifact and checksum;
 - append 0/15m/1h/24h checkpoint evidence only when a trusted clock reaches
   each due time;
 - include an exact production-host synchronization observation in every
@@ -63,6 +71,9 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 - resume from the exact canonical append-only prefix without skipping or
   replaying checkpoints;
 - forbid terminal promotion before the full 86400 seconds;
+- resume four accepted checkpoints plus absent promotion by appending the same
+  canonical promotion; accept an existing exact digest idempotently and reject
+  any mismatch;
 - keep canonical rollback V2 binding and no-effect denials.
 - install one root-owned hardened systemd oneshot/timer which uses only the host
   clock, writes the first missing due checkpoint mode 0400 and cannot publish an
