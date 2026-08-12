@@ -1,8 +1,7 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Fixed 256 KiB GHCR transport production-author GREEN on corrective RED
-base `a47e646` / `7bac35d`; fresh Core/Product verification pending; zero
-images, publication evidence or staging effects exist. Prior Core/Product PASS
+Status: GHCR upload-session keep-alive corrective RED after a real 256 KiB
+PATCH socket failure; zero images, publication evidence or staging effects exist. Prior Core/Product PASS
 `70f63cb` / `88ec383` covers superseded adapter bytes and cannot authorize publication.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
@@ -178,3 +177,9 @@ the exact Caddy layer is 61 ordered PATCHes (60 full chunks plus the same
 195,332-byte remainder). Stable-current, stale-history, cursor, finalizer and
 no-replay rules are unchanged. Author gates are typecheck, pure 61/61, focused
 35/35, static 214/214 and Sites 46/46 PASS.
+
+The real 256 KiB run still failed with `UND_ERR_SOCKET` after 525,812 bytes
+written and 1,346 read, approximately two chunks plus framing. Corrective RED
+requires exact `Connection: close` on the zero-body upload POST, every PATCH
+and the empty terminal PUT, forcing fresh transport per body. All chunk,
+Location, cursor, finalizer and no-replay rules remain unchanged.

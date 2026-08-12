@@ -2,9 +2,8 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Fixed 256 KiB GHCR transport production-author GREEN on corrective RED
-base `a47e646` / `7bac35d`; fresh Core/Product verification pending; zero
-images, publication evidence or staging effects exist.
+Status: GHCR upload-session keep-alive corrective RED after a real 256 KiB
+PATCH socket failure; zero images, publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -336,6 +335,26 @@ typecheck, exact pure focus 61/61, GHCR/staging/roadmap 35/35, serialized
 deployment static 214/214 and Sites 46/46 PASS. No credential, registry,
 publication-evidence or staging effect was used for this local author gate;
 fresh same-tree Core and Product verification remains mandatory.
+
+## Real 256 KiB keep-alive transport RED
+
+The authorized run passed frozen-input verification, GHCR auth, POST and
+stable-current semantics, then failed inside PATCH with `UND_ERR_SOCKET` after
+525,812 bytes written and 1,346 bytes read, approximately two chunks plus
+framing. The result remained `publishedImageIds=[]`, publication evidence
+absent and staging false. No credential, token or Location query is recorded.
+
+A credential-free probe established that GHCR accepts `Connection: close` and
+returns `connection: close`. Corrective RED therefore requires exact
+`Connection: close` on the upload-session zero-body POST, every PATCH and empty
+final PUT so each body uses a fresh transport. The 256 KiB bound and all
+stable-current/stale, cursor, digest, finalizer and no-replay rules are unchanged.
+This tests/docs wave has no production, credential, registry or staging effect.
+
+Intentional RED classification on exact base `749a217` / `dfca0c0`: syntax and
+typecheck PASS; focused GHCR/staging/roadmap is 34 PASS plus one causal RED at
+the missing upload POST `Connection: close`; serialized deployment static is
+213 PASS plus the same RED; Sites is 46/46 PASS.
 
 ## Real 1 MiB PATCH transport-bound RED
 

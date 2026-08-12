@@ -1,8 +1,7 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; fixed 256 KiB GHCR transport production-author
-  GREEN on corrective RED base; fresh Core/Product verification pending; zero
-  images/evidence/staging
+- Status: Accepted contract; GHCR upload-session keep-alive corrective RED
+  after a real 256 KiB PATCH socket failure; zero images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -75,7 +74,8 @@ fragments are rejected before attaching a bearer token or request body.
 Missing blobs use a bounded OCI Distribution upload session, never one
 monolithic layer PUT: `POST` carries an explicit zero content length; ordered
 `PATCH` requests carry at most 256 KiB with exact inclusive `Content-Range`,
-content length and octet-stream type; every `202` must return the exact
+content length, octet-stream type and exact `Connection: close`; the zero-body
+POST and empty final PUT also carry exact `Connection: close`. Every `202` must return the exact
 cumulative `Range` and a newly validated same-authority/repository `Location`.
 That returned Location may equal the current request URL when the exact Range
 advances, but may never revert to an older URL after the current Location
@@ -110,6 +110,10 @@ inside the PATCH transport with `UND_ERR_SOCKET` after 1,049,677 bytes written
 and 865 bytes read. The production-author replacement fixes the bound at 256
 KiB on RED base `a47e646` / `7bac35d`. All attempts remain non-authorizing;
 fresh two-verifier acceptance is mandatory before another credentialed attempt.
+The real 256 KiB run still failed inside PATCH transport after 525,812 bytes
+written and 1,346 read, approximately two chunks plus framing. Credential-free
+probing confirms GHCR honors `Connection: close`; the upload session therefore
+requires a fresh transport for POST, every PATCH and the final PUT.
 
 ### Publication evidence
 

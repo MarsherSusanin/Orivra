@@ -314,6 +314,7 @@ test("028B uploads blobs in ordered fixed 256 KiB chunks without unsafe replay",
     if (method === "HEAD") return response(404);
     if (method === "POST") {
       assert.equal(header(options.headers, "content-length"), "0");
+      assert.equal(header(options.headers, "connection"), "close");
       assert.equal(options.body?.byteLength ?? 0, 0);
       return response(202, {
         location: `${repositoryPath}/blobs/upload/chunk-0`,
@@ -328,6 +329,7 @@ test("028B uploads blobs in ordered fixed 256 KiB chunks without unsafe replay",
       assert.equal(header(options.headers, "content-length"), String(expected.byteLength));
       assert.equal(header(options.headers, "content-range"), `${start}-${end}`);
       assert.equal(header(options.headers, "content-type"), "application/octet-stream");
+      assert.equal(header(options.headers, "connection"), "close");
       assert.equal(Buffer.from(options.body).equals(expected), true);
       acceptedEnd = end;
       patchIndex += 1;
@@ -344,6 +346,7 @@ test("028B uploads blobs in ordered fixed 256 KiB chunks without unsafe replay",
       assert.equal(url.searchParams.get("digest"), layerDigest);
       assert.deepEqual([...url.searchParams.keys()], ["digest"]);
       assert.equal(header(options.headers, "content-length"), "0");
+      assert.equal(header(options.headers, "connection"), "close");
       assert.equal(options.body?.byteLength ?? 0, 0);
       return response(201, { "docker-content-digest": layerDigest });
     }
@@ -416,12 +419,14 @@ test("028B uploads blobs in ordered fixed 256 KiB chunks without unsafe replay",
       if (url.pathname === "/token") return response(200, {}, { token: "t".repeat(32) });
       if (method === "HEAD") return response(404);
       if (method === "POST") {
+        assert.equal(header(options.headers, "connection"), "close", failureCase.name);
         return response(202, {
           location: `${repositoryPath}/blobs/upload/chunk-0`,
           ...(failureCase.minimum === undefined ? {} : { "oci-chunk-min-length": failureCase.minimum }),
         });
       }
       if (method === "PATCH") {
+        assert.equal(header(options.headers, "connection"), "close", failureCase.name);
         patchCalls += 1;
         if (patchCalls < failureCase.patch) {
           return response(202, {
@@ -433,6 +438,7 @@ test("028B uploads blobs in ordered fixed 256 KiB chunks without unsafe replay",
         return response(failureCase.status ?? 202, failureCase.headers ?? {});
       }
       if (method === "PUT" && url.pathname.includes("/blobs/upload/")) {
+        assert.equal(header(options.headers, "connection"), "close", failureCase.name);
         finalizeCalls += 1;
         return response(201, { "docker-content-digest": layerDigest });
       }

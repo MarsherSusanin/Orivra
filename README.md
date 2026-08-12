@@ -142,8 +142,10 @@ blockchain-операций.
   images/evidence/staging remain. After that correction, a real 1 MiB PATCH
   still failed with `UND_ERR_SOCKET` after 1,049,677 bytes written and 865 read.
   The production-author replacement on RED base `a47e646` / `7bac35d` fixes
-  chunks at 256 KiB while retaining same-current/stale and no-replay rules; two
-  fresh same-tree verifier PASS reports remain required.
+  chunks at 256 KiB while retaining same-current/stale and no-replay rules. A
+  real run still failed after roughly two chunks (`bytesWritten=525812`,
+  `bytesRead=1346`). Corrective RED requires `Connection: close` on upload POST,
+  every PATCH and empty final PUT; two fresh verifier PASS reports remain required.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

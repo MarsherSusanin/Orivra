@@ -729,10 +729,10 @@ the first PATCH with `UND_ERR_SOCKET` after 4,194,726 bytes written and zero
 read. The fixed 1 MiB attempt then passed its first PATCH, but rejected GHCR's
 unchanged current upload Location as stale. After that correction, a real
 1 MiB PATCH still failed with `UND_ERR_SOCKET` after 1,049,677 bytes written
-and 865 read. The fixed 256 KiB replacement is production-author GREEN on RED
-base `a47e646` / `7bac35d`; do not retry credentials until two fresh same-tree
-verifier reports PASS. Use a separate classic token with only `read:packages`
-on the VDS after publication.
+and 865 read. A real 256 KiB run still failed after roughly two chunks
+(`bytesWritten=525812`, `bytesRead=1346`). Do not retry credentials until the
+upload-session keep-alive correction and two fresh same-tree verifier reports
+PASS. Use a separate classic token with only `read:packages` after publication.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now
@@ -778,6 +778,11 @@ an invalid `OCI-Chunk-Min-Length` or one above 262,144 bytes. Missing/bad/stale 
 bad range, `416`, non-accepted status or socket ambiguity aborts without blind
 chunk replay, manifest PUT, evidence or staging. Never print the bearer token
 or opaque Location query.
+
+The zero-body upload POST, every PATCH and the empty terminal PUT must carry
+exact `Connection: close`; the client may not reuse a prior upload-session
+transport for another body. This header changes transport lifetime only and
+does not weaken Location, cursor, digest, range or no-replay validation.
 
 029B is the credentialed production promotion and canary. 029B starts only
 after 028B has published and staged the exact frozen candidate.
