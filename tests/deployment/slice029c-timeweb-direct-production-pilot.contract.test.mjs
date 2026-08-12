@@ -97,6 +97,30 @@ const registry = {
   ],
 };
 
+function productionDeploymentEvidenceV2(value) {
+  return {
+    version: "2", kind: "digitalocean-production-deployment-evidence",
+    status: "passed", verification: "verified", productionClaim: true,
+    producer: value.publication.producer,
+    publicationEvidenceSha256: PUBLICATION_SHA,
+    frozenReleaseManifestSha256: value.publication.frozenRelease.frozenReleaseManifestSha256,
+    promotionAuthorizationSha256: digest(value.promotionAuthorizationBytes),
+    preflightEvidenceSha256: sha("6"), target: value.target,
+    run: { runId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4", operatorId: value.authorization.operatorId, completedAt: "2026-08-12T03:00:01Z" },
+    pullCredential: { registry: "ghcr.io", access: "read-only" },
+    images: value.publication.images.map(({ id, remoteRepository, remoteReference, remoteDigest }) => ({ id, remoteRepository, remoteReference, remoteDigest })),
+    topology: { publicService: "caddy", publicPorts: [80, 443], privateServices: ["web", "api", "worker", "postgres"], forbiddenPublicPorts: [5432, 8080], dockerSocketMounted: false },
+    database: { migrationManifestSha256: sha("7"), targetVersion: 10, schemaVersion: 10, roleBootstrap: { status: "passed" }, migration: { status: "passed" } },
+    objectStore: value.objectStore, safeConsumers: registry,
+    checks: {
+      exactDigestPull: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
+      timewebPitr: { status: "passed", restoreEvidenceSha256: sha("8"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
+      liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] },
+    },
+    cutover: { status: "passed", publicOrigin: value.target.publicOrigin, activatedAt: "2026-08-12T03:00:00Z" },
+  };
+}
+
 test("direct pilot rejects generic status-only preflight before one production effect", async () => {
   const module = await runtime();
   const value = await fixture();
@@ -226,13 +250,19 @@ test("post-cutover observation, checkpoint and deployment-evidence failures roll
 test("24-hour canary resumes from append-only checkpoints and cannot terminal-pass early", async () => {
   const module = await runtime();
   const value = await fixture();
+  const contracts = await import("../../packages/contracts/src/production-promotion-runtime.mjs").catch(() => ({}));
+  const deployment = productionDeploymentEvidenceV2(value);
+  assert.deepEqual(contracts.ProductionDeploymentEvidenceV2Schema.parse(deployment), deployment);
+  const deploymentText = contracts.canonicalSerializeProductionDeploymentEvidenceV2(deployment);
+  const deploymentEvidenceBytes = Buffer.from(deploymentText, "utf8");
+  const expectedDeploymentEvidenceSha256 = digest(deploymentEvidenceBytes);
   const state = [{ id: "cutover", observedAt: "2026-08-12T03:00:00Z" }];
   const promotions = [];
   let now = "2026-08-12T03:00:01Z";
   let observations = 0;
-  const invoke = () => module.resumeTimewebProductionCanary({
-    deploymentEvidenceBytes: bytes({ version: "2", kind: "test-bound-deployment", publicationEvidenceSha256: PUBLICATION_SHA }),
-    expectedDeploymentEvidenceSha256: sha("6"),
+  const invoke = (overrides = {}) => module.resumeTimewebProductionCanary({
+    deploymentEvidenceBytes,
+    expectedDeploymentEvidenceSha256,
     clock: { now: () => now },
     checkpointStore: { load: async () => structuredClone(state), append: async (entry) => state.push(entry) },
     observe: async ({ id, dueAt }) => {
@@ -248,7 +278,13 @@ test("24-hour canary resumes from append-only checkpoints and cannot terminal-pa
       };
     },
     appendPromotionEvidence: async (entry) => promotions.push(entry),
+    ...overrides,
   });
+  await assert.rejects(invoke({
+    deploymentEvidenceBytes: bytes({ version: "2", kind: "test-bound-deployment", publicationEvidenceSha256: PUBLICATION_SHA }),
+    expectedDeploymentEvidenceSha256: digest(bytes({ version: "2", kind: "test-bound-deployment", publicationEvidenceSha256: PUBLICATION_SHA })),
+  }), /PRODUCTION_DEPLOYMENT_EVIDENCE_INVALID|deployment evidence/i);
+  assert.equal(promotions.length, 0);
   assert.equal((await invoke()).status, "canary-pending");
   assert.equal(observations, 0);
   assert.equal(promotions.length, 0);
@@ -264,6 +300,11 @@ test("24-hour canary resumes from append-only checkpoints and cannot terminal-pa
   }
   assert.equal(promotions.length, 1);
   const promotion = JSON.parse(Buffer.from(promotions[0].bytes).toString("utf8"));
+  assert.deepEqual(contracts.ProductionPromotionEvidenceV2Schema.parse(promotion), promotion);
+  assert.equal(contracts.canonicalSerializeProductionPromotionEvidenceV2(promotion), Buffer.from(promotions[0].bytes).toString("utf8"));
+  assert.equal(promotion.status, "passed");
+  assert.equal(promotion.promotionClaim, true);
+  assert.equal(promotion.productionDeploymentEvidenceSha256, expectedDeploymentEvidenceSha256);
   assert.equal(promotion.canary.durationSeconds, 86400);
   assert.deepEqual(promotion.canary.checkpoints.map(({ id }) => id), ["cutover", "post-cutover-15m", "post-cutover-1h", "post-cutover-24h"]);
 });

@@ -136,3 +136,13 @@ Classification on exact base `24257ca24732f9c17f4e2e2c8b90fa6093362295`:
 syntax/typecheck PASS; the two focused deployment files are nine intentional
 RED; serialized static is 218 controls plus 12 intentional RED (nine 029C and
 three retained 027B); Sites is 46/46 PASS. No production or host effect ran.
+
+The first terminal-systemd RED fixture was structurally stale against the
+already frozen `ProductionDeploymentEvidenceV2`. It now carries the required
+preflight evidence digest, exact Timeweb authority, exact database keys,
+`timewebPitr`, no legacy volume identity or `healthz`, and the passed cutover.
+This is a fixture-only compatibility correction; the preserved production
+stash was not inspected, applied, modified or dropped.
+The sibling direct-pilot canary test now uses the same fully canonical V2
+handoff shape and independently computed checksum; its former
+`test-bound-deployment` fallback is an explicit zero-promotion rejection.
