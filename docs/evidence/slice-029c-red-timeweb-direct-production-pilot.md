@@ -146,3 +146,12 @@ stash was not inspected, applied, modified or dropped.
 The sibling direct-pilot canary test now uses the same fully canonical V2
 handoff shape and independently computed checksum; its former
 `test-bound-deployment` fallback is an explicit zero-promotion rejection.
+Both canary stores now retain full canonical `ProductionCanaryCheckpointV2`
+records with exact typed checks; no lossy ID/time/SHA projection or generic
+observation can satisfy resume. The valid append fakes return exact passed
+checksum receipts, while the deliberate non-PASS receipt remains causal RED.
+Classification on exact base `f32c57da5e413903439195407dda2b4514d969a8`:
+syntax/typecheck PASS; the exact two deployment files remain nine intentional
+RED; serialized deployment static remains 218 controls plus 12 intentional RED
+(nine 029C and three retained 027B); Sites is 46/46 PASS. The saved GREEN stash
+was not inspected, applied, modified or dropped.

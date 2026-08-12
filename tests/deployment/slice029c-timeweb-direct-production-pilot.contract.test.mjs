@@ -97,6 +97,18 @@ const registry = {
   ],
 };
 
+const canaryChecks = Object.freeze({
+  healthz: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
+  objectStore: { status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
+  diskPressure: { status: "passed" }, hostedBrowserSmoke: { status: "passed" },
+  liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"] },
+});
+
+const checkpoint = (id, dueAt, observedAt = dueAt) => ({
+  version: "2", kind: "production-canary-checkpoint", id, dueAt, observedAt,
+  status: "passed", checks: structuredClone(canaryChecks),
+});
+
 function productionDeploymentEvidenceV2(value) {
   return {
     version: "2", kind: "digitalocean-production-deployment-evidence",
@@ -239,7 +251,7 @@ test("post-cutover observation, checkpoint and deployment-evidence failures roll
         if (failingPhase === "deployment-evidence") throw new Error("deployment evidence failed");
         deploymentPass.push(entry);
       },
-    }), /external HTTPS failed|checkpoint failed|deployment evidence failed|PRODUCTION_/);
+    }), /DigitalOcean production promotion failed|PRODUCTION_/);
     assert.equal(events[0] === "caddy-cutover" || events.includes("caddy-cutover"), true, failingPhase);
     assert.equal(events.at(-1), "rollback-caddy", failingPhase);
     assert.equal(events.filter((entry) => entry === "rollback-caddy").length, 1, failingPhase);
@@ -256,7 +268,8 @@ test("24-hour canary resumes from append-only checkpoints and cannot terminal-pa
   const deploymentText = contracts.canonicalSerializeProductionDeploymentEvidenceV2(deployment);
   const deploymentEvidenceBytes = Buffer.from(deploymentText, "utf8");
   const expectedDeploymentEvidenceSha256 = digest(deploymentEvidenceBytes);
-  const state = [{ id: "cutover", observedAt: "2026-08-12T03:00:00Z" }];
+  const state = [checkpoint("cutover", "2026-08-12T03:00:00Z")];
+  assert.deepEqual(contracts.ProductionCanaryCheckpointV2Schema.parse(state[0]), state[0]);
   const promotions = [];
   let now = "2026-08-12T03:00:01Z";
   let observations = 0;
@@ -264,18 +277,14 @@ test("24-hour canary resumes from append-only checkpoints and cannot terminal-pa
     deploymentEvidenceBytes,
     expectedDeploymentEvidenceSha256,
     clock: { now: () => now },
-    checkpointStore: { load: async () => structuredClone(state), append: async (entry) => state.push(entry) },
+    checkpointStore: { load: async () => structuredClone(state), append: async (entry) => {
+      const parsed = contracts.ProductionCanaryCheckpointV2Schema.parse(entry);
+      assert.equal(contracts.canonicalSerializeProductionCanaryCheckpointV2(parsed), canonicalJson(entry));
+      state.push(parsed);
+    } },
     observe: async ({ id, dueAt }) => {
       observations += 1;
-      return {
-        version: "2", kind: "production-canary-checkpoint", id, dueAt, observedAt: now, status: "passed",
-        checks: {
-          healthz: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
-          objectStore: { status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
-          diskPressure: { status: "passed" }, hostedBrowserSmoke: { status: "passed" },
-          liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"] },
-        },
-      };
+      return checkpoint(id, dueAt, now);
     },
     appendPromotionEvidence: async (entry) => promotions.push(entry),
     ...overrides,

@@ -19,6 +19,18 @@ const canonicalJson = (value) => value === null || typeof value !== "object"
     ? `[${value.map(canonicalJson).join(",")}]`
     : `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
 
+const canaryChecks = Object.freeze({
+  healthz: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
+  objectStore: { status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
+  diskPressure: { status: "passed" }, hostedBrowserSmoke: { status: "passed" },
+  liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"] },
+});
+
+const checkpoint = (id, dueAt, observedAt = dueAt) => ({
+  version: "2", kind: "production-canary-checkpoint", id, dueAt, observedAt,
+  status: "passed", checks: structuredClone(canaryChecks),
+});
+
 async function productionDeploymentEvidenceV2() {
   const publication = JSON.parse(await readFile(
     resolve(root, "tests/fixtures/slice029b-publication-evidence.v1.json"),
@@ -329,7 +341,8 @@ test("systemd resume trusts only the host clock, appends one due checkpoint atom
   const deploymentEvidenceBytes = Buffer.from(deploymentText, "utf8");
   const expectedDeploymentEvidenceSha256 = `sha256:${createHash("sha256").update(deploymentEvidenceBytes).digest("hex")}`;
   const cutover = "2026-08-12T03:00:00Z";
-  const checkpoints = [{ id: "cutover", dueAt: cutover, observedAt: cutover, sha256: sha("cutover") }];
+  const checkpoints = [checkpoint("cutover", cutover)];
+  assert.deepEqual(contracts.ProductionCanaryCheckpointV2Schema.parse(checkpoints[0]), checkpoints[0]);
   const appended = [];
   const promotions = [];
   const cleanup = [];
@@ -340,10 +353,14 @@ test("systemd resume trusts only the host clock, appends one due checkpoint atom
     expectedDeploymentEvidenceSha256,
     clock: { now: () => now },
     loadCanonicalState: async () => structuredClone(checkpoints),
-    observe: async ({ id, dueAt }) => ({ id, dueAt, observedAt: now, status: "passed" }),
+    observe: async ({ id, dueAt }) => checkpoint(id, dueAt, now),
     appendCheckpoint: async (entry) => {
       appended.push(entry);
-      checkpoints.push({ id: entry.id, dueAt: entry.dueAt, observedAt: entry.observedAt, sha256: entry.sha256 });
+      const text = Buffer.from(entry.bytes).toString("utf8");
+      const value = contracts.ProductionCanaryCheckpointV2Schema.parse(JSON.parse(text));
+      assert.equal(contracts.canonicalSerializeProductionCanaryCheckpointV2(value), text);
+      checkpoints.push(value);
+      return { status: "passed", sha256: entry.sha256 };
     },
     appendPromotionEvidence: async (entry) => { promotions.push(entry); return { status: "passed", sha256: entry.sha256 }; },
     cleanupStage: async (path) => cleanup.push(path),
@@ -367,7 +384,7 @@ test("systemd resume trusts only the host clock, appends one due checkpoint atom
   now = "2026-08-13T03:00:00Z";
   await assert.rejects(invoke({
     loadCanonicalState: async () => structuredClone(checkpoints),
-    appendCheckpoint: async () => undefined,
+    appendCheckpoint: async (entry) => ({ status: "passed", sha256: entry.sha256 }),
     appendPromotionEvidence: async () => ({ status: "recorded-for-test" }),
   }), /CANARY_PROMOTION_EVIDENCE_INVALID|promotion evidence/i);
   assert.equal(promotions.length, 0);
