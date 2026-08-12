@@ -368,7 +368,15 @@ production-author replacement on RED base `a47e646` / `7bac35d` fixes the
 bound at 256 KiB. A real run still failed after roughly two chunks. The
 production-author replacement on RED base `696f317` / `33edbe3` forces a fresh
 transport with `Connection: close` on each upload-session request. Fresh
-Core/Product verification is required; no hosted claim exists.
+Core and Product independently PASS exact commit
+`e2744415508650d14bd974b885842232d756e092` / tree
+`907fa93f4b604cd8f48d8ee9734a63e0e68d2440`. The authorized run then
+published all five frozen OCI manifests without rebuild; independent GHCR
+HEAD checks returned every exact frozen digest. Append-only publication
+evidence SHA-256 is
+`1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
+This closes only registry publication. Isolated staging and 029B production
+promotion/canary remain incomplete; no hosted claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

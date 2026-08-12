@@ -2,9 +2,10 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: GHCR upload-session fresh-transport production-author GREEN on
-corrective RED base `696f317` / `33edbe3`; fresh Core/Product verification
-pending; zero images, publication evidence or staging effects exist.
+Status: GHCR publication complete and independently verified on exact commit
+`e2744415508650d14bd974b885842232d756e092` / tree
+`907fa93f4b604cd8f48d8ee9734a63e0e68d2440`; isolated DigitalOcean staging
+pending.
 
 ## Authorized predecessor
 

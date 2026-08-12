@@ -1,10 +1,13 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: GHCR upload-session fresh-transport production-author GREEN on
-corrective RED base `696f317` / `33edbe3`; fresh Core/Product verification
-pending; zero images, publication evidence or staging effects exist. Prior
-Core/Product PASS `70f63cb` / `88ec383` covers superseded adapter bytes and
-cannot authorize publication.
+Status: GHCR publication complete on exact commit
+`e2744415508650d14bd974b885842232d756e092` / tree
+`907fa93f4b604cd8f48d8ee9734a63e0e68d2440`. Core and Product independently
+PASS those bytes. Five immutable GHCR digests were independently re-read and
+canonical publication evidence has SHA-256
+`1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
+Isolated DigitalOcean staging is still pending; this is not 029B production,
+hosted canary or security-scan evidence.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 

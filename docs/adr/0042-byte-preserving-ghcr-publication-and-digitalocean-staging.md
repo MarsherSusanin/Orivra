@@ -1,8 +1,7 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; GHCR upload-session fresh-transport
-  production-author GREEN on corrective RED base; fresh Core/Product
-  verification pending; zero images/evidence/staging
+- Status: Accepted contract; GHCR publication complete and independently
+  verified; isolated DigitalOcean staging pending
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -116,7 +115,19 @@ written and 1,346 read, approximately two chunks plus framing. Credential-free
 probing confirms GHCR honors `Connection: close`; the production-author
 replacement on RED base `696f317` / `33edbe3` therefore requires a fresh
 transport for POST, every PATCH and the final PUT. Fresh two-verifier acceptance
-is mandatory before another credentialed attempt.
+is mandatory before another credentialed attempt. Core and Product independently
+PASS the accepted replacement at commit
+`e2744415508650d14bd974b885842232d756e092` / tree
+`907fa93f4b604cd8f48d8ee9734a63e0e68d2440`; report SHA-256 values are
+`b22316e932db9248157274bf4a864ee146f181d57a508388f08084ca1ef5fcf7` and
+`d52c5fa4154fc2041620626df691a170b778603c869df46cb83af601adcd7bdc`.
+The subsequently authorized run published all five frozen image manifests to
+their explicit `ghcr.io/marshersusanin/orivra-*` repositories without rebuild.
+Independent remote HEAD checks returned each exact frozen manifest digest.
+Canonical publication evidence is a mode-0400 regular file with SHA-256
+`1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
+This is GHCR publication evidence only: isolated staging and 029B production
+promotion remain separate and incomplete.
 
 ### Publication evidence
 

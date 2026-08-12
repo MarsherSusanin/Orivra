@@ -146,7 +146,13 @@ blockchain-операций.
   real run still failed after roughly two chunks (`bytesWritten=525812`,
   `bytesRead=1346`). The production-author replacement on RED base `696f317` /
   `33edbe3` requires `Connection: close` on upload POST, every PATCH and empty
-  final PUT; two fresh verifier PASS reports remain required.
+  final PUT. Core and Product independently PASS exact accepted commit
+  `e2744415508650d14bd974b885842232d756e092` / tree
+  `907fa93f4b604cd8f48d8ee9734a63e0e68d2440`. The authorized publication then
+  placed all five exact frozen manifests in GHCR and independently re-read
+  their expected digests. Immutable publication evidence SHA-256 is
+  `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
+  Isolated DigitalOcean staging and 029B production promotion remain pending.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
@@ -300,9 +306,10 @@ Web2JsonManifestV1
   WAL/base-backup PITR. Локальная credential-free 027B readiness
   independently verified; 027C backup/recovery is independently verified on
   exact `8137970` / `8c594cc`, while canceled scan 8852 is not a security PASS
-  and its deferred inventory-digest risk remains open. GHCR publication,
-  VDS deployment и использование production Spaces credentials ещё не
-  выполнялись. Это не hosted, live-production, фактический RPO/RTO или SLA PASS.
+  and its deferred inventory-digest risk remains open. GHCR publication of the
+  five frozen manifests is complete and evidence-bound; isolated staging, VDS
+  application deployment and production Spaces credentials have not yet been
+  completed. Это не hosted, live-production, фактический RPO/RTO или SLA PASS.
 - Rollback разрешён только на prior schema-compatible verified remote digest,
   уже связанный immutable publication evidence с frozen-manifest checksum;
   release manifest сам по себе не является pull authority.

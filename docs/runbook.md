@@ -732,8 +732,18 @@ unchanged current upload Location as stale. After that correction, a real
 and 865 read. A real 256 KiB run still failed after roughly two chunks
 (`bytesWritten=525812`, `bytesRead=1346`). The upload-session fresh-transport
 replacement is production-author GREEN on RED base `696f317` / `33edbe3`; do
-not retry credentials until two fresh same-tree verifier reports PASS. Use a
-separate classic token with only `read:packages` after publication.
+not retry credentials until two fresh same-tree verifier reports PASS. Core and
+Product subsequently PASS exact commit
+`e2744415508650d14bd974b885842232d756e092` / tree
+`907fa93f4b604cd8f48d8ee9734a63e0e68d2440`, with report SHA-256 values
+`b22316e932db9248157274bf4a864ee146f181d57a508388f08084ca1ef5fcf7` and
+`d52c5fa4154fc2041620626df691a170b778603c869df46cb83af601adcd7bdc`.
+The authorized run published and independently re-read all five exact remote
+manifest digests. The mode-0400 canonical publication evidence file SHA-256 is
+`1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
+Preserve those exact bytes for staging; never regenerate them from a mutable
+object. Use a separate classic token with only `read:packages` after
+publication. The write token must never reach the VDS.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now
@@ -808,9 +818,9 @@ notes. This inventory records only stable identifiers and storage boundaries.
 | State root | `/opt/orivra/state`, root-owned and not publicly served |
 | GHCR repositories | `ghcr.io/marshersusanin/orivra-{caddy,web,api,worker,postgres-recovery}` |
 
-The current prepared server source is exact commit
-`70f63cb0c4fac0c7661cb734896575be07edfa70` at
-`/opt/orivra/releases/70f63cb0c4fac0c7661cb734896575be07edfa70`.
+The current prepared server source identity must be recorded here only after
+the post-publication documentation commit is synchronized to
+`/opt/orivra/releases/<commit>` and `/opt/orivra/current` is atomically updated.
 Docker Engine `29.1.3`, Compose `2.40.3`, fail2ban and unattended upgrades are
 active. UFW denies inbound traffic by default, permits public 80/443, rate-limits
 22 and restricts the provider monitoring agent on 10050 to its explicit
