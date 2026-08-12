@@ -395,3 +395,21 @@ Serialized deployment static remains 204 PASS plus 50 intentional RED and
 Sites remains 46/46 PASS. Syntax/diff checks are clean; no production,
 dependency, Docker, network, credential or generated-output change is part of
 this correction.
+
+## Daily backup and real archive-freshness corrective RED
+
+The production boundary now freezes a separate root-owned 02:00 UTC Timeweb
+full-backup oneshot/timer. Retention follows only exact post-backup WAL
+switch/archive observation and current canonical backup evidence, using fixed
+`wal-g delete retain FULL 8 --confirm`. Direct PITR and canary reject missing,
+synthetic or stale archive observations; `archivePendingAgeSeconds` must be at
+most 60. RED performs no systemd, PostgreSQL, Timeweb, Docker, network,
+credential or retention effect; MinIO remains QA-only.
+
+Classification on exact base `7b4d15a7dd705ecee2dc6f25d0e4475c8c0ad04a`
+/ tree `7222201fdd382a9d085ced3403c08b733864614d`: typecheck PASS; the exact
+affected focus is nine causal intentional RED and no harness failure; serialized
+deployment static is 203 retained controls PASS plus 52 intentional RED,
+including the new daily-backup boundary; Sites is 46/46 PASS. No production,
+dependency, Docker, network, credential, systemd, backup, retention or generated
+output effect was run.

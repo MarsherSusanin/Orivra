@@ -260,6 +260,64 @@ test("root-owned systemd oneshot and timer expose only the fixed canary resume e
   assert.match(runbook, /install -o root -g root -m 0644[\s\S]*orivra-production-canary\.(?:service|timer)/i);
 });
 
+test("root-owned daily Timeweb full backup seals current evidence before authorized retention", async () => {
+  const [service, timer, cli, packageJson, module] = await Promise.all([
+    readFile(resolve(root, "deploy/systemd/orivra-timeweb-full-backup.service"), "utf8").catch(() => ""),
+    readFile(resolve(root, "deploy/systemd/orivra-timeweb-full-backup.timer"), "utf8").catch(() => ""),
+    readFile(resolve(root, "scripts/run-timeweb-daily-backup.mjs"), "utf8").catch(() => ""),
+    readFile(resolve(root, "package.json"), "utf8").then(JSON.parse),
+    import("../../scripts/timeweb-production-daily-backup.mjs").catch(() => ({})),
+  ]);
+  assert.match(service, /^Type=oneshot$/m);
+  assert.match(service, /^User=root$/m);
+  assert.match(service, /^Group=root$/m);
+  assert.match(service, /^UMask=0077$/m);
+  assert.match(service, /^ExecStart=\/usr\/bin\/node \/opt\/orivra\/current\/scripts\/run-timeweb-daily-backup\.mjs$/m);
+  assert.match(service, /^NoNewPrivileges=true$/m);
+  assert.doesNotMatch(service, /EnvironmentFile|--.*(?:token|key|secret|password)|5432|8080|docker\.sock/i);
+  assert.match(timer, /^OnCalendar=\*-\*-\* 02:00:00 UTC$/m);
+  assert.match(timer, /^Persistent=true$/m);
+  assert.match(timer, /^RandomizedDelaySec=0$/m);
+  assert.match(timer, /^Unit=orivra-timeweb-full-backup\.service$/m);
+  assert.equal(packageJson.scripts?.["production:backup:daily"], "node scripts/run-timeweb-daily-backup.mjs");
+  assert.match(cli, /runTimewebProductionDailyBackup/);
+  assert.match(cli, /wal-g["',\s]+delete["',\s]+retain["',\s]+FULL["',\s]+8["',\s]+--confirm/);
+  assert.doesNotMatch(cli, /console\.(?:log|error)[^\n]*(?:token|key|secret|password)|status\s*:\s*["']passed/i);
+
+  assert.equal(typeof module.runTimewebProductionDailyBackup, "function");
+  const calls = [];
+  const evidenceBytes = Buffer.from('{"kind":"base-backup","status":"completed","version":"1"}');
+  const evidenceSha256 = sha(evidenceBytes);
+  const result = await module.runTimewebProductionDailyBackup({
+    clock: { now: () => "2026-08-13T02:00:00Z" },
+    createFullBackup: async () => { calls.push("backup"); return { status: "passed", backupId: "base_20260813T020000Z" }; },
+    switchWal: async () => { calls.push("switch-wal"); return { status: "passed", walSegment: "00000001000000000000000C" }; },
+    observeArchive: async () => { calls.push("observe-archive"); return { status: "passed", walSegment: "00000001000000000000000C", archivePendingAgeSeconds: 30, source: "postgres-archive-status" }; },
+    readCanonicalBackupEvidence: async () => { calls.push("evidence"); return { bytes: evidenceBytes, sha256: evidenceSha256, backupId: "base_20260813T020000Z" }; },
+    authorizeRetention: async (input) => { calls.push("authorize-retention"); assert.equal(input.backupEvidenceSha256, evidenceSha256); return { status: "authorized", retainFull: 8 }; },
+    runRetention: async (input) => { calls.push("retention"); assert.deepEqual(input.args, ["delete", "retain", "FULL", "8", "--confirm"]); return { status: "passed" }; },
+  });
+  assert.deepEqual(calls, ["backup", "switch-wal", "observe-archive", "evidence", "authorize-retention", "retention"]);
+  assert.deepEqual(result, { status: "passed", backupId: "base_20260813T020000Z", backupEvidenceSha256: evidenceSha256, archivePendingAgeSeconds: 30, retainedFull: 8 });
+
+  for (const observation of [
+    { status: "passed", walSegment: "00000001000000000000000C", archivePendingAgeSeconds: 61, source: "postgres-archive-status" },
+    { status: "passed", walSegment: "00000001000000000000000C", archivePendingAgeSeconds: 0, source: "synthetic" },
+  ]) {
+    let retentionEffects = 0;
+    await assert.rejects(module.runTimewebProductionDailyBackup({
+      clock: { now: () => "2026-08-13T02:00:00Z" },
+      createFullBackup: async () => ({ status: "passed", backupId: "base_20260813T020000Z" }),
+      switchWal: async () => ({ status: "passed", walSegment: "00000001000000000000000C" }),
+      observeArchive: async () => observation,
+      readCanonicalBackupEvidence: async () => ({ bytes: evidenceBytes, sha256: evidenceSha256, backupId: "base_20260813T020000Z" }),
+      authorizeRetention: async () => { retentionEffects += 1; return { status: "authorized", retainFull: 8 }; },
+      runRetention: async () => { retentionEffects += 1; return { status: "passed" }; },
+    }), /TIMEWEB_DAILY_BACKUP_INVALID|archive freshness/i);
+    assert.equal(retentionEffects, 0);
+  }
+});
+
 test("direct-pilot CLI accepts only absolute file-backed authority and invokes the real adapter boundary without secret output", async () => {
   const source = await readFile(resolve(root, "scripts/timeweb-direct-production-pilot-cli.mjs"), "utf8").catch(() => "");
   const module = await import("../../scripts/timeweb-direct-production-pilot-cli.mjs").catch(() => ({}));

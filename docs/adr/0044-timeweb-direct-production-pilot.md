@@ -206,6 +206,21 @@ independent checksum. At 24 hours it appends canonical
 `ProductionPromotionEvidenceV2` with `status:passed`, `promotionClaim:true` and
 the exact deployment digest. A non-PASS test receipt is not acceptance.
 
+### Daily backup and archive freshness
+
+Production installs a separate root-owned hardened oneshot and persistent timer
+for one encrypted Timeweb full backup at exactly 02:00 UTC. It carries no
+secret value in argv or logs and exposes no port. A successful backup is
+followed by an actual `pg_switch_wal()` and matching archive observation;
+synthetic zero age is not evidence. Only after current canonical
+`BackupEvidenceV1` bytes and checksum are verified may the retention identity
+execute exactly `wal-g delete retain FULL 8 --confirm`.
+
+Direct PITR and every canary checkpoint fail closed unless that real
+observation reports `archivePendingAgeSeconds <= 60`. Missing, unrelated,
+synthetic or stale observation produces zero PITR/canary PASS and zero
+retention effect. MinIO remains QA-only.
+
 The direct-pilot CLI accepts only absolute canonical evidence/authority and
 required secret-file paths; it accepts no DigitalOcean API token. It constructs
 the production adapter set before invoking

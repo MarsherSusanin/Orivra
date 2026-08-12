@@ -946,6 +946,15 @@ must reject clock regression and caller future-time input; no invocation may
 append promotion evidence before 86400 real seconds after cutover. These are
 frozen commands, not installation or production-PASS claims.
 
+The separate `orivra-timeweb-full-backup.timer` runs exactly at 02:00 UTC and
+invokes only its fixed root-owned oneshot. The command creates the encrypted
+Timeweb full backup, calls `pg_switch_wal()`, observes the exact switched
+segment through PostgreSQL archive status/off-host storage, and requires
+pending age at most 60 seconds. Only current canonical backup evidence may
+authorize `wal-g delete retain FULL 8 --confirm`. Missing, stale or synthetic
+archive observation blocks retention, direct PITR and canary PASS. Unit argv
+and logs contain no secrets; MinIO remains QA-only.
+
 ### Production access inventory (identifiers only)
 
 Never put a password, PAT, API token, private key, database URL or application

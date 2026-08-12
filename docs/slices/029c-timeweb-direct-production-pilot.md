@@ -68,6 +68,9 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
   clock, writes the first missing due checkpoint mode 0400 and cannot publish an
   early terminal result; terminal output is canonical
   `ProductionPromotionEvidenceV2`, never a non-PASS test receipt.
+- install a separate root-owned 02:00 UTC Timeweb full-backup oneshot/timer;
+  accept only actual post-backup WAL switch/archive age at most 60 seconds, then
+  authorize exact eight-full retention from current canonical backup evidence.
 
 ### 029C4 — Bounded VDS host runner
 

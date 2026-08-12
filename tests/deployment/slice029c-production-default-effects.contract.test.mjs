@@ -116,6 +116,14 @@ test("the Timeweb PITR default restores one selected encrypted backup into a fre
   const calls = [];
   const phaseResult = (input) => {
     if (input.phase === "create-base-backup") return { status: "passed", backupId: "base_20260812T030000Z" };
+    if (input.phase === "switch-wal-after-backup") return {
+      status: "passed", switchedWalSegment: "00000001000000000000000B",
+    };
+    if (input.phase === "observe-switched-wal-archived") return {
+      status: "passed", switchedWalSegment: "00000001000000000000000B",
+      archivedAt: "2026-08-12T03:00:30Z", archivePendingAgeSeconds: 30,
+      source: "postgres-archive-status",
+    };
     if (input.phase === "select-backup") return {
       status: "passed", backupId: "base_20260812T030000Z", encrypted: true,
       backupCompletedAt: "2026-08-12T03:00:00Z", lastArchivedAt: "2026-08-12T03:00:30Z",
@@ -139,9 +147,23 @@ test("the Timeweb PITR default restores one selected encrypted backup into a fre
     backupAgeSeconds: 60, archivePendingAgeSeconds: 30,
   });
   assert.deepEqual(calls.map(({ phase }) => phase), [
-    "create-base-backup", "select-backup", "create-fresh-volume", "restore-selected-backup",
+    "create-base-backup", "switch-wal-after-backup", "observe-switched-wal-archived",
+    "select-backup", "create-fresh-volume", "restore-selected-backup",
     "verify-restored-database", "remove-fresh-volume",
   ]);
+  for (const archivedObservation of [
+    { status: "passed", switchedWalSegment: "00000001000000000000000B", archivePendingAgeSeconds: 61, source: "postgres-archive-status" },
+    { status: "passed", switchedWalSegment: "00000001000000000000000B", archivePendingAgeSeconds: 0, source: "synthetic" },
+    undefined,
+  ]) {
+    await assert.rejects(module.runDefaultTimewebProductionPitr({
+      productionRunId: PRODUCTION_RUN_ID,
+      runner: async (input) => input.phase === "observe-switched-wal-archived"
+        ? archivedObservation
+        : phaseResult(input),
+      clock: { now: () => "2026-08-12T03:01:00Z" },
+    }), /TIMEWEB_PRODUCTION_PITR_FAILED|archive freshness|archive observation/i);
+  }
   calls.length = 0;
   await assert.rejects(module.runDefaultTimewebProductionPitr({
     productionRunId: PRODUCTION_RUN_ID,
@@ -190,6 +212,21 @@ test("the canary default derives every PASS field from real due host observation
       clock: { status: "synchronized", source: "production-host", maximumSkewSeconds: 5, observedSkewSeconds: 1 },
     },
   });
+  await assert.rejects(module.observeTimewebProductionCanary({
+    id: "post-cutover-15m",
+    dueAt: "2026-08-12T03:15:00Z",
+    publicOrigin: PUBLIC_ORIGIN,
+    clock: {
+      readSynchronizedHostTime: async () => ({ now: "2026-08-12T03:15:01Z", source: "production-host", maximumSkewSeconds: 5, observedSkewSeconds: 1 }),
+    },
+    adapters: {
+      externalHttps: async () => ({ status: "passed", rootHtml: true, sameOriginApi: true }),
+      internalHealth: async () => ({ healthz: { status: "passed" }, readyz: { status: "passed", schemaVersion: 10 }, workerHeartbeat: { status: "current" } }),
+      diskPressure: async () => ({ status: "passed" }),
+      timewebBackup: async () => ({ status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 61 }),
+      persistedLiveRuns: async () => ({ status: "persisted", runIds: RUN_IDS, manifests: MANIFESTS }),
+    },
+  }), /TIMEWEB_PRODUCTION_CANARY_INVALID|archive freshness/i);
   let effects = 0;
   await assert.rejects(module.observeTimewebProductionCanary({
     id: "post-cutover-15m", dueAt: "2026-08-12T03:15:00Z", publicOrigin: PUBLIC_ORIGIN,
