@@ -729,9 +729,10 @@ the first PATCH with `UND_ERR_SOCKET` after 4,194,726 bytes written and zero
 read. The fixed 1 MiB attempt then passed its first PATCH, but rejected GHCR's
 unchanged current upload Location as stale. After that correction, a real
 1 MiB PATCH still failed with `UND_ERR_SOCKET` after 1,049,677 bytes written
-and 865 read. Do not retry credentials until the fixed 256 KiB replacement and
-two fresh same-tree verifier reports PASS. Use a separate classic token with
-only `read:packages` on the VDS after publication.
+and 865 read. The fixed 256 KiB replacement is production-author GREEN on RED
+base `a47e646` / `7bac35d`; do not retry credentials until two fresh same-tree
+verifier reports PASS. Use a separate classic token with only `read:packages`
+on the VDS after publication.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now

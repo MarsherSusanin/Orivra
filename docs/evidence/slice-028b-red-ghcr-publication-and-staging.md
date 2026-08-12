@@ -2,8 +2,9 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Fixed 256 KiB GHCR transport-bound corrective RED after a real 1 MiB
-PATCH socket failure; zero images, publication evidence or staging effects exist.
+Status: Fixed 256 KiB GHCR transport production-author GREEN on corrective RED
+base `a47e646` / `7bac35d`; fresh Core/Product verification pending; zero
+images, publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -355,6 +356,13 @@ Intentional RED classification on exact base `c4f6d54` / `49249b4`: syntax and
 typecheck PASS; focused GHCR/staging/roadmap is 34 PASS plus one causal RED
 (`1048576` actual versus `262144` frozen); serialized deployment static is 213
 PASS plus the same RED; Sites is 46/46 PASS.
+
+The production-author replacement changes only the adapter's fixed bound from
+1 MiB to 256 KiB. The exact-Caddy 61-PATCH case and all prior stable-current,
+stale-history, cursor, finalizer and no-replay cases now PASS. Post-correction
+typecheck, pure 61/61, focused 35/35, serialized static 214/214 and Sites 46/46
+PASS. No credential, registry, evidence or staging effect was used; fresh
+same-tree Core and Product verification remains mandatory.
 
 ## Stable-current GHCR Location compatibility RED
 

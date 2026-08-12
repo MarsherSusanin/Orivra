@@ -1,7 +1,8 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; fixed 256 KiB GHCR transport-bound corrective RED
-  after a real 1 MiB PATCH socket failure; zero images/evidence/staging
+- Status: Accepted contract; fixed 256 KiB GHCR transport production-author
+  GREEN on corrective RED base; fresh Core/Product verification pending; zero
+  images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -106,9 +107,9 @@ Location; the adapter classified that valid stable Location as stale and
 failed. The production-author correction accepts only the unchanged current
 URL with its exact advanced Range. A real stable-current 1 MiB run then failed
 inside the PATCH transport with `UND_ERR_SOCKET` after 1,049,677 bytes written
-and 865 bytes read. The new fixed bound is 256 KiB. All attempts remain
-non-authorizing; fresh two-verifier acceptance is mandatory before another
-credentialed attempt.
+and 865 bytes read. The production-author replacement fixes the bound at 256
+KiB on RED base `a47e646` / `7bac35d`. All attempts remain non-authorizing;
+fresh two-verifier acceptance is mandatory before another credentialed attempt.
 
 ### Publication evidence
 
