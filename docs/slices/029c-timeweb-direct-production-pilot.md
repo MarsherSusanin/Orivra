@@ -24,6 +24,11 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 ### 029C2 — Typed deployment
 
 - require eight exact typed preflight observations before provisioning;
+- bind read-only GHCR to the ordered five published digest references,
+  Timeweb to exact endpoint/region/bucket/path-style plus passed
+  PUT/HEAD/LIST/GET/DELETE capability observations, and live Coston2 to chain
+  114, canonical RPC/DA, public relayer address, decimal balance and configured
+  authorization;
 - use the existing VDS only through pinned SSH, with no DigitalOcean API token;
 - exclude the generated registry from input inventory, prove its fixed output
   path absent before deploy, then publish it atomically mode 0400/no-replace;
@@ -45,6 +50,8 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
   deployment evidence becomes authoritative;
 - append 0/15m/1h/24h checkpoint evidence only when a trusted clock reaches
   each due time;
+- include an exact production-host synchronization observation in every
+  checkpoint and reject more than five seconds skew before append;
 - resume from the exact canonical append-only prefix without skipping or
   replaying checkpoints;
 - forbid terminal promotion before the full 86400 seconds;

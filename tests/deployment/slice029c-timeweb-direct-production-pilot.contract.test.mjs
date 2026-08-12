@@ -11,6 +11,15 @@ const OPEN_METEO = "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00
 const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
 const SAFE_CONSUMER_REGISTRY_OUTPUT =
   "/opt/orivra/evidence/safe-consumer-registry.v1.json";
+const COSTON2_RPC_URL = "https://coston2-api.flare.network/ext/C/rpc";
+const COSTON2_DA_URL = "https://ctn2-data-availability.flare.network";
+const RELAYER_ADDRESS = "0x3333333333333333333333333333333333333333";
+const TIMEWEB_CAPABILITIES = ["PUT", "HEAD", "LIST", "GET", "DELETE"]
+  .map((operation) => ({ operation, status: "passed" }));
+const CLOCK_CHECK = Object.freeze({
+  status: "synchronized", source: "production-host",
+  maximumSkewSeconds: 5, observedSkewSeconds: 0,
+});
 const sha = (digit) => `sha256:${digit.repeat(64).slice(0, 64)}`;
 const canonicalJson = (value) => value === null || typeof value !== "object"
   ? JSON.stringify(value)
@@ -81,12 +90,25 @@ const commonInput = (value) => ({
 const preflight = (value, id) => ({
   "dns-target": { version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed", dnsName: value.target.dnsName, addresses: ["72.56.81.28"] },
   "ssh-host-key": { version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed", host: value.target.sshEndpoint.host, port: 22, expectedHostKeySha256: sha("1"), observedHostKeySha256: sha("1") },
-  "read-only-ghcr": { version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed", registry: "ghcr.io", access: "read-only" },
+  "read-only-ghcr": {
+    version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed",
+    registry: "ghcr.io", access: "read-only",
+    images: value.publication.images.map(({ id: imageId, remoteReference, remoteDigest }) => ({ id: imageId, remoteReference, remoteDigest })),
+  },
   "secret-files": { version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed", fileIds: Object.keys(fileInputs).sort(), valuesExposed: false },
-  "timeweb-s3-authority": { version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed", authoritySha256: digest(value.objectStoreAuthorityBytes), authorityMode: "shared-pilot" },
+  "timeweb-s3-authority": {
+    version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed",
+    authoritySha256: digest(value.objectStoreAuthorityBytes), authorityMode: "shared-pilot",
+    endpoint: value.objectStore.endpoint, region: value.objectStore.region, bucket: value.objectStore.bucket,
+    pathStyle: value.objectStore.pathStyle, capabilities: structuredClone(TIMEWEB_CAPABILITIES),
+  },
   "replay-bundle": { version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed", bundleSha256: sha("2"), reportSha256: sha("3") },
   "safe-consumer-manifests": { version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed", manifests: [["open-meteo-current-weather", OPEN_METEO], ["eth-usd", ETH_USD]] },
-  "live-coston2": { version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed", chainId: 114, authorization: "configured" },
+  "live-coston2": {
+    version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed",
+    chainId: 114, rpcUrl: COSTON2_RPC_URL, dataAvailabilityUrl: COSTON2_DA_URL,
+    relayerAddress: RELAYER_ADDRESS, balanceWei: "1000000000000000000", authorization: "configured",
+  },
 }[id]);
 
 const registry = {
@@ -102,6 +124,7 @@ const canaryChecks = Object.freeze({
   objectStore: { status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
   diskPressure: { status: "passed" }, hostedBrowserSmoke: { status: "passed" },
   liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"] },
+  clock: CLOCK_CHECK,
 });
 
 const checkpoint = (id, dueAt, observedAt = dueAt) => ({
@@ -136,14 +159,37 @@ function productionDeploymentEvidenceV2(value) {
 test("direct pilot rejects generic status-only preflight before one production effect", async () => {
   const module = await runtime();
   const value = await fixture();
-  let effects = 0;
-  await assert.rejects(module.runTimewebDirectProductionPilot({
-    ...commonInput(value),
-    clock: { now: () => "2026-08-12T02:20:00Z" },
-    preflightAdapter: { verify: async () => ({ status: "passed" }) },
-    productionAdapter: { provision: async () => { effects += 1; } },
-  }), /PRODUCTION_PREFLIGHT_INVALID|Production pilot preflight is invalid/);
-  assert.equal(effects, 0);
+  const without = (field, observation) => Object.fromEntries(
+    Object.entries(observation).filter(([key]) => key !== field),
+  );
+  const cases = [
+    ["status-only", null, () => ({ status: "passed" })],
+    ["missing GHCR image inventory", "read-only-ghcr", (observation) => without("images", observation)],
+    ["extra GHCR image", "read-only-ghcr", (observation) => ({ ...observation, images: [...observation.images, observation.images[0]] })],
+    ["reordered GHCR images", "read-only-ghcr", (observation) => ({ ...observation, images: [...observation.images].reverse() })],
+    ["mismatched GHCR digest", "read-only-ghcr", (observation) => ({ ...observation, images: observation.images.map((image, index) => index ? image : { ...image, remoteDigest: sha("0") }) })],
+    ["missing Timeweb capabilities", "timeweb-s3-authority", (observation) => without("capabilities", observation)],
+    ["extra Timeweb capability", "timeweb-s3-authority", (observation) => ({ ...observation, capabilities: [...observation.capabilities, { operation: "COPY", status: "passed" }] })],
+    ["failed Timeweb capability", "timeweb-s3-authority", (observation) => ({ ...observation, capabilities: observation.capabilities.map((capability) => capability.operation === "GET" ? { ...capability, status: "failed" } : capability) })],
+    ["mismatched Timeweb endpoint", "timeweb-s3-authority", (observation) => ({ ...observation, endpoint: "https://example.invalid" })],
+    ["missing Coston2 RPC", "live-coston2", (observation) => without("rpcUrl", observation)],
+    ["extra Coston2 field", "live-coston2", (observation) => ({ ...observation, privateKey: "forbidden" })],
+    ["mismatched Coston2 chain", "live-coston2", (observation) => ({ ...observation, chainId: 1 })],
+    ["mismatched Coston2 RPC", "live-coston2", (observation) => ({ ...observation, rpcUrl: "https://example.invalid/rpc" })],
+    ["non-decimal Coston2 balance", "live-coston2", (observation) => ({ ...observation, balanceWei: "1e18" })],
+  ];
+  for (const [label, targetId, mutate] of cases) {
+    let effects = 0;
+    await assert.rejects(module.runTimewebDirectProductionPilot({
+      ...commonInput(value),
+      clock: { now: () => "2026-08-12T02:20:00Z" },
+      preflightAdapter: { verify: async (id) => targetId === null || id === targetId
+        ? mutate(preflight(value, id))
+        : preflight(value, id) },
+      productionAdapter: { provision: async () => { effects += 1; } },
+    }), /PRODUCTION_PREFLIGHT_INVALID|Production pilot preflight is invalid/, label);
+    assert.equal(effects, 0, label);
+  }
 });
 
 test("direct pilot deploys exactly two manifest-bound consumers and writes the registry before worker", async () => {
@@ -297,6 +343,14 @@ test("24-hour canary resumes from append-only checkpoints and cannot terminal-pa
   assert.equal((await invoke()).status, "canary-pending");
   assert.equal(observations, 0);
   assert.equal(promotions.length, 0);
+  now = "2026-08-12T03:15:00Z";
+  await assert.rejects(invoke({
+    observe: async ({ id, dueAt }) => ({
+      ...checkpoint(id, dueAt, now),
+      checks: { ...structuredClone(canaryChecks), clock: { ...CLOCK_CHECK, observedSkewSeconds: 6 } },
+    }),
+  }), /CANARY_CLOCK_SKEW|CANARY_CHECKPOINT_INVALID|clock synchronization/i);
+  assert.equal(state.length, 1);
   for (const [clock, expectedId] of [
     ["2026-08-12T03:15:00Z", "post-cutover-15m"],
     ["2026-08-12T04:00:00Z", "post-cutover-1h"],

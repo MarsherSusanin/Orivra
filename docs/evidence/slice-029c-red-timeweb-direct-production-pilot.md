@@ -155,3 +155,23 @@ syntax/typecheck PASS; the exact two deployment files remain nine intentional
 RED; serialized deployment static remains 218 controls plus 12 intentional RED
 (nine 029C and three retained 027B); Sites is 46/46 PASS. The saved GREEN stash
 was not inspected, applied, modified or dropped.
+
+## Preflight and clock completeness correction
+
+The stopped implementation pause exposed underspecified typed observations.
+Corrective RED now requires the ordered five exact GHCR digest references, the
+exact Timeweb endpoint/region/bucket/path-style authority with passed
+PUT/HEAD/LIST/GET/DELETE capabilities, and Coston2 chain 114 with canonical
+RPC/DA endpoints, public relayer address, decimal balance and configured
+authorization. Missing, extra and mismatched records are causal no-provision
+cases. Every full `ProductionCanaryCheckpointV2` now carries an exact
+production-host synchronization observation with maximum skew five seconds;
+skew above the bound fails before checkpoint append. The saved GREEN stash was
+not inspected, applied, modified or dropped.
+
+Classification on exact base `7ce011501cdb0a5d9226543d17849293836ce84c`:
+syntax/typecheck PASS; contracts/domain are one retained control plus ten
+intentional RED; the exact two deployment files remain nine intentional RED;
+serialized deployment static remains 218 controls plus 12 intentional RED
+(nine 029C and three retained 027B); Sites is 46/46 PASS. No credential,
+provider, host, registry or live effect ran.

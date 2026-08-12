@@ -13,6 +13,10 @@ const REGISTRY_PATH = "/opt/orivra/evidence/safe-consumer-registry.v1.json";
 const DEPLOYMENT_EVIDENCE_PATH = "/opt/orivra/evidence/safe-consumer-deployment-evidence.v1.json";
 const CANARY_STATE_ROOT = "/var/lib/orivra/production-canary";
 const sha = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+const CLOCK_CHECK = Object.freeze({
+  status: "synchronized", source: "production-host",
+  maximumSkewSeconds: 5, observedSkewSeconds: 0,
+});
 const canonicalJson = (value) => value === null || typeof value !== "object"
   ? JSON.stringify(value)
   : Array.isArray(value)
@@ -24,6 +28,7 @@ const canaryChecks = Object.freeze({
   objectStore: { status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
   diskPressure: { status: "passed" }, hostedBrowserSmoke: { status: "passed" },
   liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"] },
+  clock: CLOCK_CHECK,
 });
 
 const checkpoint = (id, dueAt, observedAt = dueAt) => ({
@@ -371,6 +376,13 @@ test("systemd resume trusts only the host clock, appends one due checkpoint atom
   await assert.rejects(invoke({ callerNow: "2026-08-13T03:00:00Z" }), /CANARY_CLOCK_INVALID|host clock/i);
   assert.equal(appended.length, 0);
   now = "2026-08-12T03:15:00Z";
+  await assert.rejects(invoke({
+    observe: async ({ id, dueAt }) => ({
+      ...checkpoint(id, dueAt, now),
+      checks: { ...structuredClone(canaryChecks), clock: { ...CLOCK_CHECK, observedSkewSeconds: 6 } },
+    }),
+  }), /CANARY_CLOCK_SKEW|CANARY_CHECKPOINT_INVALID|clock synchronization/i);
+  assert.equal(appended.length, 0);
   assert.equal((await invoke()).checkpointId, "post-cutover-15m");
   assert.equal(appended.length, 1);
   assert.equal(appended[0].mode, 0o400);

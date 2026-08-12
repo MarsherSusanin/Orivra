@@ -6,6 +6,23 @@ import { describe, expect, it } from "vitest";
 const OPEN_METEO = "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8";
 const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
 const sha = (digit: string) => `sha256:${digit.repeat(64).slice(0, 64)}`;
+const ghcrImages = [
+  ["caddy", "ghcr.io/marshersusanin/orivra-caddy", "cc394659cd7962ef02cfb2faf341334f4baef1f16f0fd776bbd8354e10270fe1"],
+  ["web", "ghcr.io/marshersusanin/orivra-web", "581d85c7ca0e8445843cce0e1d948a09a2a7b8a4b523d694f717ca1769934513"],
+  ["api", "ghcr.io/marshersusanin/orivra-api", "c1a4e45a3982c45259ecbec48bf449ccdb5e9817b364bed7e6cf01f41eaddd33"],
+  ["worker", "ghcr.io/marshersusanin/orivra-worker", "4a9599fb40a863c3aeb59d35f56b34e4283bdf7745f5b1e2117c8b864f39f396"],
+  ["postgres-recovery", "ghcr.io/marshersusanin/orivra-postgres-recovery", "aadd4aba5f0386f1182cffb2301f55d7fbd90121f5e8b929ed1d19977083b962"],
+].map(([id, remoteRepository, digest]) => ({
+  id,
+  remoteReference: `${remoteRepository}@sha256:${digest}`,
+  remoteDigest: `sha256:${digest}`,
+}));
+const timewebCapabilities = ["PUT", "HEAD", "LIST", "GET", "DELETE"]
+  .map((operation) => ({ operation, status: "passed" }));
+const clockCheck = {
+  status: "synchronized", source: "production-host",
+  maximumSkewSeconds: 5, observedSkewSeconds: 0,
+};
 const canonicalJson = (value: any): string => value === null || typeof value !== "object"
   ? JSON.stringify(value)
   : Array.isArray(value)
@@ -169,17 +186,48 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       checks: [
         { check: "dns-target", status: "passed", dnsName: "orivra.xyz", addresses: ["72.56.81.28"] },
         { check: "ssh-host-key", status: "passed", host: "72.56.81.28", port: 22, expectedHostKeySha256: sha("2"), observedHostKeySha256: sha("2") },
-        { check: "read-only-ghcr", status: "passed", registry: "ghcr.io", access: "read-only" },
+        { check: "read-only-ghcr", status: "passed", registry: "ghcr.io", access: "read-only", images: ghcrImages },
         { check: "secret-files", status: "passed", fileIdsSha256: sha("3"), valuesExposed: false },
-        { check: "timeweb-s3-authority", status: "passed", authoritySha256: checksum(timewebAuthority), authorityMode: "shared-pilot" },
+        {
+          check: "timeweb-s3-authority", status: "passed", authoritySha256: checksum(timewebAuthority),
+          authorityMode: "shared-pilot", endpoint: timewebAuthority.endpoint, region: timewebAuthority.region,
+          bucket: timewebAuthority.bucket, pathStyle: true, capabilities: timewebCapabilities,
+        },
         { check: "replay-bundle", status: "passed", bundleSha256: sha("4"), reportSha256: sha("5") },
         { check: "safe-consumer-manifests", status: "passed", registrySha256: checksum(safeConsumers), manifests: [["open-meteo-current-weather", OPEN_METEO], ["eth-usd", ETH_USD]] },
-        { check: "live-coston2", status: "passed", chainId: 114, authorization: "configured" },
+        {
+          check: "live-coston2", status: "passed", chainId: 114,
+          rpcUrl: "https://coston2-api.flare.network/ext/C/rpc",
+          dataAvailabilityUrl: "https://ctn2-data-availability.flare.network",
+          relayerAddress: "0x3333333333333333333333333333333333333333",
+          balanceWei: "1000000000000000000", authorization: "configured",
+        },
       ],
     };
     expect(module.ProductionPilotPreflightEvidenceV1Schema.parse(evidence)).toEqual(evidence);
     expect(() => module.ProductionPilotPreflightEvidenceV1Schema.parse({ ...evidence, checks: evidence.checks.map(() => ({ status: "passed" })) })).toThrow();
     expect(() => module.ProductionPilotPreflightEvidenceV1Schema.parse({ ...evidence, checks: evidence.checks.slice(0, 7) })).toThrow();
+    const replaceCheck = (id: string, transform: (value: any) => any) => ({
+      ...evidence,
+      checks: evidence.checks.map((value) => value.check === id ? transform(value) : value),
+    });
+    for (const invalid of [
+      replaceCheck("read-only-ghcr", ({ images: _images, ...value }) => value),
+      replaceCheck("read-only-ghcr", (value) => ({ ...value, images: [...value.images, value.images[0]] })),
+      replaceCheck("read-only-ghcr", (value) => ({ ...value, images: [...value.images].reverse() })),
+      replaceCheck("read-only-ghcr", (value) => ({ ...value, images: value.images.map((image: any, index: number) => index ? image : { ...image, remoteDigest: sha("0") }) })),
+      replaceCheck("read-only-ghcr", (value) => ({ ...value, images: value.images.map((image: any, index: number) => index ? image : { ...image, remoteReference: `ghcr.io/evil/other@${image.remoteDigest}` }) })),
+      replaceCheck("timeweb-s3-authority", ({ capabilities: _capabilities, ...value }) => value),
+      replaceCheck("timeweb-s3-authority", (value) => ({ ...value, capabilities: [...value.capabilities, { operation: "COPY", status: "passed" }] })),
+      replaceCheck("timeweb-s3-authority", (value) => ({ ...value, capabilities: value.capabilities.map((capability: any) => capability.operation === "GET" ? { ...capability, status: "failed" } : capability) })),
+      replaceCheck("timeweb-s3-authority", (value) => ({ ...value, endpoint: "https://example.invalid" })),
+      replaceCheck("live-coston2", ({ rpcUrl: _rpcUrl, ...value }) => value),
+      replaceCheck("live-coston2", (value) => ({ ...value, extraEndpoint: "https://example.invalid" })),
+      replaceCheck("live-coston2", (value) => ({ ...value, chainId: 1 })),
+      replaceCheck("live-coston2", (value) => ({ ...value, rpcUrl: "https://example.invalid/rpc" })),
+      replaceCheck("live-coston2", (value) => ({ ...value, dataAvailabilityUrl: "https://example.invalid" })),
+      replaceCheck("live-coston2", (value) => ({ ...value, balanceWei: "1e18" })),
+    ]) expect(() => module.ProductionPilotPreflightEvidenceV1Schema.parse(invalid)).toThrow();
   });
 
   it("retains rollback V1 as data but requires a separately canonical V2 authority for V2 effect", async () => {
@@ -204,6 +252,7 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       objectStore: { status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
       diskPressure: { status: "passed" }, hostedBrowserSmoke: { status: "passed" },
       liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"] },
+      clock: clockCheck,
     };
     const checkpoints = [
       ["cutover", "2026-08-12T03:00:00Z"],
@@ -212,6 +261,12 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       ["post-cutover-24h", "2026-08-13T03:00:00Z"],
     ].map(([id, at]) => ({ version: "2", kind: "production-canary-checkpoint", id, dueAt: at, observedAt: at, status: "passed", checks }));
     for (const checkpoint of checkpoints) expect(module.ProductionCanaryCheckpointV2Schema.parse(checkpoint)).toEqual(checkpoint);
+    for (const invalid of [
+      { ...checkpoints[1], checks: { ...checks, clock: undefined } },
+      { ...checkpoints[1], checks: { ...checks, clock: { ...clockCheck, authority: "caller" } } },
+      { ...checkpoints[1], checks: { ...checks, clock: { ...clockCheck, source: "caller" } } },
+      { ...checkpoints[1], checks: { ...checks, clock: { ...clockCheck, observedSkewSeconds: 6 } } },
+    ]) expect(() => module.ProductionCanaryCheckpointV2Schema.parse(invalid)).toThrow();
     const evidence = {
       version: "2", kind: "digitalocean-production-promotion-evidence", status: "passed", verification: "verified", promotionClaim: true,
       producer: { commitSha: "1".repeat(40), treeSha: "2".repeat(40) }, publicationEvidenceSha256: sha("3"),

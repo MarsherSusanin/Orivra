@@ -111,6 +111,20 @@ files; deployment evidence is published first and the registry is the atomic
 no-replace commit marker. Any failure leaves no final registry and therefore no
 authoritative pair. Secret bytes and paths never enter either artifact.
 
+### Complete typed preflight authority
+
+`ProductionPilotPreflightEvidenceV1` is strict and binds the effect authority,
+not merely check names. The read-only GHCR observation contains the exact
+ordered five `{id, remoteReference, remoteDigest}` records from publication
+evidence. The Timeweb observation repeats the exact
+`https://s3.twcstorage.ru`, `ru-1`, `orivra-backet`, path-style authority and
+records exactly passed `PUT`, `HEAD`, `LIST`, `GET`, `DELETE` capability
+observations. The Coston2 observation binds chain 114, canonical RPC
+`https://coston2-api.flare.network/ext/C/rpc`, canonical DA
+`https://ctn2-data-availability.flare.network`, public relayer address,
+decimal balance and configured authorization. Missing, extra, reordered or
+mismatched authority fails before provisioning.
+
 ### Database, cutover and 24-hour acceptance
 
 Order is PostgreSQL, role bootstrap, checksummed migrator, API, deterministic
@@ -132,7 +146,10 @@ The resumable append-only canary has exactly `cutover`,
 `post-cutover-15m`, `post-cutover-1h`, `post-cutover-24h`. Each checkpoint is
 run only when a trusted injected clock reaches its due time, records strict
 health, readiness, current heartbeat, backup/archive freshness, disk,
-browser and both persisted-live results, and is conditionally appended. A
+browser and both persisted-live results. Every checkpoint also records strict
+host synchronization `{status:"synchronized", source:"production-host",
+maximumSkewSeconds:5, observedSkewSeconds}`; observed skew above five seconds
+fails before append. The complete checkpoint is conditionally appended. A
 restart validates the canonical accepted prefix and executes only the first
 missing due checkpoint. Gaps, duplicates, substitution, an early trusted time
 or an echoed caller time fail closed. Terminal V2 PASS is impossible before
