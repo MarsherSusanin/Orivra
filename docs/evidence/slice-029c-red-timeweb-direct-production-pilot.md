@@ -306,3 +306,29 @@ intentional RED and the host-command file remains 13 intentional RED. Retained
 deployment static is 215 PASS plus 39 intentional RED, exactly the prior 36
 plus these three new production defaults. Sites remains 46/46 PASS. No harness,
 fixture or unexpected retained-control failure remains.
+
+## Worker handoff compatibility correction
+
+The first root-seal RED still retained one obsolete worker-mount source string:
+`${PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT}/safe-consumer-registry.v1.json`.
+That contradicted the same frozen boundary because a UID-1000 worker cannot
+read the canonical `root:root` mode-0400 file. The retained 027A/027B contracts
+now require only `PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE` as the host bind
+source, keep the canonical evidence root separately required for deployer/seal
+lifecycle, and forbid the legacy address, caller registry-file interpolation
+and direct root-to-worker mount. Deprecated variables are absent from the
+production input inventory; the container-internal
+`PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE=/run/proofline/evidence/...` remains the
+fixed parser path, not host authority. The GREEN stash remains read-only and
+unapplied.
+
+Classification on exact base `4d9970880406b2fbd27e0b8fb0e2453f38ebfefd`
+/ tree `3cb5b565e018cf206c864cb7495a08f02207e15b`: syntax and typecheck PASS.
+The retained 027A/027B focus is 12 PASS plus 20 intentional RED because the
+clean production surface still requires the removed legacy input and lacks
+the sealed handoff lifecycle. Serialized deployment static rerun is 203 PASS
+plus 51 intentional RED, exactly the prior 215/39 classification with those
+12 retained compatibility controls moved to causal RED; an initial run had one
+unchanged 027C TERM-reap timing flake and the exact rerun classified it cleanly.
+Sites remains 46/46 PASS. No production, dependency, Docker, network or
+credential effect was performed.

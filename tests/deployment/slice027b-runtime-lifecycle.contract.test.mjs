@@ -39,8 +39,6 @@ const environment = {
   PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
   PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
   PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT: "/tmp/safe-consumer-evidence",
-  PROOFLINE_SAFE_CONSUMER_ADDRESS: "0x5555555555555555555555555555555555555555",
-  PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: "/tmp/safe-consumer-registry.v1.json",
   PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE: "/tmp/safe-consumer-worker-handoff.json",
   PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/worker-replay-bundle.json",
   PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
@@ -60,7 +58,6 @@ const runtimeFileVariables = [
   "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
   "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",
   "PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE",
-  "PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE",
   "PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE",
   "PROOFLINE_POSTGRES_PASSWORD_FILE",
 ];
@@ -226,7 +223,7 @@ test("passes one complete typed worker configuration and three read-only evidenc
         bind:
           create_host_path: false`,
     `      - type: bind
-        source: \${PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT:?PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT is required}/safe-consumer-registry.v1.json
+        source: \${PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE:?PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE is required}
         target: /run/proofline/evidence/safe-consumer-registry.v1.json
         read_only: true
         bind:
@@ -292,6 +289,8 @@ test("passes one complete typed worker configuration and three read-only evidenc
     "worker_verifier_api_key",
   ]);
   assert.doesNotMatch(runtimeSource, /PROOFLINE_SAFE_CONSUMER_ADDRESS/);
+  assert.doesNotMatch(runtimeSource, /\$\{PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE/);
+  assert.doesNotMatch(runtimeSource, /\$\{PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT[^\n]*safe-consumer-registry/);
 });
 
 test("fails render when any required worker policy, evidence root or host replay file is absent", () => {

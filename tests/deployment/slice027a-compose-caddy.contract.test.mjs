@@ -39,8 +39,6 @@ const runtimeComposeEnvironment = {
   PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
   PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
   PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT: "/opt/orivra/evidence",
-  PROOFLINE_SAFE_CONSUMER_ADDRESS: "0x5555555555555555555555555555555555555555",
-  PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: "/tmp/safe-consumer-registry.v1.json",
   PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE:
     "/opt/orivra/worker-evidence/safe-consumer-registry.v1.json",
   PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/proofline-worker-replay-bundle.json",
@@ -365,7 +363,9 @@ test("runs the safe-consumer deployer once and hands one no-replace evidence roo
   assert.equal(registryMount?.source, runtimeComposeEnvironment.PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE);
   assert.equal(registryMount?.read_only, true);
   assert.match(runtimeComposeSource, /PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE/);
-  assert.doesNotMatch(runtimeComposeSource, /PROOFLINE_SAFE_CONSUMER_ADDRESS|PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE/);
+  assert.doesNotMatch(runtimeComposeSource, /PROOFLINE_SAFE_CONSUMER_ADDRESS/);
+  assert.doesNotMatch(runtimeComposeSource, /\$\{PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE/);
+  assert.doesNotMatch(runtimeComposeSource, /\$\{PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT[^\n]*safe-consumer-registry/);
 });
 
 test("requires immutable production application images and pull never", () => {
