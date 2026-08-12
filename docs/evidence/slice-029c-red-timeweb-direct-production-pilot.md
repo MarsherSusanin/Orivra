@@ -525,3 +525,16 @@ Classification on exact rejected base
 five-file deployment focus is 37 retained controls PASS plus one causal
 intentional RED; serialized deployment static is 260 PASS plus the same one
 RED; Sites is 46/46 PASS. Diff-check is clean.
+
+## Pinned-session lifecycle GREEN closure
+
+The production orchestrator now preserves the pinned session until rollback or
+owned-resource teardown completes, closes it exactly once afterward, and
+retains deterministic aggregate order `[original, rollback-or-teardown,
+close]`. The real adapter-factory integration case is GREEN together with all
+five direct-pilot cases. After the one-file production change, typecheck,
+serialized deployment static 261/261, contracts/domain coverage 57 files/662
+tests at 100%, the full Vitest inventory 264 files/2559 tests plus only the
+configured skips, and Sites 46/46 PASS. Exact-tree verification is pending; no
+credential, network, host, registry, chain, Timeweb or production effect was
+run and no hosted/deployed/security PASS is claimed.

@@ -162,8 +162,8 @@ blockchain-операций.
   Historical V1 contracts and canonical rollback binding remain parseable but
   cannot authorize V2 effects. Exact candidate `4c828ea` / tree `8f2e086` was
   rejected by both Core and Product verification because its concrete pinned
-  session closed before post-cutover rollback. Corrective RED requires
-  rollback/teardown before one exact close. The earlier replacement locally
+  session closed before post-cutover rollback. The corrective lifecycle now
+  runs rollback/teardown before one exact close and is local GREEN. The earlier replacement locally
   showed nested activation retains rollback
   authority, cutover consumes pre-deployment live evidence, UID 1000 writes
   only run-scoped staging that root seals, and terminal promotion resumes

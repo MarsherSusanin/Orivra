@@ -1,6 +1,6 @@
 # Slice 029C — Timeweb direct-production pilot
 
-Status: Corrective RED after exact-tree Core/Product FAIL on `4c828ea` / `8f2e086`
+Status: Session-lifecycle corrective GREEN; exact-tree Core/Product verification pending
 
 Decision: [ADR 0044](../adr/0044-timeweb-direct-production-pilot.md)
 

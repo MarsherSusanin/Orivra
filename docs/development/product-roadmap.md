@@ -193,8 +193,8 @@ the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
   checkpoints. A code change returns the plan to focused RED/GREEN and two
   fresh stopped-tree verifiers. Exact candidate `4c828ea` / tree `8f2e086`
   failed both Core and Product verification: the concrete pinned session closed
-  before post-cutover rollback. Corrective RED requires rollback or teardown
-  before one exact close with deterministic error order, in addition to the
+  before post-cutover rollback. The corrective lifecycle is local GREEN with
+  rollback or teardown before one exact close and deterministic error order, in addition to the
   earlier nested Caddy activation/rollback and non-circular cutover live authority,
   UID-1000 staging to root-private no-replace sealing, terminal promotion
   resume, canonical browser acceptance and exact Timeweb backup bucket. Fresh

@@ -530,11 +530,15 @@ export async function runTimewebDirectProductionPilot(input) {
   } catch (cause) {
     failureCause = failure("DIGITALOCEAN_PRODUCTION_FAILED", "DigitalOcean production promotion failed", { cause, partial: { cutover } });
   } finally {
-    try { await session?.close?.(); } catch (cause) { if (!failureCause) failureCause = cause; else failureCause = new AggregateError([failureCause, cause]); }
+    const lifecycleFailures = [];
     if (failureCause && cutover && !deploymentPublished && typeof input.cutoverAdapter?.rollbackCaddy === "function") {
-      try { await input.cutoverAdapter.rollbackCaddy({ target: authority.target }); } catch (cause) { failureCause = new AggregateError([failureCause, cause]); }
+      try { await input.cutoverAdapter.rollbackCaddy({ target: authority.target }); } catch (cause) { lifecycleFailures.push(cause); }
     } else if (failureCause && !cutover && resource?.owned === true && typeof input.teardownCandidate === "function") {
-      try { await input.teardownCandidate(resource); } catch (cause) { failureCause = new AggregateError([failureCause, cause]); }
+      try { await input.teardownCandidate(resource); } catch (cause) { lifecycleFailures.push(cause); }
+    }
+    try { await session?.close?.(); } catch (cause) { lifecycleFailures.push(cause); }
+    if (failureCause && lifecycleFailures.length) {
+      failureCause = new AggregateError([failureCause, ...lifecycleFailures], "Production and cleanup failed", { cause: failureCause });
     }
   }
   throw failureCause;

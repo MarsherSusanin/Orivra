@@ -388,8 +388,8 @@ runs precede deployment evidence. Explicit Caddy cutover precedes resumable
 trusted-clock 0/15m/1h/24h evidence. V1 history and canonical rollback remain,
 but cannot authorize V2 effects. Exact `4c828ea` / `8f2e086` failed both
 independent verifiers because the concrete pinned session closed before
-rollback. Corrective RED requires rollback/teardown through the live session,
-then one close, with deterministic failure aggregation. The earlier replacement
+rollback. The corrective lifecycle is local GREEN: rollback/teardown runs
+through the live session, then one close, with deterministic failure aggregation. The earlier replacement
 locally had nested activation normalization and rollback authority, a
 non-circular cutover live observation, UID-1000-only staging followed by root
 no-replace sealing, resumable terminal promotion and canonical browser

@@ -1,6 +1,6 @@
 # ADR 0044: Timeweb direct-production pilot and resumable 24-hour acceptance
 
-- Status: Accepted boundary; corrective RED after Core/Product FAIL on exact 4c828ea / 8f2e086
+- Status: Accepted boundary; session-lifecycle corrective GREEN, exact-tree verification pending
 - Date: 2026-08-12
 - Supersedes active production portions of: ADR 0037, ADR 0042, ADR 0043
 - Retains: all V1 schemas as historical compatibility data types
