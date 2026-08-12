@@ -1,7 +1,6 @@
 # ADR 0043: Exact-digest production promotion and seven-day canary
 
-- Status: Accepted contract; corrective rollback RED after Core rejection of
-  `c0828d1` / `8cea88b`; blocked on 028B staging evidence
+- Status: Superseded active effect path by ADR 0044; V1 compatibility retained
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0036, ADR 0037, ADR 0039, ADR 0041, ADR 0042
 

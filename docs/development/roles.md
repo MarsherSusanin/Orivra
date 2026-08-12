@@ -95,8 +95,8 @@ the remote digest with `archiveSha256`.
 Publication/deployment evidence is separate, immutable and append-only. It
 contains `frozenReleaseManifestSha256`; it does not mutate frozen release manifest,
 candidate tree or image bytes. The VDS pulls only a verified remote digest
-bound by that publication evidence. 029B is the credentialed production
-promotion and canary, only after 028B has published and staged that candidate.
+bound by that publication evidence. ADR 0044's active V2 direct pilot begins
+after exact publication; it does not fabricate or require staging evidence.
 
 ADR 0042 assigns 028B effects to a credentialed release operator only after
 the accepted 029A candidate and both independent reports are revalidated. The
@@ -106,15 +106,17 @@ must preserve each single-manifest digest and may not build, repack, retag to a
 mutable reference or convert media types. Staging uses a distinct read-only
 pull credential and an isolated DigitalOcean project. Publication evidence and
 staging evidence are separate append-only records; neither is production
-promotion authority, which remains 029B.
+promotion authority. Historical 029B is the credentialed production promotion
+and canary contract that runs only after 028B.
 
-ADR 0043 makes 029B authority explicit: exact canonical publication and
-accepted staging evidence, an independently checksummed production target and
-an unexpired operator authorization must agree before any production effect.
-Deployment and seven-day canary evidence are separate append-only records.
-Fixtures, a prepared host, pulled images or partial canary observations cannot
-be described as production PASS. Production authors and both stopped-tree
-verifiers remain distinct.
+ADR 0044 replaces active ADR 0043 effect authority with exact canonical
+publication, independently checksummed V2 production target, Timeweb
+shared-pilot authority and unexpired operator authorization. V1 remains
+historical only. Strict preflights, exact two-consumer registry, deployment,
+explicit Caddy cutover and trusted-clock 0/15m/1h/24h checkpoint evidence are
+separate append-only records. Fixtures, prepared hosts, pulled images or an
+early/partial checkpoint cannot be described as production PASS. Production
+authors and both stopped-tree verifiers remain distinct.
 
 Rollback verification must prove that a prior schema-compatible verified
 remote digest is present in immutable publication/deployment evidence bound to

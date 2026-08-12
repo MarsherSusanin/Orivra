@@ -1,7 +1,7 @@
 # Slice 029B — Exact-digest production promotion and seven-day canary
 
-Status: Corrective rollback RED after Core rejection of `c0828d1` / `8cea88b`;
-effects blocked on accepted 028B staging evidence
+Status: Historical V1 compatibility; active effect path superseded by
+[ADR 0044](../adr/0044-timeweb-direct-production-pilot.md)
 
 Decision: [ADR 0043](../adr/0043-exact-digest-production-promotion-and-canary.md)
 

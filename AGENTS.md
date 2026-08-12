@@ -61,9 +61,12 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
   checksummed job under a PostgreSQL advisory lock before app startup;
   `/healthz`, `/readyz`, schema verification, worker heartbeat and the
   persistent PostgreSQL volume remain separate acceptance evidence.
-- Database recovery requires off-host WAL plus base backup PITR in private
-  S3-compatible Spaces and a credential-free MinIO restore drill. A Droplet
-  backup is secondary host recovery, not database restore evidence.
+- Database recovery requires off-host WAL plus base backup PITR and a
+  credential-free MinIO restore drill. ADR 0044's direct pilot uses exact
+  Timeweb S3 endpoint `https://s3.twcstorage.ru`, region `ru-1`, bucket
+  `orivra-backet`, path-style mode and explicitly shared pilot authority;
+  MinIO remains QA-only. A Droplet backup is secondary host recovery, not
+  database restore evidence.
 - Do not request or use DNS, SSH, DigitalOcean, GHCR pull, Spaces or live
   Coston2 credentials before credential-free 022–029A, the unified full matrix
   and two independent PASS reports for one tree hash. Do not claim hosted or
@@ -78,12 +81,20 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
   no rebuild. The remote image digest matches only
   `imageManifestDigest`; never compare the remote digest with `archiveSha256`.
   An archive or manifest-digest mismatch aborts before staging pull.
+- Historical 029B is the credentialed production promotion and canary contract
+  that runs only after 028B. ADR 0044 moves active V2 effect authority to the
+  direct-production 029C pilot without changing that credential gate.
 - Publication/deployment evidence is separate, immutable and append-only. It
   contains `frozenReleaseManifestSha256`; it does not mutate frozen release manifest,
   candidate tree or image bytes. The VDS pulls only a verified remote digest
-  bound by that publication evidence, using a read-only GHCR pull
-  credential. 029B is the credentialed production promotion and canary, only
-  after 028B.
+  bound by that publication evidence, using a read-only GHCR pull credential.
+  ADR 0044 active V2 is a direct-production pilot after GHCR publication: it
+  does not fabricate or require staging evidence and cannot treat historical
+  V1 records as effect authority.
+- Direct-pilot acceptance uses strict typed preflights, deterministic
+  Open-Meteo then ETH/USD safe-consumer deployment, an exact canonical worker
+  registry, explicit Caddy cutover and append-only trusted-clock checkpoints
+  at cutover/15m/1h/24h. Terminal PASS before 86400 seconds is forbidden.
 - Application rollback may select only a prior schema-compatible verified
   remote digest from immutable publication/deployment evidence bound to its
   `frozenReleaseManifestSha256`. The frozen manifest supplies schema metadata,

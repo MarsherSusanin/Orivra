@@ -375,21 +375,18 @@ published all five frozen OCI manifests without rebuild; independent GHCR
 HEAD checks returned every exact frozen digest. Append-only publication
 evidence SHA-256 is
 `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
-This closes only registry publication. Isolated staging and 029B production
-promotion/canary remain incomplete; no hosted claim exists.
+This closes only registry publication. Staging was not accepted and no hosted
+claim exists.
 
-[ADR 0043](docs/adr/0043-exact-digest-production-promotion-and-canary.md)
-freezes the remaining production trust boundary. Exact canonical publication
-and staging evidence plus separate target/operator authorization derive one
-private immutable five-digest plan. PostgreSQL/bootstrap/migration precede
-applications; Caddy alone exposes 80/443; readiness, real-worker heartbeat,
-production PITR and persisted live evidence precede deployment evidence. A
-separate terminal record requires the complete seven-day canary. Rollback may
-select only prior schema-compatible verified deployment plus publication
-evidence through canonical authorization and five independent byte/checksum
-handoffs. Candidate `c0828d1` / `8cea88b` was rejected because an object-only
-tagged rollback could reach the effect; the corrective contract is intentional
-RED. Effects remain blocked because accepted staging evidence is absent.
+[ADR 0044](docs/adr/0044-timeweb-direct-production-pilot.md) supersedes the
+active ADR 0043 path with V2 direct production. Canonical publication, target,
+Timeweb shared-pilot S3 and operator authorization derive one private five-
+digest plan without staging. PostgreSQL/bootstrap/migration precede exact
+Open-Meteo/ETH consumer deployment, worker registry and applications; Caddy
+alone exposes 80/443. Typed readiness, heartbeat, Timeweb PITR and both live
+runs precede deployment evidence. Explicit Caddy cutover precedes resumable
+trusted-clock 0/15m/1h/24h evidence. V1 history and canonical rollback remain,
+but cannot authorize V2 effects. This contract is intentional RED.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

@@ -795,37 +795,36 @@ exact `Connection: close`; the client may not reuse a prior upload-session
 transport for another body. This header changes transport lifetime only and
 does not weaken Location, cursor, digest, range or no-replay validation.
 
-029B is the credentialed production promotion and canary. 029B starts only
-after 028B has published and staged the exact frozen candidate.
+029C is the active credentialed Timeweb direct-production pilot. It starts only
+from the exact 028B publication; historical staging evidence is not fabricated
+or accepted as V2 authority.
 
-ADR 0043 is in corrective rollback RED after Core rejected candidate
-`c0828d1` / `8cea88b`; no production effect is eligible for verification. The
-current exact publication
+ADR 0044 is intentional RED after Product rejected candidate `99918ab` /
+`a24d08a`; no production effect is eligible for verification. The current exact publication
 checkpoint is the canonical 4285-byte `PublicationEvidenceV1` with SHA-256
 `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
-The operator must pass those bytes and checksum together with a real canonical
-`StagingDeploymentEvidenceV1`, its independent checksum, a production-only
-target and an unexpired authorization bound to all three. Accepted staging
-evidence does not exist yet; stop before every production effect.
+The operator must pass those bytes and checksum together with canonical V2
+production target, exact Timeweb authority bytes/checksum and unexpired V2
+authorization. V2 contains no staging field.
 
 When that blocker is closed, preflight must complete before DNS, host or Docker
 mutation: exact DNS address, pinned SSH host key, read-only GHCR scope, complete
-mode-0400 secret-file inventory, production Spaces writer/reader/retention and
-encryption authority, accepted replay bundle/report, non-zero safe consumer and
-live Coston2 configuration. Never replace any check with a fixture or a typed
-string. Production uses a distinct Compose project, origin, PostgreSQL volume,
-secret root, relayer and `/proofline/v1/production/` prefix. It maps the five
+mode-0400 secret-file inventory, exact Timeweb endpoint/region/bucket/path-style
+shared-pilot authority, accepted replay bundle/report, the ordered Open-Meteo/
+ETH manifest pair and live chain-114 configuration. Generic status is not an
+observation. Production maps the five
 publication references exactly to the five `PROOFLINE_*_IMAGE` variables,
 pulls/re-inspects by digest and starts:
 
-`postgres → db-role-bootstrap → migrator → api → worker → web → caddy`.
+`postgres → db-role-bootstrap → migrator → api → safe-consumer-deployer → write-safe-consumer-registry → worker → web → caddy-candidate`.
 
 Only Caddy publishes 80/443. PostgreSQL 5432 and API/worker ports remain
 private, with no Docker socket. Append `production-deployment-evidence.v1.json`
-only after schema 10/10, `/readyz`, current real-worker heartbeat, production
-PITR and persisted live Coston2 observations pass. Cutover then records exact
-pre-cutover, 15m, 1h, 24h, 72h and 7d checkpoints; only the 604800-second final
-checkpoint may append `production-promotion-evidence.v1.json`. Failure removes
+only after schema 10/10, `/readyz`, current real-worker heartbeat, Timeweb PITR,
+the canonical two-entry worker registry and both persisted live observations
+pass. An explicit Caddy adapter then cuts over and appends the first checkpoint.
+Trusted-clock resume records exact cutover/15m/1h/24h checkpoints; only the
+86400-second final checkpoint may append V2 promotion evidence. Failure removes
 only a run-owned pre-cutover candidate. Post-cutover rollback requires
 canonical authorization bytes, current/prior deployment-evidence bytes and
 current/prior publication-evidence bytes, all with independent checksums. The
@@ -1098,7 +1097,8 @@ Upstream Coston2 outage блокирует release. Override возможен т
   этот gate не входят.
 - 028B получает credentials только после credential-free 022–029A, unified
   full matrix и двух independent PASS на одном tree hash. 029B затем выполняет
-  production promotion и canary без rebuild candidate images, only after 028B.
+  credentialed production promotion и canary без rebuild candidate images, only
+  after 028B.
 - После любого production edit или изменения candidate tree повторите affected
   RED/GREEN, unified matrix и обе независимые verification waves на новом tree
   hash.

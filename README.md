@@ -152,17 +152,15 @@ blockchain-операций.
   placed all five exact frozen manifests in GHCR and independently re-read
   their expected digests. Immutable publication evidence SHA-256 is
   `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
-  Isolated DigitalOcean staging and 029B production promotion remain pending.
-  ADR 0043 now has corrective rollback RED after Core rejected candidate
-  `c0828d1` / `8cea88b`: the exact publication bytes
-  and a real canonical staging-evidence checksum must authorize five immutable
-  production digests before any DNS/SSH/Docker effect. Production remains
-  distinct from staging, exposes only Caddy 80/443, proves schema 10,
-  readiness, real heartbeat, PITR and persisted live Coston2, then completes a
-  full seven-day canary. Rollback additionally requires canonical authorization,
-  current/prior deployment and publication bytes with independent checksums;
-  object-only or tagged authority is forbidden. No accepted staging artifact or
-  production PASS exists.
+  Isolated DigitalOcean staging was not accepted. ADR 0044 therefore freezes a
+  V2 direct-production pilot without fabricating staging evidence. It binds
+  the exact publication to DigitalOcean compute, Timeweb S3 shared-pilot
+  authority (`https://s3.twcstorage.ru`, `ru-1`, `orivra-backet`, path-style),
+  strict typed preflights and deterministic Open-Meteo/ETH consumer registry.
+  Deployment evidence precedes explicit Caddy cutover; trusted-clock
+  cutover/15m/1h/24h checkpoints are resumable and cannot terminal-PASS early.
+  Historical V1 contracts and canonical rollback binding remain parseable but
+  cannot authorize V2 effects. No production PASS exists.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
