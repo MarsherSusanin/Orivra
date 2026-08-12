@@ -8,7 +8,8 @@
     "./templates": "./src/web2json-template-catalog.ts",
     "./release": "./src/oci-release.ts",
     "./candidate": "./src/mlp-candidate.ts",
-    "./publication": "./src/publication.ts"
+    "./publication": "./src/publication.ts",
+    "./production-promotion": "./src/production-promotion.ts"
   },
   "sideEffects": false,
   "dependencies": {

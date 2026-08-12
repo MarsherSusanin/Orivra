@@ -1,6 +1,7 @@
 # ADR 0043: Exact-digest production promotion and seven-day canary
 
-- Status: Accepted contract; intentional RED; blocked on 028B staging evidence
+- Status: Accepted contract; production-author GREEN locally; two independent
+  verifiers pending; blocked on 028B staging evidence
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0036, ADR 0037, ADR 0039, ADR 0041, ADR 0042
 
@@ -138,7 +139,7 @@ staging artifact into authority.
 
 ## Consequences
 
-- Slice 029B remains intentional RED and effect-blocked until 028B appends real
+- Slice 029B is production-author GREEN locally but remains effect-blocked until 028B appends real
   staging evidence and an operator supplies explicit authorization.
 - Import-safe fake adapters may prove orchestration without credentials; their
   observations can never be published as hosted or live PASS evidence.

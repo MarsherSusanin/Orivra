@@ -37,7 +37,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 028A | Verified local OCI archives and frozen digest manifest | Complete; Core and Product PASS `bdd09e7` / `5d0acb9`, credential-free |
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | GHCR publication Complete: Core/Product PASS `e274441` / `907fa93`; five exact remote digests verified; publication evidence SHA-256 `1fe40038…ea10`; isolated DigitalOcean staging pending |
 | 029A | Local MLP validation and candidate freeze | Complete; Core and Product PASS `fc2f6e0` / `f7cebc6`, candidate SHA-256 `8991e7e4…0cdda` |
-| 029B | Exact-digest production promotion and seven-day canary | Intentional RED frozen under ADR 0043; blocked until accepted 028B staging evidence |
+| 029B | Exact-digest production promotion and seven-day canary | Production-author GREEN locally; two independent verifiers pending; effects blocked until accepted 028B staging evidence |
 
 ## Completed pre-infrastructure product journey
 

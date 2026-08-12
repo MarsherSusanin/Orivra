@@ -1,6 +1,7 @@
 # Slice 029B — Exact-digest production promotion and seven-day canary
 
-Status: Intentional RED; blocked on accepted 028B staging evidence
+Status: Production-author GREEN locally; two independent verifiers pending;
+effects blocked on accepted 028B staging evidence
 
 Decision: [ADR 0043](../adr/0043-exact-digest-production-promotion-and-canary.md)
 

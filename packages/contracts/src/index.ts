@@ -222,6 +222,28 @@ export type {
   PublicationEvidenceV1,
   StagingDeploymentEvidenceV1,
 } from "./publication";
+export {
+  ApplicationRollbackAuthorizationV1Schema,
+  ProductionDeploymentEvidenceV1Schema,
+  ProductionPromotionAuthorizationV1Schema,
+  ProductionPromotionEvidenceV1Schema,
+  ProductionTargetV1Schema,
+  canonicalSerializeProductionDeploymentEvidence,
+  canonicalSerializeProductionPromotionAuthorization,
+  canonicalSerializeProductionPromotionEvidence,
+  canonicalSerializeProductionTarget,
+  checksumProductionDeploymentEvidence,
+  checksumProductionPromotionAuthorization,
+  checksumProductionPromotionEvidence,
+  checksumProductionTarget,
+} from "./production-promotion";
+export type {
+  ApplicationRollbackAuthorizationV1,
+  ProductionDeploymentEvidenceV1,
+  ProductionPromotionAuthorizationV1,
+  ProductionPromotionEvidenceV1,
+  ProductionTargetV1,
+} from "./production-promotion";
 export type {
   BackupEvidenceV1,
   RestoreDrillEvidenceV1,

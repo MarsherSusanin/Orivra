@@ -153,7 +153,7 @@ blockchain-операций.
   their expected digests. Immutable publication evidence SHA-256 is
   `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
   Isolated DigitalOcean staging and 029B production promotion remain pending.
-  ADR 0043 now freezes 029B as intentional RED: the exact publication bytes
+  ADR 0043 now has a local production-author GREEN 029B implementation: the exact publication bytes
   and a real canonical staging-evidence checksum must authorize five immutable
   production digests before any DNS/SSH/Docker effect. Production remains
   distinct from staging, exposes only Caddy 80/443, proves schema 10,

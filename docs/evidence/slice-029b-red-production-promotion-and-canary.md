@@ -56,6 +56,18 @@ Observed first run:
 - retained 028B staging plus DigitalOcean-roadmap controls: 26 PASS;
 - Sites compatibility: 46 PASS.
 
+## Production-author GREEN
+
+The production author added strict cycle-free contract/domain features and the
+import-safe injected production runtime. Final local gates PASS: typecheck;
+focused purity/contracts/domain 42/42; deployment orchestration 5/5; full
+contracts/domain coverage 100% statements, branches, functions and lines; full
+serialized deployment static 219/219; Sites 46/46. No credential, DNS, SSH,
+Docker, registry, Spaces, Coston2 or production effect ran. Accepted staging
+evidence still does not exist, so every real production effect remains blocked
+pending two independent same-tree verifier reports and the credentialed staging
+artifact.
+
 - full serialized deployment static: 219 tests, 214 retained controls PASS and
   the same 5 intentional runtime RED cases fail on absent entrypoints;
 

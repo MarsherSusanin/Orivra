@@ -36,6 +36,11 @@ export {
   verifyPublicationEvidenceHandoff,
 } from "./publication";
 export {
+  createProductionPromotionPlan,
+  selectSchemaCompatibleRollback,
+  verifyProductionPromotionHandoff,
+} from "./production-promotion";
+export {
   canonicalSerializeEvidenceReceipt,
   createEvidenceReceipt,
 } from "./evidence-receipt";

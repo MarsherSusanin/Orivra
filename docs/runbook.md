@@ -798,7 +798,8 @@ does not weaken Location, cursor, digest, range or no-replay validation.
 029B is the credentialed production promotion and canary. 029B starts only
 after 028B has published and staged the exact frozen candidate.
 
-ADR 0043 freezes 029B as intentional RED. The current exact publication
+ADR 0043 now has a local production-author GREEN implementation pending two
+independent same-tree verifiers. The current exact publication
 checkpoint is the canonical 4285-byte `PublicationEvidenceV1` with SHA-256
 `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
 The operator must pass those bytes and checksum together with a real canonical

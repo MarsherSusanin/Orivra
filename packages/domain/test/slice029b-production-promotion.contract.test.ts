@@ -135,9 +135,12 @@ describe("Slice 029B production authority derivation", () => {
   it.each([
     ["wrong publication SHA", (value: any) => ({ ...value, expectedPublicationEvidenceSha256: sha("0") })],
     ["noncanonical publication", (value: any) => ({ ...value, publicationEvidenceBytes: utf8(JSON.stringify(value.publication, null, 2)) })],
+    ["malformed publication", (value: any) => ({ ...value, publicationEvidenceBytes: utf8("{") })],
     ["missing staging", (value: any) => ({ ...value, stagingDeploymentEvidenceBytes: undefined })],
+    ["wrong staging SHA", (value: any) => ({ ...value, expectedStagingDeploymentEvidenceSha256: sha("0") })],
     ["same staging target", (value: any) => ({ ...value, productionTargetBytes: utf8(canonicalJson({ ...value.target, composeProject: value.staging.target.composeProject })) })],
     ["expired authorization", (value: any) => ({ ...value, now: "2026-08-12T03:00:00Z" })],
+    ["invalid clock", (value: any) => ({ ...value, now: "not-a-time" })],
   ])("rejects %s before production effect", async (_label, mutate) => {
     const module = await feature();
     const value = await fixtures();
@@ -149,6 +152,31 @@ describe("Slice 029B production authority derivation", () => {
       promotionAuthorizationBytes: value.authorizationBytes,
       now: "2026-08-12T02:20:00Z",
     }))).toThrow();
+  });
+
+  it("rejects a schema-valid production target that aliases the staging origin", async () => {
+    const module = await feature();
+    const value = await fixtures();
+    const target = { ...value.target, publicOrigin: value.staging.target.publicOrigin, dnsName: "staging.invalid" };
+    const targetBytes = utf8(canonicalJson(target));
+    const authorization = {
+      ...value.authorization,
+      productionTargetSha256: checksumBytes(targetBytes),
+    };
+    expect(() => module.verifyProductionPromotionHandoff({
+      publicationEvidenceBytes: value.publicationEvidenceBytes,
+      expectedPublicationEvidenceSha256: PUBLICATION_SHA,
+      stagingDeploymentEvidenceBytes: value.stagingEvidenceBytes,
+      expectedStagingDeploymentEvidenceSha256: checksumBytes(value.stagingEvidenceBytes),
+      productionTargetBytes: targetBytes,
+      promotionAuthorizationBytes: utf8(canonicalJson(authorization)),
+      now: "2026-08-12T02:20:00Z",
+    })).toThrow();
+  });
+
+  it("rejects non-authority values before planning", async () => {
+    const module = await feature();
+    expect(() => module.createProductionPromotionPlan({ images: [] })).toThrow();
   });
 
   it("derives exact digest mapping, database-first order and the pre-effect checklist", async () => {

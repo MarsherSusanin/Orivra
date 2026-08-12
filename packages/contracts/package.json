@@ -12,7 +12,8 @@
     "./templates": "./src/web2json-templates.ts",
     "./release": "./src/release.ts",
     "./candidate": "./src/candidate.ts",
-    "./publication": "./src/publication.ts"
+    "./publication": "./src/publication.ts",
+    "./production-promotion": "./src/production-promotion.ts"
   },
   "sideEffects": false,
   "dependencies": {

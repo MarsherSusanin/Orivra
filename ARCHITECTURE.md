@@ -386,7 +386,7 @@ applications; Caddy alone exposes 80/443; readiness, real-worker heartbeat,
 production PITR and persisted live evidence precede deployment evidence. A
 separate terminal record requires the complete seven-day canary. Rollback may
 select only prior schema-compatible verified deployment plus publication
-evidence. The contract is intentional RED and effects remain blocked because
+evidence. The contract is production-author GREEN and effects remain blocked because
 accepted staging evidence is absent.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в

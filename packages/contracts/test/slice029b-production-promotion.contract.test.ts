@@ -164,6 +164,8 @@ describe("Slice 029B production promotion contracts", () => {
     expect(module.ProductionTargetV1Schema.parse(productionTarget)).toEqual(productionTarget);
     expect(module.ProductionPromotionAuthorizationV1Schema.parse(promotionAuthorization)).toEqual(promotionAuthorization);
     expect(module.checksumProductionTarget(productionTarget)).toBe(checksum(productionTarget));
+    expect(module.checksumProductionPromotionAuthorization(promotionAuthorization)).toBe(checksum(promotionAuthorization));
+    expect(module.canonicalSerializeProductionTarget(productionTarget)).toBe(canonicalJson(productionTarget));
     expect(module.canonicalSerializeProductionPromotionAuthorization(promotionAuthorization)).toBe(canonicalJson(promotionAuthorization));
   });
 
@@ -175,10 +177,26 @@ describe("Slice 029B production promotion contracts", () => {
     expect(module.ProductionDeploymentEvidenceV1Schema.parse(deployment)).toEqual(deployment);
     expect(module.ProductionPromotionEvidenceV1Schema.parse(promotion)).toEqual(promotion);
     expect(module.canonicalSerializeProductionDeploymentEvidence(deployment)).toBe(canonicalJson(deployment));
+    expect(module.checksumProductionDeploymentEvidence(deployment)).toBe(checksum(deployment));
+    expect(module.canonicalSerializeProductionPromotionEvidence(promotion)).toBe(canonicalJson(promotion));
     expect(module.checksumProductionPromotionEvidence(promotion)).toBe(checksum(promotion));
     expect(promotion.canary.checkpoints.at(-1)).toEqual({
       id: "post-cutover-7d", observedAt: promotion.completedAt, status: "passed",
     });
+  });
+
+  it("rejects noncanonical production origins and nonterminal canary intervals", async () => {
+    const module = await feature();
+    const { value: publication } = await exactPublication();
+    for (const publicOrigin of ["https://user@orivra.xyz", "https://orivra.xyz/path", "not a url"]) {
+      expect(() => module.ProductionTargetV1Schema.parse({ ...productionTarget, publicOrigin })).toThrow();
+    }
+    const deployment = productionEvidence(publication);
+    const promotion = promotionEvidence(deployment);
+    expect(() => module.ProductionPromotionEvidenceV1Schema.parse({
+      ...promotion,
+      completedAt: "2026-08-19T03:04:59Z",
+    })).toThrow();
   });
 
   it.each([
