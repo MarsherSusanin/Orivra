@@ -821,12 +821,17 @@ pulls/re-inspects by digest and starts:
 `postgres → db-role-bootstrap → migrator → api → safe-consumer-deployer → write-safe-consumer-registry → worker → web → caddy-candidate`.
 
 Only Caddy publishes 80/443. PostgreSQL 5432 and API/worker ports remain
-private, with no Docker socket. Append `production-deployment-evidence.v1.json`
-only after schema 10/10, `/readyz`, current real-worker heartbeat, Timeweb PITR,
+private, with no Docker socket. Stage V2 deployment evidence only after schema
+10/10, `/readyz`, current real-worker heartbeat, Timeweb PITR,
 the canonical two-entry worker registry and both persisted live observations
-pass. An explicit Caddy adapter then cuts over and appends the first checkpoint.
+pass. Caddy then cuts over, a separate external HTTPS probe confirms the exact
+origin, and the cutover checkpoint is appended before deployment evidence is
+published. Any post-cutover failure calls `rollbackCaddy` and leaves zero
+deployment PASS.
 Trusted-clock resume records exact cutover/15m/1h/24h checkpoints; only the
-86400-second final checkpoint may append V2 promotion evidence. Failure removes
+86400-second final checkpoint may append canonical V2 promotion evidence with
+`status:passed`, `promotionClaim:true` and the exact deployment digest; a
+non-PASS test receipt is rejected. Failure removes
 only a run-owned pre-cutover candidate. Post-cutover rollback requires
 canonical authorization bytes, current/prior deployment-evidence bytes and
 current/prior publication-evidence bytes, all with independent checksums. The

@@ -19,6 +19,53 @@ const canonicalJson = (value) => value === null || typeof value !== "object"
     ? `[${value.map(canonicalJson).join(",")}]`
     : `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
 
+async function productionDeploymentEvidenceV2() {
+  const publication = JSON.parse(await readFile(
+    resolve(root, "tests/fixtures/slice029b-publication-evidence.v1.json"),
+    "utf8",
+  ));
+  const objectStore = {
+    version: "1", kind: "timeweb-s3-pilot-authority", provider: "timeweb-s3",
+    endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet",
+    pathStyle: true, authorityMode: "shared-pilot", credentialDelivery: "secret-files",
+    qaProvider: "minio-only", swiftRuntime: false,
+  };
+  const safeConsumers = {
+    version: "1", kind: "safe-consumer-registry", chainId: 114,
+    entries: [
+      { templateId: "open-meteo-current-weather", revision: 1, manifestSha256: OPEN_METEO, consumerAddress: "0x1111111111111111111111111111111111111111" },
+      { templateId: "eth-usd", revision: 1, manifestSha256: ETH_USD, consumerAddress: "0x2222222222222222222222222222222222222222" },
+    ],
+  };
+  return {
+    version: "2", kind: "digitalocean-production-deployment-evidence",
+    status: "passed", verification: "verified", productionClaim: true,
+    producer: publication.producer,
+    publicationEvidenceSha256: "sha256:1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10",
+    frozenReleaseManifestSha256: publication.frozenRelease.frozenReleaseManifestSha256,
+    promotionAuthorizationSha256: sha("promotion-authorization"),
+    target: {
+      version: "2", kind: "digitalocean-production-target", provider: "digitalocean", environment: "production",
+      deploymentMode: "direct-pilot", deploymentId: "orivra-production-primary", composeProject: "proofline-production-primary",
+      publicOrigin: "https://orivra.xyz", dnsName: "orivra.xyz",
+      sshEndpoint: { host: "72.56.81.28", port: 22, hostKeySha256: sha("ssh-host-key") }, ingress: [80, 443], objectStore,
+    },
+    run: { runId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4", operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4", completedAt: "2026-08-12T03:00:01Z" },
+    pullCredential: { registry: "ghcr.io", access: "read-only" },
+    images: publication.images.map(({ id, remoteRepository, remoteReference, remoteDigest }) => ({ id, remoteRepository, remoteReference, remoteDigest })),
+    topology: { publicService: "caddy", publicPorts: [80, 443], privateServices: ["web", "api", "worker", "postgres"], forbiddenPublicPorts: [5432, 8080], dockerSocketMounted: false },
+    database: { volumeIdentitySha256: sha("volume"), migrationManifestSha256: sha("migration"), targetVersion: 10, schemaVersion: 10, roleBootstrap: { status: "passed" }, migration: { status: "passed" } },
+    objectStore: { authoritySha256: sha(canonicalJson(objectStore)), authorityMode: "shared-pilot", pitr: { status: "passed", restoreEvidenceSha256: sha("restore") } },
+    safeConsumers,
+    checks: {
+      exactDigestPull: { status: "passed" }, healthz: { status: "passed" }, readyz: { status: "passed" },
+      workerHeartbeat: { status: "current" },
+      liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] },
+    },
+    cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-12T03:00:00Z" },
+  };
+}
+
 async function deploymentRuntime() {
   return import("../../scripts/safe-consumer-registry-deployment-runtime.mjs").catch(() => ({}));
 }
@@ -273,6 +320,12 @@ test("direct-pilot CLI accepts only absolute file-backed authority and invokes t
 test("systemd resume trusts only the host clock, appends one due checkpoint atomically and cannot promote early", async () => {
   const module = await canaryRuntime();
   assert.equal(typeof module.runProductionCanarySystemdTick, "function");
+  const contracts = await import("../../packages/contracts/src/production-promotion-runtime.mjs");
+  const deployment = await productionDeploymentEvidenceV2();
+  assert.deepEqual(contracts.ProductionDeploymentEvidenceV2Schema.parse(deployment), deployment);
+  const deploymentText = contracts.canonicalSerializeProductionDeploymentEvidenceV2(deployment);
+  const deploymentEvidenceBytes = Buffer.from(deploymentText, "utf8");
+  const expectedDeploymentEvidenceSha256 = `sha256:${createHash("sha256").update(deploymentEvidenceBytes).digest("hex")}`;
   const cutover = "2026-08-12T03:00:00Z";
   const checkpoints = [{ id: "cutover", dueAt: cutover, observedAt: cutover, sha256: sha("cutover") }];
   const appended = [];
@@ -281,6 +334,8 @@ test("systemd resume trusts only the host clock, appends one due checkpoint atom
   let now = "2026-08-12T03:14:59Z";
   const invoke = (extra = {}) => module.runProductionCanarySystemdTick({
     stateRoot: CANARY_STATE_ROOT,
+    deploymentEvidenceBytes,
+    expectedDeploymentEvidenceSha256,
     clock: { now: () => now },
     loadCanonicalState: async () => structuredClone(checkpoints),
     observe: async ({ id, dueAt }) => ({ id, dueAt, observedAt: now, status: "passed" }),
@@ -288,7 +343,7 @@ test("systemd resume trusts only the host clock, appends one due checkpoint atom
       appended.push(entry);
       checkpoints.push({ id: entry.id, dueAt: entry.dueAt, observedAt: entry.observedAt, sha256: entry.sha256 });
     },
-    appendPromotionEvidence: async (entry) => promotions.push(entry),
+    appendPromotionEvidence: async (entry) => { promotions.push(entry); return { status: "passed", sha256: entry.sha256 }; },
     cleanupStage: async (path) => cleanup.push(path),
     ...extra,
   });
@@ -308,10 +363,23 @@ test("systemd resume trusts only the host clock, appends one due checkpoint atom
   assert.equal((await invoke()).checkpointId, "post-cutover-1h");
   assert.equal(promotions.length, 0);
   now = "2026-08-13T03:00:00Z";
+  await assert.rejects(invoke({
+    loadCanonicalState: async () => structuredClone(checkpoints),
+    appendCheckpoint: async () => undefined,
+    appendPromotionEvidence: async () => ({ status: "recorded-for-test" }),
+  }), /CANARY_PROMOTION_EVIDENCE_INVALID|promotion evidence/i);
+  assert.equal(promotions.length, 0);
   assert.equal((await invoke()).checkpointId, "post-cutover-24h");
   assert.equal(promotions.length, 1);
   assert.equal(promotions[0].mode, 0o400);
   assert.equal(promotions[0].noReplace, true);
+  const promotionText = Buffer.from(promotions[0].bytes).toString("utf8");
+  const promotion = contracts.ProductionPromotionEvidenceV2Schema.parse(JSON.parse(promotionText));
+  assert.equal(contracts.canonicalSerializeProductionPromotionEvidenceV2(promotion), promotionText);
+  assert.equal(promotion.status, "passed");
+  assert.equal(promotion.promotionClaim, true);
+  assert.equal(promotion.productionDeploymentEvidenceSha256, expectedDeploymentEvidenceSha256);
+  assert.equal(promotions[0].sha256, `sha256:${createHash("sha256").update(promotions[0].bytes).digest("hex")}`);
   const beforeFailure = checkpoints.length;
   await assert.rejects(invoke({
     loadCanonicalState: async () => checkpoints.slice(0, 1),

@@ -139,7 +139,11 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
       return { status: "passed" };
     }, close: async () => events.push("close") }) },
     appendProductionEvidence: async (entry) => { deploymentEntry = entry; events.push("append-deployment"); },
-    cutoverAdapter: { activateCaddy: async ({ publicOrigin }) => { events.push("caddy-cutover"); return { status: "passed", publicOrigin, activatedAt: "2026-08-12T03:00:00Z" }; } },
+    cutoverAdapter: {
+      activateCaddy: async ({ publicOrigin }) => { events.push("caddy-cutover"); return { status: "passed", publicOrigin, activatedAt: "2026-08-12T03:00:00Z" }; },
+      observeExternalHttps: async ({ publicOrigin }) => { events.push("external-https"); return { status: "passed", publicOrigin, observedAt: "2026-08-12T03:00:01Z" }; },
+      rollbackCaddy: async () => events.push("rollback-caddy"),
+    },
     checkpointStore: { append: async (entry) => events.push(`checkpoint:${entry.id}`) },
   });
   assert.equal(result.status, "canary-pending");
@@ -151,13 +155,72 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
   assert.deepEqual(events.slice(events.indexOf("migrator"), events.indexOf("start-worker") + 1), [
     "migrator", "start-api", "safe-consumer-deployer", "write-safe-consumer-registry", "start-worker",
   ]);
-  assert.ok(events.indexOf("append-deployment") < events.indexOf("caddy-cutover"));
-  assert.ok(events.indexOf("caddy-cutover") < events.indexOf("checkpoint:cutover"));
+  assert.ok(events.indexOf("caddy-cutover") < events.indexOf("external-https"));
+  assert.ok(events.indexOf("external-https") < events.indexOf("checkpoint:cutover"));
+  assert.ok(events.indexOf("checkpoint:cutover") < events.indexOf("append-deployment"));
+  assert.equal(events.includes("rollback-caddy"), false);
   const deployment = JSON.parse(Buffer.from(deploymentEntry.bytes).toString("utf8"));
   assert.equal(deployment.version, "2");
+  assert.deepEqual(deployment.cutover, {
+    status: "passed", publicOrigin: value.target.publicOrigin,
+    activatedAt: "2026-08-12T03:00:00Z",
+  });
+  const contracts = await import("../../packages/contracts/src/production-promotion-runtime.mjs").catch(() => ({}));
+  assert.deepEqual(contracts.ProductionDeploymentEvidenceV2Schema.parse(deployment), deployment);
+  assert.equal(contracts.canonicalSerializeProductionDeploymentEvidenceV2(deployment), Buffer.from(deploymentEntry.bytes).toString("utf8"));
+  assert.throws(() => contracts.ProductionDeploymentEvidenceV2Schema.parse({ ...deployment, cutover: { ...deployment.cutover, status: "failed" } }));
+  assert.throws(() => contracts.ProductionDeploymentEvidenceV2Schema.parse({ ...deployment, cutover: { ...deployment.cutover, publicOrigin: "https://evil.invalid" } }));
   assert.deepEqual(deployment.safeConsumers, registry);
   assert.equal(deployment.objectStore.authorityMode, "shared-pilot");
   assert.equal(deployment.stagingDeploymentEvidenceSha256, undefined);
+});
+
+test("post-cutover observation, checkpoint and deployment-evidence failures roll Caddy back with zero deployment PASS", async () => {
+  const module = await runtime();
+  const value = await fixture();
+  for (const failingPhase of ["external-https", "checkpoint", "deployment-evidence"]) {
+    const events = [];
+    const deploymentPass = [];
+    await assert.rejects(module.runTimewebDirectProductionPilot({
+      ...commonInput(value),
+      clock: { now: () => "2026-08-12T03:00:00Z" },
+      inspectFile: async (path) => path === SAFE_CONSUMER_REGISTRY_OUTPUT ? null : ({ isFile: () => path !== fileInputs.productionSecretRoot, isDirectory: () => path === fileInputs.productionSecretRoot, isSymbolicLink: () => false, mode: path === fileInputs.productionSecretRoot ? 0o40500 : 0o100400, size: 32 }),
+      preflightAdapter: { verify: async (id) => preflight(value, id) },
+      productionAdapter: { provision: async () => ({ owned: true, deploymentId: value.target.deploymentId, sshHost: value.target.sshEndpoint.host }), applyFirewall: async () => undefined },
+      sshAdapter: { openPinnedSession: async () => ({ observedHostKeySha256: sha("1"), run: async (command) => {
+        if (command.id === "inspect-local-digests") return { status: "passed", images: value.publication.images.map(({ id, remoteDigest }) => ({ id, remoteDigest })) };
+        if (command.id === "migrator") return { status: "passed", migrationManifestSha256: sha("4"), targetVersion: 10, schemaVersion: 10 };
+        if (command.id === "safe-consumer-deployer") return { status: "passed", registry, deployments: registry.entries.map((entry, index) => ({ ...entry, transactionHash: `0x${String(index + 3).repeat(64)}` })) };
+        if (command.id === "write-safe-consumer-registry") return { status: "passed", path: SAFE_CONSUMER_REGISTRY_OUTPUT, mode: 0o400, noReplace: true, registrySha256: digest(bytes(registry)) };
+        if (command.id === "readyz-real-heartbeat") return { status: "passed", readyz: { status: "passed" }, workerHeartbeat: { status: "current" } };
+        if (command.id === "timeweb-pitr-production") return { status: "passed", restoreEvidenceSha256: sha("5"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 };
+        if (command.id === "persisted-live-coston2") return { status: "passed", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] };
+        return { status: "passed" };
+      }, close: async () => undefined }) },
+      cutoverAdapter: {
+        activateCaddy: async ({ publicOrigin }) => { events.push("caddy-cutover"); return { status: "passed", publicOrigin, activatedAt: "2026-08-12T03:00:00Z" }; },
+        observeExternalHttps: async ({ publicOrigin }) => {
+          events.push("external-https");
+          if (failingPhase === "external-https") throw new Error("external HTTPS failed");
+          return { status: "passed", publicOrigin, observedAt: "2026-08-12T03:00:01Z" };
+        },
+        rollbackCaddy: async () => events.push("rollback-caddy"),
+      },
+      checkpointStore: { append: async () => {
+        events.push("checkpoint");
+        if (failingPhase === "checkpoint") throw new Error("checkpoint failed");
+      } },
+      appendProductionEvidence: async (entry) => {
+        events.push("append-deployment");
+        if (failingPhase === "deployment-evidence") throw new Error("deployment evidence failed");
+        deploymentPass.push(entry);
+      },
+    }), /external HTTPS failed|checkpoint failed|deployment evidence failed|PRODUCTION_/);
+    assert.equal(events[0] === "caddy-cutover" || events.includes("caddy-cutover"), true, failingPhase);
+    assert.equal(events.at(-1), "rollback-caddy", failingPhase);
+    assert.equal(events.filter((entry) => entry === "rollback-caddy").length, 1, failingPhase);
+    assert.equal(deploymentPass.length, 0, failingPhase);
+  }
 });
 
 test("24-hour canary resumes from append-only checkpoints and cannot terminal-pass early", async () => {

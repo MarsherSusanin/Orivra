@@ -120,3 +120,19 @@ syntax and typecheck PASS; the two exact deployment files are eight intentional
 RED; serialized deployment static is 218 controls plus 11 intentional RED
 (the same eight 029C seams and three retained 027B registry seams); Sites is
 46/46 PASS. No credential, provider, host or registry effect was attempted.
+
+## Cutover and terminal evidence
+
+Corrective RED requires Caddy cutover plus strict external HTTPS observation
+before checkpoint and canonical V2 deployment-evidence publication. Any
+post-cutover observation/checkpoint/evidence failure rolls Caddy back exactly
+once and leaves zero deployment PASS. The systemd 24-hour path consumes real
+canonical `ProductionDeploymentEvidenceV2` bytes/checksum and emits canonical
+`ProductionPromotionEvidenceV2` with `status:passed`, `promotionClaim:true` and
+the same deployment digest; a non-PASS test receipt fails closed. The saved
+GREEN stash was not inspected, applied, modified or dropped.
+
+Classification on exact base `24257ca24732f9c17f4e2e2c8b90fa6093362295`:
+syntax/typecheck PASS; the two focused deployment files are nine intentional
+RED; serialized static is 218 controls plus 12 intentional RED (nine 029C and
+three retained 027B); Sites is 46/46 PASS. No production or host effect ran.

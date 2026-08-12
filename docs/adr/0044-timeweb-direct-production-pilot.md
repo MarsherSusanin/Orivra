@@ -119,9 +119,14 @@ Deployment evidence V2 binds publication, target, authorization, Timeweb
 authority, exact five images, exact registry, schema 10, readiness, real
 heartbeat, Timeweb PITR and both persisted live runs.
 
-Caddy cutover is an explicit adapter effect after deployment evidence append.
-It returns strict origin and trusted activation time; assigning a boolean is
-not cutover evidence.
+Caddy cutover is an explicit adapter effect before deployment evidence append.
+After it returns strict origin and trusted activation time, a separate external
+HTTPS observation must confirm that exact public origin. Only then may the
+cutover checkpoint and deployment evidence be appended. Strict
+`ProductionDeploymentEvidenceV2` binds exactly
+`cutover: {status:"passed", publicOrigin, activatedAt}`. An external
+observation, checkpoint or evidence failure after cutover requires
+`rollbackCaddy` and leaves zero deployment PASS.
 
 The resumable append-only canary has exactly `cutover`,
 `post-cutover-15m`, `post-cutover-1h`, `post-cutover-24h`. Each checkpoint is
@@ -142,6 +147,10 @@ clock regression and caller-supplied future time, and atomically appends only
 the first missing due mode-0400 checkpoint. Terminal promotion remains
 impossible before the host clock reaches cutover plus 86400 seconds. A failed
 append removes its stage and does not advance the accepted prefix.
+The timer consumes canonical `ProductionDeploymentEvidenceV2` bytes plus an
+independent checksum. At 24 hours it appends canonical
+`ProductionPromotionEvidenceV2` with `status:passed`, `promotionClaim:true` and
+the exact deployment digest. A non-PASS test receipt is not acceptance.
 
 The direct-pilot CLI accepts only absolute canonical evidence/authority and
 required secret-file paths; it accepts no DigitalOcean API token. It constructs

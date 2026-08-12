@@ -34,12 +34,15 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
   imports, one mode-0400 relayer-key file, chain/balance checks, two receipts and
   two nonempty runtime-code observations; atomically publish registry plus
   deployment evidence with zero final registry on failure;
-- append deployment evidence only after schema/readiness/heartbeat/Timeweb
-  PITR and two persisted-live observations pass.
+- stage deployment evidence after schema/readiness/heartbeat/Timeweb PITR and
+  two persisted-live observations; publish only after Caddy cutover, external
+  HTTPS observation and cutover checkpoint, with rollback and zero deployment
+  PASS on any post-cutover failure.
 
 ### 029C3 — Explicit cutover and resumable acceptance
 
-- invoke an explicit Caddy cutover adapter after deployment evidence;
+- invoke explicit Caddy cutover and external HTTPS observation before
+  deployment evidence becomes authoritative;
 - append 0/15m/1h/24h checkpoint evidence only when a trusted clock reaches
   each due time;
 - resume from the exact canonical append-only prefix without skipping or
@@ -48,7 +51,8 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 - keep canonical rollback V2 binding and no-effect denials.
 - install one root-owned hardened systemd oneshot/timer which uses only the host
   clock, writes the first missing due checkpoint mode 0400 and cannot publish an
-  early terminal result.
+  early terminal result; terminal output is canonical
+  `ProductionPromotionEvidenceV2`, never a non-PASS test receipt.
 
 ## Frozen RED
 
