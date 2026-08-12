@@ -101,3 +101,22 @@ focus remains 18 controls plus 12 intentional RED, serialized deployment
 static is 217 controls plus the same 12 intentional RED, and Sites remains
 46/46 PASS. Typecheck and diff-check PASS. These are RED evidence, not a
 production, hosted or live-Coston2 claim.
+
+## Direct-pilot input/output compatibility
+
+A later implementation pause exposed two frozen authority errors. The direct
+pilot uses an existing VDS through pinned SSH and therefore accepts no
+DigitalOcean API token. Its required input inventory still contains the
+read-only GHCR token, SSH key, Timeweb access/secret files, backup encryption
+key and replay/backup evidence. The canonical safe-consumer registry is a
+deployer output, not an input: its exact fixed path is proven absent before the
+first deployment effect, then the two-consumer deployer publishes it mode 0400
+with atomic no-replace semantics. A pre-existing output fails closed; no
+caller-authored registry can satisfy preflight. Production WIP and all stashes
+were left untouched.
+
+Compatibility classification on exact base `c8533f1811e7797925cfb9aede060109c68d9ca0`:
+syntax and typecheck PASS; the two exact deployment files are eight intentional
+RED; serialized deployment static is 218 controls plus 11 intentional RED
+(the same eight 029C seams and three retained 027B registry seams); Sites is
+46/46 PASS. No credential, provider, host or registry effect was attempted.

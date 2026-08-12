@@ -71,6 +71,13 @@ replay bundle/report digests; exact two-manifest safe-consumer plan; and chain
 check ID and fields. Generic status, missing/extra fields or mismatch returns
 `PRODUCTION_PREFLIGHT_INVALID` with zero host/evidence effect.
 
+The direct pilot reuses the already selected VDS through pinned SSH, so this
+inventory has no DigitalOcean API token. It retains only the read-only GHCR
+token, SSH key, Timeweb access/secret files, backup encryption key and required
+replay/backup inputs. The safe-consumer registry is not an input: its fixed
+path must be absent before deployment and it is atomically published mode 0400
+with no-replace semantics only after both consumer deployments succeed.
+
 ### Exact two-consumer registry
 
 `SafeConsumerRegistryV1` contains exactly two ordered entries:
@@ -137,7 +144,8 @@ impossible before the host clock reaches cutover plus 86400 seconds. A failed
 append removes its stage and does not advance the accepted prefix.
 
 The direct-pilot CLI accepts only absolute canonical evidence/authority and
-secret-file paths. It constructs the production adapter set before invoking
+required secret-file paths; it accepts no DigitalOcean API token. It constructs
+the production adapter set before invoking
 `runTimewebDirectProductionPilot`; it cannot pass raw status objects or secret
 values through argv/stdout. The systemd CLI similarly delegates to the bounded
 canary tick runtime rather than fabricating checkpoint observations.

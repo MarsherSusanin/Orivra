@@ -9,6 +9,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const PUBLICATION_SHA = "sha256:1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10";
 const OPEN_METEO = "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8";
 const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
+const SAFE_CONSUMER_REGISTRY_OUTPUT =
+  "/opt/orivra/evidence/safe-consumer-registry.v1.json";
 const sha = (digit) => `sha256:${digit.repeat(64).slice(0, 64)}`;
 const canonicalJson = (value) => value === null || typeof value !== "object"
   ? JSON.stringify(value)
@@ -51,7 +53,6 @@ async function fixture() {
 }
 
 const fileInputs = Object.freeze({
-  doApiTokenFile: "/private/credentials/digitalocean-token",
   ghcrPullTokenFile: "/private/credentials/ghcr-read-token",
   sshPrivateKeyFile: "/private/credentials/orivra-production-ssh",
   timewebS3AccessKeyFile: "/private/credentials/timeweb-s3-access-key",
@@ -61,7 +62,6 @@ const fileInputs = Object.freeze({
   replayBundleFile: "/opt/orivra/evidence/replay/proof-bundle.json",
   replayPreflightReportFile: "/opt/orivra/evidence/replay/preflight-report.json",
   backupEvidenceFile: "/opt/orivra/evidence/recovery/backup-evidence.v1.json",
-  safeConsumerRegistryFile: "/opt/orivra/evidence/safe-consumer-registry.v1.json",
 });
 
 const commonInput = (value) => ({
@@ -118,15 +118,21 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
   const result = await module.runTimewebDirectProductionPilot({
     ...commonInput(value),
     clock: { now: () => "2026-08-12T03:00:00Z" },
-    inspectFile: async (path) => ({ isFile: () => path !== fileInputs.productionSecretRoot, isDirectory: () => path === fileInputs.productionSecretRoot, isSymbolicLink: () => false, mode: path === fileInputs.productionSecretRoot ? 0o40500 : 0o100400, size: 32 }),
+    inspectFile: async (path) => {
+      if (path === SAFE_CONSUMER_REGISTRY_OUTPUT) {
+        events.push("registry-output-absent");
+        return null;
+      }
+      return { isFile: () => path !== fileInputs.productionSecretRoot, isDirectory: () => path === fileInputs.productionSecretRoot, isSymbolicLink: () => false, mode: path === fileInputs.productionSecretRoot ? 0o40500 : 0o100400, size: 32 };
+    },
     preflightAdapter: { verify: async (id) => preflight(value, id) },
-    productionAdapter: { provision: async () => ({ owned: true, deploymentId: value.target.deploymentId, sshHost: value.target.sshEndpoint.host }), applyFirewall: async () => events.push("firewall") },
+    productionAdapter: { provision: async () => { events.push("provision"); return { owned: true, deploymentId: value.target.deploymentId, sshHost: value.target.sshEndpoint.host }; }, applyFirewall: async () => events.push("firewall") },
     sshAdapter: { openPinnedSession: async () => ({ observedHostKeySha256: sha("1"), run: async (command) => {
       events.push(command.id);
       if (command.id === "inspect-local-digests") return { status: "passed", images: value.publication.images.map(({ id, remoteDigest }) => ({ id, remoteDigest })) };
       if (command.id === "migrator") return { status: "passed", migrationManifestSha256: sha("4"), targetVersion: 10, schemaVersion: 10 };
       if (command.id === "safe-consumer-deployer") return { status: "passed", registry, deployments: registry.entries.map((entry, index) => ({ ...entry, transactionHash: `0x${String(index + 3).repeat(64)}` })) };
-      if (command.id === "write-safe-consumer-registry") return { status: "passed", path: fileInputs.safeConsumerRegistryFile, mode: 0o400, registrySha256: digest(bytes(registry)) };
+      if (command.id === "write-safe-consumer-registry") return { status: "passed", path: SAFE_CONSUMER_REGISTRY_OUTPUT, mode: 0o400, noReplace: true, registrySha256: digest(bytes(registry)) };
       if (command.id === "readyz-real-heartbeat") return { status: "passed", readyz: { status: "passed" }, workerHeartbeat: { status: "current" } };
       if (command.id === "timeweb-pitr-production") return { status: "passed", restoreEvidenceSha256: sha("5"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 };
       if (command.id === "persisted-live-coston2") return { status: "passed", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] };
@@ -137,6 +143,11 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
     checkpointStore: { append: async (entry) => events.push(`checkpoint:${entry.id}`) },
   });
   assert.equal(result.status, "canary-pending");
+  assert.equal(Object.hasOwn(fileInputs, "doApiTokenFile"), false);
+  assert.equal(Object.hasOwn(fileInputs, "safeConsumerRegistryFile"), false);
+  assert.notEqual(events.indexOf("registry-output-absent"), -1);
+  assert.ok(events.indexOf("registry-output-absent") < events.indexOf("provision"));
+  assert.ok(events.indexOf("registry-output-absent") < events.indexOf("safe-consumer-deployer"));
   assert.deepEqual(events.slice(events.indexOf("migrator"), events.indexOf("start-worker") + 1), [
     "migrator", "start-api", "safe-consumer-deployer", "write-safe-consumer-registry", "start-worker",
   ]);

@@ -24,6 +24,9 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 ### 029C2 — Typed deployment
 
 - require eight exact typed preflight observations before provisioning;
+- use the existing VDS only through pinned SSH, with no DigitalOcean API token;
+- exclude the generated registry from input inventory, prove its fixed output
+  path absent before deploy, then publish it atomically mode 0400/no-replace;
 - preserve database-first composition and Caddy-only 80/443 ingress;
 - deploy Open-Meteo then ETH/USD consumers deterministically and write the
   canonical worker registry before worker startup;

@@ -214,7 +214,6 @@ test("direct-pilot CLI accepts only absolute file-backed authority and invokes t
     ["--promotion-authorization", "/opt/orivra/authority/production-promotion-authorization.v2.json"],
     ["--promotion-authorization-sha256-file", "/opt/orivra/authority/production-promotion-authorization.v2.sha256"],
     ["--run", "/opt/orivra/authority/production-run.v1.json"],
-    ["--digitalocean-token-file", "/opt/orivra/secrets/digitalocean-token"],
     ["--ghcr-pull-token-file", "/opt/orivra/secrets/ghcr-pull-token"],
     ["--ssh-private-key-file", "/opt/orivra/secrets/production-ssh-key"],
     ["--timeweb-access-key-file", "/opt/orivra/secrets/timeweb-access-key"],
@@ -232,6 +231,7 @@ test("direct-pilot CLI accepts only absolute file-backed authority and invokes t
   assert.equal(calls.length, 1);
   assert.equal(adapterInputs.length, 1);
   assert.equal(calls[0].adapters.kind, "real-production-pilot-adapters");
+  assert.doesNotMatch(source, /digitalocean-token-file|digitalOceanToken/);
   assert.deepEqual(calls[0].authorityFiles, {
     publicationEvidence: "/opt/orivra/evidence/publication-evidence.v1.json",
     publicationEvidenceSha256: "/opt/orivra/evidence/publication-evidence.v1.sha256",
@@ -244,7 +244,6 @@ test("direct-pilot CLI accepts only absolute file-backed authority and invokes t
     run: "/opt/orivra/authority/production-run.v1.json",
   });
   assert.deepEqual(adapterInputs[0].secretFiles, {
-    digitalOceanToken: "/opt/orivra/secrets/digitalocean-token",
     ghcrPullToken: "/opt/orivra/secrets/ghcr-pull-token",
     sshPrivateKey: "/opt/orivra/secrets/production-ssh-key",
     timewebAccessKey: "/opt/orivra/secrets/timeweb-access-key",

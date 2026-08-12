@@ -809,10 +809,12 @@ authorization. V2 contains no staging field.
 
 When that blocker is closed, preflight must complete before DNS, host or Docker
 mutation: exact DNS address, pinned SSH host key, read-only GHCR scope, complete
-mode-0400 secret-file inventory, exact Timeweb endpoint/region/bucket/path-style
+mode-0400 secret-file inventory without a DigitalOcean API token, exact Timeweb endpoint/region/bucket/path-style
 shared-pilot authority, accepted replay bundle/report, the ordered Open-Meteo/
 ETH manifest pair and live chain-114 configuration. Generic status is not an
-observation. Production maps the five
+observation. The generated safe-consumer registry is not a preflight input;
+its fixed path must be absent and is later published mode 0400/no-replace.
+Production maps the five
 publication references exactly to the five `PROOFLINE_*_IMAGE` variables,
 pulls/re-inspects by digest and starts:
 
@@ -836,7 +838,7 @@ The accepted implementation must expose two production-used commands rather
 than only import-safe test runtimes:
 
 ```bash
-npm run production:pilot:deploy -- --publication-evidence /opt/orivra/evidence/publication-evidence.v1.json --publication-evidence-sha256-file /opt/orivra/evidence/publication-evidence.v1.sha256 --production-target /opt/orivra/authority/production-target.v2.json --production-target-sha256-file /opt/orivra/authority/production-target.v2.sha256 --object-store-authority /opt/orivra/authority/timeweb-s3-pilot-authority.v1.json --object-store-authority-sha256-file /opt/orivra/authority/timeweb-s3-pilot-authority.v1.sha256 --promotion-authorization /opt/orivra/authority/production-promotion-authorization.v2.json --promotion-authorization-sha256-file /opt/orivra/authority/production-promotion-authorization.v2.sha256 --run /opt/orivra/authority/production-run.v1.json --digitalocean-token-file /opt/orivra/secrets/digitalocean-token --ghcr-pull-token-file /opt/orivra/secrets/ghcr-pull-token --ssh-private-key-file /opt/orivra/secrets/production-ssh-key --timeweb-access-key-file /opt/orivra/secrets/timeweb-access-key --timeweb-secret-key-file /opt/orivra/secrets/timeweb-secret-key --backup-encryption-key-file /opt/orivra/secrets/backup-encryption-key
+npm run production:pilot:deploy -- --publication-evidence /opt/orivra/evidence/publication-evidence.v1.json --publication-evidence-sha256-file /opt/orivra/evidence/publication-evidence.v1.sha256 --production-target /opt/orivra/authority/production-target.v2.json --production-target-sha256-file /opt/orivra/authority/production-target.v2.sha256 --object-store-authority /opt/orivra/authority/timeweb-s3-pilot-authority.v1.json --object-store-authority-sha256-file /opt/orivra/authority/timeweb-s3-pilot-authority.v1.sha256 --promotion-authorization /opt/orivra/authority/production-promotion-authorization.v2.json --promotion-authorization-sha256-file /opt/orivra/authority/production-promotion-authorization.v2.sha256 --run /opt/orivra/authority/production-run.v1.json --ghcr-pull-token-file /opt/orivra/secrets/ghcr-pull-token --ssh-private-key-file /opt/orivra/secrets/production-ssh-key --timeweb-access-key-file /opt/orivra/secrets/timeweb-access-key --timeweb-secret-key-file /opt/orivra/secrets/timeweb-secret-key --backup-encryption-key-file /opt/orivra/secrets/backup-encryption-key
 npm run production:canary:resume
 ```
 
