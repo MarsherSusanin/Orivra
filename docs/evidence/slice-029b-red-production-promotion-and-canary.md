@@ -29,6 +29,12 @@ domain feature `@proofline/domain/production-promotion` and import-safe
 `scripts/digitalocean-production-promotion-runtime.mjs` do not exist on the
 baseline. The new tests require them to provide:
 
+The retained Slice 009 purity inventory previously ended at the publication
+feature. It now also freezes the exact `production-promotion` contract/domain
+subpaths, root-export identity, cycle freedom, effect-free initialization and
+zero worker custody. This is one causal intentional RED until those modules
+exist; it does not grant the worker promotion authority.
+
 1. exact canonical publication/staging/target/authorization byte authority;
 2. exact five immutable production references and private frozen plans;
 3. complete pre-effect DNS/SSH/GHCR/files/Spaces/replay/safe-consumer/live

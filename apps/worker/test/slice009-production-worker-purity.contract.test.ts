@@ -110,6 +110,28 @@ const publicationDomainRuntimeExports = [
   "verifyPublicationEvidenceHandoff",
 ] as const;
 
+const productionPromotionContractRuntimeExports = [
+  "ApplicationRollbackAuthorizationV1Schema",
+  "ProductionDeploymentEvidenceV1Schema",
+  "ProductionPromotionAuthorizationV1Schema",
+  "ProductionPromotionEvidenceV1Schema",
+  "ProductionTargetV1Schema",
+  "canonicalSerializeProductionDeploymentEvidence",
+  "canonicalSerializeProductionPromotionAuthorization",
+  "canonicalSerializeProductionPromotionEvidence",
+  "canonicalSerializeProductionTarget",
+  "checksumProductionDeploymentEvidence",
+  "checksumProductionPromotionAuthorization",
+  "checksumProductionPromotionEvidence",
+  "checksumProductionTarget",
+] as const;
+
+const productionPromotionDomainRuntimeExports = [
+  "createProductionPromotionPlan",
+  "selectSchemaCompatibleRollback",
+  "verifyProductionPromotionHandoff",
+] as const;
+
 const templateDomainRuntimeExports = [
   "getWeb2JsonTemplateCatalog",
   "getWeb2JsonTemplateDetail",
@@ -197,7 +219,7 @@ function expectNoPreflightTestBridge(candidate: string, label: string) {
 }
 
 describe("Slice 009 production worker purity", () => {
-  it("declares pure package metadata and exact custody/template/recovery/release/candidate/publication feature subpaths", () => {
+  it("declares pure package metadata and exact custody/template/recovery/release/candidate/publication/production feature subpaths", () => {
     const contracts = JSON.parse(readFileSync(contractsPackage, "utf8"));
     const domain = JSON.parse(readFileSync(domainPackage, "utf8"));
 
@@ -213,6 +235,7 @@ describe("Slice 009 production worker purity", () => {
       "./release": "./src/release.ts",
       "./candidate": "./src/candidate.ts",
       "./publication": "./src/publication.ts",
+      "./production-promotion": "./src/production-promotion.ts",
     });
     expect(domain.exports).toEqual({
       ".": "./src/index.ts",
@@ -220,7 +243,33 @@ describe("Slice 009 production worker purity", () => {
       "./release": "./src/oci-release.ts",
       "./candidate": "./src/mlp-candidate.ts",
       "./publication": "./src/publication.ts",
+      "./production-promotion": "./src/production-promotion.ts",
     });
+  });
+
+  it("keeps cycle-free production-promotion features identical through pure package roots", async () => {
+    const contractFeature = resolve(root, "packages/contracts/src/production-promotion.ts");
+    const domainFeature = resolve(root, "packages/domain/src/production-promotion.ts");
+    expect(existsSync(contractFeature)).toBe(true);
+    expect(existsSync(domainFeature)).toBe(true);
+    if (!existsSync(contractFeature) || !existsSync(domainFeature)) return;
+    const contractSpecifier = "@proofline/contracts/production-promotion";
+    const domainSpecifier = "@proofline/domain/production-promotion";
+    const [rootContracts, contracts, rootDomain, domain] = await Promise.all([
+      import("@proofline/contracts"),
+      import(/* @vite-ignore */ contractSpecifier),
+      import("@proofline/domain"),
+      import(/* @vite-ignore */ domainSpecifier),
+    ]);
+    expect(Object.keys(contracts).sort()).toEqual([...productionPromotionContractRuntimeExports].sort());
+    expect(Object.keys(domain).sort()).toEqual([...productionPromotionDomainRuntimeExports].sort());
+    for (const name of productionPromotionContractRuntimeExports) expect(contracts[name]).toBe(rootContracts[name]);
+    for (const name of productionPromotionDomainRuntimeExports) expect(domain[name]).toBe(rootDomain[name]);
+    for (const feature of [contractFeature, domainFeature]) {
+      const source = readFileSync(feature, "utf8");
+      expect(source).not.toMatch(/from\s*["']\.\/index["']|from\s*["']@proofline\/(?:contracts|domain)["']/);
+      expect(moduleLoadEffectViolations(feature)).toEqual([]);
+    }
   });
 
   it("backs sideEffects false with effect-free package module initialization", () => {
