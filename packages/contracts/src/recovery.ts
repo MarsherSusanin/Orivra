@@ -1,5 +1,6 @@
 export {
   BackupEvidenceV1Schema,
+  HistoricalSpacesBackupEvidenceV1Schema,
   RestoreDrillEvidenceV1Schema,
   RestorePromotionAuthorizationV1Schema,
   RestorePromotionAuthorizationV2Schema,
@@ -13,6 +14,7 @@ export {
 } from "./recovery-schema";
 export type {
   BackupEvidenceV1,
+  HistoricalSpacesBackupEvidenceV1,
   RestoreDrillEvidenceV1,
   RestorePromotionAuthorizationV1,
   RestorePromotionAuthorizationV2,

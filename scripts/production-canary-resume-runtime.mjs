@@ -65,6 +65,44 @@ function requireAppend(result, expectedSha256, code, message) {
   if (!result || result.status !== "passed" || result.sha256 !== expectedSha256) throw failure(code, message);
 }
 
+function promotionEntry(deployment, deploymentSha256, checkpoints) {
+  const completedAt = checkpoints.at(-1).observedAt;
+  const promotion = ProductionPromotionEvidenceV2Schema.parse({
+    version: "2", kind: "digitalocean-production-promotion-evidence", status: "passed", verification: "verified", promotionClaim: true,
+    producer: deployment.producer, publicationEvidenceSha256: deployment.publicationEvidenceSha256,
+    productionDeploymentEvidenceSha256: deploymentSha256,
+    runId: deployment.run.runId, operatorId: deployment.run.operatorId, cutover: deployment.cutover,
+    canary: { durationSeconds: 86400, checkpoints }, completedAt,
+  });
+  const bytes = Buffer.from(canonicalSerializeProductionPromotionEvidenceV2(promotion), "utf8");
+  return Object.freeze({
+    path: `${ROOT}/production-promotion-evidence.v2.json`, bytes,
+    sha256: sha256(bytes), mode: 0o400, noReplace: true,
+  });
+}
+
+async function finishPromotion(input, deployment, state) {
+  const expected = promotionEntry(deployment, input.expectedDeploymentEvidenceSha256, state);
+  const existing = await input.loadCanonicalPromotionEvidence?.();
+  if (existing !== null && existing !== undefined) {
+    try {
+      if (!(existing.bytes instanceof Uint8Array) || existing.sha256 !== expected.sha256 ||
+        sha256(existing.bytes) !== expected.sha256 || Buffer.compare(Buffer.from(existing.bytes), expected.bytes) !== 0) {
+        throw new Error("promotion mismatch");
+      }
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(existing.bytes);
+      const parsed = ProductionPromotionEvidenceV2Schema.parse(JSON.parse(text));
+      if (text !== canonicalSerializeProductionPromotionEvidenceV2(parsed)) throw new Error("promotion canonical bytes");
+      return Object.freeze({ status: "complete" });
+    } catch (cause) {
+      throw failure("CANARY_PROMOTION_EVIDENCE_INVALID", "Production promotion evidence is invalid", cause);
+    }
+  }
+  const result = await input.appendPromotionEvidence(expected);
+  requireAppend(result, expected.sha256, "CANARY_PROMOTION_EVIDENCE_INVALID", "Production promotion evidence is invalid");
+  return Object.freeze({ status: "promotion-complete" });
+}
+
 export async function runProductionCanarySystemdTick(input) {
   if (Object.hasOwn(input ?? {}, "callerNow")) throw failure("CANARY_CLOCK_INVALID", "Production canary requires the host clock");
   if (input.stateRoot !== ROOT) throw failure("CANARY_STATE_INVALID", "Production canary state root is invalid");
@@ -77,7 +115,7 @@ export async function runProductionCanarySystemdTick(input) {
   const lastObserved = Date.parse(state.at(-1).observedAt);
   if (nowMs < lastObserved) throw failure("CANARY_CLOCK_SKEW", "Production host clock moved backwards");
   const next = definitions[state.length];
-  if (!next) return Object.freeze({ status: "complete" });
+  if (!next) return finishPromotion(input, deployment, state);
   const expectedDueAt = dueAt(cutover, next[1]);
   if (nowMs < Date.parse(expectedDueAt)) return Object.freeze({ status: "not-due", checkpointId: next[0], dueAt: expectedDueAt });
   const stagePath = `${ROOT}/.checkpoint-stage.${next[0]}`;
@@ -108,20 +146,7 @@ export async function runProductionCanarySystemdTick(input) {
     }
     if (next[0] === "post-cutover-24h") {
       if (nowMs - Date.parse(cutover) < 86_400_000) throw failure("CANARY_CLOCK_INVALID", "Production canary cannot complete early");
-      const promotion = ProductionPromotionEvidenceV2Schema.parse({
-        version: "2", kind: "digitalocean-production-promotion-evidence", status: "passed", verification: "verified", promotionClaim: true,
-        producer: deployment.producer, publicationEvidenceSha256: deployment.publicationEvidenceSha256,
-        productionDeploymentEvidenceSha256: input.expectedDeploymentEvidenceSha256,
-        runId: deployment.run.runId, operatorId: deployment.run.operatorId, cutover: deployment.cutover,
-        canary: { durationSeconds: 86400, checkpoints: [...state, observation] }, completedAt: now,
-      });
-      const promotionBytes = Buffer.from(canonicalSerializeProductionPromotionEvidenceV2(promotion), "utf8");
-      const promotionSha256 = sha256(promotionBytes);
-      const promotionResult = await input.appendPromotionEvidence({
-        path: `${ROOT}/production-promotion-evidence.v2.json`, bytes: promotionBytes,
-        sha256: promotionSha256, mode: 0o400, noReplace: true,
-      });
-      requireAppend(promotionResult, promotionSha256, "CANARY_PROMOTION_EVIDENCE_INVALID", "Production promotion evidence is invalid");
+      await finishPromotion(input, deployment, [...state, observation]);
     }
     return Object.freeze({ status: next[0] === "post-cutover-24h" ? "checkpoint-complete" : "canary-pending", checkpointId: next[0] });
   } catch (cause) {

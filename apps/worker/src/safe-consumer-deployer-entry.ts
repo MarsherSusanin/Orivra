@@ -12,7 +12,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { runProductionSafeConsumerDeployment } from "../../../scripts/safe-consumer-registry-deployment-runtime.mjs";
 
 const RPC = "https://coston2-api.flare.network/ext/C/rpc";
-const EVIDENCE_ROOT = "/opt/orivra/evidence";
+const CANONICAL_EVIDENCE_ROOT = "/opt/orivra/evidence";
+const EVIDENCE_ROOT = process.env.PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_DIR ?? "/run/proofline/safe-consumer-stage";
 const KEY_FILE = "/run/secrets/worker_coston2_private_key";
 const chain = {
   id: 114,
@@ -109,11 +110,13 @@ function createRelayer() {
 }
 
 async function publishCanonicalPair(input: { files: Array<{ path: string; bytes: Uint8Array; mode: number }>; commitMarker: string; noReplace: boolean }) {
-  if (!input.noReplace || input.commitMarker !== `${EVIDENCE_ROOT}/safe-consumer-registry.v1.json`) throw new Error("Safe consumer evidence publication is invalid");
+  if (!input.noReplace || input.commitMarker !== `${CANONICAL_EVIDENCE_ROOT}/safe-consumer-registry.v1.json` ||
+    !EVIDENCE_ROOT.startsWith("/run/proofline/") || EVIDENCE_ROOT.includes("\0")) throw new Error("Safe consumer evidence publication is invalid");
   await mkdir(EVIDENCE_ROOT, { recursive: true, mode: 0o700 });
   const created: string[] = [];
   try {
-    for (const file of input.files) {
+    const stagedFiles = input.files.map((file) => ({ ...file, path: `${EVIDENCE_ROOT}/${file.path.split("/").at(-1)}` }));
+    for (const file of stagedFiles) {
       await lstat(file.path).then(
         () => { throw new Error("Safe consumer evidence already exists"); },
         (cause: NodeJS.ErrnoException) => {
@@ -121,7 +124,7 @@ async function publishCanonicalPair(input: { files: Array<{ path: string; bytes:
         },
       );
     }
-    for (const file of input.files) {
+    for (const file of stagedFiles) {
       const stage = `${file.path}.stage`;
       const handle = await open(stage, "wx", 0o600);
       try { await handle.writeFile(file.bytes); await handle.sync(); } finally { await handle.close(); }
@@ -133,7 +136,7 @@ async function publishCanonicalPair(input: { files: Array<{ path: string; bytes:
     return { status: "passed", atomic: true };
   } catch (cause) {
     for (const path of created) await rm(path, { force: true });
-    for (const file of input.files) await rm(`${file.path}.stage`, { force: true });
+    for (const file of input.files) await rm(`${EVIDENCE_ROOT}/${file.path.split("/").at(-1)}.stage`, { force: true });
     throw cause;
   }
 }

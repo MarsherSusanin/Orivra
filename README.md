@@ -161,12 +161,15 @@ blockchain-операций.
   cutover/15m/1h/24h checkpoints are resumable and cannot terminal-PASS early.
   Historical V1 contracts and canonical rollback binding remain parseable but
   cannot authorize V2 effects. Exact candidate `97aae69` / tree `5d8965e` was
-  rejected by both Core and Product verification: activation/rollback,
-  cutover-live authority, UID-1000 evidence staging and terminal-promotion
-  resume require corrective RED. Browser PASS must come from a canonical
+  rejected by both Core and Product verification. The corrective replacement
+  is local production-author GREEN: nested activation retains rollback
+  authority, cutover consumes pre-deployment live evidence, UID 1000 writes
+  only run-scoped staging that root seals, and terminal promotion resumes
+  idempotently. Browser PASS must come from a canonical
   acceptance artifact, and active backup evidence fixes Timeweb bucket
-  `orivra-backet` while historical Spaces parsing stays separate. No hosted or
-  production PASS exists.
+  `orivra-backet` while historical Spaces parsing stays separate. Exact commit
+  and two fresh verifier reports remain pending; no hosted or production PASS
+  exists.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

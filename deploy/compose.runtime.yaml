@@ -141,13 +141,14 @@ services:
     environment:
       PROOFLINE_COSTON2_PRIVATE_KEY_FILE: /run/secrets/worker_coston2_private_key
       PROOFLINE_COSTON2_RPC_URL: ${PROOFLINE_COSTON2_RPC_URL:-https://coston2-api.flare.network/ext/C/rpc}
+      PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_DIR: /run/proofline/safe-consumer-stage
     secrets:
       - source: worker_coston2_private_key
         target: worker_coston2_private_key
     volumes:
       - type: bind
-        source: ${PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT:?PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT is required}
-        target: /opt/orivra/evidence
+        source: ${PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT:-/opt/orivra/absent-safe-consumer-deployer-stage}
+        target: /run/proofline/safe-consumer-stage
         bind:
           create_host_path: false
     networks:

@@ -44,6 +44,26 @@ function encodeHostCommand(id, payload) {
   }), "utf8").toString("base64url");
 }
 
+export function normalizeTimewebCaddyActivationResult(value, { expectedPublicOrigin }) {
+  try {
+    const cutover = value?.cutover;
+    const external = value?.external;
+    if (value?.id !== "activate-caddy" || value.status !== "passed" ||
+      cutover?.status !== "passed" || cutover.publicOrigin !== expectedPublicOrigin ||
+      !Number.isFinite(Date.parse(cutover.activatedAt)) || external?.status !== "passed" ||
+      external.publicOrigin !== expectedPublicOrigin || !Number.isFinite(Date.parse(external.observedAt)) ||
+      Date.parse(external.observedAt) < Date.parse(cutover.activatedAt)) {
+      throw new Error("activation envelope");
+    }
+    return Object.freeze({ status: "passed", publicOrigin: expectedPublicOrigin,
+      activatedAt: cutover.activatedAt, effectApplied: true });
+  } catch (cause) {
+    throw Object.assign(failure("PRODUCTION_CUTOVER_FAILED", "Production Caddy activation result is invalid", cause), {
+      cutoverApplied: true,
+    });
+  }
+}
+
 export function createTimewebProductionHostCommandAdapter({ images, runId, invoke }) {
   if (!Array.isArray(images) || images.length !== 5 || !/^prod_[0-9A-Z]{26}$/.test(runId ?? "") || typeof invoke !== "function") {
     throw failure("PRODUCTION_HOST_COMMAND_INVALID", "Production host command adapter is invalid");
@@ -228,7 +248,12 @@ export async function createProductionPilotAdapters({ secretFiles }) {
       async run(command) {
         if (!hostAdapter) throw failure("PRODUCTION_HOST_COMMAND_INVALID", "Production host command authority is unavailable");
         if (command?.id === "canary-observe" && command.checkpointId === "cutover") {
-          return invoke({ executable: "/usr/bin/node", arguments: [HOST_RUNNER, "--command", encodeHostCommand("canary-observe", { id: "cutover", dueAt: command.dueAt })] });
+          return invoke({ executable: "/usr/bin/node", arguments: [HOST_RUNNER, "--command", encodeHostCommand("canary-observe", {
+            id: "cutover",
+            dueAt: command.dueAt,
+            persistedLiveRuns: command.persistedLiveRuns,
+            browserAcceptanceSha256: command.browserAcceptanceSha256,
+          })] });
         }
         return hostAdapter.run(command);
       },
@@ -292,7 +317,17 @@ export async function createProductionPilotAdapters({ secretFiles }) {
     } },
     appendProductionEvidence: (entry) => remote({ id: "append-production-evidence", payload: { canonicalBytesBase64url: Buffer.from(entry.bytes).toString("base64url"), sha256: sha256(entry.bytes) } }),
     cutoverAdapter: {
-      activateCaddy: ({ publicOrigin }) => remote({ id: "activate-caddy", payload: { publicOrigin } }),
+      async activateCaddy({ publicOrigin }) {
+        try {
+          const value = await remote({ id: "activate-caddy", payload: { publicOrigin } });
+          return normalizeTimewebCaddyActivationResult(value, { expectedPublicOrigin: publicOrigin });
+        } catch (cause) {
+          if (cause?.cutoverApplied === true) throw cause;
+          throw Object.assign(failure("PRODUCTION_CUTOVER_FAILED", "Production Caddy activation response failed", cause), {
+            cutoverApplied: true,
+          });
+        }
+      },
       async observeExternalHttps({ publicOrigin }) { const response = await fetch(`${publicOrigin}/api/healthz`, { redirect: "error", signal: AbortSignal.timeout(20_000) }); if (!response.ok) throw failure("PRODUCTION_CUTOVER_FAILED", "External HTTPS failed"); return { status: "passed", publicOrigin, observedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z") }; },
       rollbackCaddy: () => remote({ id: "rollback-caddy", payload: {} }),
     },

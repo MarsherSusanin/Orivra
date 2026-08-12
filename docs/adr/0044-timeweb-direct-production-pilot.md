@@ -1,6 +1,6 @@
 # ADR 0044: Timeweb direct-production pilot and resumable 24-hour acceptance
 
-- Status: Accepted boundary; corrective RED after independent Core/Product FAIL on exact 97aae69 / 5d8965e
+- Status: Accepted boundary; corrective production-author GREEN, exact-tree verification pending
 - Date: 2026-08-12
 - Supersedes active production portions of: ADR 0037, ADR 0042, ADR 0043
 - Retains: all V1 schemas as historical compatibility data types
@@ -45,9 +45,11 @@ has SHA-256
 `70a6475d77ad27a2a8b736deb8e6ea9fc26eebae28310610b58f646d3213981a`.
 The candidate could leave Caddy active after an envelope failure, made the
 cutover checkpoint circular, could not write its root-private evidence as UID
-1000 and wedged terminal promotion after a partial append. Corrective RED is
-therefore the current state; no hosted, Timeweb, Coston2, cutover or 24-hour
-PASS exists.
+1000 and wedged terminal promotion after a partial append. The corrective
+implementation closes those seams locally and preserves a separate historical
+Spaces parser while active production backup evidence requires literal
+`orivra-backet`. Exact-tree Core/Product verification is still pending; no
+hosted, Timeweb, Coston2, cutover or 24-hour PASS exists.
 
 The pilot object store is Timeweb S3-compatible storage. Swift is an operator
 option outside the application runtime, not a release dependency.

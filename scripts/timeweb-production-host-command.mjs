@@ -32,6 +32,7 @@ const COMPOSE_FILES = [
 const REGISTRY_PATH = `${EVIDENCE_ROOT}/safe-consumer-registry.v1.json`;
 const CONSUMER_EVIDENCE_PATH = `${EVIDENCE_ROOT}/safe-consumer-deployment-evidence.v1.json`;
 const WORKER_HANDOFF_PATH = "/opt/orivra/worker-evidence/safe-consumer-registry.v1.json";
+const DEPLOYER_STAGING_ROOT = "/opt/orivra/deployer-staging";
 const MAX_COMMAND = 32_768;
 const MAX_OUTPUT = 1024 * 1024;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
@@ -170,6 +171,51 @@ export async function readCanonicalSafeConsumerEvidencePair({
   }
 }
 
+export async function sealSafeConsumerEvidenceFromStaging({
+  stagingRoot, canonicalRoot, runId, expectedStagingOwner, canonicalOwner,
+  workerHandoffPath, maximumBytes,
+}) {
+  const deploymentName = "safe-consumer-deployment-evidence.v1.json";
+  const registryName = "safe-consumer-registry.v1.json";
+  const runStage = resolve(stagingRoot, runId);
+  const stagedDeployment = resolve(runStage, deploymentName);
+  const stagedRegistry = resolve(runStage, registryName);
+  const deploymentEvidencePath = resolve(canonicalRoot, deploymentName);
+  const registryPath = resolve(canonicalRoot, registryName);
+  const created = [];
+  try {
+    if (!RUN_ID.test(runId) || !Number.isSafeInteger(maximumBytes) || maximumBytes < 1 || maximumBytes > MAX_OUTPUT ||
+      !expectedStagingOwner || !canonicalOwner || workerHandoffPath !== WORKER_HANDOFF_PATH ||
+      runStage !== `${resolve(stagingRoot)}/${runId}`) throw new Error("authority");
+    const [stageStatus, rootStatus] = await Promise.all([lstat(runStage), lstat(canonicalRoot)]);
+    if (!stageStatus.isDirectory() || stageStatus.isSymbolicLink() || stageStatus.uid !== expectedStagingOwner.uid ||
+      stageStatus.gid !== expectedStagingOwner.gid || (stageStatus.mode & 0o777) !== 0o700 ||
+      !rootStatus.isDirectory() || rootStatus.isSymbolicLink()) throw new Error("directories");
+    const [deploymentBytes, registryBytes] = await Promise.all([
+      readBoundedPrivateFile(stagedDeployment, maximumBytes),
+      readBoundedPrivateFile(stagedRegistry, maximumBytes),
+    ]);
+    const parsed = parseCanonicalSafeConsumerPair(deploymentBytes, registryBytes);
+    await chmod(canonicalRoot, 0o700);
+    if (process.getuid?.() === 0) await chown(canonicalRoot, canonicalOwner.uid, canonicalOwner.gid);
+    for (const [path, bytes] of [[deploymentEvidencePath, deploymentBytes], [registryPath, registryBytes]]) {
+      await lstat(path).then(() => { throw new Error("canonical output exists"); }, (cause) => { if (cause?.code !== "ENOENT") throw cause; });
+      const stage = `${path}.stage-${process.pid}`;
+      const handle = await open(stage, "wx", 0o600);
+      try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+      if (process.getuid?.() === 0) await chown(stage, canonicalOwner.uid, canonicalOwner.gid);
+      await chmod(stage, 0o400);
+      try { await link(stage, path); created.push(path); } finally { await rm(stage, { force: true }); }
+    }
+    await rm(runStage, { recursive: true, force: true });
+    return deepFreeze({ status: "passed", runId, noReplace: true, deploymentEvidencePath, registryPath,
+      registrySha256: checksumSafeConsumerRegistry(parsed.registry), workerHandoffPath });
+  } catch (cause) {
+    for (const path of created) await rm(path, { force: true }).catch(() => undefined);
+    throw failure("TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID", "Safe-consumer staging evidence is invalid", cause);
+  }
+}
+
 export function decodeTimewebProductionHostCommand(encoded) {
   try {
     if (typeof encoded !== "string" || encoded.length < 1 || encoded.length > MAX_COMMAND ||
@@ -181,7 +227,9 @@ export function decodeTimewebProductionHostCommand(encoded) {
     if (text !== canonicalJson(value) || !exactKeys(value, ["version", "kind", "id", "payload"]) ||
       value.version !== "1" || value.kind !== "timeweb-production-host-command" ||
       !ALLOWED_TIMEWEB_PRODUCTION_COMMAND_IDS.includes(value.id) ||
-      !exactKeys(value.payload, PAYLOAD_KEYS[value.id])) {
+      !(value.id === "canary-observe"
+        ? (exactKeys(value.payload, ["id", "dueAt"]) || exactKeys(value.payload, ["id", "dueAt", "persistedLiveRuns", "browserAcceptanceSha256"]))
+        : exactKeys(value.payload, PAYLOAD_KEYS[value.id]))) {
       throw new Error("shape");
     }
     return deepFreeze(value);
@@ -291,6 +339,15 @@ function defaultAdapters() {
     } },
     compose: { async runExactPhase(input) {
       const env = await loadRuntimeEnvironment(input.imageEnvironment);
+      if (input.phase === "safe-consumer-deployer") {
+        const runId = env.PROOFLINE_PRODUCTION_RUN_ID;
+        if (!RUN_ID.test(runId ?? "")) throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID");
+        const stage = `${DEPLOYER_STAGING_ROOT}/${runId}`;
+        await mkdir(stage, { recursive: true, mode: 0o700 });
+        await chown(stage, 1000, 1000);
+        await chmod(stage, 0o700);
+        env.PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT = stage;
+      }
       if (input.phase === "start-caddy-candidate") {
         await runProcess("/usr/bin/docker", composeArguments(["config", "--quiet"]), { environment: env });
       } else {
@@ -308,6 +365,17 @@ function defaultAdapters() {
       return { status: "passed" };
     } },
     evidence: {
+      async sealStagingPair() {
+        const env = await loadRuntimeEnvironment();
+        const runId = env.PROOFLINE_PRODUCTION_RUN_ID;
+        const stage = `${DEPLOYER_STAGING_ROOT}/${runId}`;
+        const status = await lstat(stage);
+        return sealSafeConsumerEvidenceFromStaging({
+          stagingRoot: DEPLOYER_STAGING_ROOT, canonicalRoot: EVIDENCE_ROOT, runId,
+          expectedStagingOwner: { uid: status.uid, gid: status.gid }, canonicalOwner: { uid: 0, gid: 0 },
+          workerHandoffPath: WORKER_HANDOFF_PATH, maximumBytes: MAX_OUTPUT,
+        });
+      },
       async inspectSafeConsumerPair() {
         const inspect = async (path) => lstat(path).then((status) => ({ type: status.isFile() ? "regular" : status.isSymbolicLink() ? "symlink" : "other", mode: status.mode & 0o777 }), (cause) => {
           if (cause?.code === "ENOENT") return "absent"; throw cause;
@@ -476,9 +544,14 @@ function defaultAdapters() {
         return { status: "passed", publicOrigin: PUBLIC_ORIGIN };
       },
     },
-    canary: { async observe({ id, dueAt }) {
+    canary: { async observe(input) {
+      const { id, dueAt } = input;
       const env = await loadRuntimeEnvironment();
-      const text = await runProcess("/usr/bin/node", [`${CURRENT_ROOT}/scripts/timeweb-production-canary-observation.mjs`, "--id", id, "--due-at", dueAt], { environment: env });
+      const extra = input.persistedLiveRuns ? [
+        "--persisted-live-runs-base64url", Buffer.from(canonicalJson(input.persistedLiveRuns), "utf8").toString("base64url"),
+        "--browser-acceptance-sha256", input.browserAcceptanceSha256,
+      ] : [];
+      const text = await runProcess("/usr/bin/node", [`${CURRENT_ROOT}/scripts/timeweb-production-canary-observation.mjs`, "--id", id, "--due-at", dueAt, ...extra], { environment: env });
       return JSON.parse(text);
     } },
   };
@@ -543,6 +616,9 @@ export async function runTimewebProductionHostCommand({ encodedCommand, environm
     if (!pairValid(await adapters.evidence.inspectSafeConsumerPair(evidenceInput), "absent")) throw failure("TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID");
     requireObservation((await adapters.compose.runExactPhase({ project: PROJECT, currentRoot: CURRENT_ROOT, composeFiles: COMPOSE_FILES,
       phase: id, services: [id], imageEnvironment: imageEnvironment(images), pullPolicy: "never", publicIngress: "unchanged" }))?.status === "passed");
+    if (typeof adapters.evidence.sealStagingPair === "function") {
+      requireObservation((await adapters.evidence.sealStagingPair())?.status === "passed");
+    }
     const pair = await adapters.evidence.inspectSafeConsumerPair(evidenceInput);
     if (!pairValid(pair, "present")) throw failure("TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID");
     const parsed = parsedPair(pair);
@@ -641,7 +717,10 @@ export async function runTimewebProductionHostCommand({ encodedCommand, environm
     requireObservation(receipt?.status === "passed" && receipt.sha256 === payload.sha256); return { id, status: "passed", sha256: payload.sha256 };
   }
   if (id === "canary-observe") {
-    requirePayload(payload, ["id", "dueAt"]); if (!CANARY_IDS.includes(payload.id) || !Number.isFinite(Date.parse(payload.dueAt))) throw failure("TIMEWEB_HOST_COMMAND_INVALID");
+    const keys = payload.id === "cutover" ? ["id", "dueAt", "persistedLiveRuns", "browserAcceptanceSha256"] : ["id", "dueAt"];
+    requirePayload(payload, keys); if (!CANARY_IDS.includes(payload.id) || !Number.isFinite(Date.parse(payload.dueAt)) ||
+      (payload.id === "cutover" && (!/^sha256:[a-f0-9]{64}$/.test(payload.browserAcceptanceSha256 ?? "") ||
+        payload.persistedLiveRuns?.status !== "persisted" || payload.persistedLiveRuns.runIds?.length !== 2))) throw failure("TIMEWEB_HOST_COMMAND_INVALID");
     let value;
     try { value = ProductionCanaryCheckpointV2Schema.parse(await adapters.canary.observe(payload)); }
     catch (cause) { throw failure("TIMEWEB_HOST_CANARY_INVALID", "Canary observation is invalid", cause); }

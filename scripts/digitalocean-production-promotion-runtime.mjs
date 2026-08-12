@@ -281,6 +281,24 @@ const directCanaryDefinitions = Object.freeze([
 const openMeteoSha = "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8";
 const ethUsdSha = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
 
+function parseBrowserAcceptance(bytes, expectedSha256, publicOrigin) {
+  try {
+    if (!(bytes instanceof Uint8Array) || !/^sha256:[a-f0-9]{64}$/.test(expectedSha256 ?? "") ||
+      sha256Bytes(bytes) !== expectedSha256) throw new Error("browser digest");
+    const text = decoder.decode(bytes);
+    const value = JSON.parse(text);
+    if (text !== canonicalJson(value) || !exactKeys(value, ["version", "kind", "status", "publicOrigin", "checks"]) ||
+      value.version !== "1" || value.kind !== "hosted-browser-acceptance" || value.status !== "passed" ||
+      value.publicOrigin !== publicOrigin || !exactKeys(value.checks, ["desktop", "mobile", "keyboard", "axeSeriousCritical", "consoleErrors", "networkErrors", "reloadBackForward"]) ||
+      value.checks.desktop !== "passed" || value.checks.mobile !== "passed" || value.checks.keyboard !== "passed" ||
+      value.checks.axeSeriousCritical !== 0 || value.checks.consoleErrors !== 0 || value.checks.networkErrors !== 0 ||
+      value.checks.reloadBackForward !== "passed") throw new Error("browser evidence");
+    return deepFreeze({ value, sha256: expectedSha256 });
+  } catch (cause) {
+    throw failure("PRODUCTION_PREFLIGHT_INVALID", "Hosted browser acceptance is invalid", { cause });
+  }
+}
+
 function parseDirectRun(bytes, operatorId, completedAt) {
   try {
     if (!(bytes instanceof Uint8Array)) throw new Error("missing bytes");
@@ -371,7 +389,9 @@ function directPreflightEvidence(authority, observations, files) {
 }
 
 function requireDirectCommand(id, observed, authority) {
-  if (!observed || observed.status !== "passed") throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
+  if (!observed || (id === "persisted-live-coston2" ? !["passed", "persisted"].includes(observed.status) : observed.status !== "passed")) {
+    throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
+  }
   if (id === "inspect-local-digests" && (!Array.isArray(observed.images) || observed.images.length !== authority.images.length ||
     observed.images.some((image, index) => image.id !== authority.images[index].id || image.remoteDigest !== authority.images[index].remoteDigest))) {
     throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
@@ -401,6 +421,9 @@ function requireDirectCommand(id, observed, authority) {
     observed.runIds.some((runId) => !/^run_[0-9A-Z]{26}$/.test(runId)) || JSON.stringify(observed.manifests) !== JSON.stringify([openMeteoSha, ethUsdSha]))) {
     throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
   }
+  if (id === "persisted-live-coston2") {
+    return deepFreeze({ status: "persisted", runIds: [...observed.runIds], manifests: [...observed.manifests] });
+  }
   return deepFreeze(structuredClone(observed));
 }
 
@@ -411,6 +434,11 @@ function directCommandFor(id, authority) {
 
 export async function runTimewebDirectProductionPilot(input) {
   const authority = verifyDirectProductionPilotHandoff(input);
+  const browserAcceptance = parseBrowserAcceptance(
+    input.browserAcceptanceBytes,
+    input.expectedBrowserAcceptanceSha256,
+    authority.target.publicOrigin,
+  );
   const now = input.clock?.now?.();
   if (typeof now !== "string" || !Number.isFinite(Date.parse(now))) throw failure("PRODUCTION_PREFLIGHT_INVALID", "Production pilot preflight is invalid");
   const run = parseDirectRun(input.runBytes, authority.authorization.operatorId, now);
@@ -443,7 +471,14 @@ export async function runTimewebDirectProductionPilot(input) {
     if (observations["write-safe-consumer-registry"].registrySha256 !== sha256Bytes(new TextEncoder().encode(canonicalSerializeSafeConsumerRegistry(registry)))) {
       throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: "write-safe-consumer-registry" });
     }
-    const activated = await input.cutoverAdapter.activateCaddy({ publicOrigin: authority.target.publicOrigin, target: authority.target });
+    let activated;
+    try {
+      activated = await input.cutoverAdapter.activateCaddy({ publicOrigin: authority.target.publicOrigin, target: authority.target });
+      if (activated?.effectApplied === true) cutover = true;
+    } catch (cause) {
+      if (cause?.cutoverApplied === true) cutover = true;
+      throw cause;
+    }
     if (!activated || activated.status !== "passed" || activated.publicOrigin !== authority.target.publicOrigin || !Number.isFinite(Date.parse(activated.activatedAt))) {
       throw failure("PRODUCTION_CUTOVER_FAILED", "Production cutover failed");
     }
@@ -459,6 +494,8 @@ export async function runTimewebDirectProductionPilot(input) {
         id: "canary-observe",
         checkpointId: "cutover",
         dueAt: activated.activatedAt,
+        persistedLiveRuns: observations["persisted-live-coston2"],
+        browserAcceptanceSha256: browserAcceptance.sha256,
       }));
     } catch (cause) {
       throw failure("PRODUCTION_CUTOVER_FAILED", "Production cutover host observation failed", { cause });

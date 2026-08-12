@@ -176,6 +176,7 @@ export type {
 } from "./deployment";
 export {
   BackupEvidenceV1Schema,
+  HistoricalSpacesBackupEvidenceV1Schema,
   RestoreDrillEvidenceV1Schema,
   RestorePromotionAuthorizationV1Schema,
   RestorePromotionAuthorizationV2Schema,

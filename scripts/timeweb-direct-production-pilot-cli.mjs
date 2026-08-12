@@ -20,6 +20,8 @@ const argumentMap = Object.freeze({
   "timeweb-secret-key-file": ["secret", "timewebSecretKey"],
   "backup-encryption-key-file": ["secret", "backupEncryptionKey"],
 });
+const BROWSER_ACCEPTANCE = "/opt/orivra/evidence/hosted-browser-acceptance.v1.json";
+const BROWSER_ACCEPTANCE_SHA256 = "/opt/orivra/evidence/hosted-browser-acceptance.v1.sha256";
 
 function invalid(message = "Production pilot CLI requires absolute file arguments") {
   throw Object.assign(new Error(message), { code: "PRODUCTION_PILOT_CLI_INVALID" });
@@ -60,6 +62,8 @@ async function executeProductionPilot({ authorityFiles, adapters }) {
     promotionAuthorizationBytes: await readBoundedPrivateFile(authorityFiles.promotionAuthorization, { maximumBytes: 1024 * 1024 }),
     expectedPromotionAuthorizationSha256: await readChecksum(authorityFiles.promotionAuthorizationSha256),
     runBytes: await readBoundedPrivateFile(authorityFiles.run, { maximumBytes: 64 * 1024 }),
+    browserAcceptanceBytes: await readBoundedPrivateFile(BROWSER_ACCEPTANCE, { maximumBytes: 1024 * 1024 }),
+    expectedBrowserAcceptanceSha256: await readChecksum(BROWSER_ACCEPTANCE_SHA256),
     now,
     clock: { now: () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z") },
     ...adapters,

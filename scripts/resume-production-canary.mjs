@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, link, lstat, mkdir, open, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -9,6 +10,7 @@ import { readBoundedPrivateFile } from "./private-file-runtime.mjs";
 const ROOT = "/var/lib/orivra/production-canary";
 const DEPLOYMENT_EVIDENCE = "/opt/orivra/evidence/production-deployment-evidence.v2.json";
 const DEPLOYMENT_EVIDENCE_SHA256 = "/opt/orivra/evidence/production-deployment-evidence.v2.sha256";
+const PROMOTION_EVIDENCE = `${ROOT}/production-promotion-evidence.v2.json`;
 const WRITE_STATE = Object.freeze({ accepted: "passed" });
 
 function parseRoot(argv) {
@@ -71,6 +73,16 @@ async function appendFile(entry) {
   }
 }
 
+async function loadPromotion() {
+  try {
+    const bytes = await readBoundedPrivateFile(PROMOTION_EVIDENCE, { maximumBytes: 1024 * 1024 });
+    return { bytes, sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}` };
+  } catch (cause) {
+    if (cause?.cause?.code === "ENOENT" || cause?.code === "ENOENT") return null;
+    throw cause;
+  }
+}
+
 export async function main(argv = process.argv.slice(2)) {
   const stateRoot = parseRoot(argv);
   const result = await runProductionCanarySystemdTick({
@@ -79,6 +91,7 @@ export async function main(argv = process.argv.slice(2)) {
     expectedDeploymentEvidenceSha256: (await readBoundedPrivateFile(DEPLOYMENT_EVIDENCE_SHA256, { maximumBytes: 128 })).toString("utf8").trim(),
     clock: { now: () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z") },
     loadCanonicalState: () => loadState(stateRoot),
+    loadCanonicalPromotionEvidence: loadPromotion,
     observe: createProductionCanaryObservation,
     appendCheckpoint: appendFile,
     appendPromotionEvidence: appendFile,

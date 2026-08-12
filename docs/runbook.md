@@ -800,11 +800,12 @@ from the exact 028B publication; historical staging evidence is not fabricated
 or accepted as V2 authority.
 
 ADR 0044 supersedes the rejected candidate `99918ab` / `a24d08a`. Its
-replacement is local production-author GREEN: typecheck; focused 029C 33/33;
-serialized deployment static 256/256; core 661/661 at 100%; full Vitest 264
-files/2558 tests plus only configured skips; backend, worker and Web coverage
+replacement is local corrective production-author GREEN: typecheck;
+serialized deployment static 260/260; core 662/662 at 100%; full Vitest 264
+files/2559 tests plus only configured skips; backend, worker and Web coverage
 above policy; real PostgreSQL 22 files/163 tests without skips; build, Sites
-46/46 and Action sync. The exact committed identity and two independent
+46/46, Action sync, two offline builds and Docker 027A/027B/027C. The exact
+committed identity and two independent
 verifier reports are still mandatory before credentials or effects. The historical
 publication checkpoint is the canonical 4285-byte `PublicationEvidenceV1` with SHA-256
 `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.

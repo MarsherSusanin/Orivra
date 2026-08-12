@@ -475,3 +475,25 @@ requires a run-scoped staging mount that root seals into the canonical pair.
 The retained contract now requires the staging mount and keeps the worker's
 mode-0400 handoff mount. The canonical evidence root remains a host-lifecycle
 authority and is no longer treated as a Compose interpolation prerequisite.
+
+## Corrective production-author GREEN closure
+
+The implementation closes all seven verifier/corrective RED cases: real nested
+Caddy activation is normalized with post-effect rollback authority; cutover
+uses the already persisted exact two Coston2 runs and a canonical browser
+acceptance checksum; UID 1000 writes only a run-scoped staging pair which root
+cross-binds and seals; four checkpoints retry an absent terminal promotion;
+active Timeweb backup evidence requires literal `orivra-backet`; and the
+historical Spaces parser remains separate.
+
+Final pre-commit local gates on unchanged production bytes: typecheck PASS;
+serialized deployment static 260/260; full Vitest 264 files/2559 tests plus
+only five files/43 configured skips; contracts/domain 57 files/662 tests at
+100% statements/branches/functions/lines; backend 92.03% lines/87.08%
+branches; worker 91.39%/86.22%; Web 92.57%/85.91%; Testcontainers PostgreSQL
+22 files/163 tests with zero skips; build, Sites 46/46 and Action byte-sync
+PASS. Two offline no-pull/network-none builds and Docker 027A/027B/027C PASS;
+the recovery gate restored a fresh volume and passed all eight exact negatives
+with scoped resource cleanup. No provider, registry, SSH, DNS, VDS, Timeweb or
+live Coston2 credential/effect was used. Exact-tree independent verification
+is pending, and this is not a hosted/deployed/security PASS.

@@ -1,6 +1,6 @@
 # Slice 029C — Timeweb direct-production pilot
 
-Status: Corrective RED after independent Core/Product FAIL on exact `97aae69` / `5d8965e`
+Status: Corrective production-author GREEN; exact-tree Core/Product verification pending
 
 Decision: [ADR 0044](../adr/0044-timeweb-direct-production-pilot.md)
 
@@ -138,15 +138,16 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 
 ## Gates
 
-The final production-author tree passes typecheck; the focused 029C deployment
-inventory (33/33); serialized deployment static (256/256); contracts/domain
-coverage (57 files, 661 tests, 100% statements/branches/functions/lines); the
-full Vitest inventory (264 files and 2558 tests, with only five/43 configured
+The corrective production-author tree passes typecheck; serialized deployment
+static (260/260); contracts/domain coverage (57 files, 662 tests, 100%
+statements/branches/functions/lines); the full Vitest inventory (264 files and
+2559 tests, with only five/43 configured
 skips); backend coverage (92.03% lines/87.08% branches); worker coverage
 (91.39%/86.22%); Web coverage (92.57%/85.91%); real Testcontainers PostgreSQL
 (22 files/163 tests, zero skips); build, Sites (46/46) and Action byte-sync.
-Credential-free 027A/027B/027C Docker controls also remain required on the
-committed identity before verifier handoff.
+Two offline builds and credential-free 027A/027B/027C Docker controls also PASS
+with scoped cleanup. Exact committed identity and two fresh verifier reports
+remain required before any credentialed effect.
 
 ## Exclusions
 

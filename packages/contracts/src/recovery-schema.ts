@@ -91,6 +91,7 @@ const StorageSchema = z.discriminatedUnion("provider", [
       addressing: z.literal("path-style"),
       authorityMode: z.literal("shared-pilot"),
       ...StorageSharedFields,
+      bucket: z.literal("orivra-backet"),
     })
     .strict(),
 ]);
@@ -215,7 +216,29 @@ export const BackupEvidenceV1Schema = BackupEvidenceRefinedSchema
     { path: ["storage"], message: "Storage provider does not match the slot." },
   );
 
+export const HistoricalSpacesBackupEvidenceV1Schema = BackupEvidenceRefinedSchema
+  .refine(
+    (value) => compareLsn(value.backup.startLsn, value.backup.stopLsn) <= 0n,
+    { path: ["backup"], message: "Backup LSN bounds are not ordered." },
+  )
+  .refine(
+    (value) => value.backup.startWalSegment <= value.backup.stopWalSegment,
+    { path: ["backup"], message: "Backup WAL segments are not ordered." },
+  )
+  .refine(
+    (value) =>
+      value.database.slot === "production" &&
+      value.storage.provider === "digitalocean-spaces",
+    {
+      path: ["storage"],
+      message: "Historical storage evidence must be production Spaces.",
+    },
+  );
+
 export type BackupEvidenceV1 = z.infer<typeof BackupEvidenceV1Schema>;
+export type HistoricalSpacesBackupEvidenceV1 = z.infer<
+  typeof HistoricalSpacesBackupEvidenceV1Schema
+>;
 
 export type RestoreDrillEvidenceV1 = z.infer<
   typeof RestoreDrillEvidenceV1Schema

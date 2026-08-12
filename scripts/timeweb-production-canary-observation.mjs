@@ -1,10 +1,37 @@
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { ProductionCanaryCheckpointV2Schema, ProductionDeploymentEvidenceV2Schema, canonicalSerializeProductionCanaryCheckpointV2, canonicalSerializeProductionDeploymentEvidenceV2 } from "../packages/contracts/src/production-promotion-runtime.mjs";
 import { switchAndObserveProductionWalArchive } from "./timeweb-production-pitr.mjs";
 import { readBoundedPrivateFile } from "./private-file-runtime.mjs";
 
-const IDS = ["post-cutover-15m", "post-cutover-1h", "post-cutover-24h"];
+const IDS = ["cutover", "post-cutover-15m", "post-cutover-1h", "post-cutover-24h"];
+const PUBLIC_ORIGIN = "https://orivra.xyz";
+const OPEN_METEO = "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8";
+const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
+const BROWSER_ACCEPTANCE = "/opt/orivra/evidence/hosted-browser-acceptance.v1.json";
+const BROWSER_ACCEPTANCE_SHA256 = "/opt/orivra/evidence/hosted-browser-acceptance.v1.sha256";
+const sha256 = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+
+function canonicalJson(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+}
+
+function validLiveRuns(value) {
+  return value?.status === "persisted" && Array.isArray(value.runIds) && value.runIds.length === 2 &&
+    value.runIds[0] !== value.runIds[1] && value.runIds.every((id) => /^run_[0-9A-Z]{26}$/.test(id)) &&
+    JSON.stringify(value.manifests) === JSON.stringify([OPEN_METEO, ETH_USD]);
+}
+
+function validateBrowserAcceptance(value, expectedSha256, bytes) {
+  if (value?.status !== "passed" || value.publicOrigin !== PUBLIC_ORIGIN ||
+    !/^sha256:[a-f0-9]{64}$/.test(expectedSha256 ?? "") || (bytes && sha256(bytes) !== expectedSha256)) {
+    throw new Error("browser acceptance");
+  }
+  return { status: "passed", publicOrigin: PUBLIC_ORIGIN, artifactSha256: expectedSha256 };
+}
 
 function failure(cause) {
   return Object.assign(new Error("TIMEWEB_PRODUCTION_CANARY_INVALID: Production canary observation is invalid"), {
@@ -75,6 +102,19 @@ function productionAdapters() {
       if (text !== canonicalSerializeProductionDeploymentEvidenceV2(evidence)) throw new Error("deployment evidence");
       return { status: "persisted", runIds: evidence.checks.liveCoston2.runIds, manifests: evidence.checks.liveCoston2.manifests };
     },
+    async hostedBrowserAcceptance(expectedSha256) {
+      const [bytes, checksumBytes] = await Promise.all([
+        readBoundedPrivateFile(BROWSER_ACCEPTANCE, { maximumBytes: 1024 * 1024 }),
+        readBoundedPrivateFile(BROWSER_ACCEPTANCE_SHA256, { maximumBytes: 128 }),
+      ]);
+      const checksum = checksumBytes.toString("utf8").trim();
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      const value = JSON.parse(text);
+      if (text !== canonicalJson(value) || checksum !== sha256(bytes) || (expectedSha256 && checksum !== expectedSha256)) {
+        throw new Error("browser acceptance checksum");
+      }
+      return validateBrowserAcceptance(value, checksum, bytes);
+    },
   };
 }
 
@@ -86,7 +126,7 @@ const productionClock = {
   },
 };
 
-export async function observeTimewebProductionCanary({ id, dueAt, publicOrigin = "https://orivra.xyz", clock, adapters, observeChecks }) {
+export async function observeTimewebProductionCanary({ id, dueAt, publicOrigin = PUBLIC_ORIGIN, persistedLiveRuns, browserAcceptance, browserAcceptanceSha256, clock, adapters, observeChecks }) {
   try {
     if (!IDS.includes(id) || !Number.isFinite(Date.parse(dueAt))) throw new Error("identity");
     if (observeChecks) {
@@ -100,10 +140,12 @@ export async function observeTimewebProductionCanary({ id, dueAt, publicOrigin =
     if (time?.source !== "production-host" || time.maximumSkewSeconds !== 5 || !Number.isInteger(time.observedSkewSeconds) || time.observedSkewSeconds < 0 || time.observedSkewSeconds > 5 || !Number.isFinite(Date.parse(time.now))) throw new Error("host clock");
     if (Date.parse(time.now) < Date.parse(dueAt)) throw notDue();
     const effects = adapters ?? productionAdapters();
-    const [external, internal, disk, objectStore, live] = await Promise.all([
-      effects.externalHttps({ publicOrigin }), effects.internalHealth(), effects.diskPressure(), effects.timewebBackup(), effects.persistedLiveRuns(),
+    const [external, internal, disk, objectStore, live, browser] = await Promise.all([
+      effects.externalHttps({ publicOrigin }), effects.internalHealth(), effects.diskPressure(), effects.timewebBackup(),
+      id === "cutover" ? Promise.resolve(persistedLiveRuns) : effects.persistedLiveRuns(),
+      id === "cutover" ? Promise.resolve(validateBrowserAcceptance(browserAcceptance, browserAcceptanceSha256 ?? browserAcceptance?.artifactSha256)) : effects.hostedBrowserAcceptance(),
     ]);
-    if (external?.status !== "passed" || external.rootHtml !== true || external.sameOriginApi !== true || internal?.healthz?.status !== "passed" || internal?.readyz?.status !== "passed" || internal?.workerHeartbeat?.status !== "current" || disk?.status !== "passed" || objectStore?.status !== "passed" || !Number.isSafeInteger(objectStore.archivePendingAgeSeconds) || objectStore.archivePendingAgeSeconds < 0 || objectStore.archivePendingAgeSeconds > 60 || live?.status !== "persisted") throw new Error("archive freshness");
+    if (external?.status !== "passed" || external.rootHtml !== true || external.sameOriginApi !== true || internal?.healthz?.status !== "passed" || internal?.readyz?.status !== "passed" || internal?.workerHeartbeat?.status !== "current" || disk?.status !== "passed" || objectStore?.status !== "passed" || !Number.isSafeInteger(objectStore.archivePendingAgeSeconds) || objectStore.archivePendingAgeSeconds < 0 || objectStore.archivePendingAgeSeconds > 60 || !validLiveRuns(live) || browser?.status !== "passed" || browser.publicOrigin !== publicOrigin || !/^sha256:[a-f0-9]{64}$/.test(browser.artifactSha256 ?? "")) throw new Error("archive freshness or browser acceptance");
     const checks = {
       healthz: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
       objectStore: { status: "passed", backupAgeSeconds: objectStore.backupAgeSeconds, archivePendingAgeSeconds: objectStore.archivePendingAgeSeconds },
@@ -119,8 +161,19 @@ export async function observeTimewebProductionCanary({ id, dueAt, publicOrigin =
 }
 
 export async function runTimewebProductionCanaryObservationCli({ argv = process.argv.slice(2), stdout = process.stdout, observe = observeTimewebProductionCanary } = {}) {
-  if (argv.length !== 4 || argv[0] !== "--id" || argv[2] !== "--due-at") throw failure(new Error("arguments"));
-  const result = await observe({ id: argv[1], dueAt: argv[3] });
+  if (![4, 8].includes(argv.length) || argv[0] !== "--id" || argv[2] !== "--due-at") throw failure(new Error("arguments"));
+  let extra = {};
+  if (argv.length === 8) {
+    if (argv[4] !== "--persisted-live-runs-base64url" || argv[6] !== "--browser-acceptance-sha256") throw failure(new Error("arguments"));
+    const liveBytes = Buffer.from(argv[5], "base64url");
+    if (liveBytes.toString("base64url") !== argv[5]) throw failure(new Error("live runs encoding"));
+    const liveText = new TextDecoder("utf-8", { fatal: true }).decode(liveBytes);
+    const live = JSON.parse(liveText);
+    if (liveText !== canonicalJson(live) || !validLiveRuns(live)) throw failure(new Error("live runs"));
+    const browser = await productionAdapters().hostedBrowserAcceptance(argv[7]);
+    extra = { persistedLiveRuns: live, browserAcceptance: browser, browserAcceptanceSha256: argv[7] };
+  }
+  const result = await observe({ id: argv[1], dueAt: argv[3], ...extra });
   stdout.write(`${canonicalSerializeProductionCanaryCheckpointV2(result)}\n`);
   return result;
 }

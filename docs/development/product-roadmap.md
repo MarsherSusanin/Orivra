@@ -38,7 +38,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | GHCR publication Complete: Core/Product PASS `e274441` / `907fa93`; five exact remote digests verified; publication evidence SHA-256 `1fe40038…ea10`; isolated DigitalOcean staging pending |
 | 029A | Local MLP validation and candidate freeze | Complete; Core and Product PASS `fc2f6e0` / `f7cebc6`, candidate SHA-256 `8991e7e4…0cdda` |
 | 029B | Exact-digest production promotion and seven-day canary | Historical V1 retained; active effect path superseded by ADR 0044 |
-| 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Local production-author GREEN; exact commit + Core/Product verification pending; no hosted/deployed claim |
+| 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Corrective production-author GREEN; exact commit + Core/Product verification pending; no hosted/deployed claim |
 
 ## Completed pre-infrastructure product journey
 
@@ -192,10 +192,11 @@ the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
   deployment evidence, explicit Caddy cutover and trusted-clock 0/15m/1h/24h
   checkpoints. A code change returns the plan to focused RED/GREEN and two
   fresh stopped-tree verifiers. Exact candidate `97aae69` / tree `5d8965e`
-  failed both Core and Product verification; current corrective RED covers
+  failed both Core and Product verification; the corrective local GREEN closes
   nested Caddy activation/rollback, non-circular cutover live authority,
   UID-1000 staging to root-private no-replace sealing, terminal promotion
-  resume, canonical browser acceptance and exact Timeweb backup bucket.
+  resume, canonical browser acceptance and exact Timeweb backup bucket. Fresh
+  exact-tree Core/Product verification remains pending.
 
   The final default-effect RED requires the pinned host—not the direct runtime—
   to produce the cutover checkpoint; executable worker/API persisted-run,
