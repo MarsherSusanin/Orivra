@@ -1,5 +1,18 @@
 # Slice 029A RED — credential-free MLP candidate freeze
 
+## 2026-08-13 current-tree release compatibility correction
+
+The first authorized freeze of `b77c9a5` passed the full matrix, recovery and
+five-image OCI export, then failed closed before candidate publication because
+the worker-stopped product gate did not provide the newly mandatory
+`PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE` while Compose interpolated the
+full runtime model. A causal contract now requires a canonical two-entry
+regular mode-0400 handoff inside the gate's private temporary root, the exact
+absolute path, no `PROOFLINE_SAFE_CONSUMER_ADDRESS`, and scoped removal. The
+pre-fix focused result was 7 retained PASS plus 1 intentional RED; the narrow
+correction made the file 8/8 PASS and typecheck PASS. The failed freeze is not a
+candidate PASS and authorizes no registry or host effect.
+
 Date: 2026-08-12
 
 ADR 0041 freezes the final local release boundary after 027E received two

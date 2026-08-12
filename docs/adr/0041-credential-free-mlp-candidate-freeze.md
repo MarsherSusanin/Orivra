@@ -52,6 +52,12 @@ journey and a fresh offline OCI freeze all agree.
 8. Two independent release verifiers must PASS the same final 029A tree. Their
    reports are separate immutable evidence; the author receipt alone does not
    authorize 028B. Credentials remain forbidden until both reports exist.
+9. The recorded-product journey keeps the worker stopped, but its complete
+   runtime Compose model must still interpolate every mandatory bind source.
+   The gate materializes an exact canonical two-consumer registry as a private,
+   regular mode-0400 runtime-only handoff below its owned temporary root. It
+   supplies only that absolute path, never the removed legacy consumer address,
+   and deletes the handoff during exact scoped cleanup.
 
 ## Consequences
 

@@ -11,6 +11,7 @@ import {
   createRecordedProductObservation,
   verifyRecordedProductObservation,
 } from "./mlp-product-compose-runtime.mjs";
+import { canonicalSerializeSafeConsumerRegistry } from "../packages/contracts/src/safe-consumer-registry-runtime.mjs";
 import { assertExactTlsPortAvailable } from "./docker-smoke-orchestration.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -146,6 +147,26 @@ async function createEnvironment(temporaryDirectory) {
     await writeFile(path, value, { mode: 0o600, flag: "wx" });
     paths[name] = path;
   }
+  paths.safeConsumerWorkerHandoff = join(temporaryDirectory, "safe-consumer-registry.v1.json");
+  await writeFile(paths.safeConsumerWorkerHandoff, canonicalSerializeSafeConsumerRegistry({
+    version: "1",
+    kind: "safe-consumer-registry",
+    chainId: 114,
+    entries: [
+      {
+        templateId: "open-meteo-current-weather",
+        revision: 1,
+        manifestSha256: "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8",
+        consumerAddress: "0x1111111111111111111111111111111111111111",
+      },
+      {
+        templateId: "eth-usd",
+        revision: 1,
+        manifestSha256: "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db",
+        consumerAddress: "0x2222222222222222222222222222222222222222",
+      },
+    ],
+  }), { mode: 0o400, flag: "wx" });
   const git = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
   if (git.status !== 0 || !/^[a-f0-9]{40}\n?$/.test(git.stdout ?? "")) fail();
   const dockerHost = process.env.DOCKER_HOST;
@@ -173,10 +194,10 @@ async function createEnvironment(temporaryDirectory) {
     PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: paths.replayBundle,
     PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE: paths.replayPreflight,
     PROOFLINE_POSTGRES_PASSWORD_FILE: paths.postgresPassword,
+    PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE: paths.safeConsumerWorkerHandoff,
     PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
     PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
     PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
-    PROOFLINE_SAFE_CONSUMER_ADDRESS: "0x5555555555555555555555555555555555555555",
   };
 }
 
