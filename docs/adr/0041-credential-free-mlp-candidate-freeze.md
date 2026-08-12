@@ -58,6 +58,11 @@ journey and a fresh offline OCI freeze all agree.
    regular mode-0400 runtime-only handoff below its owned temporary root. It
    supplies only that absolute path, never the removed legacy consumer address,
    and deletes the handoff during exact scoped cleanup.
+10. Recorded-product cleanup is a terminal lifecycle, not a single `compose
+    down` call. A failure in Compose cleanup cannot skip the independent scoped
+    residue audit, recursive removal of generated database/token/handoff files,
+    or removal of a non-PASS fixture. Cleanup phases are attempted in fixed
+    order and preserve the causal failure before cleanup failures.
 
 ## Consequences
 

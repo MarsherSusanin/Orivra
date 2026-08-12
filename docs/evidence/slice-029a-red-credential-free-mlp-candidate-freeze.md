@@ -1,5 +1,26 @@
 # Slice 029A RED — credential-free MLP candidate freeze
 
+## 2026-08-13 recorded-product terminal-cleanup corrective RED
+
+Fresh release candidate `7e6806ae937dff1048f83f32425f05b980c05998` /
+tree `04740ed5f3a97fc50b069977d3131f6fe68bb0b2` completed the unified matrix,
+PITR, five-image OCI freeze and recorded product success path. Independent
+Product report `/private/tmp/orivra-release-b77c/verifiers/7e6806a/product-verifier.md`
+with SHA-256 `66c12ce2233fe03ea0297d7df6308fff63fc627b7d76f79c524d30ebd146855a`
+and Core report `/private/tmp/orivra-release-b77c/verifiers/7e6806a/core-verifier.md`
+with SHA-256 `e584afa8b8f63e96b5eeb396bce19f126b1f7e5e888ef8739c2fea354fb11675`
+reject it as publication authority. If scoped `docker compose down` throws,
+the existing `finally` exits before residue inspection, recursive removal of
+the private generated database/token/handoff inputs and removal of a non-PASS
+fixture.
+
+The corrective contract requires one production-used terminal lifecycle that
+attempts Compose cleanup, scoped residue inspection, private-temporary removal
+and failed-fixture removal in fixed order even when an earlier cleanup phase
+fails. The current implementation is intentionally RED because that lifecycle
+entrypoint is absent. Candidate and OCI bytes remain unchanged but cannot be
+published; no credential, registry, host or production effect is authorized.
+
 ## 2026-08-13 current-tree release compatibility correction
 
 The first authorized freeze of `b77c9a5` passed the full matrix, recovery and

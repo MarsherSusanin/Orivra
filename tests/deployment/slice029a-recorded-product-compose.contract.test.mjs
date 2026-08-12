@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 async function runtime() {
@@ -76,4 +78,33 @@ test("029A materializes a private canonical worker handoff for Compose interpola
   assert.match(source, /PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE:\s*paths\.safeConsumerWorkerHandoff/);
   assert.match(source, /safeConsumerWorkerHandoff[\s\S]*mode:\s*0o400/);
   assert.doesNotMatch(source, /PROOFLINE_SAFE_CONSUMER_ADDRESS/);
+});
+
+test("029A removes failed fixture and generated secrets even when Compose cleanup fails", async () => {
+  const module = await runtime();
+  assert.equal(typeof module.runRecordedProductLifecycle, "function");
+  const parent = await mkdtemp(join(tmpdir(), "proofline-029a-product-cleanup-"));
+  const temporaryDirectory = join(parent, "private-runtime");
+  const fixtureOutput = join(parent, "recorded-product-fixture.v1.json");
+  await import("node:fs/promises").then(({ mkdir }) => mkdir(temporaryDirectory, { mode: 0o700 }));
+  await writeFile(join(temporaryDirectory, "generated-database-secret"), "private", { mode: 0o600 });
+  await writeFile(fixtureOutput, "non-pass", { mode: 0o600 });
+  const phases = [];
+  const composeFailure = new Error("compose-down-failed");
+  try {
+    const error = await module.runRecordedProductLifecycle({
+      execute: async () => { phases.push("execute"); },
+      cleanupCompose: async () => { phases.push("compose"); throw composeFailure; },
+      inspectResidue: async () => { phases.push("inspect"); return []; },
+      removeTemporary: async () => { phases.push("temporary"); await rm(temporaryDirectory, { recursive: true }); },
+      removeFailedFixture: async () => { phases.push("fixture"); await rm(fixtureOutput); },
+    }).catch((cause) => cause);
+    assert.equal(error, composeFailure);
+    assert.deepEqual(phases, ["execute", "compose", "inspect", "temporary", "fixture"]);
+    await assert.rejects(() => lstat(temporaryDirectory), { code: "ENOENT" });
+    await assert.rejects(() => lstat(fixtureOutput), { code: "ENOENT" });
+  } finally {
+    await chmod(parent, 0o700).catch(() => undefined);
+    await rm(parent, { recursive: true, force: true });
+  }
 });
