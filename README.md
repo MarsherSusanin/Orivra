@@ -139,10 +139,10 @@ blockchain-операций.
   then failed on the first PATCH with `UND_ERR_SOCKET` after 4,194,726 bytes
   written and zero read. The fixed 1 MiB replacement then passed its first
   PATCH, but rejected GHCR's unchanged current upload Location as stale. Zero
-  images/evidence/staging remain. The production-author correction on RED base
-  `566e4b8` / `6e63468` allows only same-current plus advancing Range and still
-  rejects any older superseded URL; two fresh same-tree verifier PASS reports
-  remain required before publication resumes.
+  images/evidence/staging remain. After that correction, a real 1 MiB PATCH
+  still failed with `UND_ERR_SOCKET` after 1,049,677 bytes written and 865 read.
+  Corrective RED fixes chunks at 256 KiB while retaining same-current/stale and
+  no-replay rules; two fresh same-tree verifier PASS reports remain required.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

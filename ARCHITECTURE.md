@@ -362,8 +362,10 @@ the bound at 1 MiB on RED base `a34b424` / `bdc1d48`. A real first PATCH then
 returned the same current upload Location and was rejected as stale. The
 production-author correction on RED base `566e4b8` / `6e63468` accepts
 same-current only with the exact advanced Range, still rejects older
-superseded URLs, and retains empty finalizer/no replay. Fresh Core/Product
-verification is required; no hosted or deployed claim exists.
+superseded URLs, and retains empty finalizer/no replay. A subsequent real 1 MiB
+PATCH still failed in transport after 1,049,677 bytes written and 865 read, so
+the corrective bound is fixed at 256 KiB. Fresh Core/Product verification is
+required; no hosted or deployed claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

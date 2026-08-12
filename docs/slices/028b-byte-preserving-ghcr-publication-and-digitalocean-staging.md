@@ -1,8 +1,7 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Stable-current GHCR upload Location production-author GREEN on
-corrective RED base `566e4b8` / `6e63468`; fresh Core/Product verification
-pending; zero images, publication evidence or staging effects exist. Prior
+Status: Fixed 256 KiB GHCR transport-bound corrective RED after a real 1 MiB
+PATCH socket failure; zero images, publication evidence or staging effects exist. Prior
 Core/Product PASS `70f63cb` / `88ec383` covers superseded adapter bytes and
 cannot authorize publication.
 
@@ -143,10 +142,10 @@ That authorized attempt proved auth, `POST` 202 and the singular Location, then
 the monolithic PUT of the 15,923,972-byte Caddy layer failed with
 `UND_ERR_SOCKET` after 15,924,448 bytes were written. No image ID, publication
 evidence or staging effect exists. The production-author replacement provides
-explicit zero-length `POST`, fixed ordered 1 MiB `PATCH` chunks with inclusive ranges,
+explicit zero-length `POST`, fixed ordered 256 KiB `PATCH` chunks with inclusive ranges,
 validation and exclusive use of every latest returned Location, and an empty
 terminal `PUT` carrying the whole digest. Missing/bad/stale/cross-authority or
-cross-repository Location, invalid cursor, a minimum above 1 MiB, `416` or
+cross-repository Location, invalid cursor, a minimum above 262,144 bytes, `416` or
 ambiguous mid-chunk failure stops without replay, manifest PUT, PASS evidence
 or staging. Typecheck, pure 61/61, focused 35/35, deployment static 214/214 and
 Sites 46/46 PASS. Fresh same-tree Core and Product verification is required
@@ -170,3 +169,10 @@ to any older URL after the current Location changes remains stale and
 fail-closed. Author gates are typecheck, pure 61/61, focused 35/35, static
 214/214 and Sites 46/46 PASS. The outcome still has `publishedImageIds=[]`, no
 evidence and no staging.
+
+The real stable-current 1 MiB run passed auth, POST and Location validation but
+failed inside its PATCH with `UND_ERR_SOCKET` after 1,049,677 bytes written and
+865 bytes read. The outcome again has zero published image IDs, evidence or
+staging. Corrective RED fixes the bound at 262,144 bytes: the exact Caddy layer
+is 61 ordered PATCHes (60 full chunks plus the same 195,332-byte remainder).
+Stable-current, stale-history, cursor, finalizer and no-replay rules are unchanged.

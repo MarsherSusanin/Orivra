@@ -1,8 +1,7 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; stable-current GHCR upload Location
-  production-author GREEN on corrective RED base; fresh Core/Product
-  verification pending; zero images/evidence/staging
+- Status: Accepted contract; fixed 256 KiB GHCR transport-bound corrective RED
+  after a real 1 MiB PATCH socket failure; zero images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -74,14 +73,14 @@ fragments are rejected before attaching a bearer token or request body.
 
 Missing blobs use a bounded OCI Distribution upload session, never one
 monolithic layer PUT: `POST` carries an explicit zero content length; ordered
-`PATCH` requests carry at most 1 MiB with exact inclusive `Content-Range`,
+`PATCH` requests carry at most 256 KiB with exact inclusive `Content-Range`,
 content length and octet-stream type; every `202` must return the exact
 cumulative `Range` and a newly validated same-authority/repository `Location`.
 That returned Location may equal the current request URL when the exact Range
 advances, but may never revert to an older URL after the current Location
 changes. One empty terminal `PUT` to the latest Location carries only the
 whole-blob digest query and must return `201`. An advertised `OCI-Chunk-Min-Length`
-greater than the 1 MiB safety bound, a missing or malformed cursor/Location,
+greater than the 262,144-byte safety bound, a missing or malformed cursor/Location,
 an earlier superseded Location, `416`, mid-chunk transport ambiguity or any
 non-accepted status fails closed. The client does not automatically replay a
 chunk or finalize a partially observed upload.
@@ -105,8 +104,11 @@ fixes the bound at 1 MiB on RED base `a34b424` / `bdc1d48`. A real run then
 passed auth, POST and its first PATCH, but GHCR returned the same current upload
 Location; the adapter classified that valid stable Location as stale and
 failed. The production-author correction accepts only the unchanged current
-URL with its exact advanced Range. All attempts remain non-authorizing; fresh
-two-verifier acceptance is mandatory before another credentialed attempt.
+URL with its exact advanced Range. A real stable-current 1 MiB run then failed
+inside the PATCH transport with `UND_ERR_SOCKET` after 1,049,677 bytes written
+and 865 bytes read. The new fixed bound is 256 KiB. All attempts remain
+non-authorizing; fresh two-verifier acceptance is mandatory before another
+credentialed attempt.
 
 ### Publication evidence
 

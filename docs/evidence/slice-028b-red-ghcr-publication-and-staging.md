@@ -2,9 +2,8 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Stable-current GHCR upload Location production-author GREEN on
-corrective RED base `566e4b8` / `6e63468`; fresh Core/Product verification
-pending; zero images, publication evidence or staging effects exist.
+Status: Fixed 256 KiB GHCR transport-bound corrective RED after a real 1 MiB
+PATCH socket failure; zero images, publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -336,6 +335,26 @@ typecheck, exact pure focus 61/61, GHCR/staging/roadmap 35/35, serialized
 deployment static 214/214 and Sites 46/46 PASS. No credential, registry,
 publication-evidence or staging effect was used for this local author gate;
 fresh same-tree Core and Product verification remains mandatory.
+
+## Real 1 MiB PATCH transport-bound RED
+
+The stable-current correction passed local gates, then the authorized real run
+passed auth, token, POST and Location validation. Its 1 MiB PATCH failed with
+`UND_ERR_SOCKET` after 1,049,677 bytes written and 865 bytes read. The redacted
+result remained `publishedImageIds=[]`, publication evidence absent and
+staging false. No credential, token or Location query is recorded here.
+
+Corrective RED changes only the fixed transport bound to 262,144 bytes. The
+exact 15,923,972-byte Caddy layer is 61 PATCHes: 60 full chunks and the existing
+195,332-byte remainder. A minimum above 262,144 remains rejected before PATCH;
+stable-current, superseded-stale, exact cursor, empty finalizer and no-replay
+contracts remain unchanged. This tests/docs wave has no production, credential,
+network, registry, evidence or staging effect.
+
+Intentional RED classification on exact base `c4f6d54` / `49249b4`: syntax and
+typecheck PASS; focused GHCR/staging/roadmap is 34 PASS plus one causal RED
+(`1048576` actual versus `262144` frozen); serialized deployment static is 213
+PASS plus the same RED; Sites is 46/46 PASS.
 
 ## Stable-current GHCR Location compatibility RED
 

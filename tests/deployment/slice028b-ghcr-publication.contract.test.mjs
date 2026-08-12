@@ -277,11 +277,11 @@ test("028B conditionally creates append-only evidence and never masks cleanup fa
   assert.equal(preserved.equals(existing), true);
 });
 
-test("028B uploads blobs in ordered fixed 1 MiB chunks without unsafe replay", async () => {
+test("028B uploads blobs in ordered fixed 256 KiB chunks without unsafe replay", async () => {
   const { createGhcrRegistryPublicationAdapter } = await import("../../scripts/ghcr-registry-adapter.mjs");
   const remoteRepository = "ghcr.io/marshersusanin/orivra-caddy";
   const repositoryPath = "/v2/marshersusanin/orivra-caddy";
-  const chunkSize = 1024 * 1024;
+  const chunkSize = 256 * 1024;
   const layerBytes = Buffer.alloc(15_923_972, 0x2a);
   const layerDigest = shaBytes(layerBytes);
   const manifestDigest = sha("1");
@@ -370,9 +370,9 @@ test("028B uploads blobs in ordered fixed 1 MiB chunks without unsafe replay", a
     remoteRepository,
   });
   const patchRequests = requests.filter(({ method }) => method === "PATCH");
-  assert.equal(patchIndex, 16);
-  assert.equal(patchRequests.length, 16);
-  for (let index = 0; index < 15; index += 1) {
+  assert.equal(patchIndex, 61);
+  assert.equal(patchRequests.length, 61);
+  for (let index = 0; index < 60; index += 1) {
     assert.deepEqual(patchRequests[index], {
       method: "PATCH",
       pathname: `${repositoryPath}/blobs/upload/chunk-${index === 1 ? 0 : index}`,
@@ -383,9 +383,9 @@ test("028B uploads blobs in ordered fixed 1 MiB chunks without unsafe replay", a
       bodyLength: chunkSize,
     });
   }
-  assert.deepEqual(patchRequests[15], {
+  assert.deepEqual(patchRequests[60], {
     method: "PATCH",
-    pathname: `${repositoryPath}/blobs/upload/chunk-15`,
+    pathname: `${repositoryPath}/blobs/upload/chunk-60`,
     search: "",
     contentLength: "195332",
     contentRange: "15728640-15923971",
@@ -404,7 +404,7 @@ test("028B uploads blobs in ordered fixed 1 MiB chunks without unsafe replay", a
     { name: "mid-chunk-416", patch: 2, status: 416, headers: { range: `0-${chunkSize - 1}` } },
     { name: "mid-chunk-socket", patch: 2, throws: true },
     { name: "oversize-minimum", patch: 0, minimum: String(chunkSize + 1) },
-    { name: "invalid-minimum", patch: 0, minimum: "1MiB" },
+    { name: "invalid-minimum", patch: 0, minimum: "256KiB" },
   ];
   for (const failureCase of failureCases) {
     let patchCalls = 0;
