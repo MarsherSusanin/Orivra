@@ -1,7 +1,8 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; GHCR upload-session keep-alive corrective RED
-  after a real 256 KiB PATCH socket failure; zero images/evidence/staging
+- Status: Accepted contract; GHCR upload-session fresh-transport
+  production-author GREEN on corrective RED base; fresh Core/Product
+  verification pending; zero images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -112,8 +113,10 @@ KiB on RED base `a47e646` / `7bac35d`. All attempts remain non-authorizing;
 fresh two-verifier acceptance is mandatory before another credentialed attempt.
 The real 256 KiB run still failed inside PATCH transport after 525,812 bytes
 written and 1,346 read, approximately two chunks plus framing. Credential-free
-probing confirms GHCR honors `Connection: close`; the upload session therefore
-requires a fresh transport for POST, every PATCH and the final PUT.
+probing confirms GHCR honors `Connection: close`; the production-author
+replacement on RED base `696f317` / `33edbe3` therefore requires a fresh
+transport for POST, every PATCH and the final PUT. Fresh two-verifier acceptance
+is mandatory before another credentialed attempt.
 
 ### Publication evidence
 

@@ -365,9 +365,10 @@ same-current only with the exact advanced Range, still rejects older
 superseded URLs, and retains empty finalizer/no replay. A subsequent real 1 MiB
 PATCH still failed in transport after 1,049,677 bytes written and 865 read. The
 production-author replacement on RED base `a47e646` / `7bac35d` fixes the
-bound at 256 KiB. A real run still failed after roughly two chunks; corrective
-RED forces a fresh transport with `Connection: close` on each upload-session
-request. Fresh Core/Product verification is required; no hosted claim exists.
+bound at 256 KiB. A real run still failed after roughly two chunks. The
+production-author replacement on RED base `696f317` / `33edbe3` forces a fresh
+transport with `Connection: close` on each upload-session request. Fresh
+Core/Product verification is required; no hosted claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна

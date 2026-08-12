@@ -2,8 +2,9 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: GHCR upload-session keep-alive corrective RED after a real 256 KiB
-PATCH socket failure; zero images, publication evidence or staging effects exist.
+Status: GHCR upload-session fresh-transport production-author GREEN on
+corrective RED base `696f317` / `33edbe3`; fresh Core/Product verification
+pending; zero images, publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -355,6 +356,14 @@ Intentional RED classification on exact base `749a217` / `dfca0c0`: syntax and
 typecheck PASS; focused GHCR/staging/roadmap is 34 PASS plus one causal RED at
 the missing upload POST `Connection: close`; serialized deployment static is
 213 PASS plus the same RED; Sites is 46/46 PASS.
+
+The production-author replacement adds exact `Connection: close` only to the
+upload-session POST, every PATCH and the empty final PUT. Token, HEAD and
+manifest requests remain unchanged. The causal transport case and all prior
+256 KiB, stable-current/stale, cursor, finalizer and no-replay cases now PASS.
+Post-correction typecheck, pure 61/61, focused 35/35, serialized static 214/214
+and Sites 46/46 PASS. No credential, registry, evidence or staging effect was
+used; fresh same-tree Core and Product verification remains mandatory.
 
 ## Real 1 MiB PATCH transport-bound RED
 

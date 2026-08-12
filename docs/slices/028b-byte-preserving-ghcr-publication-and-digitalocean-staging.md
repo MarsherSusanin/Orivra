@@ -1,8 +1,10 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: GHCR upload-session keep-alive corrective RED after a real 256 KiB
-PATCH socket failure; zero images, publication evidence or staging effects exist. Prior Core/Product PASS
-`70f63cb` / `88ec383` covers superseded adapter bytes and cannot authorize publication.
+Status: GHCR upload-session fresh-transport production-author GREEN on
+corrective RED base `696f317` / `33edbe3`; fresh Core/Product verification
+pending; zero images, publication evidence or staging effects exist. Prior
+Core/Product PASS `70f63cb` / `88ec383` covers superseded adapter bytes and
+cannot authorize publication.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 
@@ -179,7 +181,9 @@ no-replay rules are unchanged. Author gates are typecheck, pure 61/61, focused
 35/35, static 214/214 and Sites 46/46 PASS.
 
 The real 256 KiB run still failed with `UND_ERR_SOCKET` after 525,812 bytes
-written and 1,346 read, approximately two chunks plus framing. Corrective RED
-requires exact `Connection: close` on the zero-body upload POST, every PATCH
-and the empty terminal PUT, forcing fresh transport per body. All chunk,
-Location, cursor, finalizer and no-replay rules remain unchanged.
+written and 1,346 read, approximately two chunks plus framing. The
+production-author replacement requires exact `Connection: close` on the
+zero-body upload POST, every PATCH and the empty terminal PUT, forcing fresh
+transport per body. All chunk, Location, cursor, finalizer and no-replay rules
+remain unchanged. Author gates are typecheck, pure 61/61, focused 35/35,
+static 214/214 and Sites 46/46 PASS.

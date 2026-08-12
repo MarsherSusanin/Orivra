@@ -100,7 +100,7 @@ export async function createGhcrRegistryPublicationAdapter({ username, tokenByte
     if (head.status === 200) return;
     const started = await registryRequest(remoteRepository, "blobs/uploads/", {
       method: "POST",
-      headers: { "content-length": "0" },
+      headers: { "connection": "close", "content-length": "0" },
       body: new Uint8Array(0),
     }, [202]);
     const location = started.headers.get("location");
@@ -116,6 +116,7 @@ export async function createGhcrRegistryPublicationAdapter({ username, tokenByte
         method: "PATCH",
         headers: {
           authorization: `Bearer ${token}`,
+          "connection": "close",
           "content-length": String(chunk.byteLength),
           "content-range": `${start}-${end}`,
           "content-type": "application/octet-stream",
@@ -136,6 +137,7 @@ export async function createGhcrRegistryPublicationAdapter({ username, tokenByte
       method: "PUT",
       headers: {
         authorization: `Bearer ${token}`,
+        "connection": "close",
         "content-length": "0",
       },
       body: new Uint8Array(0),

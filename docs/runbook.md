@@ -730,9 +730,10 @@ read. The fixed 1 MiB attempt then passed its first PATCH, but rejected GHCR's
 unchanged current upload Location as stale. After that correction, a real
 1 MiB PATCH still failed with `UND_ERR_SOCKET` after 1,049,677 bytes written
 and 865 read. A real 256 KiB run still failed after roughly two chunks
-(`bytesWritten=525812`, `bytesRead=1346`). Do not retry credentials until the
-upload-session keep-alive correction and two fresh same-tree verifier reports
-PASS. Use a separate classic token with only `read:packages` after publication.
+(`bytesWritten=525812`, `bytesRead=1346`). The upload-session fresh-transport
+replacement is production-author GREEN on RED base `696f317` / `33edbe3`; do
+not retry credentials until two fresh same-tree verifier reports PASS. Use a
+separate classic token with only `read:packages` after publication.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now
