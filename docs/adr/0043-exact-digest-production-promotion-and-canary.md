@@ -1,7 +1,7 @@
 # ADR 0043: Exact-digest production promotion and seven-day canary
 
-- Status: Accepted contract; production-author GREEN locally; two independent
-  verifiers pending; blocked on 028B staging evidence
+- Status: Accepted contract; corrective rollback RED after Core rejection of
+  `c0828d1` / `8cea88b`; blocked on 028B staging evidence
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0036, ADR 0037, ADR 0039, ADR 0041, ADR 0042
 
@@ -119,13 +119,18 @@ deterministic order.
 
 ### Rollback
 
-Application rollback selects one prior `verified` production deployment whose
-immutable deployment evidence binds prior publication evidence, frozen
-manifest and exact five remote digests. The current schema version must be
-inside the prior manifest's compatibility range. For the current release that
-range is exactly 10/10/10. Missing, draft, unpublished, mismatched or
-schema-incompatible evidence returns `PRODUCTION_ROLLBACK_FORBIDDEN` before
-effect. Publication evidence alone is never rollback authority. Database
+Application rollback consumes canonical UTF-8 `ApplicationRollbackAuthorizationV1`,
+current and prior `ProductionDeploymentEvidenceV1`, and current and prior
+`PublicationEvidenceV1` bytes, each with an independently supplied SHA-256.
+The authorization binds both deployment-evidence digests and the prior
+publication digest. The prior deployment and prior publication must cross-bind
+producer, frozen manifest and the exact ordered five immutable remote
+repository/digest/reference tuples. Operator, expiry and schema compatibility
+are checked before `apply`; for the current release the accepted schema range
+is exactly 10/10/10. Object-only input, tags such as `:latest`, shaped but
+unbound SHA values, missing, draft, unpublished, mismatched, expired or
+schema-incompatible evidence returns a fixed rollback error before effect.
+Publication evidence alone is never rollback authority. Database
 rollback remains forward repair or a separately authorized new-volume PITR;
 029B does not run down migrations or reuse the old data volume.
 
@@ -139,8 +144,9 @@ staging artifact into authority.
 
 ## Consequences
 
-- Slice 029B is production-author GREEN locally but remains effect-blocked until 028B appends real
-  staging evidence and an operator supplies explicit authorization.
+- Candidate `c0828d1` / `8cea88b` is rejected: its object-only rollback path
+  accepted forged tagged images. Corrective RED requires canonical byte and
+  checksum authority before a new production author or verifier run.
 - Import-safe fake adapters may prove orchestration without credentials; their
   observations can never be published as hosted or live PASS evidence.
 - No DNS, SSH, DigitalOcean, Docker, Spaces, GHCR or Coston2 effect is executed

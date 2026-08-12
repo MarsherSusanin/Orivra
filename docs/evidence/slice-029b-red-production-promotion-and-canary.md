@@ -83,3 +83,28 @@ identity is recorded in the writer handoff.
 - The prepared VDS and pulled images are not production readiness evidence.
 - Scan 8852 remains user-canceled/not a security PASS and the deferred 027C
   evidence-integrity risk remains open.
+
+## Corrective rollback RED after Core verification
+
+Core rejected exact candidate `c0828d1ce96c54cd093fc65a26026fd8c45374fc` /
+tree `8cea88b52daeeb95d7ddbc37393d64b1af260a39`. Durable report
+`/private/tmp/proofline-029b-verifiers/c0828d1/core-verifier.md` has SHA-256
+`5fc1b4810f047438afbdb61e8a08206fac312ea67ef033dbaa842a1f06bd61d1`.
+The reproduced object-only rollback accepted a shaped prior record containing
+tagged `:latest` image references and invoked `apply` once without canonical
+authorization or current/prior deployment/publication evidence.
+
+The corrective tests freeze five canonical inputs with independent checksums:
+one rollback authorization, current/prior production deployment evidence and
+current/prior publication evidence. They require exact authorization binding,
+the ordered five prior immutable repository/digest/reference tuples, operator,
+expiry and schema compatibility before effect. Noncanonical bytes, shaped but
+unbound SHA values, tag/object-only input and evidence substitutions must
+produce zero effect. No production code, credential, network, Docker, VDS or
+live effect is part of this RED correction.
+
+Corrective RED classification: syntax and typecheck PASS; focused
+contracts/domain/worker purity has 38 retained controls PASS and 5 intentional
+RED; deployment focus has 5 retained controls PASS and 2 intentional rollback
+RED; serialized deployment static has 219 retained controls PASS and the same
+2 intentional rollback RED; Sites compatibility has 46/46 PASS.

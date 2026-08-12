@@ -153,12 +153,16 @@ blockchain-операций.
   their expected digests. Immutable publication evidence SHA-256 is
   `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
   Isolated DigitalOcean staging and 029B production promotion remain pending.
-  ADR 0043 now has a local production-author GREEN 029B implementation: the exact publication bytes
+  ADR 0043 now has corrective rollback RED after Core rejected candidate
+  `c0828d1` / `8cea88b`: the exact publication bytes
   and a real canonical staging-evidence checksum must authorize five immutable
   production digests before any DNS/SSH/Docker effect. Production remains
   distinct from staging, exposes only Caddy 80/443, proves schema 10,
   readiness, real heartbeat, PITR and persisted live Coston2, then completes a
-  full seven-day canary. No accepted staging artifact or production PASS exists.
+  full seven-day canary. Rollback additionally requires canonical authorization,
+  current/prior deployment and publication bytes with independent checksums;
+  object-only or tagged authority is forbidden. No accepted staging artifact or
+  production PASS exists.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

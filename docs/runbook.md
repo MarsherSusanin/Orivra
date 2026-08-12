@@ -798,8 +798,9 @@ does not weaken Location, cursor, digest, range or no-replay validation.
 029B is the credentialed production promotion and canary. 029B starts only
 after 028B has published and staged the exact frozen candidate.
 
-ADR 0043 now has a local production-author GREEN implementation pending two
-independent same-tree verifiers. The current exact publication
+ADR 0043 is in corrective rollback RED after Core rejected candidate
+`c0828d1` / `8cea88b`; no production effect is eligible for verification. The
+current exact publication
 checkpoint is the canonical 4285-byte `PublicationEvidenceV1` with SHA-256
 `1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
 The operator must pass those bytes and checksum together with a real canonical
@@ -825,9 +826,12 @@ only after schema 10/10, `/readyz`, current real-worker heartbeat, production
 PITR and persisted live Coston2 observations pass. Cutover then records exact
 pre-cutover, 15m, 1h, 24h, 72h and 7d checkpoints; only the 604800-second final
 checkpoint may append `production-promotion-evidence.v1.json`. Failure removes
-only a run-owned pre-cutover candidate. Post-cutover rollback requires separate
-prior verified deployment/publication evidence with schema compatibility; it
-is never inferred from the release manifest or publication evidence alone.
+only a run-owned pre-cutover candidate. Post-cutover rollback requires
+canonical authorization bytes, current/prior deployment-evidence bytes and
+current/prior publication-evidence bytes, all with independent checksums. The
+authorization and evidence cross-bind the exact ordered five prior immutable
+digests; expiry, operator and schema compatibility pass before apply.
+Object-only input and `:latest` are forbidden.
 
 ### Production access inventory (identifiers only)
 

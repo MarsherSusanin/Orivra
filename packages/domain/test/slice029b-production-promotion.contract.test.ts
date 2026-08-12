@@ -6,8 +6,14 @@ import { describe, expect, it } from "vitest";
 import {
   PublicationEvidenceV1Schema,
   StagingDeploymentEvidenceV1Schema,
+  canonicalSerializePublicationEvidence,
   canonicalSerializeStagingDeploymentEvidence,
 } from "@proofline/contracts/publication";
+import {
+  ApplicationRollbackAuthorizationV1Schema,
+  ProductionDeploymentEvidenceV1Schema,
+  canonicalSerializeProductionDeploymentEvidence,
+} from "@proofline/contracts/production-promotion";
 
 const PUBLICATION_SHA = "sha256:1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10";
 const sha = (digit: string) => `sha256:${digit.repeat(64).slice(0, 64)}`;
@@ -107,6 +113,96 @@ async function fixtures() {
     authorizationBytes: utf8(canonicalJson(authorization)),
   };
 }
+
+function rollbackFixtures(publication: any) {
+  const currentPublicationBytes = utf8(canonicalSerializePublicationEvidence(publication));
+  const priorPublication = PublicationEvidenceV1Schema.parse({
+    ...publication,
+    runId: "pub_01K2Q4P6R8T0V2X4Z6B8D0F2H5",
+    publishedAt: "2026-08-01T00:00:00Z",
+    frozenRelease: { ...publication.frozenRelease, frozenReleaseManifestSha256: sha("6") },
+    images: publication.images.map((image: any, index: number) => {
+      const remoteDigest = sha(String(9 - index));
+      return {
+        ...image,
+        archiveSha256: sha(String.fromCharCode(97 + index)),
+        imageManifestDigest: remoteDigest,
+        remoteDigest,
+        remoteReference: `${image.remoteRepository}@${remoteDigest}`,
+      };
+    }),
+  });
+  const priorPublicationBytes = utf8(canonicalSerializePublicationEvidence(priorPublication));
+  const deployment = (source: any, sourceBytes: Uint8Array, prior: boolean) => ProductionDeploymentEvidenceV1Schema.parse({
+    version: "1",
+    kind: "digitalocean-production-deployment-evidence",
+    status: "passed",
+    verification: "verified",
+    productionClaim: true,
+    producer: source.producer,
+    publicationEvidenceSha256: checksumBytes(sourceBytes),
+    stagingDeploymentEvidenceSha256: sha(prior ? "7" : "8"),
+    frozenReleaseManifestSha256: source.frozenRelease.frozenReleaseManifestSha256,
+    promotionAuthorizationSha256: sha(prior ? "9" : "0"),
+    target: {
+      version: "1",
+      kind: "digitalocean-production-target",
+      provider: "digitalocean",
+      environment: "production",
+      deploymentId: prior ? "orivra-production-previous" : "orivra-production-primary",
+      composeProject: prior ? "proofline-production-previous" : "proofline-production-primary",
+      publicOrigin: prior ? "https://previous.orivra.xyz" : "https://orivra.xyz",
+      dnsName: prior ? "previous.orivra.xyz" : "orivra.xyz",
+      sshEndpoint: { host: "72.56.81.28", port: 22, hostKeySha256: sha(prior ? "a" : "b") },
+      ingress: [80, 443],
+    },
+    run: {
+      runId: prior ? "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H5" : "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+      operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+      completedAt: prior ? "2026-08-01T01:00:00Z" : "2026-08-12T03:00:00Z",
+    },
+    pullCredential: { registry: "ghcr.io", access: "read-only" },
+    images: source.images.map(({ id, remoteRepository, remoteReference, remoteDigest }: any) => ({ id, remoteRepository, remoteReference, remoteDigest })),
+    topology: { publicService: "caddy", publicPorts: [80, 443], privateServices: ["web", "api", "worker", "postgres"], forbiddenPublicPorts: [5432, 8080], dockerSocketMounted: false },
+    database: { volumeIdentitySha256: sha(prior ? "c" : "d"), migrationManifestSha256: sha("e"), targetVersion: 10, schemaVersion: 10, roleBootstrap: { status: "passed" }, migration: { status: "passed" } },
+    checks: { exactDigestPull: { status: "passed" }, healthz: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" }, spacesPitr: { restoreEvidenceSha256: sha("f"), status: "passed" }, liveCoston2: { runId: prior ? "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5" : "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", status: "persisted" } },
+  });
+  const currentDeployment = deployment(publication, currentPublicationBytes, false);
+  const priorDeployment = deployment(priorPublication, priorPublicationBytes, true);
+  const currentDeploymentBytes = utf8(canonicalSerializeProductionDeploymentEvidence(currentDeployment));
+  const priorDeploymentBytes = utf8(canonicalSerializeProductionDeploymentEvidence(priorDeployment));
+  const authorization = ApplicationRollbackAuthorizationV1Schema.parse({
+    version: "1", kind: "application-rollback-authorization", status: "authorized", rollback: true,
+    currentProductionDeploymentEvidenceSha256: checksumBytes(currentDeploymentBytes),
+    priorProductionDeploymentEvidenceSha256: checksumBytes(priorDeploymentBytes),
+    priorPublicationEvidenceSha256: checksumBytes(priorPublicationBytes),
+    currentSchemaVersion: 10, priorMinimumCompatibleVersion: 10, priorMaximumCompatibleVersion: 10,
+    operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+    authorizedAt: "2026-08-19T03:10:00Z", expiresAt: "2026-08-19T03:40:00Z",
+  });
+  const authorizationBytes = utf8(canonicalJson(authorization));
+  return {
+    authorization, authorizationBytes,
+    currentPublication: publication, currentPublicationBytes,
+    priorPublication, priorPublicationBytes,
+    currentDeployment, currentDeploymentBytes,
+    priorDeployment, priorDeploymentBytes,
+  };
+}
+
+const rollbackInput = (value: any) => ({
+  rollbackAuthorizationBytes: value.authorizationBytes,
+  expectedRollbackAuthorizationSha256: checksumBytes(value.authorizationBytes),
+  currentProductionDeploymentEvidenceBytes: value.currentDeploymentBytes,
+  expectedCurrentProductionDeploymentEvidenceSha256: checksumBytes(value.currentDeploymentBytes),
+  currentPublicationEvidenceBytes: value.currentPublicationBytes,
+  expectedCurrentPublicationEvidenceSha256: checksumBytes(value.currentPublicationBytes),
+  priorProductionDeploymentEvidenceBytes: value.priorDeploymentBytes,
+  expectedPriorProductionDeploymentEvidenceSha256: checksumBytes(value.priorDeploymentBytes),
+  priorPublicationEvidenceBytes: value.priorPublicationBytes,
+  expectedPriorPublicationEvidenceSha256: checksumBytes(value.priorPublicationBytes),
+  now: "2026-08-19T03:20:00Z",
+});
 
 describe("Slice 029B production authority derivation", () => {
   it("parses exact canonical publication and staging evidence into one private immutable authority", async () => {
@@ -210,25 +306,70 @@ describe("Slice 029B production authority derivation", () => {
     expect(plan.privateHostPorts).toEqual({ api: [], worker: [], postgres: [] });
   });
 
-  it("selects rollback only from prior verified publication/deployment evidence compatible with schema 10", async () => {
+  it("derives one private immutable rollback authority from five canonical byte handoffs", async () => {
     const module = await feature();
-    const value = await fixtures();
-    const prior = {
-      status: "passed",
-      verification: "verified",
-      productionClaim: true,
-      schemaVersion: 10,
-      minimumCompatibleVersion: 10,
-      maximumCompatibleVersion: 10,
-      publicationEvidenceSha256: sha("8"),
-      deploymentEvidenceSha256: sha("9"),
-      images: value.publication.images.map(({ id, remoteReference }) => ({ id, remoteReference })),
+    const value = rollbackFixtures((await fixtures()).publication);
+    const authority = module.selectSchemaCompatibleRollback(rollbackInput(value));
+    expect(authority.authorization.operatorId).toBe(value.authorization.operatorId);
+    expect(authority.currentDeployment).toEqual(value.currentDeployment);
+    expect(authority.priorDeployment).toEqual(value.priorDeployment);
+    expect(authority.priorPublication).toEqual(value.priorPublication);
+    expect(authority.images).toEqual(value.priorPublication.images.map(({ id, remoteRepository, remoteReference, remoteDigest }: any) => ({
+      id, remoteRepository, remoteReference, remoteDigest,
+    })));
+    expect(Object.isFrozen(authority)).toBe(true);
+    expect(Object.isFrozen(authority.images[0])).toBe(true);
+  });
+
+  it("rejects object-only, noncanonical, expired, unbound and mutable rollback inputs", async () => {
+    const module = await feature();
+    const value = rollbackFixtures((await fixtures()).publication);
+    const input = rollbackInput(value);
+    const encoded = (entry: any) => utf8(canonicalJson(entry));
+    const withAuthorization = (authorization: any) => {
+      const rollbackAuthorizationBytes = encoded(authorization);
+      return { ...input, rollbackAuthorizationBytes, expectedRollbackAuthorizationSha256: checksumBytes(rollbackAuthorizationBytes) };
     };
-    expect(module.selectSchemaCompatibleRollback({ currentSchemaVersion: 10, prior }).images).toEqual(prior.images);
-    for (const invalid of [
-      { ...prior, verification: "draft" },
-      { ...prior, publicationEvidenceSha256: undefined },
-      { ...prior, minimumCompatibleVersion: 11 },
-    ]) expect(() => module.selectSchemaCompatibleRollback({ currentSchemaVersion: 10, prior: invalid })).toThrow();
+    const forgedPublication = {
+      ...value.priorPublication,
+      images: value.priorPublication.images.map((image: any, index: number) => index === 0 ? {
+        ...image,
+        imageManifestDigest: sha("4"), remoteDigest: sha("4"),
+        remoteReference: `${image.remoteRepository}@${sha("4")}`,
+      } : image),
+    };
+    const forgedPublicationBytes = encoded(forgedPublication);
+    const latestDeployment = {
+      ...value.priorDeployment,
+      images: value.priorDeployment.images.map((image: any, index: number) => index === 0
+        ? { ...image, remoteReference: `${image.remoteRepository}:latest` }
+        : image),
+    };
+    const latestDeploymentBytes = encoded(latestDeployment);
+    const reorderedDeploymentBytes = encoded({
+      ...value.priorDeployment,
+      images: [...value.priorDeployment.images].reverse(),
+    });
+    const invalidInputs = [
+      {
+        currentSchemaVersion: 10,
+        prior: {
+          status: "passed", verification: "verified", productionClaim: true,
+          schemaVersion: 10, minimumCompatibleVersion: 10, maximumCompatibleVersion: 10,
+          publicationEvidenceSha256: sha("8"), deploymentEvidenceSha256: sha("9"),
+          images: value.priorPublication.images.map(({ id, remoteRepository }: any) => ({ id, remoteReference: `${remoteRepository}:latest` })),
+        },
+      },
+      { ...input, rollbackAuthorizationBytes: utf8(JSON.stringify(value.authorization, null, 2)) },
+      { ...input, expectedRollbackAuthorizationSha256: sha("0") },
+      { ...input, now: "2026-08-19T03:40:01Z" },
+      { ...input, priorPublicationEvidenceBytes: forgedPublicationBytes, expectedPriorPublicationEvidenceSha256: checksumBytes(forgedPublicationBytes) },
+      { ...input, priorProductionDeploymentEvidenceBytes: latestDeploymentBytes, expectedPriorProductionDeploymentEvidenceSha256: checksumBytes(latestDeploymentBytes) },
+      { ...input, priorProductionDeploymentEvidenceBytes: reorderedDeploymentBytes, expectedPriorProductionDeploymentEvidenceSha256: checksumBytes(reorderedDeploymentBytes) },
+      withAuthorization({ ...value.authorization, priorPublicationEvidenceSha256: sha("0") }),
+      withAuthorization({ ...value.authorization, operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H5" }),
+      withAuthorization({ ...value.authorization, priorMinimumCompatibleVersion: 11 }),
+    ];
+    for (const invalid of invalidInputs) expect(() => module.selectSchemaCompatibleRollback(invalid)).toThrow();
   });
 });

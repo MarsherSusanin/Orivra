@@ -1,6 +1,6 @@
 # Slice 029B — Exact-digest production promotion and seven-day canary
 
-Status: Production-author GREEN locally; two independent verifiers pending;
+Status: Corrective rollback RED after Core rejection of `c0828d1` / `8cea88b`;
 effects blocked on accepted 028B staging evidence
 
 Decision: [ADR 0043](../adr/0043-exact-digest-production-promotion-and-canary.md)
@@ -53,9 +53,12 @@ deliberately unavailable and no hosted/readiness/live claim is made.
 - clean only run-owned failed candidate resources before cutover; after
   cutover retain evidence/previous deployment and require explicit rollback
   authorization;
-- rollback only to prior verified deployment/publication evidence whose schema
-  range contains current schema 10. Database repair is forward or new-volume
-  PITR, never a down migration.
+- rollback only from canonical authorization, current/prior deployment and
+  current/prior publication bytes plus independent checksums; cross-bind the
+  exact ordered five prior immutable digest references and require the
+  authorization's operator, expiry and schema range to accept current schema
+  10 before effect. Object-only or tagged input is forbidden. Database repair
+  is forward or new-volume PITR, never a down migration.
 
 ## Frozen RED
 

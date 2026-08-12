@@ -120,6 +120,8 @@ const productionPromotionContractRuntimeExports = [
   "canonicalSerializeProductionPromotionAuthorization",
   "canonicalSerializeProductionPromotionEvidence",
   "canonicalSerializeProductionTarget",
+  "canonicalSerializeApplicationRollbackAuthorization",
+  "checksumApplicationRollbackAuthorization",
   "checksumProductionDeploymentEvidence",
   "checksumProductionPromotionAuthorization",
   "checksumProductionPromotionEvidence",

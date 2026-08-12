@@ -149,10 +149,12 @@ describe("Slice 029B production promotion contracts", () => {
       "canonicalSerializeProductionPromotionAuthorization",
       "canonicalSerializeProductionDeploymentEvidence",
       "canonicalSerializeProductionPromotionEvidence",
+      "canonicalSerializeApplicationRollbackAuthorization",
       "checksumProductionTarget",
       "checksumProductionPromotionAuthorization",
       "checksumProductionDeploymentEvidence",
       "checksumProductionPromotionEvidence",
+      "checksumApplicationRollbackAuthorization",
     ];
     expect(Object.keys(module).sort()).toEqual(names.sort());
     for (const name of names) expect(root[name]).toBe(module[name]);
@@ -231,6 +233,8 @@ describe("Slice 029B production promotion contracts", () => {
       expiresAt: "2026-08-19T03:40:00Z",
     };
     expect(module.ApplicationRollbackAuthorizationV1Schema.parse(rollback)).toEqual(rollback);
+    expect(module.canonicalSerializeApplicationRollbackAuthorization(rollback)).toBe(canonicalJson(rollback));
+    expect(module.checksumApplicationRollbackAuthorization(rollback)).toBe(checksum(rollback));
     expect(() => module.ApplicationRollbackAuthorizationV1Schema.parse({
       ...rollback, priorMinimumCompatibleVersion: 11,
     })).toThrow();
