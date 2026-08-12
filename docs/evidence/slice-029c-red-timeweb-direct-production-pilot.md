@@ -332,3 +332,21 @@ plus 51 intentional RED, exactly the prior 215/39 classification with those
 unchanged 027C TERM-reap timing flake and the exact rerun classified it cleanly.
 Sites remains 46/46 PASS. No production, dependency, Docker, network or
 credential effect was performed.
+
+## Pre-deployer handoff absence correction
+
+The handoff path is required configuration but is not a generic runtime input
+file. The retained lifecycle fixture no longer materializes it with secrets and
+replay inputs: it supplies one absolute intended path and proves that target is
+absent before the deployer. Only the host seal phase may create the exact
+mode-0400 handoff before the explicit worker phase. This preserves both the
+mandatory path contract and the no-preexisting/no-replace lifecycle without a
+fixture-created false authority. The PITR adapter contract is unchanged; its
+default run identity may remain closed over by the production adapter.
+
+Classification on exact base `c81c456dc1bc44cfa33cc86c396fc920ee9e66e7`
+/ tree `45d084bbd42edb71b1bd19389d10377e95641419`: syntax and typecheck PASS;
+the retained 027A/027B focus is 13 PASS plus 19 intentional RED; serialized
+deployment static is 204 PASS plus 50 intentional RED; Sites is 46/46 PASS.
+The one corrected generic runtime lifecycle control moved from fixture-caused
+RED to PASS while the absent production deployer/seal boundaries remain RED.

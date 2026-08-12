@@ -57,7 +57,6 @@ const runtimeFileVariables = [
   "PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE",
   "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
   "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",
-  "PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE",
   "PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE",
   "PROOFLINE_POSTGRES_PASSWORD_FILE",
 ];
@@ -67,6 +66,10 @@ async function materializeRuntimeFiles(directory) {
   const evidenceRoot = join(directory, "safe-consumer-evidence");
   await mkdir(evidenceRoot, { mode: 0o700 });
   result.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT = evidenceRoot;
+  result.PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE = join(
+    directory,
+    "safe-consumer-worker-handoff.v1.json",
+  );
   for (const name of runtimeFileVariables) {
     const path = join(directory, name.toLowerCase());
     await writeFile(path, `fixture for ${name}\n`, { mode: 0o600 });
@@ -408,6 +411,10 @@ appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "
 `);
     await chmod(executable, 0o700);
     const runtimeEnvironment = await materializeRuntimeFiles(directory);
+    await assert.rejects(
+      readFile(runtimeEnvironment.PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE),
+      { code: "ENOENT" },
+    );
     const module = await import(`${pathToFileURL(resolve(root, "scripts/compose-production.mjs")).href}?027b=${Date.now()}`);
     await module.runProductionCompose({
       runtime: true,
