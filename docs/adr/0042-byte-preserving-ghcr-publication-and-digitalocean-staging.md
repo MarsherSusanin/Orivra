@@ -1,7 +1,8 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; fixed 1 MiB GHCR chunk corrective RED after a
-  real first-PATCH socket failure; zero images/evidence/staging
+- Status: Accepted contract; fixed 1 MiB GHCR chunk production-author GREEN on
+  corrective RED base; fresh Core/Product verification pending; zero
+  images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -97,9 +98,10 @@ upload `POST` and the singular Location correction, then its monolithic PUT of
 the 15,923,972-byte Caddy layer failed with `UND_ERR_SOCKET`. It published zero
 images and no evidence/staging. Its fixed 4 MiB replacement then passed auth,
 token and POST, but the first PATCH failed with `UND_ERR_SOCKET` after 4,194,726
-bytes written and zero bytes read. The bound is therefore fixed at 1 MiB in
-corrective RED. Both failed attempts remain non-authorizing; fresh two-verifier
-acceptance is mandatory before another credentialed attempt.
+bytes written and zero bytes read. The production-author replacement therefore
+fixes the bound at 1 MiB on RED base `a34b424` / `bdc1d48`. Both failed attempts
+remain non-authorizing; fresh two-verifier acceptance is mandatory before
+another credentialed attempt.
 
 ### Publication evidence
 

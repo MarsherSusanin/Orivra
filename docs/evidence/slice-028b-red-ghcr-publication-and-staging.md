@@ -2,8 +2,9 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: Fixed 1 MiB GHCR chunk corrective RED after a real first-PATCH socket
-failure; zero images, publication evidence or staging effects exist.
+Status: Fixed 1 MiB GHCR chunk production-author GREEN on corrective RED base
+`a34b424` / `bdc1d48`; fresh Core/Product verification pending; zero images,
+publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -357,3 +358,10 @@ typecheck PASS; focused GHCR/staging/roadmap is 34 PASS plus this one causal
 RED; serialized deployment static is 213 PASS plus the same RED; Sites is
 46/46 PASS. The first PATCH exposes the unchanged 4 MiB body (`4194304`) where
 the frozen bound requires `1048576`, before finalization or PASS authority.
+
+The production-author replacement changes only the adapter's fixed chunk
+constant from 4 MiB to 1 MiB. The causal exact-Caddy case and all prior
+authority/cursor/no-replay cases now PASS. Post-correction typecheck, pure
+61/61, focused GHCR/staging/roadmap 35/35, serialized static 214/214 and Sites
+46/46 PASS. No credential, registry, evidence or staging effect occurred;
+fresh same-tree Core and Product verification remains mandatory.

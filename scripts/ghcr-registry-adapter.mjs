@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 
 const OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
-const UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024;
+const UPLOAD_CHUNK_SIZE = 1024 * 1024;
 
 function fail(message = "GHCR registry operation failed") {
   throw Object.assign(new Error(message), { code: "GHCR_REGISTRY_FAILED" });

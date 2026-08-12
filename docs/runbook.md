@@ -726,9 +726,10 @@ then its monolithic PUT of the 15,923,972-byte Caddy layer failed with
 `publishedImageIds=[]`, `failedImageId=caddy`, no publication evidence and no
 staging. Its fixed 4 MiB replacement then passed auth/token/POST but failed on
 the first PATCH with `UND_ERR_SOCKET` after 4,194,726 bytes written and zero
-read. Do not retry credentials until the fixed 1 MiB corrective replacement
-and two fresh same-tree verifier reports PASS. Use a separate classic token
-with only `read:packages` on the VDS after publication.
+read. The fixed 1 MiB production-author replacement is GREEN on RED base
+`a34b424` / `bdc1d48`; do not retry credentials until two fresh same-tree
+verifier reports PASS. Use a separate classic token with only `read:packages`
+on the VDS after publication.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now

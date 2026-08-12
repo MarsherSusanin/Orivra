@@ -137,9 +137,9 @@ blockchain-операций.
   PUT of the 15,923,972-byte Caddy layer failed with `UND_ERR_SOCKET`; still
   zero image IDs, publication evidence or staging. Its fixed 4 MiB replacement
   then failed on the first PATCH with `UND_ERR_SOCKET` after 4,194,726 bytes
-  written and zero read. 028B is corrective RED for fixed 1 MiB ordered chunks;
-  two fresh same-tree verifier PASS reports remain required before publication
-  resumes.
+  written and zero read. The fixed 1 MiB ordered-chunk replacement is locally
+  production-author GREEN on RED base `a34b424` / `bdc1d48`; two fresh
+  same-tree verifier PASS reports remain required before publication resumes.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

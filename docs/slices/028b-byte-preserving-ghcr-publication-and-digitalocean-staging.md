@@ -1,9 +1,9 @@
 # Slice 028B — Byte-preserving GHCR publication and DigitalOcean staging
 
-Status: Fixed 1 MiB GHCR chunk corrective RED after a real first-PATCH socket
-failure; zero images, publication evidence or staging effects exist. Prior Core/Product PASS
-`70f63cb` / `88ec383` covers superseded adapter bytes and cannot authorize
-publication.
+Status: Fixed 1 MiB GHCR chunk production-author GREEN on corrective RED base
+`a34b424` / `bdc1d48`; fresh Core/Product verification pending; zero images,
+publication evidence or staging effects exist. Prior Core/Product PASS
+`70f63cb` / `88ec383` covers superseded adapter bytes and cannot authorize publication.
 
 Architecture authority: [ADR 0042](../adr/0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md).
 
@@ -154,7 +154,9 @@ before credential use resumes.
 The authorized 4 MiB chunk attempt passed auth, token and POST, then its first
 PATCH failed with `UND_ERR_SOCKET` after 4,194,726 bytes written and zero bytes
 read. The result remained `publishedImageIds=[]`, failed on `caddy`, wrote no
-publication evidence and never started staging. Corrective RED fixes the bound
-at 1 MiB: the exact 15,923,972-byte Caddy layer is 16 ordered PATCHes (15 full
-1,048,576-byte chunks plus 195,332 bytes). All existing Location/cursor,
-bodyless-finalizer and no-replay contracts remain unchanged.
+publication evidence and never started staging. The production-author
+replacement fixes the bound at 1 MiB: the exact 15,923,972-byte Caddy layer is
+16 ordered PATCHes (15 full 1,048,576-byte chunks plus 195,332 bytes). All
+existing Location/cursor, bodyless-finalizer and no-replay contracts remain
+unchanged; author gates are typecheck, pure 61/61, focused 35/35, static
+214/214 and Sites 46/46 PASS.

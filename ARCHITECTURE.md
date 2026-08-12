@@ -357,10 +357,10 @@ accepted both exact forms without widening authority. A subsequent authorized
 attempt passed auth/POST/Location, but the monolithic PUT of the 15,923,972-byte
 Caddy layer failed with `UND_ERR_SOCKET`; still no image or evidence/staging
 effect. Its fixed 4 MiB replacement then failed on the first PATCH after
-4,194,726 bytes written and zero read. Corrective RED reduces the fixed bound to
-1 MiB while retaining strict cursor/Location validation, empty digest finalizer
-and no replay. Fresh Core/Product verification is required; no hosted or
-deployed claim exists.
+4,194,726 bytes written and zero read. The production-author replacement fixes
+the bound at 1 MiB on RED base `a34b424` / `bdc1d48` while retaining strict
+cursor/Location validation, empty digest finalizer and no replay. Fresh
+Core/Product verification is required; no hosted or deployed claim exists.
 
 Recovery contract использует off-host WAL archiving и base backup для PITR в
 private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна
