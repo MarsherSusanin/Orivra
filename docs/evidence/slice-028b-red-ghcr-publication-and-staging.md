@@ -2,8 +2,9 @@
 
 Date: 2026-08-12 (Asia/Vladivostok)
 
-Status: GHCR chunked-upload corrective RED after a real authenticated
-diagnostic; zero images, publication evidence or staging effects exist.
+Status: GHCR chunked-upload production-author GREEN on corrective RED base
+`756a4aa` / `7a064e0`; fresh Core/Product verification pending; zero images,
+publication evidence or staging effects exist.
 
 ## Authorized predecessor
 
@@ -326,3 +327,12 @@ and typecheck PASS; focused GHCR/staging/roadmap is 34 PASS plus this one causal
 RED; serialized deployment static is 213 PASS plus the same RED; Sites is
 46/46 PASS. The RED fails at the missing explicit zero-length POST contract in
 the unchanged monolithic adapter, before any PATCH or external effect.
+
+The production-author replacement changes only the GHCR registry adapter. It
+uses explicit zero-length POST, fixed ordered 4 MiB PATCH chunks, exact
+inclusive ranges, strict latest Location/cursor validation and an empty digest
+finalizer. It never replays an ambiguous accepted chunk. Post-correction
+typecheck, exact pure focus 61/61, GHCR/staging/roadmap 35/35, serialized
+deployment static 214/214 and Sites 46/46 PASS. No credential, registry,
+publication-evidence or staging effect was used for this local author gate;
+fresh same-tree Core and Product verification remains mandatory.

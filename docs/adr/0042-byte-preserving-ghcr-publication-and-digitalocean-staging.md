@@ -1,7 +1,8 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; GHCR chunked-upload corrective RED after a real
-  authenticated diagnostic; zero images/evidence/staging
+- Status: Accepted contract; GHCR chunked-upload production-author GREEN on
+  the corrective RED base; fresh Core/Product verification pending; zero
+  images/evidence/staging
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
@@ -95,9 +96,9 @@ index creation. `release:publish` is fixed to the exact accepted 029A candidate
 and verifier report checksums. A real authorized attempt proved authentication,
 upload `POST` and the singular Location correction, then its monolithic PUT of
 the 15,923,972-byte Caddy layer failed with `UND_ERR_SOCKET`. It published zero
-images and no evidence/staging. The bounded chunked replacement is intentional
-RED and requires fresh two-verifier acceptance before another credentialed
-attempt.
+images and no evidence/staging. The bounded chunked replacement is locally
+production-author GREEN and requires fresh two-verifier acceptance before
+another credentialed attempt.
 
 ### Publication evidence
 

@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 
 const OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
+const UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024;
 
 function fail(message = "GHCR registry operation failed") {
   throw Object.assign(new Error(message), { code: "GHCR_REGISTRY_FAILED" });
@@ -37,6 +38,17 @@ function requireUploadLocation(value, remoteRepository) {
 async function requireResponse(response, accepted) {
   if (!response || !accepted.includes(response.status)) fail();
   return response;
+}
+
+function requireChunkMinimum(value) {
+  if (value === null) return;
+  if (!/^[1-9][0-9]*$/.test(value)) fail();
+  const minimum = Number(value);
+  if (!Number.isSafeInteger(minimum) || minimum > UPLOAD_CHUNK_SIZE) fail();
+}
+
+function requireAcceptedRange(value, acceptedEnd) {
+  if (value !== `0-${acceptedEnd}`) fail();
 }
 
 export async function createGhcrRegistryPublicationAdapter({ username, tokenBytes, request = fetch } = {}) {
@@ -86,20 +98,47 @@ export async function createGhcrRegistryPublicationAdapter({ username, tokenByte
     if (!SHA256.test(digest) || !(bytes instanceof Uint8Array)) fail();
     const head = await registryRequest(remoteRepository, `blobs/${digest}`, { method: "HEAD" }, [200, 404]);
     if (head.status === 200) return;
-    const started = await registryRequest(remoteRepository, "blobs/uploads/", { method: "POST" }, [202]);
+    const started = await registryRequest(remoteRepository, "blobs/uploads/", {
+      method: "POST",
+      headers: { "content-length": "0" },
+      body: new Uint8Array(0),
+    }, [202]);
     const location = started.headers.get("location");
     if (!location) fail();
-    const upload = requireUploadLocation(location, remoteRepository);
-    upload.searchParams.set("digest", digest);
+    requireChunkMinimum(started.headers.get("oci-chunk-min-length"));
+    let upload = requireUploadLocation(location, remoteRepository);
+    const seenUploads = new Set([upload.href]);
     const token = await bearer(remoteRepository);
+    for (let start = 0; start < bytes.byteLength; start += UPLOAD_CHUNK_SIZE) {
+      const end = Math.min(start + UPLOAD_CHUNK_SIZE, bytes.byteLength) - 1;
+      const chunk = bytes.subarray(start, end + 1);
+      const patched = await requireResponse(await request(upload, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-length": String(chunk.byteLength),
+          "content-range": `${start}-${end}`,
+          "content-type": "application/octet-stream",
+        },
+        body: chunk,
+        redirect: "error",
+      }), [202]);
+      const nextLocation = patched.headers.get("location");
+      if (!nextLocation) fail();
+      const nextUpload = requireUploadLocation(nextLocation, remoteRepository);
+      if (seenUploads.has(nextUpload.href)) fail();
+      requireAcceptedRange(patched.headers.get("range"), end);
+      seenUploads.add(nextUpload.href);
+      upload = nextUpload;
+    }
+    upload.searchParams.set("digest", digest);
     const completed = await requireResponse(await request(upload, {
       method: "PUT",
       headers: {
         authorization: `Bearer ${token}`,
-        "content-length": String(bytes.byteLength),
-        "content-type": "application/octet-stream",
+        "content-length": "0",
       },
-      body: bytes,
+      body: new Uint8Array(0),
       redirect: "error",
     }), [201]);
     const remoteDigest = completed.headers.get("docker-content-digest");

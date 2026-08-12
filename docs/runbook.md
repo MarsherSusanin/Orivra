@@ -724,9 +724,10 @@ singular form. A subsequent authorized attempt passed auth, POST and Location,
 then its monolithic PUT of the 15,923,972-byte Caddy layer failed with
 `UND_ERR_SOCKET` after 15,924,448 bytes were written. The result again had
 `publishedImageIds=[]`, `failedImageId=caddy`, no publication evidence and no
-staging. Do not retry credentials until the bounded chunked replacement and two
-fresh same-tree verifier reports PASS. Use a separate classic token with only
-`read:packages` on the VDS after publication.
+staging. The bounded chunked replacement is production-author GREEN on RED
+base `756a4aa` / `7a064e0`; do not retry credentials until two fresh same-tree
+verifier reports PASS. Use a separate classic token with only `read:packages`
+on the VDS after publication.
 
 Core rejected first implementation `5322125` / `bad14e5`; it is not eligible
 for either credentialed command. The production-author replacement now
