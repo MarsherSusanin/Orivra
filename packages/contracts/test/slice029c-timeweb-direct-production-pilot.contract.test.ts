@@ -187,7 +187,14 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
     };
     expect(module.ProductionTargetV2Schema.parse(target)).toEqual(target);
     expect(module.ProductionPromotionAuthorizationV2Schema.parse(authorization)).toEqual(authorization);
+    expect(module.checksumProductionTargetV2(target)).toBe(checksum(target));
+    expect(module.checksumProductionPromotionAuthorizationV2(authorization)).toBe(checksum(authorization));
     expect(() => module.ProductionPromotionAuthorizationV2Schema.parse({ ...authorization, stagingDeploymentEvidenceSha256: sha("3") })).toThrow();
+    for (const publicOrigin of [
+      "http://orivra.xyz", "https://user@orivra.xyz", "https://user:pass@orivra.xyz",
+      "https://orivra.xyz/path", "https://orivra.xyz/?query=1", "https://orivra.xyz/#fragment",
+      "https://www.orivra.xyz",
+    ]) expect(() => module.ProductionTargetV2Schema.parse({ ...target, publicOrigin })).toThrow();
   });
 
   it("requires exact typed preflight observations instead of status-only success", async () => {
@@ -217,6 +224,8 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       ],
     };
     expect(module.ProductionPilotPreflightEvidenceV1Schema.parse(evidence)).toEqual(evidence);
+    expect(module.canonicalSerializeProductionPilotPreflightEvidence(evidence)).toBe(canonicalJson(evidence));
+    expect(module.checksumProductionPilotPreflightEvidence(evidence)).toBe(checksum(evidence));
     expect(module.ProductionPilotPreflightEvidenceV1Schema.parse({
       ...evidence,
       checks: evidence.checks.map((value) => value.check === "read-only-ghcr"
@@ -290,6 +299,39 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
     })).toThrow();
   });
 
+  it("serializes one exact V2 deployment envelope without staging authority", async () => {
+    const module = await feature();
+    const target = {
+      version: "2", kind: "digitalocean-production-target", provider: "digitalocean", environment: "production",
+      deploymentMode: "direct-pilot", deploymentId: "orivra-production-primary", composeProject: "proofline-production-primary",
+      publicOrigin: "https://orivra.xyz", dnsName: "orivra.xyz",
+      sshEndpoint: { host: "72.56.81.28", port: 22, hostKeySha256: sha("1") }, ingress: [80, 443], objectStore: timewebAuthority,
+    };
+    const images = repositories.map(([id, remoteRepository], index) => {
+      const remoteDigest = sha(String.fromCharCode(97 + index));
+      return { id, remoteRepository, remoteReference: `${remoteRepository}@${remoteDigest}`, remoteDigest };
+    });
+    const deployment = {
+      version: "2", kind: "digitalocean-production-deployment-evidence", status: "passed", verification: "verified", productionClaim: true,
+      producer: { commitSha: "1".repeat(40), treeSha: "2".repeat(40) }, publicationEvidenceSha256: sha("3"), frozenReleaseManifestSha256: sha("4"),
+      promotionAuthorizationSha256: sha("5"), preflightEvidenceSha256: sha("6"), target,
+      run: { runId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4", operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4", completedAt: "2026-08-12T03:00:01Z" },
+      pullCredential: { registry: "ghcr.io", access: "read-only" }, images,
+      topology: { publicService: "caddy", publicPorts: [80, 443], privateServices: ["web", "api", "worker", "postgres"], forbiddenPublicPorts: [5432, 8080], dockerSocketMounted: false },
+      database: { migrationManifestSha256: sha("7"), targetVersion: 10, schemaVersion: 10, roleBootstrap: { status: "passed" }, migration: { status: "passed" } },
+      objectStore: timewebAuthority, safeConsumers,
+      checks: {
+        exactDigestPull: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
+        timewebPitr: { status: "passed", restoreEvidenceSha256: sha("8"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
+        liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] },
+      },
+      cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-12T03:00:00Z" },
+    };
+    expect(module.ProductionDeploymentEvidenceV2Schema.parse(deployment)).toEqual(deployment);
+    expect(module.canonicalSerializeProductionDeploymentEvidenceV2(deployment)).toBe(canonicalJson(deployment));
+    expect(module.checksumProductionDeploymentEvidenceV2(deployment)).toBe(checksum(deployment));
+  });
+
   it("retains rollback V1 as data but requires a separately canonical V2 authority for V2 effect", async () => {
     const module = await feature();
     const authorization = {
@@ -301,8 +343,12 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
     };
     expect(module.ApplicationRollbackAuthorizationV2Schema.parse(authorization)).toEqual(authorization);
     expect(module.canonicalSerializeApplicationRollbackAuthorizationV2(authorization)).toBe(canonicalJson(authorization));
+    expect(module.checksumApplicationRollbackAuthorizationV2(authorization)).toBe(checksum(authorization));
     expect(() => module.ApplicationRollbackAuthorizationV2Schema.parse({ ...authorization, currentPublicationEvidenceSha256: undefined })).toThrow();
     expect(() => module.ApplicationRollbackAuthorizationV2Schema.parse({ ...authorization, version: "1" })).toThrow();
+    expect(() => module.ApplicationRollbackAuthorizationV2Schema.parse({ ...authorization, priorMinimumCompatibleVersion: 11 })).toThrow();
+    expect(() => module.ApplicationRollbackAuthorizationV2Schema.parse({ ...authorization, priorMaximumCompatibleVersion: 9 })).toThrow();
+    expect(() => module.ApplicationRollbackAuthorizationV2Schema.parse({ ...authorization, expiresAt: authorization.authorizedAt })).toThrow();
   });
 
   it("accepts terminal V2 promotion only from the exact resumable 0/15m/1h/24h trusted-clock sequence", async () => {
@@ -315,12 +361,16 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       clock: clockCheck,
     };
     const checkpoints = [
-      ["cutover", "2026-08-12T03:00:00Z"],
+      ["cutover", "2026-08-12T03:00:00Z", "2026-08-12T03:00:01Z"],
       ["post-cutover-15m", "2026-08-12T03:15:00Z"],
       ["post-cutover-1h", "2026-08-12T04:00:00Z"],
       ["post-cutover-24h", "2026-08-13T03:00:00Z"],
-    ].map(([id, at]) => ({ version: "2", kind: "production-canary-checkpoint", id, dueAt: at, observedAt: at, status: "passed", checks }));
-    for (const checkpoint of checkpoints) expect(module.ProductionCanaryCheckpointV2Schema.parse(checkpoint)).toEqual(checkpoint);
+    ].map(([id, dueAt, observedAt = dueAt]) => ({ version: "2", kind: "production-canary-checkpoint", id, dueAt, observedAt, status: "passed", checks }));
+    for (const checkpoint of checkpoints) {
+      expect(module.ProductionCanaryCheckpointV2Schema.parse(checkpoint)).toEqual(checkpoint);
+      expect(module.canonicalSerializeProductionCanaryCheckpointV2(checkpoint)).toBe(canonicalJson(checkpoint));
+      expect(module.checksumProductionCanaryCheckpointV2(checkpoint)).toBe(checksum(checkpoint));
+    }
     for (const invalid of [
       { ...checkpoints[1], checks: { ...checks, clock: undefined } },
       { ...checkpoints[1], checks: { ...checks, clock: { ...clockCheck, authority: "caller" } } },
@@ -331,11 +381,16 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       version: "2", kind: "digitalocean-production-promotion-evidence", status: "passed", verification: "verified", promotionClaim: true,
       producer: { commitSha: "1".repeat(40), treeSha: "2".repeat(40) }, publicationEvidenceSha256: sha("3"),
       productionDeploymentEvidenceSha256: sha("4"), runId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
-      operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4", cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: checkpoints[0].observedAt },
+      operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4", cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: checkpoints[0].dueAt },
       canary: { durationSeconds: 86400, checkpoints }, completedAt: checkpoints.at(-1)?.observedAt,
     };
     expect(module.ProductionPromotionEvidenceV2Schema.parse(evidence)).toEqual(evidence);
+    expect(module.canonicalSerializeProductionPromotionEvidenceV2(evidence)).toBe(canonicalJson(evidence));
+    expect(module.checksumProductionPromotionEvidenceV2(evidence)).toBe(checksum(evidence));
     expect(() => module.ProductionPromotionEvidenceV2Schema.parse({ ...evidence, completedAt: "2026-08-12T04:00:00Z" })).toThrow();
+    expect(() => module.ProductionPromotionEvidenceV2Schema.parse({ ...evidence, completedAt: "2026-08-13T03:00:01Z" })).toThrow();
+    expect(() => module.ProductionPromotionEvidenceV2Schema.parse({ ...evidence, cutover: { ...evidence.cutover, activatedAt: "2026-08-12T02:59:59Z" } })).toThrow();
+    expect(() => module.ProductionPromotionEvidenceV2Schema.parse({ ...evidence, canary: { ...evidence.canary, checkpoints: checkpoints.map((entry, index) => index === 2 ? { ...entry, dueAt: "2026-08-12T04:00:01Z" } : entry) } })).toThrow();
     expect(() => module.ProductionPromotionEvidenceV2Schema.parse({ ...evidence, canary: { ...evidence.canary, durationSeconds: 3600, checkpoints: checkpoints.slice(0, 3) } })).toThrow();
   });
 });

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { lstat } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseProductionBackupConfiguration } from "./backup-configuration.mjs";
@@ -19,6 +19,7 @@ const RUNTIME_INPUT_FILES = [
   "PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE",
   "PROOFLINE_WORKER_REPLAY_BUNDLE_FILE",
   "PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE",
+  "PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT",
   "PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE",
   "PROOFLINE_POSTGRES_PASSWORD_FILE",
 ];
@@ -36,20 +37,76 @@ const BACKUP_INPUT_FILES = [
   "PROOFLINE_BACKUP_EVIDENCE_FILE",
 ];
 
-async function validateRuntimeInputFiles(environment) {
+async function validateRuntimeInputFiles(environment, composeArguments) {
   try {
+    const handoffPath = environment.PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE;
+    if (typeof handoffPath !== "string" || !isAbsolute(handoffPath)) throw new Error(RUNTIME_INPUT_ERROR);
     for (const name of RUNTIME_INPUT_FILES) {
       const path = environment[name];
       if (typeof path !== "string" || !isAbsolute(path)) {
         throw new Error(RUNTIME_INPUT_ERROR);
       }
       const status = await lstat(path);
-      if (!status.isFile() || status.size < 1) {
+      const evidenceRoot = name === "PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT";
+      if ((evidenceRoot ? !status.isDirectory() : !status.isFile()) || (!evidenceRoot && status.size < 1)) {
         throw new Error(RUNTIME_INPUT_ERROR);
       }
     }
   } catch {
     throw new Error(RUNTIME_INPUT_ERROR);
+  }
+}
+
+const SAFE_CONSUMER_FILES = [
+  "safe-consumer-deployment-evidence.v1.json",
+  "safe-consumer-registry.v1.json",
+];
+
+export async function validateSafeConsumerEvidenceLifecycle({ evidenceRoot, workerHandoffPath, phase }) {
+  const invalid = (code) => Object.assign(new Error(`${code}: safe consumer evidence lifecycle is invalid`), { code });
+  try {
+    if (typeof evidenceRoot !== "string" || !isAbsolute(evidenceRoot) ||
+      typeof workerHandoffPath !== "string" || !isAbsolute(workerHandoffPath)) {
+      throw invalid("SAFE_CONSUMER_EVIDENCE_INVALID");
+    }
+    const rootStatus = await lstat(evidenceRoot);
+    if (!rootStatus.isDirectory() || (rootStatus.mode & 0o777) !== 0o700) throw invalid("SAFE_CONSUMER_EVIDENCE_INVALID");
+    const entries = (await readdir(evidenceRoot)).sort();
+    if (phase === "before-deployer") {
+      if (entries.length !== 0) throw invalid("SAFE_CONSUMER_EVIDENCE_PREEXISTS");
+      await lstat(workerHandoffPath).then(
+        () => { throw invalid("SAFE_CONSUMER_EVIDENCE_PREEXISTS"); },
+        (cause) => { if (cause?.code !== "ENOENT") throw cause; },
+      );
+    } else if (phase === "before-worker") {
+      if (entries.length !== SAFE_CONSUMER_FILES.length || entries.some((entry, index) => entry !== SAFE_CONSUMER_FILES[index])) {
+        throw invalid("SAFE_CONSUMER_EVIDENCE_INCOMPLETE");
+      }
+      for (const entry of entries) {
+        const status = await lstat(resolve(evidenceRoot, entry));
+        if (!status.isFile() || status.size < 1 || (status.mode & 0o777) !== 0o400) {
+          throw invalid("SAFE_CONSUMER_EVIDENCE_INVALID");
+        }
+      }
+      const handoff = await lstat(workerHandoffPath).catch((cause) => {
+        if (cause?.code === "ENOENT") throw invalid("SAFE_CONSUMER_EVIDENCE_INCOMPLETE");
+        throw cause;
+      });
+      if (!handoff.isFile() || handoff.size < 1 || (handoff.mode & 0o777) !== 0o400) {
+        throw invalid("SAFE_CONSUMER_EVIDENCE_INVALID");
+      }
+    } else {
+      throw invalid("SAFE_CONSUMER_EVIDENCE_INVALID");
+    }
+    return {
+      evidenceRoot,
+      deploymentEvidencePath: resolve(evidenceRoot, SAFE_CONSUMER_FILES[0]),
+      registryPath: resolve(evidenceRoot, SAFE_CONSUMER_FILES[1]),
+      workerHandoffPath,
+    };
+  } catch (cause) {
+    if (cause?.code?.startsWith?.("SAFE_CONSUMER_")) throw cause;
+    throw invalid("SAFE_CONSUMER_EVIDENCE_INVALID");
   }
 }
 
@@ -103,7 +160,13 @@ export async function runProductionCompose({
       throw new Error("Runtime one-shot jobs require forced recreation during up");
     }
     if (composeArguments.includes("up")) {
-      await validateRuntimeInputFiles(environment);
+      await validateRuntimeInputFiles(environment, composeArguments);
+      const explicitWorker = composeArguments.includes("worker") && !composeArguments.includes("safe-consumer-deployer");
+      await validateSafeConsumerEvidenceLifecycle({
+        evidenceRoot: environment.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT,
+        workerHandoffPath: environment.PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE,
+        phase: explicitWorker ? "before-worker" : "before-deployer",
+      });
       if (environment.PROOFLINE_POSTGRES_IMAGE !== undefined) {
         parseProductionBackupConfiguration(environment);
         await validateBackupInputFiles(environment);

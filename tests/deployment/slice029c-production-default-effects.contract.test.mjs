@@ -127,6 +127,7 @@ test("the Timeweb PITR default restores one selected encrypted backup into a fre
     if (input.phase === "select-backup") return {
       status: "passed", backupId: "base_20260812T030000Z", encrypted: true,
       backupCompletedAt: "2026-08-12T03:00:00Z", lastArchivedAt: "2026-08-12T03:00:30Z",
+      systemIdentifier: "7532076200787175519", timeline: 1,
     };
     if (input.phase === "create-fresh-volume") return { status: "passed", volumeId: `proofline-pitr-${PRODUCTION_RUN_ID}`, wasAbsent: true };
     if (input.phase === "restore-selected-backup") return { status: "passed", backupId: "base_20260812T030000Z", volumeId: `proofline-pitr-${PRODUCTION_RUN_ID}` };
@@ -178,6 +179,10 @@ test("the Timeweb PITR default restores one selected encrypted backup into a fre
   const recoveryCompose = await readFile(resolve(root, "deploy/compose.production-recovery.yaml"), "utf8").catch(() => "");
   assert.match(recoveryCompose, /pitr-restore:/);
   assert.match(recoveryCompose, /profiles:\s*\[["']production-recovery["']\]/);
+  const pitrSource = await readFile(resolve(root, "scripts/timeweb-production-pitr.mjs"), "utf8");
+  assert.doesNotMatch(pitrSource, /PROOFLINE_RECOVERY_TARGET_TIMELINE:\s*["']latest["']/);
+  assert.doesNotMatch(pitrSource, /\],\s*1024\s*\*\s*1024,\s*environment\)\)\.trim\(\)/);
+  assert.match(pitrSource, /switchProductionWal\(environment\)[\s\S]*observeProductionWalArchived\(switched, environment\)/);
   assert.doesNotMatch(recoveryCompose, /ports:|docker\.sock|MINIO|localhost:9000/i);
 });
 

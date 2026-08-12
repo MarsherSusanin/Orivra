@@ -16,7 +16,7 @@ import {
   type PreflightPorts,
   type RawDaProof,
 } from "@proofline/fdc-coston2";
-import { diagnoseConsumerRequest } from "@proofline/domain";
+import { canonicalJson, diagnoseConsumerRequest } from "@proofline/domain";
 import { first as jqFirst } from "jq-wasm/inline";
 import {
   concatHex,
@@ -221,6 +221,13 @@ function consumerAbi(): Abi {
       outputs: [{ name: "", type: "bytes" }],
     },
   ] as Abi;
+}
+
+function resolveSafeConsumerAddress(runtimeConfig: LiveCoston2RuntimeConfig, manifest: Web2JsonManifestV1): Address {
+  const manifestSha256 = `sha256:${createHash("sha256").update(canonicalJson(Coston2Web2JsonManifestV1Schema.parse(manifest))).digest("hex")}`;
+  const matches = runtimeConfig.safeConsumerRegistry.entries.filter((entry) => entry.manifestSha256 === manifestSha256);
+  if (matches.length !== 1) throw createFdcError("schema-invalid", "SAFE_CONSUMER_REGISTRY_INVALID", "Safe consumer registry has no exact manifest binding", false, {});
+  return matches[0].consumerAddress;
 }
 
 const PIPELINE_CONTRACT_NAMES = [
@@ -774,7 +781,7 @@ export function createLiveCoston2PipelinePorts(input: LivePipelineFactoryInput) 
         };
       }
       await read(
-        runtimeConfig.safeConsumerAddress,
+        resolveSafeConsumerAddress(runtimeConfig, manifest),
         consumerAbi(),
         "consume",
         [decoded],

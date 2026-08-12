@@ -57,18 +57,17 @@ export function parseProductionBackupConfiguration(environment = process.env) {
     const region = environment.PROOFLINE_BACKUP_REGION;
     const bucket = environment.PROOFLINE_BACKUP_BUCKET;
     if (
-      (slot !== "staging" && slot !== "production") ||
+      slot !== "production" ||
       typeof endpointValue !== "string" ||
-      !/^[a-z]{3}[0-9]$/.test(region ?? "") ||
-      !/^[a-z0-9](?:[a-z0-9.-]{1,61}[a-z0-9])$/.test(bucket ?? "") ||
-      bucket.includes("..")
+      region !== "ru-1" ||
+      bucket !== "orivra-backet"
     ) {
       invalidConfiguration();
     }
     const endpoint = new URL(endpointValue);
     if (
       endpoint.protocol !== "https:" ||
-      endpoint.hostname !== `${region}.digitaloceanspaces.com` ||
+      endpoint.hostname !== "s3.twcstorage.ru" ||
       endpoint.port ||
       endpoint.username ||
       endpoint.password ||
@@ -84,6 +83,8 @@ export function parseProductionBackupConfiguration(environment = process.env) {
       endpoint: endpoint.origin,
       region,
       bucket,
+      pathStyle: true,
+      authorityMode: "shared-pilot",
     });
   } catch (cause) {
     if (cause instanceof BackupConfigurationError) throw cause;

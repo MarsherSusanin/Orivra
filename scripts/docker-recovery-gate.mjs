@@ -381,6 +381,10 @@ async function prepareSecrets(directory) {
 
 async function environmentFor(directory, producerIdentity, sourceRoot) {
   const paths = await prepareSecrets(directory);
+  const safeConsumerEvidenceRoot = join(directory, "safe-consumer-evidence");
+  const safeConsumerWorkerHandoff = join(directory, "safe-consumer-worker-handoff.json");
+  await mkdir(safeConsumerEvidenceRoot, { mode: 0o700 });
+  await writeFile(safeConsumerWorkerHandoff, "{}", { mode: 0o400 });
   const lock = JSON.parse(
     await readFile(join(sourceRoot, "docker/base-images.json"), "utf8"),
   );
@@ -416,8 +420,8 @@ async function environmentFor(directory, producerIdentity, sourceRoot) {
     PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
     PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
     PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
-    PROOFLINE_SAFE_CONSUMER_ADDRESS:
-      "0x5555555555555555555555555555555555555555",
+    PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT: safeConsumerEvidenceRoot,
+    PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE: safeConsumerWorkerHandoff,
     PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE: paths.postgres_admin_database_url,
     PROOFLINE_MIGRATOR_DATABASE_URL_FILE: paths.migrator_database_url,
     PROOFLINE_API_DATABASE_URL_FILE: paths.api_database_url,

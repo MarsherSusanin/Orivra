@@ -1,6 +1,6 @@
 # ADR 0044: Timeweb direct-production pilot and resumable 24-hour acceptance
 
-- Status: Accepted contract; intentional RED
+- Status: Accepted; local production-author GREEN, independent verification pending
 - Date: 2026-08-12
 - Supersedes active production portions of: ADR 0037, ADR 0042, ADR 0043
 - Retains: all V1 schemas as historical compatibility data types
@@ -33,6 +33,14 @@ the cutover checkpoint checks locally; the default live-run and canary
 entrypoints threw; the default PITR path stopped before restore; and canonical
 safe-consumer files owned by the service UID could not satisfy the required
 root-owned evidence boundary.
+
+The replacement implementation closes those RED boundaries locally. Its
+production-author matrix passes strict V2 contracts/domain coverage, typed
+host orchestration, the eight-service Compose model, real PostgreSQL,
+credential-free MinIO recovery controls, Sites compatibility and the exact
+worker/API persistence path. This status is not a hosted, Timeweb, Coston2,
+cutover or 24-hour PASS. The exact committed tree and two independent verifier
+reports remain required before credentials or production effects are used.
 
 The pilot object store is Timeweb S3-compatible storage. Swift is an operator
 option outside the application runtime, not a release dependency.
@@ -258,7 +266,8 @@ origin, service or command.
 The deployer command requires both canonical safe-consumer outputs absent,
 runs the fixed one-shot service, then requires the regular non-symlink
 mode-0400 pair. The host reads both files once through bounded private
-`O_NOFOLLOW` descriptors, requires canonical UTF-8
+`O_NOFOLLOW` descriptors, requires regular mode-0400 authority/evidence files with
+explicit byte bounds, and requires canonical UTF-8
 `SafeConsumerRegistryV1`/`SafeConsumerDeploymentEvidenceV1`, cross-checks the
 registry checksum and exact ordered deployments, and returns the parsed
 registry plus deployments to the direct runtime. The following compatibility

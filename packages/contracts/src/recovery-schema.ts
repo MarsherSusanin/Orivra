@@ -83,6 +83,16 @@ const StorageSchema = z.discriminatedUnion("provider", [
       ...StorageSharedFields,
     })
     .strict(),
+  z
+    .object({
+      provider: z.literal("timeweb-s3"),
+      endpointOrigin: z.literal("https://s3.twcstorage.ru"),
+      region: z.literal("ru-1"),
+      addressing: z.literal("path-style"),
+      authorityMode: z.literal("shared-pilot"),
+      ...StorageSharedFields,
+    })
+    .strict(),
 ]);
 
 const InventoryEntrySchema = z
@@ -187,7 +197,7 @@ const BackupEvidenceRefinedSchema = BackupEvidenceCoreSchema.superRefine(
 const ExpectedProviderBySlot = {
   qa: "minio",
   staging: "digitalocean-spaces",
-  production: "digitalocean-spaces",
+  production: "timeweb-s3",
 } as const;
 
 export const BackupEvidenceV1Schema = BackupEvidenceRefinedSchema

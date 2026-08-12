@@ -106,8 +106,11 @@ function validStorage(storage, database) {
     "encryption",
     "encryptionKeyIdSha256",
   ];
+  const expectedKeys = storage?.provider === "timeweb-s3"
+    ? [...shared, "region", "addressing", "authorityMode"]
+    : shared;
   if (
-    !exactObject(storage, shared) ||
+    !exactObject(storage, expectedKeys) ||
     typeof storage.bucket !== "string" ||
     storage.bucket.length < 3 ||
     storage.bucket.length > 63 ||
@@ -117,8 +120,9 @@ function validStorage(storage, database) {
   ) return false;
   const providerMatches = database.slot === "qa"
     ? storage.provider === "minio" && storage.endpointOrigin === "http://minio:9000"
-    : storage.provider === "digitalocean-spaces" &&
-      /^https:\/\/[a-z0-9]+\.digitaloceanspaces\.com$/.test(storage.endpointOrigin ?? "");
+    : storage.provider === "timeweb-s3" && storage.endpointOrigin === "https://s3.twcstorage.ru" &&
+      storage.region === "ru-1" && storage.addressing === "path-style" && storage.authorityMode === "shared-pilot" &&
+      storage.bucket === "orivra-backet";
   return providerMatches && storage.prefix ===
     `s3://${storage.bucket}/proofline/v1/${database.slot}/${database.systemIdentifier}`;
 }

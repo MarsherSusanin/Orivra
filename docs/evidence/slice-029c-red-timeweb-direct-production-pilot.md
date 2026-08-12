@@ -413,3 +413,25 @@ deployment static is 203 retained controls PASS plus 52 intentional RED,
 including the new daily-backup boundary; Sites is 46/46 PASS. No production,
 dependency, Docker, network, credential, systemd, backup, retention or generated
 output effect was run.
+
+## Production-author GREEN closure
+
+The final implementation closes the frozen RED seams without restoring
+staging authority or weakening V1 compatibility. It adds exact Timeweb
+shared-pilot backup/PITR, a deterministic two-consumer deployment and
+worker-registry handoff, typed preflights, explicit Caddy cutover, one canonical
+append-only canary state root, a real host-clock 24-hour terminal boundary and
+the root-owned 02:00 UTC backup timer. The canary cutover and timer now share
+`/var/lib/orivra/production-canary/checkpoints`; writes use hard-link
+no-replace publication and bounded `O_NOFOLLOW` mode-0400 reads.
+
+Final local production-author evidence before commit: typecheck PASS; focused
+029C deployment 33/33; serialized deployment static 256/256; core 57 files/661
+tests and 100% statements/branches/functions/lines; full Vitest 264 files/2558
+tests with only five files/43 configured skips; backend 92.03% lines/87.08%
+branches; worker 91.39%/86.22%; Web 92.57%/85.91%; Testcontainers PostgreSQL
+22 files/163 tests with zero skips; build, Sites 46/46 and Action byte-sync
+PASS. The local matrix used no Timeweb, Swift, GHCR, SSH, DNS, VDS or live
+Coston2 credentials/effects. It is not a hosted/deployed/security PASS; scan
+8852 remains user-canceled and the accepted deferred 027C integrity risk stays
+open. Exact-tree Core and Product verification are pending.

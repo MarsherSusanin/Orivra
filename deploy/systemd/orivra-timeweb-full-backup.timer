@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule the Orivra encrypted Timeweb production full backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+Persistent=true
+RandomizedDelaySec=0
+Unit=orivra-timeweb-full-backup.service
+
+[Install]
+WantedBy=timers.target

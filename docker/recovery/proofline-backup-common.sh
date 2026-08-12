@@ -29,7 +29,7 @@ proofline_system_identifier() {
 
 proofline_configure_storage() {
   case "${PROOFLINE_BACKUP_SLOT:-}" in
-    staging|production) ;;
+    production) ;;
     qa) [ "${PROOFLINE_BACKUP_QA:-}" = "true" ] || proofline_fail ;;
     *) proofline_fail ;;
   esac
@@ -48,10 +48,11 @@ proofline_configure_storage() {
     AWS_S3_FORCE_PATH_STYLE=true
     export AWS_S3_FORCE_PATH_STYLE
   else
-    case "$AWS_ENDPOINT" in
-      "https://${AWS_REGION}.digitaloceanspaces.com") ;;
-      *) proofline_fail ;;
-    esac
+    [ "$AWS_ENDPOINT" = "https://s3.twcstorage.ru" ] || proofline_fail
+    [ "$AWS_REGION" = "ru-1" ] || proofline_fail
+    [ "$PROOFLINE_BACKUP_BUCKET" = "orivra-backet" ] || proofline_fail
+    AWS_S3_FORCE_PATH_STYLE=true
+    export AWS_S3_FORCE_PATH_STYLE
   fi
 }
 

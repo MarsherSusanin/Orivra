@@ -63,6 +63,7 @@ function createWorkerLoopConfig(
 
 function createLiveRuntimeConfig(
   configuration: WorkerRuntimeConfiguration,
+  safeConsumerRegistry: LiveCoston2RuntimeConfig["safeConsumerRegistry"],
 ): LiveCoston2RuntimeConfig {
   return Object.freeze({
     chainId: configuration.chainId,
@@ -73,7 +74,7 @@ function createLiveRuntimeConfig(
     daTimeoutMs: configuration.daTimeoutMs,
     relayerAccount: Object.freeze({ ...configuration.relayerAccount }),
     relayerPolicy: copyRelayerPolicy(configuration.relayerPolicy),
-    safeConsumerAddress: configuration.safeConsumerAddress,
+    safeConsumerRegistry,
   });
 }
 
@@ -85,6 +86,9 @@ function copyReplayEvidence(
     bundleSha256: evidence.bundleSha256,
     preflightReportCanonicalJson: evidence.preflightReportCanonicalJson,
     preflightReportSha256: evidence.preflightReportSha256,
+    safeConsumerRegistry: evidence.safeConsumerRegistry,
+    safeConsumerRegistryCanonicalJson: evidence.safeConsumerRegistryCanonicalJson,
+    safeConsumerRegistrySha256: evidence.safeConsumerRegistrySha256,
   });
 }
 
@@ -253,7 +257,10 @@ export async function startProductionWorker(
   );
   const repositoryPolicy = createRepositoryPolicy(runtimeConfiguration);
   const workerLoopConfig = createWorkerLoopConfig(runtimeConfiguration);
-  const liveRuntimeConfig = createLiveRuntimeConfig(runtimeConfiguration);
+  const liveRuntimeConfig = createLiveRuntimeConfig(
+    runtimeConfiguration,
+    loadedReplayEvidence.safeConsumerRegistry,
+  );
   const replayEvidence = copyReplayEvidence(loadedReplayEvidence);
   const pool = new Pool({
     connectionString: runtimeConfiguration.databaseUrl,

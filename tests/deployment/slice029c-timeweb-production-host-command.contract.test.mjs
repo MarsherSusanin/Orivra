@@ -27,6 +27,7 @@ const command = (id, payload = {}) => encode({
 const CURRENT_ROOT = "/opt/orivra/current";
 const SECRET_ROOT = "/opt/orivra/secrets";
 const EVIDENCE_ROOT = "/opt/orivra/evidence";
+const CANARY_STATE_ROOT = "/var/lib/orivra/production-canary";
 const PROJECT = "proofline-production-primary";
 const COMPOSE_FILES = [
   "/opt/orivra/current/compose.yaml",
@@ -513,16 +514,27 @@ test("rolls an exact active Caddy state back through one fixed adapter call with
 test("appends canonical evidence/checkpoints only to fixed mode-0400 no-replace paths", async () => {
   const module = await feature();
   const calls = [];
-  for (const [id, value, expectedPath] of [
-    ["append-production-evidence", productionEvidence, `${EVIDENCE_ROOT}/production-deployment-evidence.v2.json`],
-    ["append-canary-checkpoint", canaryCheckpoint, `${EVIDENCE_ROOT}/canary/01-post-cutover-15m.json`],
+  for (const [id, value, expectedPath, expectedChecksumPath] of [
+    ["append-production-evidence", productionEvidence, `${EVIDENCE_ROOT}/production-deployment-evidence.v2.json`, `${EVIDENCE_ROOT}/production-deployment-evidence.v2.sha256`],
+    ["append-canary-checkpoint", canaryCheckpoint, `${CANARY_STATE_ROOT}/checkpoints/01-post-cutover-15m.json`, undefined],
   ]) {
     const canonicalBytes = Buffer.from(canonicalJson(value), "utf8");
+    const sha256 = digest(canonicalBytes);
     const result = await module.runTimewebProductionHostCommand({
-      encodedCommand: command(id, { canonicalBytesBase64url: canonicalBytes.toString("base64url"), sha256: digest(canonicalBytes) }),
-      adapters: { evidence: { appendNoReplace: async (entry) => { calls.push(entry); return { status: "passed", sha256: entry.sha256 }; } } },
+      encodedCommand: command(id, { canonicalBytesBase64url: canonicalBytes.toString("base64url"), sha256 }),
+      adapters: { evidence: {
+        appendNoReplace: async (entry) => { calls.push(entry); return { status: "passed", sha256: entry.sha256 }; },
+        appendCanonicalPairNoReplace: async (entry) => { calls.push(entry); return { status: "passed", sha256: entry.sha256 }; },
+      } },
     });
-    assert.deepEqual(calls.at(-1), { path: expectedPath, bytes: canonicalBytes, sha256: digest(canonicalBytes), mode: 0o400, noReplace: true });
+    assert.deepEqual(calls.at(-1), {
+      path: expectedPath,
+      ...(expectedChecksumPath ? { checksumPath: expectedChecksumPath } : {}),
+      bytes: canonicalBytes,
+      sha256,
+      mode: 0o400,
+      noReplace: true,
+    });
     assert.equal(result.status, "passed");
   }
   const noncanonical = Buffer.from(JSON.stringify(productionEvidence, null, 2), "utf8");

@@ -68,6 +68,9 @@ services:
     image: ${PROOFLINE_WORKER_IMAGE:?PROOFLINE_WORKER_IMAGE is required}
     user: "1000:1000"
     read_only: true
+    env_file:
+      - path: ./deploy/worker-runtime-fixed.env
+        required: true
     tmpfs:
       - /tmp:size=64m,mode=1777
     environment:
@@ -84,7 +87,6 @@ services:
       PROOFLINE_RELEASE_TREE_SHA: ${PROOFLINE_RELEASE_TREE_SHA:?PROOFLINE_RELEASE_TREE_SHA is required}
       PROOFLINE_REPLAY_BUNDLE_PATH: /run/proofline/replay/bundle.json
       PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH: /run/proofline/replay/preflight-report.json
-      PROOFLINE_SAFE_CONSUMER_ADDRESS: ${PROOFLINE_SAFE_CONSUMER_ADDRESS:?PROOFLINE_SAFE_CONSUMER_ADDRESS is required}
       PROOFLINE_VERIFIER_API_KEY_FILE: /run/secrets/worker_verifier_api_key
       PROOFLINE_VERIFIER_URL: ${PROOFLINE_VERIFIER_URL:-https://fdc-verifiers-testnet.flare.network}
       PROOFLINE_WORKER_DB_POOL_SIZE: "4"
@@ -103,6 +105,12 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ${PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE:?PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE is required}
+        target: /run/proofline/evidence/safe-consumer-registry.v1.json
+        read_only: true
+        bind:
+          create_host_path: false
     secrets:
       - source: worker_database_url
         target: worker_database_url
@@ -115,9 +123,39 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+      safe-consumer-deployer:
+        condition: service_completed_successfully
     networks:
       - db_internal
       - worker_egress
+
+  safe-consumer-deployer:
+    <<: *runtime-service-defaults
+    image: ${PROOFLINE_WORKER_IMAGE:?PROOFLINE_WORKER_IMAGE is required}
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    restart: "no"
+    command: ["node", "/app/apps/worker/dist/safe-consumer-deployer.js"]
+    environment:
+      PROOFLINE_COSTON2_PRIVATE_KEY_FILE: /run/secrets/worker_coston2_private_key
+      PROOFLINE_COSTON2_RPC_URL: ${PROOFLINE_COSTON2_RPC_URL:-https://coston2-api.flare.network/ext/C/rpc}
+    secrets:
+      - source: worker_coston2_private_key
+        target: worker_coston2_private_key
+    volumes:
+      - type: bind
+        source: ${PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT:?PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT is required}
+        target: /opt/orivra/evidence
+        bind:
+          create_host_path: false
+    networks:
+      - worker_egress
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+
 
   postgres:
     <<: *runtime-service-defaults

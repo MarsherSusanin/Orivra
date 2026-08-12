@@ -131,6 +131,7 @@ describe("Slice 029C direct-production pilot authority", () => {
     ]);
     expect(plan.publicPorts).toEqual([80, 443]);
     expect(plan.privateHostPorts).toEqual({ api: [], worker: [], postgres: [] });
+    expect(() => module.createDirectProductionPilotPlan({})).toThrow();
   });
 
   it("rejects staging, noncanonical bytes, checksum substitution and expired direct authority before planning", async () => {
@@ -145,5 +146,57 @@ describe("Slice 029C direct-production pilot authority", () => {
       { ...input(value), expectedObjectStoreAuthoritySha256: sha("0") },
       { ...input(value), now: "2026-08-12T02:40:00Z" },
     ]) expect(() => module.verifyDirectProductionPilotHandoff(invalid)).toThrow();
+  });
+
+  it("selects rollback V2 only from five canonical and independently bound evidence files", async () => {
+    const module = await feature();
+    const value = await fixture();
+    const safeConsumers = {
+      version: "1", kind: "safe-consumer-registry", chainId: 114,
+      entries: [
+        { templateId: "open-meteo-current-weather", revision: 1, manifestSha256: "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8", consumerAddress: "0x1111111111111111111111111111111111111111" },
+        { templateId: "eth-usd", revision: 1, manifestSha256: "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db", consumerAddress: "0x2222222222222222222222222222222222222222" },
+      ],
+    };
+    const deployment = {
+      version: "2", kind: "digitalocean-production-deployment-evidence", status: "passed", verification: "verified", productionClaim: true,
+      producer: value.publication.producer, publicationEvidenceSha256: value.publicationEvidenceSha256,
+      frozenReleaseManifestSha256: value.publication.frozenRelease.frozenReleaseManifestSha256,
+      promotionAuthorizationSha256: sha("5"), preflightEvidenceSha256: sha("6"), target: value.target,
+      run: { runId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4", operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4", completedAt: "2026-08-12T03:00:01Z" },
+      pullCredential: { registry: "ghcr.io", access: "read-only" },
+      images: value.publication.images.map(({ id, remoteRepository, remoteReference, remoteDigest }: any) => ({ id, remoteRepository, remoteReference, remoteDigest })),
+      topology: { publicService: "caddy", publicPorts: [80, 443], privateServices: ["web", "api", "worker", "postgres"], forbiddenPublicPorts: [5432, 8080], dockerSocketMounted: false },
+      database: { migrationManifestSha256: sha("7"), targetVersion: 10, schemaVersion: 10, roleBootstrap: { status: "passed" }, migration: { status: "passed" } },
+      objectStore: value.objectStore, safeConsumers,
+      checks: {
+        exactDigestPull: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
+        timewebPitr: { status: "passed", restoreEvidenceSha256: sha("8"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
+        liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: safeConsumers.entries.map(({ manifestSha256 }) => manifestSha256) },
+      },
+      cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-12T03:00:00Z" },
+    };
+    const deploymentBytes = utf8(deployment);
+    const deploymentSha256 = checksum(deploymentBytes);
+    const authorization = {
+      version: "2", kind: "application-rollback-authorization", status: "authorized", rollback: true,
+      currentProductionDeploymentEvidenceSha256: deploymentSha256, priorProductionDeploymentEvidenceSha256: deploymentSha256,
+      currentPublicationEvidenceSha256: value.publicationEvidenceSha256, priorPublicationEvidenceSha256: value.publicationEvidenceSha256,
+      currentSchemaVersion: 10, priorMinimumCompatibleVersion: 10, priorMaximumCompatibleVersion: 10,
+      operatorId: deployment.run.operatorId, authorizedAt: "2026-08-12T03:05:00Z", expiresAt: "2026-08-12T03:35:00Z",
+    };
+    const rollbackAuthorizationBytes = utf8(authorization);
+    const rollbackInput = {
+      rollbackAuthorizationBytes, expectedRollbackAuthorizationSha256: checksum(rollbackAuthorizationBytes),
+      currentProductionDeploymentEvidenceBytes: deploymentBytes, expectedCurrentProductionDeploymentEvidenceSha256: deploymentSha256,
+      priorProductionDeploymentEvidenceBytes: deploymentBytes, expectedPriorProductionDeploymentEvidenceSha256: deploymentSha256,
+      currentPublicationEvidenceBytes: value.publicationEvidenceBytes, expectedCurrentPublicationEvidenceSha256: value.publicationEvidenceSha256,
+      priorPublicationEvidenceBytes: value.publicationEvidenceBytes, expectedPriorPublicationEvidenceSha256: value.publicationEvidenceSha256,
+      now: "2026-08-12T03:10:00Z",
+    };
+    const selected = module.selectSchemaCompatibleRollbackV2(rollbackInput);
+    expect(selected.images).toEqual(value.publication.images.map(({ id, remoteRepository, remoteReference, remoteDigest }: any) => ({ id, remoteRepository, remoteReference, remoteDigest })));
+    expect(Object.isFrozen(selected)).toBe(true);
+    expect(() => module.selectSchemaCompatibleRollbackV2({ ...rollbackInput, expectedPriorPublicationEvidenceSha256: sha("0") })).toThrow();
   });
 });

@@ -22,6 +22,7 @@ COPY src ./src
 COPY apps ./apps
 COPY packages ./packages
 COPY contracts ./contracts
+COPY scripts/safe-consumer-registry-deployment-runtime.mjs ./scripts/safe-consumer-registry-deployment-runtime.mjs
 RUN npm exec vite -- build
 RUN npm run --workspace @proofline/api build
 RUN npm run --workspace @proofline/api build:import-canonical-url-attack
@@ -60,5 +61,8 @@ RUN mkdir -p /run/proofline/replay && chown node:node /run/proofline/replay
 COPY --from=dependency-cache /workspace/node_modules /app/node_modules
 # The bundle keeps the pg and solc runtime packages external.
 COPY --from=build --chown=node:node /workspace/apps/worker/dist/worker.js /app/apps/worker/dist/worker.js
+COPY --from=build --chown=node:node /workspace/apps/worker/dist/safe-consumer-deployer.js /app/apps/worker/dist/safe-consumer-deployer.js
+COPY --from=build --chown=node:node /workspace/apps/worker/dist/production-live-gate.js /app/apps/worker/dist/production-live-gate.js
+COPY --from=build --chown=node:node /workspace/contracts/ProoflineUrlInvariant.sol /app/contracts/ProoflineUrlInvariant.sol
 USER node
 CMD ["node", "/app/apps/worker/dist/worker.js"]

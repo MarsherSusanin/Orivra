@@ -160,7 +160,11 @@ blockchain-операций.
   Deployment evidence precedes explicit Caddy cutover; trusted-clock
   cutover/15m/1h/24h checkpoints are resumable and cannot terminal-PASS early.
   Historical V1 contracts and canonical rollback binding remain parseable but
-  cannot authorize V2 effects. No production PASS exists.
+  cannot authorize V2 effects. The implementation is now local
+  production-author GREEN across focused/static/full tests, coverage, real
+  PostgreSQL, build, Sites and Action sync. Exact-tree Core/Product verification
+  and all credentialed Timeweb/Coston2/VDS effects remain pending, so no hosted
+  or production PASS exists.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM

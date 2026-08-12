@@ -1,6 +1,6 @@
 # Slice 029C — Timeweb direct-production pilot
 
-Status: Final default-effect corrective RED on `acd72de` / `f36a963`; no production effect
+Status: Local production-author GREEN; exact commit and two independent verifiers pending
 
 Decision: [ADR 0044](../adr/0044-timeweb-direct-production-pilot.md)
 
@@ -127,15 +127,20 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 
 ## Gates
 
-RED runs typecheck, the contracts/domain and four 029C deployment focused files
-plus retained 029B and Slice009 purity controls, serialized deployment static
-and Sites compatibility. The
-expected failures are absent V2 schemas/domain methods/runtime entrypoints;
-retained V1 rollback and production controls remain GREEN.
+The final production-author tree passes typecheck; the focused 029C deployment
+inventory (33/33); serialized deployment static (256/256); contracts/domain
+coverage (57 files, 661 tests, 100% statements/branches/functions/lines); the
+full Vitest inventory (264 files and 2558 tests, with only five/43 configured
+skips); backend coverage (92.03% lines/87.08% branches); worker coverage
+(91.39%/86.22%); Web coverage (92.57%/85.91%); real Testcontainers PostgreSQL
+(22 files/163 tests, zero skips); build, Sites (46/46) and Action byte-sync.
+Credential-free 027A/027B/027C Docker controls also remain required on the
+committed identity before verifier handoff.
 
 ## Exclusions
 
-- no production/dependency/lock/Compose/Docker/generated Sites edit;
-- no credential value, deadline, DNS, SSH, provider, registry or live effect;
+- no credential value, deadline, DNS, SSH, provider, registry or live effect
+  was used by the local author matrix;
 - no Swift runtime and no MinIO production authority;
-- no hosted, deployed, backup/PITR, safe-consumer, cutover or 24-hour PASS.
+- no hosted, deployed, Timeweb backup/PITR, safe-consumer, cutover or 24-hour
+  PASS is claimed before the credentialed acceptance wave.

@@ -38,7 +38,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | GHCR publication Complete: Core/Product PASS `e274441` / `907fa93`; five exact remote digests verified; publication evidence SHA-256 `1fe40038…ea10`; isolated DigitalOcean staging pending |
 | 029A | Local MLP validation and candidate freeze | Complete; Core and Product PASS `fc2f6e0` / `f7cebc6`, candidate SHA-256 `8991e7e4…0cdda` |
 | 029B | Exact-digest production promotion and seven-day canary | Historical V1 retained; active effect path superseded by ADR 0044 |
-| 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Final default-effect corrective RED on `acd72de` / `f36a963`; no hosted/deployed claim |
+| 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Local production-author GREEN; exact commit + Core/Product verification pending; no hosted/deployed claim |
 
 ## Completed pre-infrastructure product journey
 

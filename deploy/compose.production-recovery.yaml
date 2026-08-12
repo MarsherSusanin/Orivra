@@ -1,0 +1,80 @@
+services:
+  pitr-restore:
+    profiles: ["production-recovery"]
+    image: ${PROOFLINE_POSTGRES_IMAGE:?PROOFLINE_POSTGRES_IMAGE is required}
+    pull_policy: never
+    user: "999:999"
+    read_only: true
+    command: ["/usr/local/bin/proofline-pitr-fetch.sh"]
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      PROOFLINE_BACKUP_SLOT: production
+      PROOFLINE_BACKUP_ENDPOINT: https://s3.twcstorage.ru
+      PROOFLINE_BACKUP_REGION: ru-1
+      PROOFLINE_BACKUP_BUCKET: orivra-backet
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      PROOFLINE_BACKUP_SYSTEM_IDENTIFIER: ${PROOFLINE_BACKUP_SYSTEM_IDENTIFIER:?PROOFLINE_BACKUP_SYSTEM_IDENTIFIER is required}
+      PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup_encryption_key
+      PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE: /run/secrets/backup_reader_access_key_id
+      PROOFLINE_BACKUP_READER_SECRET_ACCESS_KEY_FILE: /run/secrets/backup_reader_secret_access_key
+      PROOFLINE_RESTORE_BACKUP_ID: ${PROOFLINE_RESTORE_BACKUP_ID:?PROOFLINE_RESTORE_BACKUP_ID is required}
+      PROOFLINE_RECOVERY_TARGET_TIME: ${PROOFLINE_RECOVERY_TARGET_TIME:?PROOFLINE_RECOVERY_TARGET_TIME is required}
+      PROOFLINE_RECOVERY_TARGET_TIMELINE: ${PROOFLINE_RECOVERY_TARGET_TIMELINE:?PROOFLINE_RECOVERY_TARGET_TIMELINE is required}
+      recovery_target_inclusive: "on"
+      recovery_target_action: pause
+      recovery_target_timeline: ${PROOFLINE_RECOVERY_TARGET_TIMELINE:?PROOFLINE_RECOVERY_TARGET_TIMELINE is required}
+    secrets: [backup_reader_access_key_id, backup_reader_secret_access_key, backup_encryption_key]
+    volumes:
+      - pitr_postgres_data:/var/lib/postgresql/data
+    networks: [db_internal, backup_egress]
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+
+  pitr-postgres:
+    profiles: ["production-recovery"]
+    image: ${PROOFLINE_POSTGRES_IMAGE:?PROOFLINE_POSTGRES_IMAGE is required}
+    pull_policy: never
+    user: "999:999"
+    command: ["postgres"]
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      PROOFLINE_BACKUP_SLOT: production
+      PROOFLINE_BACKUP_ENDPOINT: https://s3.twcstorage.ru
+      PROOFLINE_BACKUP_REGION: ru-1
+      PROOFLINE_BACKUP_BUCKET: orivra-backet
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup_encryption_key
+      PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE: /run/secrets/backup_reader_access_key_id
+      PROOFLINE_BACKUP_READER_SECRET_ACCESS_KEY_FILE: /run/secrets/backup_reader_secret_access_key
+    secrets: [backup_reader_access_key_id, backup_reader_secret_access_key, backup_encryption_key]
+    volumes:
+      - pitr_postgres_data:/var/lib/postgresql/data
+    networks: [db_internal, backup_egress]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U proofline -d proofline"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  pitr-verify:
+    profiles: ["production-recovery"]
+    image: ${PROOFLINE_POSTGRES_IMAGE:?PROOFLINE_POSTGRES_IMAGE is required}
+    pull_policy: never
+    user: "999:999"
+    entrypoint: ["/bin/sh", "-eu", "-c"]
+    command:
+      - |
+        export PGPASSWORD="$$(cat /run/secrets/postgres_password)"
+        recovery=$$(psql -h pitr-postgres -U proofline -d proofline -Atc 'SELECT pg_is_in_recovery()')
+        system_id=$$(psql -h pitr-postgres -U proofline -d proofline -Atc 'SELECT system_identifier FROM pg_control_system()')
+        schema=$$(psql -h pitr-postgres -U proofline -d proofline -Atc 'SELECT max(version) FROM proofline_private.schema_migrations')
+        [ "$$recovery" = t ] && [ "$$schema" = 10 ] && [ "$$system_id" = "${PROOFLINE_BACKUP_SYSTEM_IDENTIFIER:?PROOFLINE_BACKUP_SYSTEM_IDENTIFIER is required}" ]
+        printf '{"pgIsInRecovery":true,"schemaVersion":10,"status":"passed","systemIdentifier":"%s"}\n' "$$system_id"
+    secrets: [postgres_password]
+    networks: [db_internal]
+    restart: "no"
+
+volumes:
+  pitr_postgres_data:
+    name: ${PROOFLINE_PITR_VOLUME_NAME:?PROOFLINE_PITR_VOLUME_NAME is required}

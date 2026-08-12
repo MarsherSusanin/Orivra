@@ -7,6 +7,10 @@ import {
   isCanonicalUint256Decimal,
 } from "@proofline/contracts";
 import {
+  SafeConsumerRegistryV1Schema,
+  canonicalSerializeSafeConsumerRegistry as serializeSafeConsumerRegistry,
+} from "@proofline/contracts/production-promotion";
+import {
   canonicalSerializePreflightReport,
   canonicalizeManifestUrl,
   projectRun,
@@ -27,9 +31,15 @@ const DEFAULT_VERIFIER_ENDPOINT =
 const DEFAULT_RPC_URL = "https://coston2-api.flare.network/ext/C/rpc";
 const DEFAULT_DA_ENDPOINT =
   "https://ctn2-data-availability.flare.network";
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const BUNDLE_MAX_BYTES = 2_200_000;
 const REPORT_MAX_BYTES = 65_536;
+const SAFE_CONSUMER_REGISTRY_MAX_BYTES = 16_384;
+const FORBIDDEN_SAFE_CONSUMER_ADDRESS = [
+  "PROOFLINE",
+  "SAFE",
+  "CONSUMER",
+  "ADDRESS",
+].join("_");
 const ERROR_CODE = "WORKER_RUNTIME_CONFIGURATION_INVALID";
 const ERROR_MESSAGE = "Worker runtime configuration is invalid";
 
@@ -130,7 +140,7 @@ export type WorkerRuntimeConfiguration = Readonly<{
   releaseTreeSha: string;
   relayerAccount: ReturnType<typeof privateKeyToAccount>;
   relayerPolicy: WorkerRelayerPolicy;
-  safeConsumerAddress: Address;
+  safeConsumerRegistryPath: string;
   replayBundlePath: string;
   replayPreflightReportPath: string;
 }>;
@@ -144,7 +154,17 @@ export type LiveCoston2RuntimeConfig = Readonly<{
   daTimeoutMs: number;
   relayerAccount: ReturnType<typeof privateKeyToAccount>;
   relayerPolicy: WorkerRelayerPolicy;
-  safeConsumerAddress: Address;
+  safeConsumerRegistry: Readonly<{
+    version: "1";
+    kind: "safe-consumer-registry";
+    chainId: 114;
+    entries: readonly Readonly<{
+      templateId: string;
+      revision: 1;
+      manifestSha256: string;
+      consumerAddress: Address;
+    }>[];
+  }>;
 }>;
 
 export type WorkerReplayEvidence = Readonly<{
@@ -152,6 +172,9 @@ export type WorkerReplayEvidence = Readonly<{
   bundleSha256: string;
   preflightReportCanonicalJson: string;
   preflightReportSha256: string;
+  safeConsumerRegistry: LiveCoston2RuntimeConfig["safeConsumerRegistry"];
+  safeConsumerRegistryCanonicalJson: string;
+  safeConsumerRegistrySha256: string;
 }>;
 
 export function parseWorkerRuntimeConfig(
@@ -166,10 +189,14 @@ export function parseWorkerRuntimeConfig(
     const relayerAccount = privateKeyToAccount(
       required(environment, "PROOFLINE_COSTON2_PRIVATE_KEY") as Hex,
     );
-    const safeConsumerAddress = getAddress(
-      required(environment, "PROOFLINE_SAFE_CONSUMER_ADDRESS"),
+    const safeConsumerRegistryPath = required(
+      environment,
+      "PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE",
     );
-    if (safeConsumerAddress.toLowerCase() === ZERO_ADDRESS) {
+    if (
+      !isAbsolute(safeConsumerRegistryPath) ||
+      Object.hasOwn(environment, FORBIDDEN_SAFE_CONSUMER_ADDRESS)
+    ) {
       invalidConfiguration();
     }
     const replayBundlePath = required(
@@ -258,7 +285,7 @@ export function parseWorkerRuntimeConfig(
       releaseTreeSha: identity.releaseTreeSha,
       relayerAccount: Object.freeze(relayerAccount),
       relayerPolicy,
-      safeConsumerAddress,
+      safeConsumerRegistryPath,
       replayBundlePath,
       replayPreflightReportPath,
     });
@@ -268,7 +295,40 @@ export function parseWorkerRuntimeConfig(
   }
 }
 
-async function readBoundedRegularFile(path: string, maximum: number) {
+export async function loadWorkerSafeConsumerRegistry(config: WorkerRuntimeConfiguration) {
+  try {
+    const canonical = await readBoundedRegularFile(
+      config.safeConsumerRegistryPath,
+      SAFE_CONSUMER_REGISTRY_MAX_BYTES,
+      0o400,
+    );
+    const registry = SafeConsumerRegistryV1Schema.parse(JSON.parse(canonical));
+    if (serializeSafeConsumerRegistry(registry) !== canonical) invalidConfiguration();
+    const safeConsumerRegistry = Object.freeze({
+      version: registry.version,
+      kind: registry.kind,
+      chainId: registry.chainId,
+      entries: Object.freeze(registry.entries.map((entry) => Object.freeze({
+        ...entry,
+        consumerAddress: getAddress(entry.consumerAddress),
+      }))),
+    });
+    return Object.freeze({
+      safeConsumerRegistry,
+      safeConsumerRegistryCanonicalJson: canonical,
+      safeConsumerRegistrySha256: sha256(canonical),
+    });
+  } catch (cause) {
+    if (cause instanceof WorkerRuntimeConfigurationError) throw cause;
+    invalidConfiguration();
+  }
+}
+
+async function readBoundedRegularFile(
+  path: string,
+  maximum: number,
+  requiredMode?: number,
+) {
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     handle = await open(
@@ -276,7 +336,12 @@ async function readBoundedRegularFile(path: string, maximum: number) {
       constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     );
     const stat = await handle.stat();
-    if (!stat.isFile() || stat.size < 1 || stat.size > maximum) {
+    if (
+      !stat.isFile() ||
+      (requiredMode !== undefined && (stat.mode & 0o777) !== requiredMode) ||
+      stat.size < 1 ||
+      stat.size > maximum
+    ) {
       invalidConfiguration();
     }
     const bytes = Buffer.alloc(maximum + 1);
@@ -320,6 +385,7 @@ export async function loadWorkerReplayEvidence(
   config: WorkerRuntimeConfiguration,
 ): Promise<WorkerReplayEvidence> {
   try {
+    const registryEvidence = await loadWorkerSafeConsumerRegistry(config);
     const bundleCanonicalJson = await readBoundedRegularFile(
       config.replayBundlePath,
       BUNDLE_MAX_BYTES,
@@ -389,6 +455,7 @@ export async function loadWorkerReplayEvidence(
       bundleSha256: sha256(bundleCanonicalJson),
       preflightReportCanonicalJson,
       preflightReportSha256: sha256(preflightReportCanonicalJson),
+      ...registryEvidence,
     });
   } catch (cause) {
     if (cause instanceof WorkerRuntimeConfigurationError) throw cause;

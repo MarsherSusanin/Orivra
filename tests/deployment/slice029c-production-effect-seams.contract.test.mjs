@@ -256,6 +256,9 @@ test("root-owned systemd oneshot and timer expose only the fixed canary resume e
   assert.match(timer, /^Unit=orivra-production-canary\.service$/m);
   assert.equal(packageJson.scripts?.["production:canary:resume"], "node scripts/resume-production-canary.mjs --state-root /var/lib/orivra/production-canary");
   assert.match(canaryCli, /runProductionCanarySystemdTick/);
+  assert.match(canaryCli, /O_NOFOLLOW/);
+  assert.match(canaryCli, /\blink\s*\(/);
+  assert.doesNotMatch(canaryCli, /\brename\s*\(/);
   assert.doesNotMatch(canaryCli, /status\s*:\s*["']passed|privateKey|secretAccessKey/i);
   assert.match(runbook, /install -o root -g root -m 0644[\s\S]*orivra-production-canary\.(?:service|timer)/i);
 });
@@ -283,6 +286,10 @@ test("root-owned daily Timeweb full backup seals current evidence before authori
   assert.match(cli, /runTimewebProductionDailyBackup/);
   assert.match(cli, /wal-g["',\s]+delete["',\s]+retain["',\s]+FULL["',\s]+8["',\s]+--confirm/);
   assert.doesNotMatch(cli, /console\.(?:log|error)[^\n]*(?:token|key|secret|password)|status\s*:\s*["']passed/i);
+  const evidenceSource = await readFile(resolve(root, "scripts/timeweb-production-backup-evidence.mjs"), "utf8");
+  assert.match(evidenceSource, /\blink\s*\(stage, path\)/);
+  assert.match(evidenceSource, /lstat\(EVIDENCE_ROOT\)/);
+  assert.doesNotMatch(evidenceSource, /\brename\s*\(/);
 
   assert.equal(typeof module.runTimewebProductionDailyBackup, "function");
   const calls = [];
@@ -324,6 +331,8 @@ test("direct-pilot CLI accepts only absolute file-backed authority and invokes t
   assert.equal(typeof module.runTimewebDirectProductionPilotCli, "function");
   assert.match(source, /runTimewebDirectProductionPilot/);
   assert.match(source, /createProductionPilotAdapters/);
+  assert.match(source, /readBoundedPrivateFile/);
+  assert.doesNotMatch(source, /\breadFile\s*\(/);
   assert.doesNotMatch(source, /status\s*:\s*["']passed|privateKey\s*:|secretAccessKey\s*:/i);
   const calls = [];
   const adapterInputs = [];
@@ -394,6 +403,35 @@ test("direct-pilot CLI accepts only absolute file-backed authority and invokes t
   }), /PRODUCTION_PILOT_CLI_INVALID|unknown argument/i);
 });
 
+test("operator authority is read once from bounded no-follow mode-0400 descriptors", async () => {
+  const module = await import("../../scripts/private-file-runtime.mjs");
+  const directory = await mkdtemp(join(tmpdir(), "orivra-private-authority-"));
+  const authority = join(directory, "authority.json");
+  const linkPath = join(directory, "authority-link.json");
+  await writeFile(authority, "{}", { mode: 0o400 });
+  await chmod(authority, 0o400);
+  await symlink(authority, linkPath);
+  try {
+    assert.equal((await module.readBoundedPrivateFile(authority, { maximumBytes: 16 })).toString("utf8"), "{}");
+    await assert.rejects(module.readBoundedPrivateFile(linkPath, { maximumBytes: 16 }), /Private file|ELOOP/);
+    await chmod(authority, 0o600);
+    await assert.rejects(module.readBoundedPrivateFile(authority, { maximumBytes: 16 }), /metadata/);
+    await chmod(authority, 0o400);
+    await assert.rejects(module.readBoundedPrivateFile(authority, { maximumBytes: 1 }), /metadata/);
+  } finally {
+    await chmod(authority, 0o600).catch(() => undefined);
+    await rm(directory, { recursive: true, force: true });
+  }
+  for (const path of [
+    "scripts/timeweb-direct-production-pilot-cli.mjs",
+    "scripts/resume-production-canary.mjs",
+    "scripts/timeweb-production-canary-observation.mjs",
+    "scripts/timeweb-production-host-command.mjs",
+  ]) {
+    assert.match(await readFile(resolve(root, path), "utf8"), /readBoundedPrivateFile/);
+  }
+});
+
 test("systemd resume trusts only the host clock, appends one due checkpoint atomically and cannot promote early", async () => {
   const module = await canaryRuntime();
   assert.equal(typeof module.runProductionCanarySystemdTick, "function");
@@ -404,7 +442,7 @@ test("systemd resume trusts only the host clock, appends one due checkpoint atom
   const deploymentEvidenceBytes = Buffer.from(deploymentText, "utf8");
   const expectedDeploymentEvidenceSha256 = `sha256:${createHash("sha256").update(deploymentEvidenceBytes).digest("hex")}`;
   const cutover = "2026-08-12T03:00:00Z";
-  const checkpoints = [checkpoint("cutover", cutover)];
+  const checkpoints = [checkpoint("cutover", cutover, "2026-08-12T03:00:01Z")];
   assert.deepEqual(contracts.ProductionCanaryCheckpointV2Schema.parse(checkpoints[0]), checkpoints[0]);
   const appended = [];
   const promotions = [];

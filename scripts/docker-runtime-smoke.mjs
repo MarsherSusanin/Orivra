@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { request as httpsRequest } from "node:https";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -231,6 +231,10 @@ async function prepareTemporaryDirectory(temporaryDirectory) {
     await writeFile(path, value, { mode: 0o600 });
     secretPaths[name] = path;
   }
+  const safeConsumerEvidenceRoot = join(temporaryDirectory, "safe-consumer-evidence");
+  const safeConsumerWorkerHandoff = join(temporaryDirectory, "safe-consumer-worker-handoff.json");
+  await mkdir(safeConsumerEvidenceRoot, { mode: 0o700 });
+  await writeFile(safeConsumerWorkerHandoff, "{}", { mode: 0o400 });
   return {
     environment: {
       ...process.env,
@@ -249,8 +253,8 @@ async function prepareTemporaryDirectory(temporaryDirectory) {
       PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
       PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
       PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
-      PROOFLINE_SAFE_CONSUMER_ADDRESS:
-        "0x5555555555555555555555555555555555555555",
+      PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT: safeConsumerEvidenceRoot,
+      PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE: safeConsumerWorkerHandoff,
       PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: secretPaths.workerReplayBundle,
       PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
         secretPaths.workerReplayPreflightReport,

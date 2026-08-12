@@ -39,6 +39,8 @@
     "release:publish": "node scripts/ghcr-publication.mjs",
     "test:action:artifact": "vitest run tests/action-artifact-sync.contract.test.ts --reporter=verbose",
     "compose:production": "node scripts/compose-production.mjs"
+    ,"production:canary:resume": "node scripts/resume-production-canary.mjs --state-root /var/lib/orivra/production-canary"
+    ,"production:backup:daily": "node scripts/run-timeweb-daily-backup.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

@@ -51,6 +51,7 @@ function invalidConfiguration(): never {
 }
 
 function isDeploymentFileVariable(name: string): boolean {
+  if (name === "PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE") return false;
   return (
     (name.startsWith("DATABASE_URL") && name.endsWith("_FILE")) ||
     (name.startsWith("PROOFLINE_") && name.endsWith("_FILE"))
@@ -119,7 +120,7 @@ export async function resolveDeploymentEnvironment(
 
   const resolved: DeploymentEnvironment = { ...environment };
   for (const name of Object.keys(resolved)) {
-    if (name.endsWith("_FILE")) delete resolved[name];
+    if (isDeploymentFileVariable(name)) delete resolved[name];
   }
   for (const name of requiredSecrets) {
     const direct = environment[name];

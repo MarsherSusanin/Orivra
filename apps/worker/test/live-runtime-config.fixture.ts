@@ -4,7 +4,10 @@ import type {
   WorkerReplayEvidence,
 } from "../src/worker-runtime-configuration";
 import { privateKeyToAccount } from "viem/accounts";
-import { testSafeConsumerRegistry } from "./safe-consumer-registry.fixture";
+import {
+  testSafeConsumerRegistry,
+  testSafeConsumerRegistryCanonicalJson,
+} from "./safe-consumer-registry.fixture";
 
 const TEST_PRIVATE_KEY = `0x${"1".repeat(64)}` as const;
 
@@ -60,4 +63,7 @@ export const testReplayEvidence: WorkerReplayEvidence = Object.freeze({
   bundleSha256: `sha256:${"a".repeat(64)}`,
   preflightReportCanonicalJson: '{"version":"1"}',
   preflightReportSha256: `sha256:${"b".repeat(64)}`,
+  safeConsumerRegistry: testSafeConsumerRegistry,
+  safeConsumerRegistryCanonicalJson: testSafeConsumerRegistryCanonicalJson,
+  safeConsumerRegistrySha256: `sha256:${"c".repeat(64)}`,
 });
