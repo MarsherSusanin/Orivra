@@ -215,7 +215,8 @@ test("renders exact production backup services, archive settings and private top
 test("keeps production wrapper fixed and makes backup inseparable from runtime", async () => {
   const wrapper = await source("scripts/compose-production.mjs");
   assert.match(wrapper, /deploy\/compose\.backup\.yaml/);
-  assert.match(wrapper, /validateProductionImageReference\(environment\.PROOFLINE_POSTGRES_IMAGE\)/);
+  assert.match(wrapper, /validateProductionImageReference\(composeEnvironment\.PROOFLINE_POSTGRES_IMAGE\)/);
+  assert.match(wrapper, /bindFixedReplayBootstrapComposeInterpolationEnvironment\(environment\)/);
   assert.match(wrapper, /BACKUP_DATABASE_URL_FILE/);
   assert.match(wrapper, /WRITER_ACCESS_KEY_ID_FILE/);
   assert.match(wrapper, /BACKUP_ENCRYPTION_KEY_FILE/);

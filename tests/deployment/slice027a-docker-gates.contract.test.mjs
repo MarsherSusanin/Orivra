@@ -110,6 +110,7 @@ appendFileSync(${JSON.stringify(log)}, JSON.stringify({
   npmToken: process.env.NPM_TOKEN,
   awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   verifierKey: process.env.PROOFLINE_VERIFIER_API_KEY,
+  replayBootstrapStageRoot: process.env.PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT,
   configJson,
   configMode,
 }) + "\\n");
@@ -346,6 +347,22 @@ test("validates immutable production image references before any Compose effect"
     });
     records = await readJsonLines(fake.log);
     assert.ok(records.at(-1).args.includes("deploy/compose.runtime.yaml"));
+    assert.equal(records.at(-1).replayBootstrapStageRoot, "/opt/orivra/replay-bootstrap-stage");
+
+    const beforeCallerReplayAuthority = records.length;
+    await assert.rejects(productionCompose.runProductionCompose({
+      composeArguments: ["config"],
+      dockerExecutable: fake.executable,
+      environment: {
+        ...baseEnvironment,
+        PROOFLINE_API_IMAGE: `proofline/api@sha256:${digest}`,
+        PROOFLINE_WORKER_IMAGE: `proofline/worker@sha256:${digest}`,
+        PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: "/tmp/caller-selected",
+      },
+      runtime: true,
+    }), /TIMEWEB_HOST_REPLAY_STAGE_INVALID/);
+    records = await readJsonLines(fake.log);
+    assert.equal(records.length, beforeCallerReplayAuthority, "caller replay-stage authority must fail before Docker");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -95,6 +95,13 @@ under the `current` symlink may bypass it. Host firewall setup uses Ubuntu UFW's
 exact `allow 80/tcp` and `allow 443/tcp` grammar after default-deny incoming
 and the SSH source-IP rule, and enables UFW only after all rules succeed.
 
+Every production caller that renders the full runtime Compose model binds the
+same fixed replay-stage interpolation value before invoking Docker. This
+includes the canonical `compose:production -- --runtime` wrapper, host phases,
+pilot and daily backup paths, PITR, live-run and canary observers. Each caller
+rejects an ambient or caller-supplied value before a Docker effect; only the
+owned replay-bootstrap lifecycle may create or consume the fixed directory.
+
 ### One-shot replay bootstrap
 
 Production Compose has nine service definitions: the retained eight plus one

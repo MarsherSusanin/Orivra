@@ -361,3 +361,19 @@ the causal source inventory. The rejected commit was
 was not pushed or installed on the VDS. The mode-0400 Core FAIL report is
 `/private/tmp/orivra-release-62f/verifiers/62f6f9f/core-verifier.md`, SHA-256
 `ea6a14a595dc0d5d74d4edeaa15b3a1a14d7991208190ae588fa1002bcab6c04`.
+
+The follow-up candidate correctly bound both backup callers but independent
+Core review found the canonical `compose:production -- --runtime` wrapper
+still passed its raw environment to Docker. A causal executable probe showed
+that it accepted `/tmp/caller-selected`; with the key absent the whole model
+instead failed its required interpolation. That rejected commit was
+`230e3474b97c901cb71d383133bcf704cbeecc49` / tree
+`3778defee63fad4b70040d51f299eeab43857c91`, received no Product PASS and was
+not pushed or installed. Its mode-0400 Core FAIL report is
+`/private/tmp/orivra-release-230/verifiers/230e347/core-verifier.md`, SHA-256
+`86136f030cf9c0951f8bd781bc5ad8252594ada160b687255f85392f870a89a3`.
+
+The next correction routes that canonical wrapper through the same fixed
+binder, rejects caller/ambient replay authority before Docker, and expands the
+production Compose caller inventory to cover the wrapper alongside host,
+pilot backup, backup evidence, daily backup, PITR, live-run and canary paths.

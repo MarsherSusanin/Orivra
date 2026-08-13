@@ -64,6 +64,7 @@ const runtimeFileVariables = [
 
 async function materializeRuntimeFiles(directory) {
   const result = { ...environment };
+  delete result.PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT;
   const evidenceRoot = join(directory, "safe-consumer-evidence");
   await mkdir(evidenceRoot, { mode: 0o700 });
   result.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT = evidenceRoot;

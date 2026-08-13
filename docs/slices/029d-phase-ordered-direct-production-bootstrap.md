@@ -35,6 +35,9 @@ acceptance or rollback authority.
 - early Compose phases receive the exact host-fixed replay path only to satisfy
   whole-model interpolation; they neither create nor consume it, and ambient
   or caller-selected values remain forbidden;
+- the canonical runtime Compose wrapper and every backup/PITR/live/canary
+  caller apply that same fixed binding before Docker, so no generic operator
+  path can omit or replace the authority;
 - preserve the two public replay template SHAs and replay-keyed consumer
   registry; define exact submission-only Open-Meteo/ETH relayer SHAs for live
   effects and require a strict manifest/consumer-byte alias before RPC;

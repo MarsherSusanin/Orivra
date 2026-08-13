@@ -480,12 +480,13 @@ test("binds the owned replay stage into the real Compose environment without amb
     { runtimeEnvironment: baseEnvironment, stageRoot, createHostPath: true },
   ]) assert.throws(() => module.bindOwnedReplayBootstrapComposeEnvironment(invalid), /TIMEWEB_HOST_REPLAY_STAGE_INVALID/);
 
-  const [hostSource, composeSource, operatorSource, backupEvidenceSource, dailyBackupSource] = await Promise.all([
+  const [hostSource, composeSource, operatorSource, backupEvidenceSource, dailyBackupSource, productionWrapperSource] = await Promise.all([
     readFile(scriptPath, "utf8"),
     readFile(resolve(root, "deploy/compose.runtime.yaml"), "utf8"),
     readFile(resolve(root, "scripts/timeweb-production-pilot-adapters.mjs"), "utf8"),
     readFile(resolve(root, "scripts/timeweb-production-backup-evidence.mjs"), "utf8"),
     readFile(resolve(root, "scripts/run-timeweb-daily-backup.mjs"), "utf8"),
+    readFile(resolve(root, "scripts/compose-production.mjs"), "utf8"),
   ]);
   const composeAdapter = hostSource.slice(hostSource.indexOf("compose: { async runExactPhase"), hostSource.indexOf("evidence: {"));
   assert.match(composeAdapter, /bindOwnedReplayBootstrapComposeEnvironment\s*\(/);
@@ -496,6 +497,24 @@ test("binds the owned replay stage into the real Compose environment without amb
   assert.doesNotMatch(operatorSource, /void\s+PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT/);
   assert.match(backupEvidenceSource, /bindFixedReplayBootstrapComposeInterpolationEnvironment\s*\(environment\)/);
   assert.match(dailyBackupSource, /bindFixedReplayBootstrapComposeInterpolationEnvironment\s*\(/);
+  assert.match(productionWrapperSource, /bindFixedReplayBootstrapComposeInterpolationEnvironment\s*\(environment\)/);
+  assert.match(productionWrapperSource, /env:\s*composeEnvironment/);
+  assert.doesNotMatch(productionWrapperSource, /env:\s*environment/);
+
+  const productionFullModelCallers = [
+    "scripts/compose-production.mjs",
+    "scripts/run-timeweb-daily-backup.mjs",
+    "scripts/timeweb-production-backup-evidence.mjs",
+    "scripts/timeweb-production-canary-observation.mjs",
+    "scripts/timeweb-production-host-command.mjs",
+    "scripts/timeweb-production-live-runs.mjs",
+    "scripts/timeweb-production-pilot-backup.mjs",
+    "scripts/timeweb-production-pitr.mjs",
+  ];
+  for (const path of productionFullModelCallers) {
+    const source = await readFile(resolve(root, path), "utf8");
+    assert.match(source, /bind(?:Fixed|Owned)ReplayBootstrapCompose(?:Interpolation)?Environment\s*\(/, path);
+  }
 });
 
 test("strictly parses and cross-binds the canonical safe-consumer pair into the direct-runtime result envelope", async () => {

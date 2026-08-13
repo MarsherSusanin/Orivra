@@ -7,6 +7,7 @@ import {
   PRODUCTION_BOOTSTRAP_OUTPUTS,
   validateProductionBootstrapPhaseInputs,
 } from "./timeweb-production-bootstrap-runtime.mjs";
+import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPOSITORY_COMPONENT = "[a-z0-9]+(?:[._-][a-z0-9]+)*";
@@ -188,13 +189,16 @@ export async function runProductionCompose({
     argument.startsWith("--file=") || argument.startsWith("-f"))) {
     throw new Error("Production Compose files are fixed by policy");
   }
-  validateProductionImageReference(environment.PROOFLINE_CADDY_IMAGE);
-  validateProductionImageReference(environment.PROOFLINE_WEB_IMAGE);
+  const composeEnvironment = runtime
+    ? bindFixedReplayBootstrapComposeInterpolationEnvironment(environment)
+    : environment;
+  validateProductionImageReference(composeEnvironment.PROOFLINE_CADDY_IMAGE);
+  validateProductionImageReference(composeEnvironment.PROOFLINE_WEB_IMAGE);
   if (runtime) {
-    validateProductionImageReference(environment.PROOFLINE_API_IMAGE);
-    validateProductionImageReference(environment.PROOFLINE_WORKER_IMAGE);
-    if (environment.PROOFLINE_POSTGRES_IMAGE !== undefined) {
-      validateProductionImageReference(environment.PROOFLINE_POSTGRES_IMAGE);
+    validateProductionImageReference(composeEnvironment.PROOFLINE_API_IMAGE);
+    validateProductionImageReference(composeEnvironment.PROOFLINE_WORKER_IMAGE);
+    if (composeEnvironment.PROOFLINE_POSTGRES_IMAGE !== undefined) {
+      validateProductionImageReference(composeEnvironment.PROOFLINE_POSTGRES_IMAGE);
     }
     if (composeArguments.some((argument) => argument === "start" || argument === "restart")) {
       throw new Error("Runtime one-shot jobs require an up deployment and cannot use start or restart");
@@ -203,16 +207,16 @@ export async function runProductionCompose({
       throw new Error("Runtime one-shot jobs require forced recreation during up");
     }
     if (composeArguments.includes("up")) {
-      await validateRuntimeInputFiles(environment, composeArguments);
+      await validateRuntimeInputFiles(composeEnvironment, composeArguments);
       const explicitWorker = composeArguments.includes("worker") && !composeArguments.includes("safe-consumer-deployer");
       await validateSafeConsumerEvidenceLifecycle({
-        evidenceRoot: environment.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT,
-        workerHandoffPath: environment.PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE,
+        evidenceRoot: composeEnvironment.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT,
+        workerHandoffPath: composeEnvironment.PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE,
         phase: explicitWorker ? "before-worker" : "before-deployer",
       });
-      if (environment.PROOFLINE_POSTGRES_IMAGE !== undefined) {
-        parseProductionBackupConfiguration(environment);
-        await validateBackupInputFiles(environment);
+      if (composeEnvironment.PROOFLINE_POSTGRES_IMAGE !== undefined) {
+        parseProductionBackupConfiguration(composeEnvironment);
+        await validateBackupInputFiles(composeEnvironment);
       }
     }
   }
@@ -229,7 +233,7 @@ export async function runProductionCompose({
   const result = spawnSync(dockerExecutable, args, {
     cwd: root,
     encoding: "utf8",
-    env: environment,
+    env: composeEnvironment,
     stdio: "inherit",
   });
   if (result.status !== 0) {
