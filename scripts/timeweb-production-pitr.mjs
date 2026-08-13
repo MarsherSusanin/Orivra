@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { selectRecoveryBackupMetadata } from "./recovery-selected-backup-metadata.mjs";
 import { parseCanonicalBackupEvidence } from "./backup-evidence-validation.mjs";
+import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
 
 const RUN_ID = /^prod_[0-9A-Z]{26}$/;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
@@ -50,7 +51,9 @@ function compose(action, environment = {}, recovery = false) {
   for (const file of FILES) args.push("--file", `${ROOT}/${file}`);
   if (recovery) args.push("--file", `${ROOT}/${RECOVERY_FILE}`);
   args.push("--project-name", PROJECT, ...action);
-  return runDocker(args, 1024 * 1024, environment);
+  const inherited = { ...process.env, ...environment };
+  return runDocker(args, 1024 * 1024,
+    bindFixedReplayBootstrapComposeInterpolationEnvironment(inherited));
 }
 
 function utcSeconds(value) {

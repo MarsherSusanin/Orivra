@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { ProductionCanaryCheckpointV2Schema, ProductionDeploymentEvidenceV2Schema, canonicalSerializeProductionCanaryCheckpointV2, canonicalSerializeProductionDeploymentEvidenceV2 } from "../packages/contracts/src/production-promotion-runtime.mjs";
 import { switchAndObserveProductionWalArchive } from "./timeweb-production-pitr.mjs";
 import { readBoundedPrivateFile } from "./private-file-runtime.mjs";
+import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
 
 const IDS = ["cutover", "post-cutover-15m", "post-cutover-1h", "post-cutover-24h"];
 const PUBLIC_ORIGIN = "https://orivra.xyz";
@@ -51,9 +52,9 @@ function notDue(cause) {
   });
 }
 
-function run(file, args, maximum = 1024 * 1024) {
+function run(file, args, maximum = 1024 * 1024, environment = process.env) {
   return new Promise((resolve, reject) => {
-    const child = spawn(file, args, { env: { ...process.env, PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", LANG: "C", LC_ALL: "C", TZ: "UTC" }, stdio: ["ignore", "pipe", "pipe"], shell: false });
+    const child = spawn(file, args, { env: { ...environment, PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", LANG: "C", LC_ALL: "C", TZ: "UTC" }, stdio: ["ignore", "pipe", "pipe"], shell: false });
     const stdout = []; let size = 0;
     const collect = (chunk) => { size += chunk.length; if (size > maximum) child.kill("SIGKILL"); else stdout.push(chunk); };
     child.stdout.on("data", collect); child.stderr.on("data", (chunk) => { size += chunk.length; if (size > maximum) child.kill("SIGKILL"); }); child.on("error", reject);
@@ -61,7 +62,8 @@ function run(file, args, maximum = 1024 * 1024) {
   });
 }
 
-const compose = (args) => run("/usr/bin/docker", ["compose", "--project-name", "proofline-production-primary", "--file", "/opt/orivra/current/compose.yaml", "--file", "/opt/orivra/current/deploy/compose.runtime.yaml", "--file", "/opt/orivra/current/deploy/compose.backup.yaml", ...args]);
+const compose = (args) => run("/usr/bin/docker", ["compose", "--project-name", "proofline-production-primary", "--file", "/opt/orivra/current/compose.yaml", "--file", "/opt/orivra/current/deploy/compose.runtime.yaml", "--file", "/opt/orivra/current/deploy/compose.backup.yaml", ...args], 1024 * 1024,
+  bindFixedReplayBootstrapComposeInterpolationEnvironment(process.env));
 
 function productionAdapters() {
   return {

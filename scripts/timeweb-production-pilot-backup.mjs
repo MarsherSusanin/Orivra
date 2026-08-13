@@ -5,6 +5,7 @@ import { authorizeBackupRetention } from "./backup-retention-authorization.mjs";
 import { parseCanonicalBackupEvidence, sha256 } from "./backup-evidence-validation.mjs";
 import { createCanonicalTimewebBackupEvidence } from "./timeweb-production-backup-evidence.mjs";
 import { runSelectedTimewebProductionPitr, switchAndObserveProductionWalArchive } from "./timeweb-production-pitr.mjs";
+import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
 
 const ROOT = "/opt/orivra/current";
 const SELECTED = "/opt/orivra/evidence/recovery/backup-evidence.v1.json";
@@ -26,7 +27,9 @@ function compose(args, environment, maximum = 4 * 1024 * 1024) {
     command.push("--project-name", "proofline-production-primary", ...args);
     const child = spawn("/usr/bin/docker", command, {
       cwd: ROOT,
-      env: { ...environment, PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C", TZ: "UTC" },
+      env: bindFixedReplayBootstrapComposeInterpolationEnvironment({
+        ...environment, PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C", TZ: "UTC",
+      }),
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
     });

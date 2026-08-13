@@ -26,6 +26,15 @@ import {
 } from "./timeweb-production-pilot-backup.mjs";
 import { parseCanonicalBackupEvidence } from "./backup-evidence-validation.mjs";
 import { sealProductionReplayArtifacts } from "./timeweb-production-bootstrap-runtime.mjs";
+import {
+  bindFixedReplayBootstrapComposeInterpolationEnvironment,
+  bindOwnedReplayBootstrapComposeEnvironment,
+} from "./timeweb-production-compose-environment.mjs";
+
+export {
+  bindFixedReplayBootstrapComposeInterpolationEnvironment,
+  bindOwnedReplayBootstrapComposeEnvironment,
+} from "./timeweb-production-compose-environment.mjs";
 
 const CURRENT_ROOT = "/opt/orivra/current";
 const SECRET_ROOT = "/opt/orivra/secrets";
@@ -405,6 +414,8 @@ function defaultAdapters() {
           stageRoot: input.stageRoot,
           createHostPath: input.createHostPath,
         });
+      } else {
+        env = bindFixedReplayBootstrapComposeInterpolationEnvironment(env);
       }
       if (input.phase === "safe-consumer-deployer") {
         const runId = env.PROOFLINE_PRODUCTION_RUN_ID;
@@ -582,7 +593,7 @@ function defaultAdapters() {
     },
     observe: {
       async readyzHeartbeat() {
-        const env = await loadRuntimeEnvironment();
+        const env = bindFixedReplayBootstrapComposeInterpolationEnvironment(await loadRuntimeEnvironment());
         const text = await runProcess("/usr/bin/docker", composeArguments(["exec", "-T", "api", "node", "-e", "fetch('http://127.0.0.1:8080/readyz').then(async r=>{process.stdout.write(await r.text());process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]), { environment: env });
         const value = JSON.parse(text);
         if (value?.status !== "ready" || value?.worker?.status !== "current") throw failure("TIMEWEB_HOST_OBSERVATION_INVALID");
@@ -610,7 +621,7 @@ function defaultAdapters() {
     caddy: {
       async inspectCandidate() { return { status: "staged", publicIngress: false }; },
       async activate() {
-        const env = await loadRuntimeEnvironment();
+        const env = bindFixedReplayBootstrapComposeInterpolationEnvironment(await loadRuntimeEnvironment());
         await runProcess("/usr/bin/docker", composeArguments(["up", "--detach", "--no-build", "--pull", "never", "--force-recreate"], ["caddy"]), { environment: env });
         return { status: "passed", publicOrigin: PUBLIC_ORIGIN, activatedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z") };
       },
@@ -626,7 +637,7 @@ function defaultAdapters() {
         };
       },
       async rollbackExact() {
-        const env = await loadRuntimeEnvironment();
+        const env = bindFixedReplayBootstrapComposeInterpolationEnvironment(await loadRuntimeEnvironment());
         await runProcess("/usr/bin/docker", composeArguments(["stop"], ["caddy"]), { environment: env });
         return { status: "passed", publicOrigin: PUBLIC_ORIGIN };
       },
@@ -712,23 +723,6 @@ export async function runOwnedReplayBootstrapStageLifecycle({
     const primary = failure("TIMEWEB_HOST_REPLAY_STAGE_INVALID", "Replay-bootstrap staging lifecycle is invalid", cause);
     if (cleanup.length) throw new AggregateError([primary, ...cleanup], "Replay-bootstrap staging and cleanup failed", { cause: primary });
     throw primary;
-  }
-}
-
-export function bindOwnedReplayBootstrapComposeEnvironment({
-  runtimeEnvironment,
-  stageRoot,
-  createHostPath,
-} = {}) {
-  try {
-    if (!runtimeEnvironment || typeof runtimeEnvironment !== "object" || Array.isArray(runtimeEnvironment) ||
-      Object.hasOwn(runtimeEnvironment, "PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT") ||
-      stageRoot !== REPLAY_STAGE_ROOT || createHostPath !== false) {
-      throw new Error("replay stage authority");
-    }
-    return deepFreeze({ ...runtimeEnvironment, PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: REPLAY_STAGE_ROOT });
-  } catch (cause) {
-    throw failure("TIMEWEB_HOST_REPLAY_STAGE_INVALID", "Replay-bootstrap Compose authority is invalid", cause);
   }
 }
 

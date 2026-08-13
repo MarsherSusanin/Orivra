@@ -175,6 +175,14 @@ rejects an ambient/pre-existing value, validates the exact fixed path and
 Compose. The Compose bind has no default path. The operator envelope cannot
 select or override this host path.
 
+Because Compose interpolates every service before running even an earlier
+single-service phase, the production host also supplies that same fixed path
+as interpolation-only authority to non-replay Compose invocations and nested
+production observers. This does not create the directory or authorize its
+contents. The replay phase remains the only owner that may create and consume
+it. A value inherited from `runtime.env`, the caller or process environment is
+rejected before Compose.
+
 ### Phase-aware input validation and sealing
 
 Compose input validation is phase-aware. Late outputs may be absent only in

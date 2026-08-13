@@ -98,7 +98,10 @@ test("the production live default executes one worker-owned API persistence gate
       "exec", "-T", "worker", "node",
       "/app/apps/worker/dist/production-live-gate.js", "--run-id", PRODUCTION_RUN_ID,
     ],
-    environment: { PATH: "/usr/bin:/bin" },
+    environment: {
+      PATH: "/usr/bin:/bin",
+      PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: "/opt/orivra/replay-bootstrap-stage",
+    },
     timeoutMs: 1_800_000,
   }]);
   assert.doesNotMatch(canonicalJson(commands), /projectToken|privateKey|verifierKey|signature/i);

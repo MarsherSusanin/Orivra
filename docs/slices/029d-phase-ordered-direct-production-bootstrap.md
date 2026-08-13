@@ -32,6 +32,9 @@ acceptance or rollback authority.
 - the host alone owns the fixed mode-0700 UID/GID-1000 replay staging directory,
   rejects pre-existing/symlink paths and cleans only its owned path after
   success or failure;
+- early Compose phases receive the exact host-fixed replay path only to satisfy
+  whole-model interpolation; they neither create nor consume it, and ambient
+  or caller-selected values remain forbidden;
 - preserve the two public replay template SHAs and replay-keyed consumer
   registry; define exact submission-only Open-Meteo/ETH relayer SHAs for live
   effects and require a strict manifest/consumer-byte alias before RPC;

@@ -336,3 +336,17 @@ exact two-file focus is 26/26 PASS; typecheck passes, serialized deployment
 static is 294/294 PASS and Sites is 46/46 PASS. No credential, network, host,
 UFW, Docker, registry or deployment effect was used by this local correction;
 fresh independent verification remains required.
+
+## Real VDS whole-model Compose interpolation correction
+
+The exact accepted host runner reached the VDS with all five immutable images
+present and failed before creating a container, network or volume. A bounded
+`docker compose config --quiet` diagnostic showed that Compose interpolates
+the late replay-bootstrap bind while starting the first `postgres` phase, but
+the production adapter supplied `PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT` only
+inside the later owned replay phase. The correction freezes a separate
+host-only interpolation binding for all other Compose/nested observer
+processes. It is the same fixed path, rejects ambient/caller values and does
+not create or consume the directory; owned creation and no-follow cleanup stay
+exclusive to replay bootstrap. The VDS attempt produced no deployment
+evidence or runtime resources.
