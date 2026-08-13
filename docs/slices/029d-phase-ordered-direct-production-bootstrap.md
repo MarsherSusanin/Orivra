@@ -35,6 +35,10 @@ acceptance or rollback authority.
 - the fixed selected backup handoff is immutable while daily backup-ID records
   remain append-only; the post-activation external browser adapter proves
   desktop/mobile, keyboard, axe, console/network and history restoration;
+- that adapter sends canonical bytes/SHA only through exact host command
+  `append-browser-acceptance`; the host publishes the fixed mode-0400
+  no-replace pair under `/opt/orivra/evidence/browser/`, and its returned SHA
+  binds canary plus deployment evidence;
 - post-activation browser/evidence failure rolls Caddy back before session
   close and cannot publish deployment PASS.
 
@@ -52,6 +56,10 @@ acceptance or rollback authority.
 5. pure/deployment relayer-authority tests reject replay SHA as a live
    submission, raw relayer SHA as replay/registry authority and cross-source
    aliasing before the first RPC effect.
+6. host/browser tests reject caller paths, old root-level browser files,
+   noncanonical bytes, wrong origin or digest before append; post-activation
+   append failure rolls Caddy back before pinned-session close and emits no
+   deployment PASS.
 
 Expected RED is missing `replay-bootstrap` Compose/runtime production and the
 new import-safe bootstrap lifecycle. No credential, Docker, network, server or

@@ -212,7 +212,6 @@ test("produces canonical desktop/mobile browser acceptance only after public act
   const calls = [];
   const result = await module.runProductionHostedBrowserAcceptance({
     activation: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-13T03:00:00Z" },
-    outputPath: outputPaths.browserAcceptanceFile,
     browserAdapter: {
       desktop: async () => { calls.push("desktop"); return { status: "passed" }; },
       mobile: async () => { calls.push("mobile"); return { status: "passed" }; },
@@ -221,20 +220,57 @@ test("produces canonical desktop/mobile browser acceptance only after public act
       consoleAndNetwork: async () => { calls.push("console-network"); return { consoleErrors: 0, networkErrors: 0 }; },
       reloadBackForward: async () => { calls.push("reload-back-forward"); return { status: "passed" }; },
     },
-    appendNoReplace: async ({ path, bytes }) => {
-      calls.push("append-browser");
-      assert.equal(path, outputPaths.browserAcceptanceFile);
+    hostAdapter: { appendBrowserAcceptance: async ({ id, canonicalBytesBase64url, sha256 }) => {
+      calls.push("append-browser-host-command");
+      assert.equal(id, "append-browser-acceptance");
+      const bytes = Buffer.from(canonicalBytesBase64url, "base64url");
+      assert.equal(`sha256:${createHash("sha256").update(bytes).digest("hex")}`, sha256);
       assert.deepEqual(JSON.parse(bytes.toString("utf8")).checks, {
         desktop: "passed", mobile: "passed", keyboard: "passed",
         axeSeriousCritical: 0, consoleErrors: 0, networkErrors: 0,
         reloadBackForward: "passed",
       });
-      return { status: "passed", mode: 0o400, noReplace: true };
-    },
+      return { id, status: "passed", sha256 };
+    } },
   });
-  assert.deepEqual(calls, ["desktop", "mobile", "keyboard", "axe", "console-network", "reload-back-forward", "append-browser"]);
+  assert.deepEqual(calls, ["desktop", "mobile", "keyboard", "axe", "console-network", "reload-back-forward", "append-browser-host-command"]);
   assert.equal(result.status, "passed");
   assert.match(result.sha256, /^sha256:[a-f0-9]{64}$/);
+});
+
+test("binds the host-persisted browser digest into canary and deployment authority", async () => {
+  const module = await runtime();
+  const browserSha256 = `sha256:${"b".repeat(64)}`;
+  const calls = [];
+  const result = await module.runTimewebProductionBootstrapLifecycle({
+    outputPaths,
+    execute: async (phase, authority = {}) => {
+      calls.push([phase, authority.browserAcceptanceSha256]);
+      if (phase === "observe-wal-freshness") return { status: "passed", archivePendingAgeSeconds: 30, switchedWalArchived: true };
+      if (phase === "replay-bootstrap") return { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY };
+      if (phase === "persisted-live-coston2") return { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_RELAYER, ETH_RELAYER] };
+      if (phase === "seal-browser-acceptance") return { id: "append-browser-acceptance", status: "passed", sha256: browserSha256 };
+      if (phase === "append-deployment-evidence") assert.equal(authority.browserAcceptanceSha256, browserSha256);
+      return { status: "passed" };
+    },
+  });
+  assert.equal(result.browserAcceptanceSha256, browserSha256);
+  assert.deepEqual(calls.filter(([phase]) => ["seal-browser-acceptance", "append-deployment-evidence"].includes(phase)), [
+    ["seal-browser-acceptance", undefined],
+    ["append-deployment-evidence", browserSha256],
+  ]);
+});
+
+test("uses one canonical browser artifact pair under the browser evidence directory", async () => {
+  const [canary, pilot] = await Promise.all([
+    readFile(resolve(root, "scripts/timeweb-production-canary-observation.mjs"), "utf8"),
+    readFile(resolve(root, "scripts/timeweb-direct-production-pilot-cli.mjs"), "utf8"),
+  ]);
+  for (const source of [canary, pilot]) {
+    assert.match(source, /\/opt\/orivra\/evidence\/browser\/hosted-browser-acceptance\.v1\.json/);
+    assert.match(source, /\/opt\/orivra\/evidence\/browser\/hosted-browser-acceptance\.v1\.sha256/);
+    assert.doesNotMatch(source, /\/opt\/orivra\/evidence\/hosted-browser-acceptance\.v1/);
+  }
 });
 
 test("allows absent late outputs only for exact early Compose phases and blocks consumers before Docker", async () => {

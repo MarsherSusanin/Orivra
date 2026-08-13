@@ -64,3 +64,22 @@ Serialized deployment static is 249 PASS / 30 intentional RED, all at the
 already frozen missing phase-order or new relayer/alias/schema production
 boundaries. No Docker, network, credential, server, build or production effect
 was run.
+
+## Hosted browser VDS handoff corrective RED
+
+The production-used operator browser adapter now has one bounded handoff:
+after Caddy activation it sends canonical acceptance bytes and their digest to
+the exact allowlisted `append-browser-acceptance` host command. The host alone
+strict-parses and no-replace publishes the mode-0400 JSON/checksum pair under
+`/opt/orivra/evidence/browser/`. Caller paths, noncanonical bytes, wrong origin
+or checksum, generic file writers and the obsolete root-level browser paths are
+rejected. The returned digest—not an in-memory observation—is frozen as canary
+and deployment authority. Any append or subsequent failure rolls Caddy back
+before pinned-session close and produces zero deployment PASS.
+
+On exact clean base `3f1f66924827e4b6df4f04cdebc8ced463a6d0bc` /
+`d19d0f013c363c7357c8803fdabe13e05fc4e5fe`, typecheck and 46 Sites
+controls pass. The browser/host focus is 12 PASS / 18 intentional RED;
+serialized deployment static is 248 PASS / 34 intentional RED. New failures
+are confined to the missing exact host allowlist/append, returned-digest
+authority and canonical browser-directory production surfaces.

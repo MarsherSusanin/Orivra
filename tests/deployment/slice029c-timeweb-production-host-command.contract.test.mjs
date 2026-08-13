@@ -39,6 +39,16 @@ const DEPLOYMENT_PATH = `${EVIDENCE_ROOT}/safe-consumer-deployment-evidence.v1.j
 const WORKER_HANDOFF_PATH = "/opt/orivra/worker-evidence/safe-consumer-registry.v1.json";
 const GHCR_TOKEN_PATH = `${SECRET_ROOT}/ghcr-pull-token`;
 const PUBLIC_ORIGIN = "https://orivra.xyz";
+const BROWSER_ACCEPTANCE_PATH = `${EVIDENCE_ROOT}/browser/hosted-browser-acceptance.v1.json`;
+const BROWSER_ACCEPTANCE_SHA256_PATH = `${EVIDENCE_ROOT}/browser/hosted-browser-acceptance.v1.sha256`;
+const BROWSER_ACCEPTANCE = Object.freeze({
+  version: "1", kind: "hosted-browser-acceptance", status: "passed", publicOrigin: PUBLIC_ORIGIN,
+  checks: {
+    desktop: "passed", mobile: "passed", keyboard: "passed",
+    axeSeriousCritical: 0, consoleErrors: 0, networkErrors: 0,
+    reloadBackForward: "passed",
+  },
+});
 const OPEN_METEO = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
 const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
 const OPEN_METEO_RELAYER = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6";
@@ -170,6 +180,7 @@ const ALLOWED_IDS = [
   "timeweb-pitr-production",
   "persisted-live-coston2",
   "activate-caddy",
+  "append-browser-acceptance",
   "rollback-caddy",
   "append-production-evidence",
   "append-canary-checkpoint",
@@ -570,6 +581,49 @@ test("rolls an exact active Caddy state back through one fixed adapter call with
     encodedCommand: command("rollback-caddy", { publicOrigin: "https://evil.invalid" }),
     adapters: { caddy: { inspectState: async () => state, rollbackExact: async () => { throw new Error("must not run"); } } },
   }), /TIMEWEB_HOST_COMMAND_INVALID|payload/i);
+});
+
+test("appends exact canonical browser acceptance to one fixed private pair with no path authority", async () => {
+  const module = await feature();
+  const canonicalBytes = Buffer.from(canonicalJson(BROWSER_ACCEPTANCE), "utf8");
+  const sha256 = digest(canonicalBytes);
+  const calls = [];
+  const result = await module.runTimewebProductionHostCommand({
+    encodedCommand: command("append-browser-acceptance", {
+      canonicalBytesBase64url: canonicalBytes.toString("base64url"), sha256,
+    }),
+    adapters: { evidence: { appendCanonicalPairNoReplace: async (entry) => {
+      calls.push(entry); return { status: "passed", sha256: entry.sha256 };
+    } } },
+  });
+  assert.deepEqual(calls, [{
+    path: BROWSER_ACCEPTANCE_PATH,
+    checksumPath: BROWSER_ACCEPTANCE_SHA256_PATH,
+    bytes: canonicalBytes,
+    sha256,
+    mode: 0o400,
+    noReplace: true,
+  }]);
+  assert.deepEqual(result, { id: "append-browser-acceptance", status: "passed", sha256 });
+
+  let effects = 0;
+  for (const invalid of [
+    { value: { ...BROWSER_ACCEPTANCE, publicOrigin: "https://evil.invalid" } },
+    { value: BROWSER_ACCEPTANCE, sha256: sha("0") },
+    { value: BROWSER_ACCEPTANCE, pretty: true },
+    { value: BROWSER_ACCEPTANCE, extraPayload: { path: "/tmp/browser.json" } },
+  ]) {
+    const bytes = Buffer.from(invalid.pretty ? JSON.stringify(invalid.value, null, 2) : canonicalJson(invalid.value), "utf8");
+    await assert.rejects(module.runTimewebProductionHostCommand({
+      encodedCommand: command("append-browser-acceptance", {
+        canonicalBytesBase64url: bytes.toString("base64url"),
+        sha256: invalid.sha256 ?? digest(bytes),
+        ...(invalid.extraPayload ?? {}),
+      }),
+      adapters: { evidence: { appendCanonicalPairNoReplace: async () => { effects += 1; } } },
+    }), /TIMEWEB_HOST_(?:COMMAND|EVIDENCE)_INVALID|canonical|browser/i);
+  }
+  assert.equal(effects, 0);
 });
 
 test("appends canonical evidence/checkpoints only to fixed mode-0400 no-replace paths", async () => {

@@ -868,8 +868,13 @@ and records activation before validating any post-effect field. A separate
 external HTTPS probe confirms the origin, and the pinned host executes
 `canary-observe` for the cutover checkpoint using the already-observed exact two
 persisted run IDs/manifests, never unpublished deployment evidence. Browser
-PASS requires canonical pre-cutover browser-acceptance bytes and an independent
-checksum; HTTP fetches are not browser acceptance. Any malformed activation or
+PASS is produced after activation by the real operator browser adapter; HTTP
+fetches are not browser acceptance. It submits canonical bytes plus SHA-256
+only through fixed host command `append-browser-acceptance`, which accepts no
+path and writes the root-private mode-0400 no-replace pair only at
+`/opt/orivra/evidence/browser/hosted-browser-acceptance.v1.json` and adjacent
+`.sha256`. Canary and deployment evidence use the returned checksum; obsolete
+root-level `/opt/orivra/evidence/hosted-*` paths are forbidden. Any malformed activation or
 later failure calls `rollbackCaddy` exactly once and leaves zero deployment
 PASS.
 The real adapter uses the same pinned session for activation and rollback.

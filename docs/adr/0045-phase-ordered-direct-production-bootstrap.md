@@ -134,9 +134,15 @@ bytes or paths in argv, evidence or logs.
 The browser producer is a production-used external browser adapter invoked
 only after recorded Caddy activation. It proves desktop and mobile journeys,
 keyboard operation, zero serious/critical axe findings, zero console/network
-errors and reload/back-forward restoration, then writes one canonical
-mode-0400 no-replace artifact. Any browser or seal failure is post-effect and
-therefore rolls Caddy back before session close.
+errors and reload/back-forward restoration. The operator sends only canonical
+bytes plus their SHA-256 through exact allowlisted host command
+`append-browser-acceptance`; the host strict-parses the fixed schema and writes
+the no-replace root-private mode-0400 pair only at
+`/opt/orivra/evidence/browser/hosted-browser-acceptance.v1.json` and adjacent
+`.sha256`. No generic writer or caller-selected path exists. The returned exact
+SHA is the sole browser authority passed into cutover canary and deployment
+evidence. Any browser, host append or later evidence failure is post-effect and
+therefore rolls Caddy back before the pinned session closes.
 
 ## Consequences
 
