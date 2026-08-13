@@ -29,6 +29,10 @@ async function browserRuntime() {
   return import("../../scripts/timeweb-production-browser-acceptance.mjs").catch(() => ({}));
 }
 
+async function productionRuntime() {
+  return import("../../scripts/digitalocean-production-promotion-runtime.mjs").catch(() => ({}));
+}
+
 test("accepts ADR 0045 and freezes 029D without claiming publication or deployment", async () => {
   const [index, adr, slice, roadmap] = await Promise.all([
     readFile(resolve(root, "docs/adr/README.md"), "utf8"),
@@ -38,7 +42,7 @@ test("accepts ADR 0045 and freezes 029D without claiming publication or deployme
   ]);
   assert.match(index, /0045-phase-ordered-direct-production-bootstrap/);
   assert.match(adr, /Status: Accepted boundary; Author GREEN, independent verification pending/);
-  assert.match(slice, /Status: Author GREEN; independent Core and Product\/Integration verification pending/);
+  assert.match(slice, /Status: Corrective RED after independent Core FAIL on fe18f10/);
   assert.match(roadmap, /361bac3[\s\S]*obsolete undeployable images[\s\S]*must not be published/i);
   assert.doesNotMatch(`${adr}\n${slice}`, /hosted PASS|deployed PASS|production PASS/i);
 });
@@ -56,7 +60,8 @@ test("exports one exact phase grammar and removes late outputs from static prefl
     "seal-backup-evidence", "observe-wal-freshness", "timeweb-pitr", "authorize-retention",
     "replay-bootstrap", "seal-replay-pair", "deep-validate-replay-pair", "start-worker",
     "persisted-live-coston2", "start-web", "start-caddy-candidate", "activate-caddy",
-    "external-browser-acceptance", "seal-browser-acceptance", "append-deployment-evidence",
+    "external-browser-acceptance", "seal-browser-acceptance", "observe-cutover-checkpoint",
+    "append-cutover-checkpoint", "append-deployment-evidence",
   ]);
 });
 
@@ -383,6 +388,92 @@ test("binds the host-persisted browser digest into canary and deployment authori
     ["seal-browser-acceptance", undefined],
     ["append-deployment-evidence", browserSha256],
   ]);
+});
+
+test("records one canonical cutover checkpoint before deployment evidence and resumes from those exact bytes", async () => {
+  const [bootstrap, production, contracts] = await Promise.all([
+    runtime(),
+    productionRuntime(),
+    import("../../packages/contracts/src/production-promotion-runtime.mjs").catch(() => ({})),
+  ]);
+  assert.equal(typeof production.validatePhaseOrderedCutoverCheckpoint, "function");
+  const browserAcceptanceSha256 = `sha256:${"b".repeat(64)}`;
+  const persistedLiveRuns = {
+    status: "persisted",
+    runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"],
+    manifests: [OPEN_RELAYER, ETH_RELAYER],
+  };
+  const checkpoint = {
+    version: "2",
+    kind: "production-canary-checkpoint",
+    id: "cutover",
+    dueAt: "2026-08-13T03:00:00Z",
+    observedAt: "2026-08-13T03:00:01Z",
+    status: "passed",
+    checks: {
+      healthz: { status: "passed" },
+      readyz: { status: "passed" },
+      workerHeartbeat: { status: "current" },
+      objectStore: { status: "passed", backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
+      diskPressure: { status: "passed" },
+      hostedBrowserSmoke: { status: "passed" },
+      liveCoston2: { status: "persisted", runIds: persistedLiveRuns.runIds },
+      clock: { status: "synchronized", source: "production-host", maximumSkewSeconds: 5, observedSkewSeconds: 0 },
+    },
+  };
+  const accepted = production.validatePhaseOrderedCutoverCheckpoint({
+    checkpoint,
+    activation: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: checkpoint.dueAt },
+    browserReceipt: { id: "append-browser-acceptance", status: "passed", sha256: browserAcceptanceSha256 },
+    expectedBrowserAcceptanceSha256: browserAcceptanceSha256,
+    persistedLiveRuns,
+  });
+  assert.deepEqual(accepted, contracts.ProductionCanaryCheckpointV2Schema.parse(checkpoint));
+  assert.equal(
+    contracts.canonicalSerializeProductionCanaryCheckpointV2(accepted),
+    contracts.canonicalSerializeProductionCanaryCheckpointV2(checkpoint),
+  );
+  for (const mutation of [
+    { activation: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-13T02:59:59Z" } },
+    { browserReceipt: { id: "append-browser-acceptance", status: "passed", sha256: `sha256:${"0".repeat(64)}` } },
+    { persistedLiveRuns: { ...persistedLiveRuns, runIds: [persistedLiveRuns.runIds[0]] } },
+    { checkpoint: { ...checkpoint, id: "post-cutover-15m" } },
+    { checkpoint: { ...checkpoint, checks: { ...checkpoint.checks, liveCoston2: { status: "persisted", runIds: [...persistedLiveRuns.runIds].reverse() } } } },
+  ]) assert.throws(() => production.validatePhaseOrderedCutoverCheckpoint({
+    checkpoint,
+    activation: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: checkpoint.dueAt },
+    browserReceipt: { id: "append-browser-acceptance", status: "passed", sha256: browserAcceptanceSha256 },
+    expectedBrowserAcceptanceSha256: browserAcceptanceSha256,
+    persistedLiveRuns,
+    ...mutation,
+  }), /PRODUCTION_CANARY_FAILED|CUTOVER_CHECKPOINT_INVALID/);
+
+  for (const failingPhase of ["observe-cutover-checkpoint", "append-cutover-checkpoint"]) {
+    const calls = [];
+    await assert.rejects(bootstrap.runTimewebProductionBootstrapLifecycle({
+      outputPaths,
+      execute: async (phase) => {
+        calls.push(phase);
+        if (phase === failingPhase) throw new Error(`failed ${phase}`);
+        if (phase === "observe-wal-freshness") return { status: "passed", archivePendingAgeSeconds: 30, switchedWalArchived: true };
+        if (phase === "replay-bootstrap") return { status: "passed", chainId: 114, sourceRunId: persistedLiveRuns.runIds[0], sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY };
+        if (phase === "persisted-live-coston2") return persistedLiveRuns;
+        if (phase === "seal-browser-acceptance") return { id: "append-browser-acceptance", status: "passed", sha256: browserAcceptanceSha256 };
+        if (phase === "observe-cutover-checkpoint") return checkpoint;
+        return { status: "passed" };
+      },
+      rollbackCaddy: async () => calls.push("rollback-caddy"),
+      closeSession: async () => calls.push("close-session"),
+    }), /PRODUCTION_BOOTSTRAP_FAILED/);
+    assert.deepEqual(calls.slice(-2), ["rollback-caddy", "close-session"]);
+    assert.equal(calls.includes("append-deployment-evidence"), false);
+  }
+
+  const source = await readFile(resolve(root, "scripts/digitalocean-production-promotion-runtime.mjs"), "utf8");
+  const phaseOrdered = source.slice(source.indexOf("export async function runTimewebPhaseOrderedProductionPilot"), source.indexOf("export async function resumeTimewebProductionCanary"));
+  assert.match(phaseOrdered, /canary-observe/);
+  assert.match(phaseOrdered, /checkpointStore\.append/);
+  assert.ok(phaseOrdered.indexOf("checkpointStore.append") < phaseOrdered.indexOf("appendProductionEvidence"));
 });
 
 test("uses one canonical browser artifact pair under the browser evidence directory", async () => {

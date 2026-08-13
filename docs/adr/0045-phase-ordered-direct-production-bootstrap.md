@@ -62,7 +62,17 @@ One pinned-session lifecycle executes:
 8. private Web and candidate Caddy;
 9. explicit Caddy activation, real external desktop/mobile/keyboard/axe/
    console/network/reload acceptance, atomic browser evidence seal;
-10. cutover checkpoint and deployment evidence.
+10. strict host cutover observation, canonical no-replace `cutover` checkpoint
+    append, and only then deployment evidence.
+
+The phase-ordered path itself writes the initial checkpoint consumed by the
+15m/1h/24h resume state machine. After browser acceptance is sealed, the still
+open pinned session obtains a typed `canary-observe` result bound to the exact
+activation time, browser receipt and two persisted live run IDs. The result is
+strict-parsed as `ProductionCanaryCheckpointV2`, canonically appended through
+the checkpoint store, and must be the first `cutover` entry later loaded by
+`resumeTimewebProductionCanary`. Observation or append failure occurs before
+deployment evidence, rolls Caddy back, and only then closes the pinned session.
 
 Any failure after activation rolls Caddy back through the still-open pinned
 session before its exact-once close. No deployment PASS is written first.
@@ -140,6 +150,13 @@ seal or validation failure performs the same scoped cleanup; a caller-owned,
 pre-existing, nonempty or symlink path is preserved and blocks before effect.
 No caller-selected staging path exists.
 
+The production Compose adapter derives
+`PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT` only from that owned phase argument. It
+rejects an ambient/pre-existing value, validates the exact fixed path and
+`create_host_path: false`, then supplies the resulting private environment to
+Compose. The Compose bind has no default path. The operator envelope cannot
+select or override this host path.
+
 ### Phase-aware input validation and sealing
 
 Compose input validation is phase-aware. Late outputs may be absent only in
@@ -184,3 +201,8 @@ therefore rolls Caddy back before the pinned session closes.
   `dist/production-replay-bootstrap.js` into the final worker image at
   `/app/apps/worker/dist/production-replay-bootstrap.js`; Compose cannot depend
   on host `dist` bytes or an entry absent from the immutable image.
+- Exact candidate `fe18f10efb22d09347041594d27fec6e4fa6f224` / tree
+  `5925c48cc8b69170ec921fa29953e70b71073ec3` is rejected by the Core report
+  `/private/tmp/orivra-release-fe18/verifiers/fe18f10/core-verifier.md`
+  (SHA-256 `f87c8756624e0bf0db6d1b8890e2668b2e5ff2c22eca63d9b5d1c831645d4ec6`)
+  until both checkpoint publication and fixed stage-to-Compose binding pass.

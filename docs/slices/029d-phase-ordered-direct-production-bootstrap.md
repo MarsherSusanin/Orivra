@@ -1,6 +1,6 @@
 # Slice 029D — Phase-ordered direct-production bootstrap
 
-Status: Author GREEN; independent Core and Product/Integration verification pending
+Status: Corrective RED after independent Core FAIL on fe18f10
 
 Decision: [ADR 0045](../adr/0045-phase-ordered-direct-production-bootstrap.md)
 
@@ -16,7 +16,7 @@ acceptance or rollback authority.
   outputs and never reads them;
 - exact phase order is database/API → consumer seal → first backup/WAL/PITR/
   retention → replay bootstrap/seal → ordinary worker/two live runs → private
-  Web/Caddy → cutover/browser seal → deployment evidence;
+  Web/Caddy → cutover/browser seal → cutover checkpoint → deployment evidence;
 - runtime Compose contains exactly nine definitions with one additional
   hardened one-shot `replay-bootstrap`, not a ninth long-lived service;
 - replay bootstrap is worker-owned, chain 114, manifest-bound, bounded and
@@ -50,6 +50,11 @@ acceptance or rollback authority.
   deployment evidence append; V1 remains unchanged;
 - post-activation browser/evidence failure rolls Caddy back before session
   close and cannot publish deployment PASS.
+- the phase-ordered path observes and canonically appends its real first
+  `cutover` checkpoint before deployment evidence; that exact entry starts the
+  resumable 15m/1h/24h chain;
+- the fixed owned replay stage is bound by the host into the actual Compose
+  environment with no ambient/default/caller path authority;
 - the production-used browser adapter adds only root devDependency
   `playwright-core@1.62.1` through its exact lock graph; protected Sites bytes
   remain unchanged and any additional dependency or lock drift fails closed.
@@ -75,10 +80,9 @@ acceptance or rollback authority.
 7. the worker final image contains the freshly built replay-bootstrap entry at
    the exact Compose command path; host build output is never a runtime input.
 
-The frozen RED was the missing `replay-bootstrap` Compose/runtime production
-and import-safe bootstrap lifecycle. Author implementation now closes every
-causal RED without weakening the contract. No credential, registry, server or
-provider effect is claimed by this author GREEN.
+The prior author GREEN is superseded by corrective RED for the missing initial
+cutover checkpoint and fixed replay-stage Compose binding. No credential,
+registry, server or provider effect is claimed by this correction.
 
 ## Exclusions
 

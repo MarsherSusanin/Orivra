@@ -384,6 +384,41 @@ test("owns the fixed replay-bootstrap staging directory across setup, Compose, s
   }
 });
 
+test("binds the owned replay stage into the real Compose environment without ambient or caller fallback", async () => {
+  const module = await feature();
+  assert.equal(typeof module.bindOwnedReplayBootstrapComposeEnvironment, "function");
+  const stageRoot = "/opt/orivra/replay-bootstrap-stage";
+  const baseEnvironment = { PROOFLINE_PRODUCTION_RUN_ID: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4", PATH: "/usr/bin:/bin" };
+  const bound = module.bindOwnedReplayBootstrapComposeEnvironment({
+    runtimeEnvironment: baseEnvironment,
+    stageRoot,
+    createHostPath: false,
+  });
+  assert.deepEqual(bound, {
+    ...baseEnvironment,
+    PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: stageRoot,
+  });
+  assert.equal(Object.isFrozen(bound), true);
+  for (const invalid of [
+    { runtimeEnvironment: { ...baseEnvironment, PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: stageRoot }, stageRoot, createHostPath: false },
+    { runtimeEnvironment: { ...baseEnvironment, PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: "/tmp/caller" }, stageRoot, createHostPath: false },
+    { runtimeEnvironment: baseEnvironment, stageRoot: "/tmp/caller", createHostPath: false },
+    { runtimeEnvironment: baseEnvironment, stageRoot, createHostPath: true },
+  ]) assert.throws(() => module.bindOwnedReplayBootstrapComposeEnvironment(invalid), /TIMEWEB_HOST_REPLAY_STAGE_INVALID/);
+
+  const [hostSource, composeSource, operatorSource] = await Promise.all([
+    readFile(scriptPath, "utf8"),
+    readFile(resolve(root, "deploy/compose.runtime.yaml"), "utf8"),
+    readFile(resolve(root, "scripts/timeweb-production-pilot-adapters.mjs"), "utf8"),
+  ]);
+  const composeAdapter = hostSource.slice(hostSource.indexOf("compose: { async runExactPhase"), hostSource.indexOf("evidence: {"));
+  assert.match(composeAdapter, /bindOwnedReplayBootstrapComposeEnvironment\s*\(/);
+  assert.match(composeAdapter, /stageRoot/);
+  assert.match(composeSource, /source:\s*\$\{PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:\?PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT is required\}/);
+  assert.doesNotMatch(composeSource, /PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:-/);
+  assert.doesNotMatch(operatorSource, /void\s+PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT/);
+});
+
 test("strictly parses and cross-binds the canonical safe-consumer pair into the direct-runtime result envelope", async () => {
   const module = await feature();
   const states = [

@@ -173,3 +173,29 @@ This is author-local GREEN, not either independent verifier report, not a
 fresh frozen release, and not publication, hosted, deployed, live Coston2,
 Timeweb backup/PITR or security PASS. Scan 8852 remains user-canceled and the
 accepted deferred 027C evidence-integrity risk remains open.
+
+## Core fe18 corrective RED
+
+Independent Core verification rejected exact clean candidate
+`fe18f10efb22d09347041594d27fec6e4fa6f224` / tree
+`5925c48cc8b69170ec921fa29953e70b71073ec3`. Report
+`/private/tmp/orivra-release-fe18/verifiers/fe18f10/core-verifier.md` has
+SHA-256 `f87c8756624e0bf0db6d1b8890e2668b2e5ff2c22eca63d9b5d1c831645d4ec6`.
+
+Two release blockers are intentional RED. The authoritative phase-ordered
+pilot must insert `observe-cutover-checkpoint` then
+`append-cutover-checkpoint` after browser seal and before deployment evidence;
+the canonical `cutover` entry is the initial state consumed by canary resume.
+Either failure rolls Caddy back before session close and leaves zero deployment
+PASS. Separately, the fixed host-owned
+`/opt/orivra/replay-bootstrap-stage` must be the exact environment bind seen by
+Compose. Ambient, default or caller-supplied roots fail before Docker; the
+operator cannot discard or override the owned host authority.
+
+This is tests/docs-only evidence. It makes no hosted, deployment, Timeweb,
+Coston2, registry, Docker or security PASS claim.
+
+Syntax and typecheck pass. The exact two-file focus is 34 retained controls
+PASS / 3 intentional RED: phase grammar and canonical checkpoint handoff for
+the P0, plus the real Compose environment bind for the P1. Serialized
+deployment static is 287 PASS / the same 3 RED. Sites remains 46/46 PASS.
