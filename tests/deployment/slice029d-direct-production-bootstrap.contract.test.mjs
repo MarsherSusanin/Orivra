@@ -116,6 +116,7 @@ test("phase validation fails closed unless each consuming phase has its exact ca
 test("runs backup, WAL freshness, PITR and replay bootstrap before the ordinary worker", async () => {
   const module = await runtime();
   const calls = [];
+  const browserSha256 = `sha256:${"b".repeat(64)}`;
   const result = await module.runTimewebProductionBootstrapLifecycle({
     outputPaths,
     execute: async (phase) => {
@@ -130,6 +131,9 @@ test("runs backup, WAL freshness, PITR and replay bootstrap before the ordinary 
         status: "persisted",
         runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"],
         manifests: [OPEN_RELAYER, ETH_RELAYER],
+      };
+      if (phase === "seal-browser-acceptance") return {
+        id: "append-browser-acceptance", status: "passed", sha256: browserSha256,
       };
       return { status: "passed" };
     },

@@ -100,3 +100,8 @@ return the exact browser host append receipt before they can reach deployment
 append, and extends the retained host-command inventory with the already
 frozen backup, WAL-freshness, PITR, retention and replay-bootstrap commands in
 production phase order. It changes no runtime authority or historical V1 data.
+
+The final fixture-only follow-up also returns that exact receipt from the
+primary backup/replay lifecycle happy path and keeps the retained 029C
+`start-web` / `start-caddy-candidate` / `readyz-real-heartbeat` /
+`timeweb-pitr-production` relative order while inserting the 029D commands.
