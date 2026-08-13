@@ -187,11 +187,11 @@ test("binds QA only to exact loopback HTTPS 443 without random HTTP authority", 
   assert.doesNotMatch(caddy, /target:\s*80|PROOFLINE_QA_HTTP_PORT|PROOFLINE_CADDY_SITE_ADDRESS|:\s*80/);
 });
 
-test("renders one semantic production Compose model with the exact eight-service runtime inventory", () => {
+test("renders one semantic production Compose model with the exact nine-service bootstrap inventory", () => {
   assert.equal(rendered.status, 0, rendered.stderr || "docker compose config must pass");
   assert.deepEqual(
     Object.keys(rendered.model.services ?? {}).sort(),
-    ["api", "caddy", "db-role-bootstrap", "migrator", "postgres", "safe-consumer-deployer", "web", "worker"],
+    ["api", "caddy", "db-role-bootstrap", "migrator", "postgres", "replay-bootstrap", "safe-consumer-deployer", "web", "worker"],
   );
 });
 
@@ -212,7 +212,7 @@ test("activates only Caddy and Web when no runtime profile is requested", () => 
 
 test("promotes the 027B runtime without a hidden Compose profile", () => {
   const services = rendered.model.services ?? {};
-  for (const name of ["caddy", "web", "postgres", "db-role-bootstrap", "migrator", "api", "safe-consumer-deployer", "worker"]) {
+  for (const name of ["caddy", "web", "postgres", "db-role-bootstrap", "migrator", "api", "safe-consumer-deployer", "replay-bootstrap", "worker"]) {
     assert.deepEqual(services[name]?.profiles ?? [], []);
   }
   assert.deepEqual(services.caddy?.depends_on ?? {}, {
@@ -354,6 +354,18 @@ test("runs the safe-consumer deployer once and hands one no-replace evidence roo
   });
   assert.equal(deployer.depends_on?.migrator?.condition, "service_completed_successfully");
   assert.equal(services.worker?.depends_on?.["safe-consumer-deployer"]?.condition, "service_completed_successfully");
+  const replayBootstrap = services["replay-bootstrap"];
+  assert.ok(replayBootstrap, "replay-bootstrap must be an exact one-shot runtime service");
+  assert.deepEqual(replayBootstrap.command, ["node", "/app/apps/worker/dist/production-replay-bootstrap.js"]);
+  assert.equal(replayBootstrap.restart, "no");
+  assert.equal(replayBootstrap.user, "1000:1000");
+  assert.equal(replayBootstrap.read_only, true);
+  assert.equal(replayBootstrap.depends_on?.api?.condition, "service_healthy");
+  assert.equal(replayBootstrap.depends_on?.["safe-consumer-deployer"]?.condition, "service_completed_successfully");
+  assert.equal(services.worker?.depends_on?.["replay-bootstrap"]?.condition, "service_completed_successfully");
+  assert.equal(replayBootstrap.ports, undefined);
+  assert.equal(replayBootstrap.privileged, undefined);
+  assert.equal(replayBootstrap.volumes?.some((volume) => String(volume.source ?? volume).includes("replay-bootstrap-stage")), true);
   const outputMount = (deployer.volumes ?? []).find((mount) =>
     mount.target === "/run/proofline/safe-consumer-stage");
   assert.deepEqual(outputMount, {

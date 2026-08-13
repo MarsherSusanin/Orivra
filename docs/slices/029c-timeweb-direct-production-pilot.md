@@ -1,6 +1,6 @@
 # Slice 029C — Timeweb direct-production pilot
 
-Status: Open-Meteo verifier-compatibility Core and Product PASS on exact `4f421dc` / `1bbbbad`; fresh publication pending
+Status: Historical 029C boundary; active first-start order refined by Slice 029D
 
 Decision: [ADR 0044](../adr/0044-timeweb-direct-production-pilot.md)
 
@@ -42,8 +42,9 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
   `sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898`
   and reject the former `round`-bearing SHA throughout registry, deployment,
   worker selection and persisted-live evidence;
-- extend retained runtime Compose to exactly eight services with one hardened
-  one-shot deployer; give UID 1000 only a dedicated run-scoped staging
+- historically extend retained runtime Compose to eight services with one
+  hardened one-shot deployer; Slice 029D adds the ninth replay-bootstrap
+  definition without changing the long-lived set. Give UID 1000 only a dedicated run-scoped staging
   directory, then have the root host cross-bind and no-replace seal its pair
   into one canonical evidence root
   `root:root` mode 0400, create one SHA-identical worker-owned mode-0400

@@ -95,6 +95,13 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
   Open-Meteo then ETH/USD safe-consumer deployment, an exact canonical worker
   registry, explicit Caddy cutover and append-only trusted-clock checkpoints
   at cutover/15m/1h/24h. Terminal PASS before 86400 seconds is forbidden.
+- ADR 0045 makes the first start phase-aware: backup, replay and hosted-browser
+  evidence are absent no-replace outputs, not static preflight inputs. Private
+  database/API and consumer seal precede first Timeweb backup/WAL/PITR; one
+  bounded worker-image replay-bootstrap one-shot seals canonical replay before
+  the ordinary worker; public browser acceptance follows explicit cutover and
+  remains rollback-bound. Compose has nine service definitions without adding
+  a ninth long-lived service.
 - Application rollback may select only a prior schema-compatible verified
   remote digest from immutable publication/deployment evidence bound to its
   `frozenReleaseManifestSha256`. The frozen manifest supplies schema metadata,

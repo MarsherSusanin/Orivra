@@ -390,6 +390,12 @@ parseable but cannot authorize V2 effects.
 The active Open-Meteo authority uses official-verifier-compatible JQ without
 `round` and canonical manifest SHA `26a1b91f…c898`; every catalog, registry,
 deployment, worker and live-run binding must agree before effects.
+ADR 0045 removes a first-start cycle without weakening those bindings. Static
+preflight reserves absent backup/replay/browser outputs; private database/API,
+consumer seal, first Timeweb backup/WAL/PITR, a bounded replay-bootstrap
+one-shot, ordinary worker/two live runs, Caddy activation and real browser
+acceptance then execute in that order before deployment evidence. Compose has
+nine definitions but retains the same long-lived application set.
 Exact `4c828ea` / `8f2e086` failed both
 independent verifiers because the concrete pinned session closed before
 rollback. The corrective lifecycle is local GREEN: rollback/teardown runs

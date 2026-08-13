@@ -118,6 +118,14 @@ separate append-only records. Fixtures, prepared hosts, pulled images or an
 early/partial checkpoint cannot be described as production PASS. Production
 authors and both stopped-tree verifiers remain distinct.
 
+ADR 0045 refines the active direct-pilot first start. Static preflight cannot
+consume backup, replay or hosted-browser outputs that do not exist yet. One
+bounded worker-image replay-bootstrap one-shot creates the canonical replay
+pair after first Timeweb backup/PITR and before the ordinary worker. Browser
+acceptance is post-cutover and rollback-bound. A verifier must reject any
+generic Compose/file validator that recreates the cycle or bypasses phase
+authority.
+
 Rollback verification must prove that a prior schema-compatible verified
 remote digest is present in immutable publication/deployment evidence bound to
 its `frozenReleaseManifestSha256`. The release manifest provides compatibility

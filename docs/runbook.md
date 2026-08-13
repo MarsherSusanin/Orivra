@@ -821,12 +821,14 @@ then pass its new canonical bytes and checksum together with canonical V2
 production target, exact Timeweb authority bytes/checksum and unexpired V2
 authorization. V2 contains no staging field.
 
-When that blocker is closed, preflight must complete before DNS, host or Docker
-mutation: exact DNS address, pinned SSH host key, read-only GHCR scope, complete
+ADR 0045 supersedes the first-start ordering below. Static preflight completes
+before DNS, host or Docker mutation with exact DNS address, pinned SSH host
+key, read-only GHCR scope, complete
 mode-0400 secret-file inventory without a DigitalOcean API token, exact Timeweb endpoint/region/bucket/path-style
-shared-pilot authority, accepted replay bundle/report, the ordered Open-Meteo/
-ETH manifest pair and live chain-114 configuration. Generic status is not an
-observation. The generated safe-consumer registry is not a preflight input;
+shared-pilot authority, the ordered Open-Meteo/ETH manifest pair and live
+chain-114 configuration. Backup evidence, replay bundle/report and hosted
+browser acceptance are fixed absent/no-replace outputs, never preflight input
+bytes. Generic status is not an observation. The generated safe-consumer registry is not a preflight input;
 its fixed path must be absent and is later published mode 0400/no-replace.
 The Open-Meteo manifest uses JQ
 `.current | {temperatureTenthsCelsius: (.temperature_2m * 10), observedAt: .time}`
@@ -837,10 +839,13 @@ Production maps the five
 publication references exactly to the five `PROOFLINE_*_IMAGE` variables,
 pulls/re-inspects by digest and starts:
 
-`postgres → db-role-bootstrap → migrator → api → safe-consumer-deployer → write-safe-consumer-registry → worker → web → caddy-candidate`.
+`postgres → db-role-bootstrap → migrator → api → safe-consumer-deployer → seal-safe-consumer → first-Timeweb-backup/WAL/PITR/retention → replay-bootstrap → seal/deep-validate-replay → worker → two-persisted-live-runs → web → caddy-candidate → cutover → external-browser-acceptance → deployment-evidence`.
 
-The runtime overlay has exactly eight services: the retained seven plus the
-one-shot `safe-consumer-deployer`. The UID-1000 deployer writes only a fresh
+The runtime model has exactly nine service definitions: the retained eight
+plus one hardened one-shot `replay-bootstrap`; the long-lived set does not
+grow. It uses the worker image after healthy API and safe-consumer deployment,
+writes only a fresh run-scoped replay staging directory, and exits before the
+ordinary worker starts. The UID-1000 consumer deployer writes only a fresh
 run-scoped staging directory and never mounts the root-private canonical root.
 The canonical authority remains
 `PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT=/opt/orivra/evidence`. Before deployer

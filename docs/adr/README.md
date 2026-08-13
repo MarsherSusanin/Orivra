@@ -47,5 +47,6 @@ ADR фиксирует архитектурное решение, которое
 | [0042](0042-byte-preserving-ghcr-publication-and-digitalocean-staging.md) | Explicit GHCR targets, byte-preserving image publication and isolated DigitalOcean staging consume one verified frozen candidate without rebuild or production promotion |
 | [0043](0043-exact-digest-production-promotion-and-canary.md) | Exact publication and staging evidence authorize an isolated production deployment, seven-day canary and schema-compatible evidence-bound rollback |
 | [0044](0044-timeweb-direct-production-pilot.md) | Timeweb shared-pilot S3, exact two-consumer registry and trusted-clock 24-hour acceptance replace active staging/seven-day authority with V2 direct production |
+| [0045](0045-phase-ordered-direct-production-bootstrap.md) | Static authority, first backup, one-shot replay bootstrap, ordinary worker, public browser acceptance and deployment evidence execute in one fail-closed phase order |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

@@ -1,6 +1,6 @@
 # ADR 0044: Timeweb direct-production pilot and resumable 24-hour acceptance
 
-- Status: Accepted boundary; Open-Meteo verifier-compatibility Core and Product PASS on exact 4f421dc / 1bbbbad, fresh publication pending
+- Status: Accepted boundary; first-start ordering refined by ADR 0045
 - Date: 2026-08-12
 - Supersedes active production portions of: ADR 0037, ADR 0042, ADR 0043
 - Retains: all V1 schemas as historical compatibility data types
@@ -107,6 +107,9 @@ Timeweb endpoint, region, path-style and shared-pilot fields. V2 deployment
 evidence records the Timeweb authority checksum and typed PITR observation.
 
 ### Strict typed preflight
+
+ADR 0045 supersedes the first-start aspects of this section: replay, backup and
+browser evidence are later no-replace outputs, not static preflight inputs.
 
 Before provisioning, eight strict observations must pass in fixed order:
 DNS target; expected/observed SSH pin; read-only GHCR; exact file inventory

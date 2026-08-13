@@ -105,7 +105,7 @@ function secretTargets(service) {
 
 const rendered = render();
 
-test("renders exact eight-service runtime without the 027A profile block", () => {
+test("renders exact nine-service bootstrap runtime without the 027A profile block", () => {
   assert.equal(rendered.status, 0, rendered.stderr || "runtime compose config must render");
   assert.deepEqual(Object.keys(rendered.model.services ?? {}).sort(), [
     "api",
@@ -113,6 +113,7 @@ test("renders exact eight-service runtime without the 027A profile block", () =>
     "db-role-bootstrap",
     "migrator",
     "postgres",
+    "replay-bootstrap",
     "safe-consumer-deployer",
     "web",
     "worker",
@@ -129,7 +130,7 @@ test("keeps the independently renderable base limited to Caddy and Web", () => {
   assert.deepEqual(Object.keys(base.model.services ?? {}).sort(), ["caddy", "web"]);
 });
 
-test("orders engine health, migration, safe-consumer deployment and both application processes exactly", () => {
+test("orders engine health, migration, consumer deployment, replay bootstrap and both application processes exactly", () => {
   const services = rendered.model.services ?? {};
   assert.deepEqual(services["db-role-bootstrap"]?.depends_on, {
     postgres: { condition: "service_healthy", required: true },
@@ -146,7 +147,11 @@ test("orders engine health, migration, safe-consumer deployment and both applica
     assert.equal(services[name]?.depends_on?.postgres?.condition, "service_healthy");
   }
   assert.equal(services["safe-consumer-deployer"]?.depends_on?.migrator?.condition, "service_completed_successfully");
-  assert.equal(services.worker?.depends_on?.["safe-consumer-deployer"]?.condition, "service_completed_successfully");
+  assert.deepEqual(services["replay-bootstrap"]?.depends_on, {
+    api: { condition: "service_healthy", required: true },
+    "safe-consumer-deployer": { condition: "service_completed_successfully", required: true },
+  });
+  assert.equal(services.worker?.depends_on?.["replay-bootstrap"]?.condition, "service_completed_successfully");
   assert.deepEqual(services.caddy?.depends_on, {
     api: { condition: "service_healthy", required: true },
     web: { condition: "service_started", required: true },
@@ -204,7 +209,7 @@ test("passes exact nonsecret deployment/tree identity to API and worker only", (
     assert.equal(services[name]?.environment?.PROOFLINE_DEPLOYMENT_ID, environment.PROOFLINE_DEPLOYMENT_ID);
     assert.equal(services[name]?.environment?.PROOFLINE_RELEASE_TREE_SHA, environment.PROOFLINE_RELEASE_TREE_SHA);
   }
-  for (const name of ["caddy", "web", "postgres", "db-role-bootstrap", "migrator", "safe-consumer-deployer"]) {
+  for (const name of ["caddy", "web", "postgres", "db-role-bootstrap", "migrator", "safe-consumer-deployer", "replay-bootstrap"]) {
     assert.equal(services[name]?.environment?.PROOFLINE_DEPLOYMENT_ID, undefined);
   }
 });

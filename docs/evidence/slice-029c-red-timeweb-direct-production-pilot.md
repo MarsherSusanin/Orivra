@@ -623,3 +623,13 @@ halted with no PASS. The durable mode-0400 Core FAIL report has SHA-256
 The corrective wave changes only active documentation and the publisher
 authority test; candidate, verifier reports and all five OCI archives remain
 byte-identical.
+
+## Phase-ordered first-start supersession
+
+ADR 0045 / Slice 029D supersedes the active first-start ordering on exact
+`361bac3091144fd507dc2e2e04acff91d969b385` / tree
+`fe8e7717d0d22af394fc753373402ee41d33d5a2`. Backup, replay and hosted-browser
+files are producer outputs, not static preflight inputs. Until the nine-service
+phase-aware bootstrap reaches GREEN and a newly frozen tree receives two fresh
+verifier PASS reports, the 361bac3 images are obsolete undeployable images and
+must not be published. Historical 029C evidence above remains chronology only.

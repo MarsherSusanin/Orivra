@@ -39,6 +39,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 029A | Local MLP validation and candidate freeze | Complete; Core and Product PASS `fc2f6e0` / `f7cebc6`, candidate SHA-256 `8991e7e4…0cdda` |
 | 029B | Exact-digest production promotion and seven-day canary | Historical V1 retained; active effect path superseded by ADR 0044 |
 | 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Open-Meteo verifier-compatible Core/Product PASS 4f421dc / 1bbbbad; fresh publication pending; no hosted/deployed claim |
+| 029D | Phase-ordered direct-production bootstrap | Intentional RED: 361bac3 images are obsolete undeployable images and must not be published |
 
 ## Completed pre-infrastructure product journey
 
@@ -214,6 +215,12 @@ the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
   029B remains the historical credentialed production promotion and canary
   contract that runs only after 028B. ADR 0044 preserves its V1 data types while
   moving active V2 effect authority to 029C.
+- **029D removes the direct-pilot first-start cycle.** Static preflight reserves
+  backup, replay and browser outputs as absent/no-replace. Private bootstrap,
+  first Timeweb backup/WAL/PITR, one replay-bootstrap job, ordinary worker/two
+  runs, cutover/browser and deployment evidence then execute in fixed order.
+  Exact `361bac3` / `fe8e771` remains publisher-ready only for obsolete
+  undeployable images and must not be published or deployed.
 
   ADR 0044 supersedes the active ADR 0043 production boundary without executing it. The
   current canonical publication evidence SHA-256 is
