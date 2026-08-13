@@ -354,6 +354,15 @@ function composeArguments(action, services = []) {
   return args;
 }
 
+export function createPreservedCurrentNodeArguments(path, arguments_ = []) {
+  if (typeof path !== "string" || !path.startsWith(`${CURRENT_ROOT}/scripts/`) ||
+    !path.endsWith(".mjs") || !Array.isArray(arguments_) ||
+    arguments_.some((value) => typeof value !== "string" || value.includes("\0"))) {
+    throw failure("TIMEWEB_HOST_NODE_ENTRY_INVALID", "Production Node entry is invalid");
+  }
+  return Object.freeze(["--preserve-symlinks-main", path, ...arguments_]);
+}
+
 export async function applyExactTimewebFirewall({ sshSource, publicTcpPorts, runProcess: invoke = runProcess }) {
   if (isIP(sshSource) === 0 || !Array.isArray(publicTcpPorts) ||
     publicTcpPorts.length !== 2 || publicTcpPorts[0] !== 80 || publicTcpPorts[1] !== 443 ||
@@ -583,7 +592,9 @@ function defaultAdapters() {
         const env = await loadRuntimeEnvironment();
         const runId = env.PROOFLINE_PRODUCTION_RUN_ID;
         if (!RUN_ID.test(runId ?? "")) throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID");
-        const text = await runProcess("/usr/bin/node", [`${CURRENT_ROOT}/scripts/timeweb-production-live-runs.mjs`, "--run-id", runId], { environment: env });
+        const text = await runProcess("/usr/bin/node", createPreservedCurrentNodeArguments(
+          `${CURRENT_ROOT}/scripts/timeweb-production-live-runs.mjs`, ["--run-id", runId],
+        ), { environment: env });
         return JSON.parse(text);
       },
     },
@@ -591,7 +602,9 @@ function defaultAdapters() {
       const env = await loadRuntimeEnvironment();
       const runId = env.PROOFLINE_PRODUCTION_RUN_ID;
       if (!RUN_ID.test(runId ?? "")) throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID");
-      const text = await runProcess("/usr/bin/node", [`${CURRENT_ROOT}/scripts/timeweb-production-pitr.mjs`, "--run-id", runId], { environment: env });
+      const text = await runProcess("/usr/bin/node", createPreservedCurrentNodeArguments(
+        `${CURRENT_ROOT}/scripts/timeweb-production-pitr.mjs`, ["--run-id", runId],
+      ), { environment: env });
       return JSON.parse(text);
     } },
     caddy: {
@@ -625,7 +638,9 @@ function defaultAdapters() {
         "--persisted-live-runs-base64url", Buffer.from(canonicalJson(input.persistedLiveRuns), "utf8").toString("base64url"),
         "--browser-acceptance-sha256", input.browserAcceptanceSha256,
       ] : [];
-      const text = await runProcess("/usr/bin/node", [`${CURRENT_ROOT}/scripts/timeweb-production-canary-observation.mjs`, "--id", id, "--due-at", dueAt, ...extra], { environment: env });
+      const text = await runProcess("/usr/bin/node", createPreservedCurrentNodeArguments(
+        `${CURRENT_ROOT}/scripts/timeweb-production-canary-observation.mjs`, ["--id", id, "--due-at", dueAt, ...extra],
+      ), { environment: env });
       return JSON.parse(text);
     } },
   };

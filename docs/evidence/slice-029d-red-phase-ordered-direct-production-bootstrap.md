@@ -316,3 +316,23 @@ PASS envelope only after the sequence succeeds. The exact two-file focus is
 Sites is 46/46 PASS. No credential, network, VDS, Docker, registry or
 deployment effect was performed by this local correction; fresh independent
 verification remains required.
+
+## Core df8 nested symlink-main corrective GREEN
+
+Independent Core verification rejected exact `df8f3b7e0e72a23e7ee5cd361269d211d67c02c6`
+/ tree `7aabccd3db0d47d66cc11b59c0c1cbd10b518e4a`. Its mode-0400
+report is `/private/tmp/orivra-release-df8/verifiers/df8f3b7/core-verifier.md`,
+SHA-256 `4efce6f6d96aac44a34e736d0737b0da7535395bf13cf8b30afeaf4f398ad5f5`.
+The outer host CLI and UFW sequence passed, but three nested CLIs under the same
+`current` symlink—persisted live runs, Timeweb PITR and canary observation—still
+used raw Node argv and silently exited before their file-URL main guards.
+
+One bounded production helper now admits only fixed
+`/opt/orivra/current/scripts/*.mjs` entries and constructs the exact
+`--preserve-symlinks-main` argv. All three nested production spawns use it.
+Real private symlink subprocess fixtures prove each main guard executes and
+rejects invalid arguments instead of returning exit 0 with empty output. The
+exact two-file focus is 26/26 PASS; typecheck passes, serialized deployment
+static is 294/294 PASS and Sites is 46/46 PASS. No credential, network, host,
+UFW, Docker, registry or deployment effect was used by this local correction;
+fresh independent verification remains required.

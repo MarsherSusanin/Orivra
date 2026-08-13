@@ -89,7 +89,9 @@ The production host entry is executed from the fixed
 `/opt/orivra/current` release symlink with Node
 `--preserve-symlinks-main`; every one-shot, canary and pinned-session command
 uses that same argv grammar so the file-URL main guard executes rather than
-silently returning an empty response. Host firewall setup uses Ubuntu UFW's
+silently returning an empty response. The host runner's nested live-run, PITR
+and canary Node CLIs use the same fixed preserved-main helper; no executable
+under the `current` symlink may bypass it. Host firewall setup uses Ubuntu UFW's
 exact `allow 80/tcp` and `allow 443/tcp` grammar after default-deny incoming
 and the SSH source-IP rule, and enables UFW only after all rules succeed.
 

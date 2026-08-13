@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -199,6 +200,17 @@ async function feature() {
   return import(`../../scripts/timeweb-production-host-command.mjs?contract=${Date.now()}-${Math.random()}`).catch(() => ({}));
 }
 
+async function runNode(arguments_) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, arguments_, { stdio: ["ignore", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.once("close", (code) => resolve({ code, stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8") }));
+  });
+}
+
 test("decodes only bounded canonical base64url command JSON into private frozen authority", async () => {
   const module = await feature();
   assert.equal(typeof module.decodeTimewebProductionHostCommand, "function");
@@ -273,6 +285,35 @@ test("applies Ubuntu-compatible exact UFW rules before reporting firewall PASS",
   ]);
   assert.equal(calls.some(([, arguments_]) => arguments_.join(" ") === "allow 80 tcp"), false);
   assert.equal(calls.some(([, arguments_]) => arguments_.join(" ") === "allow 443 tcp"), false);
+});
+
+test("executes every nested current-symlink Node entrypoint with preserved main authority", async (t) => {
+  const module = await feature();
+  assert.equal(typeof module.createPreservedCurrentNodeArguments, "function");
+  const temporary = await mkdtemp(`${tmpdir()}/orivra-nested-main-`);
+  t.after(() => rm(temporary, { recursive: true, force: true }));
+  const current = resolve(temporary, "current");
+  await symlink(root, current, "dir");
+  const cases = [
+    ["scripts/timeweb-production-live-runs.mjs", ["--invalid"]],
+    ["scripts/timeweb-production-pitr.mjs", ["--invalid"]],
+    ["scripts/timeweb-production-canary-observation.mjs", ["--invalid"]],
+  ];
+  for (const [relativePath, arguments_] of cases) {
+    const productionPath = `/opt/orivra/current/${relativePath}`;
+    assert.deepEqual(module.createPreservedCurrentNodeArguments(productionPath, arguments_), [
+      "--preserve-symlinks-main", productionPath, ...arguments_,
+    ]);
+    const symlinkPath = resolve(current, relativePath);
+    const result = await runNode(["--preserve-symlinks-main", symlinkPath, ...arguments_]);
+    assert.notEqual(result.code, 0, relativePath);
+    assert.equal(result.stdout, "", relativePath);
+    assert.notEqual(result.stderr, "", relativePath);
+  }
+  for (const path of [
+    resolve(root, "scripts/timeweb-production-live-runs.mjs"),
+    "/opt/orivra/other/scripts/timeweb-production-pitr.mjs",
+  ]) assert.throws(() => module.createPreservedCurrentNodeArguments(path, []), /TIMEWEB_HOST_NODE_ENTRY_INVALID|Node entry/i);
 });
 
 test("opens one read-only GHCR session, pulls exact five digests and independently inspects the same refs", async () => {

@@ -59,8 +59,9 @@ acceptance or rollback authority.
 - the fixed owned replay stage is bound by the host into the actual Compose
   environment with no ambient/default/caller path authority;
 - every production host command executes the fixed `current` symlink through
-  Node's preserved-main mode, and firewall activation accepts only the exact
-  source-IP SSH plus Ubuntu-compatible Caddy `80/tcp` and `443/tcp` rules;
+  Node's preserved-main mode, including nested live-run, PITR and canary CLIs,
+  and firewall activation accepts only the exact source-IP SSH plus
+  Ubuntu-compatible Caddy `80/tcp` and `443/tcp` rules;
 - the production-used browser adapter adds only root devDependency
   `playwright-core@1.62.1` through its exact lock graph; protected Sites bytes
   remain unchanged and any additional dependency or lock drift fails closed.
