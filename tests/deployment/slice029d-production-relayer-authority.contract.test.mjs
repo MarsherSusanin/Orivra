@@ -61,3 +61,46 @@ test("production sources keep replay-keyed registry and verify live relayer alia
   assert.match(bootstrap, new RegExp(OPEN_REPLAY.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(bootstrap, /verifyProductionRelayerReplayAlias/);
 });
+
+test("resolves both production relayer aliases before the first API or RPC effect", async () => {
+  const module = await import("../../scripts/production-relayer-manifest-authority.mjs").catch(() => ({}));
+  assert.equal(typeof module.resolveProductionLiveManifestAuthorities, "function");
+  const effects = [];
+  const aliases = await module.resolveProductionLiveManifestAuthorities({
+    authorities: [
+      { id: "open-meteo-current-weather", manifestSha256: OPEN_RELAYER, manifest: { submission: { mode: "relayer" } } },
+      { id: "eth-usd", manifestSha256: ETH_RELAYER, manifest: { submission: { mode: "relayer" } } },
+    ],
+    expectedReplayManifestSha256s: [OPEN_REPLAY, ETH_REPLAY],
+    resolveAlias: async ({ relayerManifestSha256, replayManifestSha256 }) => {
+      effects.push(["alias", relayerManifestSha256, replayManifestSha256]);
+      return Object.freeze({ sourceLiveManifestSha256: relayerManifestSha256, replayManifestSha256 });
+    },
+  });
+  assert.deepEqual(effects, [
+    ["alias", OPEN_RELAYER, OPEN_REPLAY],
+    ["alias", ETH_RELAYER, ETH_REPLAY],
+  ]);
+  assert.deepEqual(aliases.map(({ sourceLiveManifestSha256, replayManifestSha256 }) => [
+    sourceLiveManifestSha256,
+    replayManifestSha256,
+  ]), [[OPEN_RELAYER, OPEN_REPLAY], [ETH_RELAYER, ETH_REPLAY]]);
+
+  for (const invalidReplay of [ETH_REPLAY, OPEN_RELAYER]) {
+    let apiOrRpcEffects = 0;
+    await assert.rejects(module.resolveProductionLiveManifestAuthorities({
+      authorities: [
+        { id: "open-meteo-current-weather", manifestSha256: OPEN_RELAYER, manifest: { submission: { mode: "relayer" } } },
+        { id: "eth-usd", manifestSha256: ETH_RELAYER, manifest: { submission: { mode: "relayer" } } },
+      ],
+      expectedReplayManifestSha256s: [invalidReplay, ETH_REPLAY],
+      resolveAlias: async () => { throw new Error("PRODUCTION_RELAYER_MANIFEST_INVALID"); },
+      beginLiveEffects: async () => { apiOrRpcEffects += 1; },
+    }), /PRODUCTION_RELAYER_MANIFEST_INVALID/);
+    assert.equal(apiOrRpcEffects, 0);
+  }
+
+  const source = await readFile(resolve(root, "apps/worker/src/production-live-gate-entry.ts"), "utf8");
+  assert.match(source, /resolveProductionLiveManifestAuthorities\s*\(/);
+  assert.doesNotMatch(source, /^\s*verifyProductionRelayerReplayAlias\s*;\s*$/m);
+});

@@ -87,6 +87,13 @@ persisted run's `/bundle` and `/preflight` bytes. Run ID and manifest SHA match
 across terminal run, bundle, report and staged pair. Ordinary replay file
 loaders and replay handlers are unavailable inside bootstrap.
 
+The bootstrap command repository is run-scoped. Before the API returns the
+submitted bootstrap run ID it has no claim authority; afterwards its only
+claim operation selects that exact run ID in PostgreSQL. It never calls the
+ordinary global `claimNextCommand`, and a foreign queued/expired command cannot
+be leased, renewed, handled or completed by this one-shot. The ordinary worker
+repository contract remains unchanged.
+
 Public catalog/replay identity remains byte-identical:
 
 - Open-Meteo replay: `sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898`;
@@ -115,6 +122,23 @@ the handoff records both `sourceLiveManifestSha256` and
 `replayManifestSha256`. Raw relayer SHA used directly as registry/replay
 authority, arbitrary aliases and cross-source request/consumer mismatches fail
 before RPC/effect.
+
+Both live manifests pass the pure relayer-to-replay alias resolver before the
+live gate reads authority or makes its first SIWE/API/RPC effect; merely
+importing or referencing the resolver is not verification. Replay bootstrap
+parses the actual exported proof bundle and preflight report. The bundle's
+canonical relayer manifest, terminal run ID, report run ID and report
+`canonicalUrl` must bind to the submitted run and canonical manifest URL before
+the first staging write. Invented `{runId, manifestSha256}` projections are not
+handoff authority.
+
+The host owns exactly `/opt/orivra/replay-bootstrap-stage`: it must be absent
+before the phase, is created as a non-symlink UID/GID 1000 mode-0700 directory,
+and is passed to Compose with `create_host_path: false`. Seal/deep validation
+removes only that owned directory using no-follow cleanup. Setup, Compose,
+seal or validation failure performs the same scoped cleanup; a caller-owned,
+pre-existing, nonempty or symlink path is preserved and blocks before effect.
+No caller-selected staging path exists.
 
 ### Phase-aware input validation and sealing
 
@@ -155,3 +179,7 @@ therefore rolls Caddy back before the pinned session closes.
   two stopped-tree PASS reports before any fresh GHCR publication.
 - Existing 029C publication readiness is explicitly revoked; no provider,
   registry, VDS, Timeweb or live effect is authorized by this RED.
+- The worker build must copy its freshly built
+  `dist/production-replay-bootstrap.js` into the final worker image at
+  `/app/apps/worker/dist/production-replay-bootstrap.js`; Compose cannot depend
+  on host `dist` bytes or an entry absent from the immutable image.

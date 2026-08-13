@@ -211,6 +211,115 @@ test("replay bootstrap uses only the live worker plus persisted API path and exp
   });
 });
 
+test("cross-binds the actual exported bundle and preflight before staging", async () => {
+  const module = await workerBootstrapRuntime();
+  assert.equal(typeof module.validateAndStageProductionReplayBootstrapArtifacts, "function");
+  const runId = "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4";
+  const relayerManifest = {
+    version: "1",
+    request: { url: "https://api.open-meteo.com/v1/forecast?current=temperature_2m" },
+    consumer: { selector: ".current.temperature_2m" },
+    submission: { mode: "relayer" },
+  };
+  const canonicalUrl = relayerManifest.request.url;
+  const validBundle = { version: "1", kind: "proof-bundle", runId, manifest: relayerManifest };
+  const validReport = { version: "1", kind: "preflight-report", runId, canonicalUrl };
+  const bundleBytes = Buffer.from(JSON.stringify(validBundle), "utf8");
+  const reportBytes = Buffer.from(JSON.stringify(validReport), "utf8");
+  const staged = [];
+  const base = {
+    sourceRun: { runId, stage: "completed", proofVerified: true, manifestSha256: OPEN_RELAYER },
+    relayerManifest,
+    relayerManifestSha256: OPEN_RELAYER,
+    replayManifestSha256: OPEN_REPLAY,
+    bundleBytes,
+    reportBytes,
+    parseBundle: (bytes) => JSON.parse(bytes.toString("utf8")),
+    parseReport: (bytes) => JSON.parse(bytes.toString("utf8")),
+    verifyAlias: () => ({ sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY }),
+    stageCanonicalPair: async (value) => { staged.push(value); return { status: "staged" }; },
+  };
+  await module.validateAndStageProductionReplayBootstrapArtifacts(base);
+  assert.equal(staged.length, 1);
+  assert.equal(staged[0].runId, runId);
+  assert.equal(staged[0].bundleBytes, bundleBytes);
+  assert.equal(staged[0].reportBytes, reportBytes);
+
+  const invalid = [
+    { bundleBytes: Buffer.from(JSON.stringify({ ...validBundle, manifest: { ...relayerManifest, consumer: { selector: ".evil" } } })) },
+    { reportBytes: Buffer.from(JSON.stringify({ ...validReport, runId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5" })) },
+    { reportBytes: Buffer.from(JSON.stringify({ ...validReport, canonicalUrl: "https://example.invalid/" })) },
+  ];
+  for (const mutation of invalid) {
+    staged.length = 0;
+    await assert.rejects(module.validateAndStageProductionReplayBootstrapArtifacts({ ...base, ...mutation }), /PRODUCTION_REPLAY_BOOTSTRAP_INVALID/);
+    assert.equal(staged.length, 0);
+  }
+
+  const source = await readFile(resolve(root, "apps/worker/src/production-replay-bootstrap.ts"), "utf8");
+  assert.match(source, /validateAndStageProductionReplayBootstrapArtifacts\s*\(/);
+  assert.match(source, /bundle\.manifest/);
+  assert.match(source, /report\.runId/);
+  assert.match(source, /report\.canonicalUrl/);
+  assert.doesNotMatch(source, /rawRelayerBundle:\s*\{\s*runId:\s*bundle\.runId,\s*manifestSha256:\s*OPEN_METEO_RELAYER\s*\}/);
+});
+
+test("leases only the submitted bootstrap run and never a foreign queued command", async () => {
+  const module = await workerBootstrapRuntime();
+  assert.equal(typeof module.createRunScopedReplayBootstrapRepository, "function");
+  const activeRunId = "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4";
+  const foreignRunId = "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5";
+  const calls = [];
+  const scoped = module.createRunScopedReplayBootstrapRepository({
+    repository: {
+      claimNextCommand: async () => {
+        calls.push(["global-claim"]);
+        return { claimToken: "foreign", command: { id: "foreign", runId: foreignRunId } };
+      },
+      claimNextCommandForRun: async (runId) => {
+        calls.push(["run-claim", runId]);
+        return { claimToken: "active", command: { id: "active", runId } };
+      },
+    },
+  });
+  await assert.rejects(scoped.claimNextCommand(), /PRODUCTION_REPLAY_BOOTSTRAP_RUN_SCOPE_INVALID/);
+  assert.deepEqual(calls, []);
+  scoped.activateRun(activeRunId);
+  assert.deepEqual(await scoped.claimNextCommand(), {
+    claimToken: "active",
+    command: { id: "active", runId: activeRunId },
+  });
+  assert.deepEqual(calls, [["run-claim", activeRunId]]);
+  assert.equal(calls.some(([kind]) => kind === "global-claim"), false);
+
+  const mismatched = module.createRunScopedReplayBootstrapRepository({
+    repository: {
+      claimNextCommandForRun: async () => ({ claimToken: "foreign", command: { id: "foreign", runId: foreignRunId } }),
+    },
+  });
+  mismatched.activateRun(activeRunId);
+  await assert.rejects(mismatched.claimNextCommand(), /PRODUCTION_REPLAY_BOOTSTRAP_RUN_SCOPE_INVALID/);
+
+  const [bootstrapSource, entrySource] = await Promise.all([
+    readFile(resolve(root, "apps/worker/src/bootstrap.ts"), "utf8"),
+    readFile(resolve(root, "apps/worker/src/production-replay-bootstrap.ts"), "utf8"),
+  ]);
+  assert.match(bootstrapSource, /createRunScopedReplayBootstrapRepository\s*\(/);
+  assert.match(entrySource, /activateRun\s*\(\s*submittedRunId\s*\)/);
+});
+
+test("copies the freshly built replay bootstrap entry into the final worker image", async () => {
+  const [dockerfile, workerPackage] = await Promise.all([
+    readFile(resolve(root, "docker/Dockerfile"), "utf8"),
+    readFile(resolve(root, "apps/worker/package.json"), "utf8"),
+  ]);
+  const packageJson = JSON.parse(workerPackage);
+  assert.match(packageJson.scripts.build, /build:production-replay-bootstrap/);
+  assert.match(packageJson.scripts["build:production-replay-bootstrap"], /src\/production-replay-bootstrap\.ts[\s\S]*dist\/production-replay-bootstrap\.js/);
+  assert.match(dockerfile, /COPY --from=build --chown=node:node \/workspace\/apps\/worker\/dist\/production-replay-bootstrap\.js \/app\/apps\/worker\/dist\/production-replay-bootstrap\.js/);
+  assert.doesNotMatch(dockerfile, /COPY\s+(?:\.\/)?(?:dist|apps\/worker\/dist)\/production-replay-bootstrap\.js/);
+});
+
 test("produces canonical desktop/mobile browser acceptance only after public activation", async () => {
   const module = await browserRuntime();
   const calls = [];

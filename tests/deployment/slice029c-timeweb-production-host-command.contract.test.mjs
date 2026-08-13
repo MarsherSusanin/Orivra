@@ -326,6 +326,64 @@ test("maps fixed database-first Compose phases without public Caddy cutover or c
   }), /TIMEWEB_HOST_COMMAND_INVALID|services/i);
 });
 
+test("owns the fixed replay-bootstrap staging directory across setup, Compose, seal and cleanup", async () => {
+  const module = await feature();
+  assert.equal(typeof module.runOwnedReplayBootstrapStageLifecycle, "function");
+  const stageRoot = "/opt/orivra/replay-bootstrap-stage";
+  const events = [];
+  const result = await module.runOwnedReplayBootstrapStageLifecycle({
+    inspectStage: async (path) => { events.push(["inspect", path]); return "absent"; },
+    createStage: async (input) => { events.push(["create", input]); return { status: "created" }; },
+    runCompose: async (input) => { events.push(["compose", input]); return { status: "passed" }; },
+    sealPair: async (input) => { events.push(["seal", input]); return { status: "passed" }; },
+    deepValidatePair: async () => { events.push(["deep-validate"]); return { status: "passed" }; },
+    removeOwnedStage: async (input) => { events.push(["remove", input]); return { status: "passed" }; },
+  });
+  assert.deepEqual(result, { status: "passed" });
+  assert.deepEqual(events, [
+    ["inspect", stageRoot],
+    ["create", { path: stageRoot, type: "directory", mode: 0o700, uid: 1000, gid: 1000, noFollow: true, noReplace: true }],
+    ["compose", { stageRoot, createHostPath: false }],
+    ["seal", { stageRoot }],
+    ["deep-validate"],
+    ["remove", { path: stageRoot, noFollow: true, ownedOnly: true }],
+  ]);
+
+  for (const failingPhase of ["create", "compose", "seal", "deep-validate"]) {
+    const failureEvents = [];
+    await assert.rejects(module.runOwnedReplayBootstrapStageLifecycle({
+      inspectStage: async () => "absent",
+      createStage: async () => {
+        failureEvents.push("create");
+        if (failingPhase === "create") throw new Error("create failed");
+        return { status: "created" };
+      },
+      runCompose: async () => { failureEvents.push("compose"); if (failingPhase === "compose") throw new Error("compose failed"); return { status: "passed" }; },
+      sealPair: async () => { failureEvents.push("seal"); if (failingPhase === "seal") throw new Error("seal failed"); return { status: "passed" }; },
+      deepValidatePair: async () => { failureEvents.push("deep-validate"); if (failingPhase === "deep-validate") throw new Error("deep validation failed"); return { status: "passed" }; },
+      removeOwnedStage: async ({ path, noFollow, ownedOnly }) => { failureEvents.push(["remove", path, noFollow, ownedOnly]); return { status: "passed" }; },
+    }), /TIMEWEB_HOST_REPLAY_STAGE_INVALID|failed/);
+    if (failingPhase === "create") assert.equal(failureEvents.some(Array.isArray), false);
+    else assert.deepEqual(failureEvents.at(-1), ["remove", stageRoot, true, true]);
+  }
+
+  for (const existing of [
+    { type: "directory", mode: 0o700, uid: 1000, gid: 1000, empty: true },
+    { type: "symlink", target: "/tmp/caller-owned" },
+    { type: "directory", mode: 0o700, uid: 0, gid: 0, empty: false },
+  ]) {
+    let effects = 0;
+    await assert.rejects(module.runOwnedReplayBootstrapStageLifecycle({
+      inspectStage: async () => existing,
+      createStage: async () => { effects += 1; },
+      runCompose: async () => { effects += 1; },
+      sealPair: async () => { effects += 1; },
+      removeOwnedStage: async () => { effects += 1; },
+    }), /TIMEWEB_HOST_REPLAY_STAGE_INVALID/);
+    assert.equal(effects, 0);
+  }
+});
+
 test("strictly parses and cross-binds the canonical safe-consumer pair into the direct-runtime result envelope", async () => {
   const module = await feature();
   const states = [

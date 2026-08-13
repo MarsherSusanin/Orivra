@@ -24,6 +24,14 @@ acceptance or rollback authority.
   sole source of cross-bound persisted `/bundle` and `/preflight` bytes, while
   ordinary replay handlers are unavailable; no fixture, test adapter or
   generic worker bypass exists;
+- both live manifest aliases are actually resolved before SIWE/API/RPC; the
+  bootstrap claims only its submitted run, and foreign queued commands remain
+  unavailable to the one-shot;
+- actual bundle manifest/run and preflight run/canonical URL are verified
+  before staging; invented metadata cannot stand in for exported bytes;
+- the host alone owns the fixed mode-0700 UID/GID-1000 replay staging directory,
+  rejects pre-existing/symlink paths and cleans only its owned path after
+  success or failure;
 - preserve the two public replay template SHAs and replay-keyed consumer
   registry; define exact submission-only Open-Meteo/ETH relayer SHAs for live
   effects and require a strict manifest/consumer-byte alias before RPC;
@@ -64,6 +72,8 @@ acceptance or rollback authority.
    noncanonical bytes, wrong origin or digest before append; post-activation
    append failure rolls Caddy back before pinned-session close and emits no
    deployment PASS.
+7. the worker final image contains the freshly built replay-bootstrap entry at
+   the exact Compose command path; host build output is never a runtime input.
 
 Expected RED is missing `replay-bootstrap` Compose/runtime production and the
 new import-safe bootstrap lifecycle. No credential, Docker, network, server or

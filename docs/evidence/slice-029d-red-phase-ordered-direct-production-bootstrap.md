@@ -122,3 +122,20 @@ node and exact lock SHA-256 `2d45697a041b8bbc4c91b76c645cf5749a0f8e9293741c9a980
 Any extra Playwright package or lock drift remains a failure. The isolated
 guard, typecheck, serialized deployment static (283/283) and Sites (46/46) all
 pass on the active production WIP.
+
+## Replay authority, staging and image corrective RED
+
+On exact tests/docs base `3a41251a3620ad9ed97770af8f03074f76ab4e43` /
+tree `23bb339ea4eec26116423e35da423fcb91484c75`, five causal contracts reject the
+active production WIP without modifying it. The live entry currently references
+the alias verifier without calling it; replay bootstrap substitutes invented
+run/SHA projections for the actual bundle manifest and preflight run/URL; its
+worker repository claims globally; the host never creates or owns the fixed
+replay stage; and the final worker image omits the entry Compose commands.
+
+The exact three-file focus is 33 retained controls PASS / 5 intentional RED.
+The correction requires alias resolution before effects, actual exported-byte
+cross-binding before staging, exact-run PostgreSQL claim authority, no-follow
+UID/GID-1000 owned stage lifecycle, and a fresh build-stage copy into the final
+worker image. No credential, Docker, network, server, build or production
+effect is part of this evidence.
