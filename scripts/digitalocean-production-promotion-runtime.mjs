@@ -278,7 +278,7 @@ const directCommandIds = Object.freeze([
 const directCanaryDefinitions = Object.freeze([
   ["cutover", 0], ["post-cutover-15m", 900], ["post-cutover-1h", 3600], ["post-cutover-24h", 86400],
 ]);
-const openMeteoSha = "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8";
+const openMeteoSha = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
 const ethUsdSha = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
 
 function parseBrowserAcceptance(bytes, expectedSha256, publicOrigin) {

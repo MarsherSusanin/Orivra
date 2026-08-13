@@ -1,6 +1,6 @@
 # Slice 029C — Timeweb direct-production pilot
 
-Status: Open-Meteo verifier-compatibility RED on exact `0c8bc13` / `01d8497`
+Status: Open-Meteo verifier-compatibility production-author GREEN; exact-tree Core and Product verification pending
 
 Decision: [ADR 0044](../adr/0044-timeweb-direct-production-pilot.md)
 

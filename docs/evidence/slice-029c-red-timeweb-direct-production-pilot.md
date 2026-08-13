@@ -575,3 +575,27 @@ run and passed 1/1 when rerun alone with host process permissions. Sites is
 46/46 PASS and diff-check is clean. No production file, generated artifact,
 dependency, lock, server, credential, Docker resource or external effect was
 changed or used by this RED wave.
+
+## Open-Meteo verifier-compatibility GREEN closure
+
+Production now uses the exact no-`round` Open-Meteo manifest and canonical SHA
+`sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898`
+at every catalog, registry, deployment, worker and live-run authority boundary.
+No historical SHA remains in an active production path.
+
+The production-author matrix is GREEN: typecheck PASS; focused contract,
+domain, worker, API/Web and deployment tests PASS; serialized deployment static
+264/264; contracts/domain coverage 57 files/662 tests at 100% statements,
+branches, functions and lines; backend coverage 92.03% lines/87.08% branches;
+worker coverage 91.39% lines/86.22% branches; Web coverage 92.57% lines/85.91%
+branches with React components 89.28% lines/81.59% branches; real PostgreSQL
+Testcontainers 22 files/163 tests with zero skips; full Vitest 264 files/2559
+tests plus only the configured environment skips; Solidity 30 files/395 tests;
+E2E 3 files/7 tests; Action artifact 1/1; production build and Sites 46/46.
+
+This closure invalidates the earlier frozen release, publication evidence and
+publisher authorization. A new clean release freeze, two independent exact-tree
+PASS reports and fresh GHCR publication are required before any VDS start or
+public Caddy cutover. This is not yet hosted, deployed, live-Coston2 or security
+PASS; scan 8852 remains user-canceled and the accepted deferred 027C integrity
+risk remains open.

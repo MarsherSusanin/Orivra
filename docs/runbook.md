@@ -990,8 +990,9 @@ notes. This inventory records only stable identifiers and storage boundaries.
 | Default branch | `main` |
 | Public origins | `https://orivra.xyz`, `https://www.orivra.xyz` |
 | VDS | `72.56.81.28` |
-| SSH principal | `orivra@72.56.81.28`, key-only; root login and password auth disabled |
-| Accepted admin key | fingerprint `SHA256:6nF05fkgqcs4y3B39eC97znTYlGWQnyE+mqiQJQF388` |
+| SSH principals | `orivra@72.56.81.28` and emergency `root@72.56.81.28`, key-only; password authentication disabled and root is `prohibit-password` |
+| Accepted admin key | fingerprint `SHA256:Me+fjVR2IR1VTlVyQd5Gko4oikR7QIhNt4Kx/8oIFi0` |
+| VDS SSH host key | Ed25519 fingerprint `SHA256:EXN987qSpCkErUcUPMlz3bCTkQEPkPBNmTJ1UeEIrBg` |
 | Release root | `/opt/orivra/releases/<commit>`; `/opt/orivra/current` is the active symlink |
 | Server secret root | `/opt/orivra/secrets`, root-owned mode `0500`; secret files mode `0400` |
 | Evidence root | `/opt/orivra/evidence`, root-owned mode `0700` |
@@ -1000,16 +1001,13 @@ notes. This inventory records only stable identifiers and storage boundaries.
 
 The prepared VDS source is synchronized from GitHub `main` into immutable
 `/opt/orivra/releases/<commit>` directories and selected through the atomic
-`/opt/orivra/current` symlink. The first post-publication checkpoint installed
-exact main commit `69e5567b5c84a4eba97c6d7045d3b427d2e1f5ac`; later docs-only commits must be
-synced with the same archive/hash/symlink procedure before the final start.
-The exact mode-0400 publication-evidence bytes are installed at
-`/opt/orivra/evidence/publication-evidence.v1.json` and have SHA-256
-`1fe40038c67adfab8e21e108371bc47e61450296760e87cf5242d7b94113ea10`.
-The VDS has pulled all five `ghcr.io/marshersusanin/orivra-*` images by their
-publication-authorized immutable digest; no mutable tags are used. Its Docker
-registry config is root-only mode `0600`; the underlying token has only
-`read:packages`. The GHCR write token is never copied to the VDS.
+`/opt/orivra/current` symlink. The earlier prepared release and publication
+evidence were invalidated when the official verifier rejected the historical
+Open-Meteo `round` filter. They are not production authority. Final start must
+use a newly frozen, independently verified and published exact commit; the VDS
+must pull its five publication-authorized immutable digests and never a mutable
+tag. Docker registry config remains root-only mode `0600` with a read-only
+package token. The GHCR write token is never copied to the VDS.
 
 The dedicated Coston2 relayer public address is
 `0xf7726036892E1278a3dDC270098ddf9003cA05eb`; only its private key file is

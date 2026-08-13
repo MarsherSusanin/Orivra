@@ -158,9 +158,10 @@ blockchain-операций.
   authority (`https://s3.twcstorage.ru`, `ru-1`, `orivra-backet`, path-style),
   strict typed preflights and deterministic Open-Meteo/ETH consumer registry.
   A bounded official-verifier probe rejected the old Open-Meteo `round` JQ
-  filter and accepted the exact no-`round` replacement. Current corrective RED
-  binds canonical SHA `26a1b91f…c898` through catalog, registry, deployment,
-  worker and live-run authority; no hosted or production PASS is claimed.
+  filter and accepted the exact no-`round` replacement. The production-author
+  GREEN binds canonical SHA `26a1b91f…c898` through catalog, registry,
+  deployment, worker and live-run authority; exact-tree Core/Product
+  verification is pending and no hosted or production PASS is claimed.
   Explicit Caddy cutover and its canonical checkpoint precede deployment evidence; trusted-clock
   cutover/15m/1h/24h checkpoints are resumable and cannot terminal-PASS early.
   Historical V1 contracts and canonical rollback binding remain parseable but

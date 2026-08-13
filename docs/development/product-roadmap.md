@@ -38,7 +38,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 028B | Byte-preserving GHCR publication and DigitalOcean staging | GHCR publication Complete: Core/Product PASS `e274441` / `907fa93`; five exact remote digests verified; publication evidence SHA-256 `1fe40038…ea10`; isolated DigitalOcean staging pending |
 | 029A | Local MLP validation and candidate freeze | Complete; Core and Product PASS `fc2f6e0` / `f7cebc6`, candidate SHA-256 `8991e7e4…0cdda` |
 | 029B | Exact-digest production promotion and seven-day canary | Historical V1 retained; active effect path superseded by ADR 0044 |
-| 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Corrective production-author GREEN; exact commit + Core/Product verification pending; no hosted/deployed claim |
+| 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Open-Meteo verifier-compatible production-author GREEN; exact commit + Core/Product verification pending; no hosted/deployed claim |
 
 ## Completed pre-infrastructure product journey
 
@@ -191,7 +191,7 @@ the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
   preflights, exact two-consumer registry, schema/readiness/Timeweb-PITR/live
   deployment evidence, explicit Caddy cutover and trusted-clock 0/15m/1h/24h
   checkpoints. A code change returns the plan to focused RED/GREEN and two
-  fresh stopped-tree verifiers. Exact `0c8bc13` / `01d8497` is corrective RED
+  fresh stopped-tree verifiers. Exact `0c8bc13` / `01d8497` is the corrective RED
   because the official verifier rejects the old Open-Meteo `round` filter;
   exact no-`round` SHA `26a1b91f…c898` must propagate through every catalog,
   registry, deployment, worker and persisted-live binding. Earlier candidate

@@ -157,7 +157,7 @@ async function createEnvironment(temporaryDirectory) {
       {
         templateId: "open-meteo-current-weather",
         revision: 1,
-        manifestSha256: "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8",
+        manifestSha256: "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898",
         consumerAddress: "0x1111111111111111111111111111111111111111",
       },
       {
