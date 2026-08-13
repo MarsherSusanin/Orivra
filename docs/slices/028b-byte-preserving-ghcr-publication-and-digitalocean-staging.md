@@ -76,11 +76,11 @@ promotion, or run a canary. 029B owns production promotion/canary after accepted
 - the five frozen 029A OCI archives pass the single-descriptor parser and exact
   manifest-digest revalidation without registry or external network access.
 
-The active publication handoff was refreshed after the Open-Meteo
-verifier-compatibility correction. Exact producer `4f421dc` / tree `1bbbbad`,
-candidate `c34c28a6...`, Core report `179a98bd...` and Product report
-`30d1fc44...` are the only accepted authority for the next real GHCR
-publication. The immediately prior `0813628` / `d00f9ebd...` tuple is rejected
+The active publication handoff was refreshed after the final recovery harness
+verification. Exact producer `9e45513` / tree `6d39b92`, candidate
+`b8dc48ca...`, Core report `c07d0780...` and Product report `dacb9cc3...` are
+the only accepted authority for the next real GHCR publication. The immediately
+prior `4f421dc` / `c34c28a6...` tuple is rejected
 by the executable publisher. This refresh
 does not rebuild or mutate any of the five frozen OCI archives.
 

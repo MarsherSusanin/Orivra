@@ -17,13 +17,18 @@ async function runtime() {
 test("028B binds publication to the current two-verifier release candidate", async () => {
   const source = await readFile(new URL("../../scripts/ghcr-publication.mjs", import.meta.url), "utf8");
   for (const value of [
+    "9e45513339022a91f3269f2145b54166a7bb1046",
+    "6d39b92accefa60cd5b829a0b28a280ee6b98f13",
+    "sha256:b8dc48cab19e341d9c1033ef84f265058320c3f123d25117f06dfbbdcaee6405",
+    "sha256:c07d0780ff0ff7cdcbdc92ab30808c416bf96b7f115b9165e03dc64b7b2f57af",
+    "sha256:dacb9cc30e6e56b6f442d34c2df95743c75ada29c8ef6c313722fba0d676016f",
+  ]) assert.match(source, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const forbidden of [
     "4f421dc297ee0c737a4e744694c6f022d2b94ad6",
     "1bbbbadeee1cbfdedd17a8a4bca35c8524ec535b",
     "sha256:c34c28a64f91f301ef518105d42adce725d02360cbbd7cf8c36d42e9429d5f32",
     "sha256:179a98bd82f09a61960da42f4e824bb3ebd4b92c15ae488c7bd409fb2d60cc87",
     "sha256:30d1fc44bc0721fafd0f9a8975b26b179423f4c5c624bf64806e310f0ffffff8",
-  ]) assert.match(source, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  for (const forbidden of [
     "081362877e6f05a94368c60cc0dc4ea20d338fba",
     "5e661b933aeb53a0fa87c5e7d50ed2659d0a6542",
     "sha256:d00f9ebd20f027bbad54c3f8d946ae3f7e7bb1c6739928aca9c0eb8e65b937fb",
