@@ -350,3 +350,14 @@ processes. It is the same fixed path, rejects ambient/caller values and does
 not create or consume the directory; owned creation and no-follow cleanup stay
 exclusive to replay bootstrap. The VDS attempt produced no deployment
 evidence or runtime resources.
+
+The first corrective candidate was rejected by independent Core review before
+acceptance because two additional full-model callers—the canonical backup
+evidence collector and the daily backup scheduler—still passed raw runtime
+environments. Both are now covered by the same fixed interpolation binder and
+the causal source inventory. The rejected commit was
+`62f6f9f1e52807e0d3ff9ddb67d1dd82ac85ba9d` / tree
+`3bef261495668a5554614fe28ef4dcbe3c9750d3`; it received no Product PASS and
+was not pushed or installed on the VDS. The mode-0400 Core FAIL report is
+`/private/tmp/orivra-release-62f/verifiers/62f6f9f/core-verifier.md`, SHA-256
+`ea6a14a595dc0d5d74d4edeaa15b3a1a14d7991208190ae588fa1002bcab6c04`.

@@ -480,10 +480,12 @@ test("binds the owned replay stage into the real Compose environment without amb
     { runtimeEnvironment: baseEnvironment, stageRoot, createHostPath: true },
   ]) assert.throws(() => module.bindOwnedReplayBootstrapComposeEnvironment(invalid), /TIMEWEB_HOST_REPLAY_STAGE_INVALID/);
 
-  const [hostSource, composeSource, operatorSource] = await Promise.all([
+  const [hostSource, composeSource, operatorSource, backupEvidenceSource, dailyBackupSource] = await Promise.all([
     readFile(scriptPath, "utf8"),
     readFile(resolve(root, "deploy/compose.runtime.yaml"), "utf8"),
     readFile(resolve(root, "scripts/timeweb-production-pilot-adapters.mjs"), "utf8"),
+    readFile(resolve(root, "scripts/timeweb-production-backup-evidence.mjs"), "utf8"),
+    readFile(resolve(root, "scripts/run-timeweb-daily-backup.mjs"), "utf8"),
   ]);
   const composeAdapter = hostSource.slice(hostSource.indexOf("compose: { async runExactPhase"), hostSource.indexOf("evidence: {"));
   assert.match(composeAdapter, /bindOwnedReplayBootstrapComposeEnvironment\s*\(/);
@@ -492,6 +494,8 @@ test("binds the owned replay stage into the real Compose environment without amb
   assert.match(composeSource, /source:\s*\$\{PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:\?PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT is required\}/);
   assert.doesNotMatch(composeSource, /PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:-/);
   assert.doesNotMatch(operatorSource, /void\s+PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT/);
+  assert.match(backupEvidenceSource, /bindFixedReplayBootstrapComposeInterpolationEnvironment\s*\(environment\)/);
+  assert.match(dailyBackupSource, /bindFixedReplayBootstrapComposeInterpolationEnvironment\s*\(/);
 });
 
 test("strictly parses and cross-binds the canonical safe-consumer pair into the direct-runtime result envelope", async () => {

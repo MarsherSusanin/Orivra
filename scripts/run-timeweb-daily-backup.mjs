@@ -7,6 +7,7 @@ import { parseCanonicalBackupEvidence } from "./backup-evidence-validation.mjs";
 import { runTimewebProductionDailyBackup } from "./timeweb-production-daily-backup.mjs";
 import { createCanonicalTimewebBackupEvidence } from "./timeweb-production-backup-evidence.mjs";
 import { switchAndObserveProductionWalArchive } from "./timeweb-production-pitr.mjs";
+import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
 
 const ROOT = "/opt/orivra/current";
 const FILES = ["compose.yaml", "deploy/compose.runtime.yaml", "deploy/compose.backup.yaml"];
@@ -18,7 +19,9 @@ function compose(args, environment = process.env) {
     const command = ["compose"];
     for (const path of FILES) command.push("--file", `${ROOT}/${path}`);
     command.push("--project-name", "proofline-production-primary", ...args);
-    const child = spawn("/usr/bin/docker", command, { cwd: ROOT, env: { ...environment, PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C", TZ: "UTC" }, stdio: ["ignore", "pipe", "pipe"], shell: false });
+    const child = spawn("/usr/bin/docker", command, { cwd: ROOT, env: bindFixedReplayBootstrapComposeInterpolationEnvironment({
+      ...environment, PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C", TZ: "UTC",
+    }), stdio: ["ignore", "pipe", "pipe"], shell: false });
     let size = 0; const output = [];
     const collect = (chunk) => { size += chunk.length; if (size > 4 * 1024 * 1024) child.kill("SIGKILL"); else output.push(chunk); };
     child.stdout.on("data", collect); child.stderr.on("data", (chunk) => { size += chunk.length; if (size > 4 * 1024 * 1024) child.kill("SIGKILL"); });

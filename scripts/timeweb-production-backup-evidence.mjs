@@ -13,6 +13,7 @@ import {
 } from "./backup-evidence-validation.mjs";
 import { collectCiphertextInventory } from "./recovery-inventory.mjs";
 import { selectRecoveryBackupMetadata } from "./recovery-selected-backup-metadata.mjs";
+import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
 
 const ROOT = "/opt/orivra/current";
 const EVIDENCE_ROOT = "/opt/orivra/evidence/recovery/backups";
@@ -35,7 +36,8 @@ function compose(args, environment = process.env) {
   const command = ["compose"];
   for (const entry of FILES) command.push("--file", `${ROOT}/${entry}`);
   command.push("--project-name", "proofline-production-primary", ...args);
-  return run("/usr/bin/docker", command, 4 * 1024 * 1024, environment);
+  return run("/usr/bin/docker", command, 4 * 1024 * 1024,
+    bindFixedReplayBootstrapComposeInterpolationEnvironment(environment));
 }
 
 async function privateBytes(path, maximum = 4096) {
