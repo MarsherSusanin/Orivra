@@ -105,6 +105,7 @@ test("the production live default executes one worker-owned API persistence gate
   assert.match(packageJson.scripts?.["build:production-live-gate"] ?? "",
     /^esbuild src\/production-live-gate-entry\.ts\b[\s\S]*--platform=node\b[\s\S]*--target=node22\b[\s\S]*--outfile=dist\/production-live-gate\.js$/);
   assert.doesNotMatch(packageJson.scripts?.["build:production-live-gate"] ?? "", /NODE_ENV|test-adapter/i);
+  assert.match(dockerfile, /COPY scripts\/production-relayer-manifest-authority\.mjs \.\/scripts\/production-relayer-manifest-authority\.mjs/);
   assert.match(dockerfile, /apps\/worker\/dist\/production-live-gate\.js/);
   const workerSource = await readFile(resolve(root, "apps/worker/src/production-live-gate-runtime.mjs"), "utf8").catch(() => "");
   assert.doesNotMatch(workerSource, /live-runtime|new Pool|DATABASE_URL|privateKey\s*:/);

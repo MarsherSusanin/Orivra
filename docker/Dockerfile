@@ -23,6 +23,7 @@ COPY apps ./apps
 COPY packages ./packages
 COPY contracts ./contracts
 COPY scripts/safe-consumer-registry-deployment-runtime.mjs ./scripts/safe-consumer-registry-deployment-runtime.mjs
+COPY scripts/production-relayer-manifest-authority.mjs ./scripts/production-relayer-manifest-authority.mjs
 RUN npm exec vite -- build
 RUN npm run --workspace @proofline/api build
 RUN npm run --workspace @proofline/api build:import-canonical-url-attack

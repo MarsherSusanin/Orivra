@@ -257,3 +257,13 @@ any new observation or append. A mismatched first due time therefore fails
 before effects. The correction remains Author GREEN pending two fresh
 independent reports on one exact clean tree; it is not a hosted, deployed or
 security PASS.
+
+## Final candidate Docker build correction
+
+The first credential-free freeze of `bf143b9` passed the complete test,
+coverage, PostgreSQL, Solidity, E2E, build, Sites and static inventories, then
+failed closed before candidate publication when the worker-image build could
+not resolve the production relayer-manifest authority imported by the new live
+gate. The Docker build stage now copies that exact checked-in production module
+before compiling the worker entrypoint. No image, registry or server effect was
+accepted from the failed attempt.
