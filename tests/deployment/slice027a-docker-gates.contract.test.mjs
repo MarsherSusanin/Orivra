@@ -568,17 +568,38 @@ test("binds cleanup to one validated project and removes only its temporary reso
   assert.doesNotMatch(smoke, /docker["',\s]+system["',\s]+prune|docker["',\s]+volume["',\s]+prune|rm\s+-rf\s+(?:~|\/)/i);
 });
 
-test("keeps protected Sites and dependency-lock bytes unchanged", async () => {
-  const expected = {
+test("keeps protected Sites bytes unchanged and permits only the frozen 029D browser dependency lock", async () => {
+  const protectedSites = {
     ".openai/hosting.json": "d532abb65cf9ae20634b464d954cb4a08a0de9f3cd3cdf7f9c3ec8948826d947",
     "worker/index.js": "ed70aece7c28dae1af8445b33cc855289fce753e4207cfa43a2aafcd6c42156c",
     "scripts/prepare-sites-build.mjs": "b6a6adaa4fab3234676116dd1c9cb6611275ab9d92dd26f5bf402393e3744bf6",
     "tests/sites-worker.test.mjs": "96af7b48906c6460c793356d7b6952f7d5026dbf5a502bec0d9297ff04201c26",
-    "package-lock.json": "5e5b73de922c84ce1f619b936b1b47160bab0f613f1824cefbbcdabe14912ccc",
   };
-  for (const [path, digest] of Object.entries(expected)) {
+  for (const [path, digest] of Object.entries(protectedSites)) {
     assert.equal(sha256(await readFile(resolve(root, path))), digest, `${path} changed`);
   }
+  const [packageText, lockBytes] = await Promise.all([
+    readFile(resolve(root, "package.json"), "utf8"),
+    readFile(resolve(root, "package-lock.json")),
+  ]);
+  const packageJson = JSON.parse(packageText);
+  const lock = JSON.parse(lockBytes.toString("utf8"));
+  assert.equal(packageJson.devDependencies?.["playwright-core"], "^1.62.1");
+  assert.equal(packageJson.dependencies?.["playwright-core"], undefined);
+  assert.equal(lock.packages?.[""]?.devDependencies?.["playwright-core"], "^1.62.1");
+  assert.deepEqual(Object.keys(lock.packages).filter((path) => /(?:^|\/)playwright(?:-core)?$/.test(path)), [
+    "node_modules/playwright-core",
+  ]);
+  assert.deepEqual(lock.packages["node_modules/playwright-core"], {
+    version: "1.62.1",
+    resolved: "https://registry.npmjs.org/playwright-core/-/playwright-core-1.62.1.tgz",
+    integrity: "sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==",
+    dev: true,
+    license: "Apache-2.0",
+    bin: { "playwright-core": "cli.js" },
+    engines: { node: ">=20" },
+  });
+  assert.equal(sha256(lockBytes), "2d45697a041b8bbc4c91b76c645cf5749a0f8e9293741c9a980ece95dc204896");
 });
 
 test("documents that 027B and 027C gates cannot be fabricated by the 027A smoke", async () => {

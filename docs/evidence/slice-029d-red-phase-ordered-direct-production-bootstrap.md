@@ -114,3 +114,11 @@ and deployment evidence is never appended. On the active production WIP,
 typecheck and syntax pass; the 029D file is 15 control PASS / 1 causal RED,
 serialized deployment static is 281 control PASS / 2 intentional RED (this
 case plus the already frozen host-command expansion), and Sites is 46 PASS.
+
+The retained 027A dependency guard now keeps all four protected Sites files at
+their prior exact hashes while allowing only the production browser adapter's
+root `playwright-core` declaration (`^1.62.1`), exact resolved 1.62.1 package
+node and exact lock SHA-256 `2d45697a041b8bbc4c91b76c645cf5749a0f8e9293741c9a980ece95dc204896`.
+Any extra Playwright package or lock drift remains a failure. The isolated
+guard, typecheck, serialized deployment static (283/283) and Sites (46/46) all
+pass on the active production WIP.

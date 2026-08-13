@@ -42,6 +42,9 @@ acceptance or rollback authority.
   deployment evidence append; V1 remains unchanged;
 - post-activation browser/evidence failure rolls Caddy back before session
   close and cannot publish deployment PASS.
+- the production-used browser adapter adds only root devDependency
+  `playwright-core@1.62.1` through its exact lock graph; protected Sites bytes
+  remain unchanged and any additional dependency or lock drift fails closed.
 
 ## Intentional RED
 
