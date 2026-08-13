@@ -1,6 +1,6 @@
 # ADR 0044: Timeweb direct-production pilot and resumable 24-hour acceptance
 
-- Status: Accepted boundary; Open-Meteo verifier-compatibility production-author GREEN, exact-tree verification pending
+- Status: Accepted boundary; Open-Meteo verifier-compatibility Core and Product PASS on exact 4f421dc / 1bbbbad, fresh publication pending
 - Date: 2026-08-12
 - Supersedes active production portions of: ADR 0037, ADR 0042, ADR 0043
 - Retains: all V1 schemas as historical compatibility data types

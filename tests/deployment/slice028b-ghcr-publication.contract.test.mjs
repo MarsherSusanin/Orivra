@@ -17,11 +17,11 @@ async function runtime() {
 test("028B binds publication to the current two-verifier release candidate", async () => {
   const source = await readFile(new URL("../../scripts/ghcr-publication.mjs", import.meta.url), "utf8");
   for (const value of [
-    "081362877e6f05a94368c60cc0dc4ea20d338fba",
-    "5e661b933aeb53a0fa87c5e7d50ed2659d0a6542",
-    "sha256:d00f9ebd20f027bbad54c3f8d946ae3f7e7bb1c6739928aca9c0eb8e65b937fb",
-    "sha256:67c165798fa4c252313a5e1cc9bb67e5f12bdd7a002d6d3fa985053420dd63a0",
-    "sha256:500b43e5b8001b00d40861d7734e388ea834012698227880df5443532a5a00d1",
+    "4f421dc297ee0c737a4e744694c6f022d2b94ad6",
+    "1bbbbadeee1cbfdedd17a8a4bca35c8524ec535b",
+    "sha256:c34c28a64f91f301ef518105d42adce725d02360cbbd7cf8c36d42e9429d5f32",
+    "sha256:179a98bd82f09a61960da42f4e824bb3ebd4b92c15ae488c7bd409fb2d60cc87",
+    "sha256:30d1fc44bc0721fafd0f9a8975b26b179423f4c5c624bf64806e310f0ffffff8",
   ]) assert.match(source, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.doesNotMatch(source, /fc2f6e0677c64dc4f2ee90a85219bcc9f8c9bfbc|8991e7e49f4570702436c269c8f6bd0af7b8f186997bff2a52e6da22f7a0cdda/);
 });

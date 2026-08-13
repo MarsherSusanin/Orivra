@@ -599,3 +599,16 @@ PASS reports and fresh GHCR publication are required before any VDS start or
 public Caddy cutover. This is not yet hosted, deployed, live-Coston2 or security
 PASS; scan 8852 remains user-canceled and the accepted deferred 027C integrity
 risk remains open.
+
+The new immutable candidate is now frozen on exact commit
+`4f421dc297ee0c737a4e744694c6f022d2b94ad6` / tree
+`1bbbbadeee1cbfdedd17a8a4bca35c8524ec535b`. Candidate SHA-256 is
+`sha256:c34c28a64f91f301ef518105d42adce725d02360cbbd7cf8c36d42e9429d5f32`,
+manifest SHA-256 is `sha256:afaa6c2c81a7fd2539453d3f749627ad7367cf23887d0aea0e7884f42aedba64`
+and receipt SHA-256 is `sha256:dccc1d31a291bf4dec46e730dca315882f7945d80466eb797beaa08f2806749c`.
+Independent Core and Product verifiers both PASS those exact bytes. Their
+mode-0400 report SHA-256 values are respectively
+`sha256:179a98bd82f09a61960da42f4e824bb3ebd4b92c15ae488c7bd409fb2d60cc87`
+and `sha256:30d1fc44bc0721fafd0f9a8975b26b179423f4c5c624bf64806e310f0ffffff8`.
+Fresh byte-preserving GHCR publication remains pending and no deployment claim
+is made by the verifier reports.

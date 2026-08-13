@@ -670,8 +670,12 @@ read-only output for both independent verifiers; do not edit the candidate tree
 or output between their reports.
 
 The current terminal candidate is complete. Core and Product independently
-PASS exact commit `0813628` / tree `5e661b9`; candidate SHA-256 is
-`d00f9ebd20f027bbad54c3f8d946ae3f7e7bb1c6739928aca9c0eb8e65b937fb`.
+PASS exact commit `4f421dc` / tree `1bbbbad`; candidate SHA-256 is
+`c34c28a64f91f301ef518105d42adce725d02360cbbd7cf8c36d42e9429d5f32`.
+The mode-0400 Core report SHA-256 is
+`179a98bd82f09a61960da42f4e824bb3ebd4b92c15ae488c7bd409fb2d60cc87`;
+the Product report SHA-256 is
+`30d1fc44bc0721fafd0f9a8975b26b179423f4c5c624bf64806e310f0ffffff8`.
 
 028B begins only from those immutable candidate bytes and the two exact report
 receipts. Its credentialed preflight requires an explicit canonical mapping
