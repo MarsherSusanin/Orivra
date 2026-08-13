@@ -56,6 +56,13 @@ services:
         target: backup_writer_secret_access_key
       - source: backup_encryption_key
         target: backup_encryption_key
+    volumes:
+      - type: bind
+        source: /etc/ssl/certs/ca-certificates.crt
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - db_internal
       - backup_egress
@@ -97,6 +104,12 @@ services:
         target: backup_encryption_key
     volumes:
       - postgres_data:/var/lib/postgresql/data:ro
+      - type: bind
+        source: /etc/ssl/certs/ca-certificates.crt
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -125,6 +138,12 @@ services:
         target: backup_encryption_key
     volumes:
       - postgres_data:/var/lib/postgresql/data:ro
+      - type: bind
+        source: /etc/ssl/certs/ca-certificates.crt
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - backup_egress
 
@@ -147,6 +166,12 @@ services:
         target: backup_encryption_key
     volumes:
       - postgres_data:/var/lib/postgresql/data:ro
+      - type: bind
+        source: /etc/ssl/certs/ca-certificates.crt
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
       - type: bind
         source: ${PROOFLINE_BACKUP_EVIDENCE_FILE:?PROOFLINE_BACKUP_EVIDENCE_FILE is required}
         target: /run/proofline/backup/evidence.json

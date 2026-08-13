@@ -199,7 +199,10 @@ test("adds exact file-only backup secrets without exposing values or arbitrary f
 });
 
 test("renders exact production backup services, archive settings and private topology", async () => {
-  const compose = await source("deploy/compose.backup.yaml");
+  const [compose, productionRecovery] = await Promise.all([
+    source("deploy/compose.backup.yaml"),
+    source("deploy/compose.production-recovery.yaml"),
+  ]);
   assert.notEqual(compose, "", "backup Compose overlay must exist");
   for (const service of ["postgres", "base-backup", "backup-status", "backup-retention"]) {
     assert.match(compose, new RegExp(`^  ${service}:`, "m"));
@@ -210,6 +213,12 @@ test("renders exact production backup services, archive settings and private top
   assert.match(compose, /backup_egress/);
   assert.match(compose, /postgres_data:[\s\S]{0,180}(?:read_only:\s*true|:ro)/i);
   assert.match(compose, /pull_policy:\s*never/);
+  for (const model of [compose, productionRecovery]) {
+    assert.match(model, /source:\s*\/etc\/ssl\/certs\/ca-certificates\.crt/);
+    assert.match(model, /target:\s*\/etc\/ssl\/certs\/ca-certificates\.crt/);
+    assert.match(model, /read_only:\s*true/);
+    assert.match(model, /create_host_path:\s*false/);
+  }
   assert.doesNotMatch(compose, /published:|ports:|docker\.sock|privileged:/i);
 });
 

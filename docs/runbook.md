@@ -205,6 +205,13 @@ Linux/amd64 manifest and release-asset checksums. The only network-capable
 dependency step remains the isolated no-auth prefetch; subsequent image builds
 are repeated with `--pull=false` and `--network=none`:
 
+Production WAL-G services bind the VDS system CA bundle from
+`/etc/ssl/certs/ca-certificates.crt` to the identical container path as a
+read-only regular file with `create_host_path: false`. This is required because
+the frozen recovery image contains the WAL-G binary but no populated public CA
+bundle; missing host trust material therefore fails before a Timeweb backup can
+be accepted.
+
 ```bash
 npm run docker:prefetch
 node scripts/docker-build.mjs

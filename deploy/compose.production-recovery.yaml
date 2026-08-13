@@ -26,6 +26,12 @@ services:
     secrets: [backup_reader_access_key_id, backup_reader_secret_access_key, backup_encryption_key]
     volumes:
       - pitr_postgres_data:/var/lib/postgresql/data
+      - type: bind
+        source: /etc/ssl/certs/ca-certificates.crt
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
     networks: [db_internal, backup_egress]
     restart: "no"
     security_opt: ["no-new-privileges:true"]
@@ -50,6 +56,12 @@ services:
     secrets: [backup_reader_access_key_id, backup_reader_secret_access_key, backup_encryption_key]
     volumes:
       - pitr_postgres_data:/var/lib/postgresql/data
+      - type: bind
+        source: /etc/ssl/certs/ca-certificates.crt
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
     networks: [db_internal, backup_egress]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U proofline -d proofline"]

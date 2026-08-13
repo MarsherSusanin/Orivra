@@ -95,6 +95,12 @@ currently authorized canonical `PublicationEvidenceV1`.
 - `authorityMode: "shared-pilot"` and secret-file credential delivery;
 - MinIO is QA-only and Swift is absent from runtime.
 
+Every production WAL-G container consumes the VDS system CA bundle at
+`/etc/ssl/certs/ca-certificates.crt` through an exact read-only bind with host
+path creation disabled. The operator must verify that file before Docker; an
+absent or non-regular bundle blocks the pilot rather than disabling TLS
+verification.
+
 The shared authority is an explicit bounded pilot exception to ADR 0037's
 separate object-store identities. It is never presented as least-privilege
 production storage. No credential value, key ID, rotation deadline or secret
