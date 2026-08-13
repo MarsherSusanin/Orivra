@@ -131,9 +131,9 @@ test("uses O_NOFOLLOW capture and validates in every production entry before Doc
     assert.match(source, /validateTimewebProductionSecretInventory\s*\(/, name);
   }
   assert.match(live, /validateSecretInventory\s*\(\s*\{\s*environment\s*\}/);
-  assert.match(pitr, /runDefaultTimewebProductionPitr[\s\S]*validateSecretInventory\s*\(\s*\{\s*environment\s*\}/);
-  assert.match(pitr, /runSelectedTimewebProductionPitr[\s\S]*validateSecretInventory\s*\(\s*\{\s*environment\s*\}/);
-  assert.match(pitr, /switchAndObserveProductionWalArchive[\s\S]*validateSecretInventory\s*\(\s*\{\s*environment\s*\}/);
+  assert.match(pitr, /runDefaultTimewebProductionPitr[\s\S]*validateSecretInventory\s*\(\s*\{\s*environment:\s*effectEnvironment\s*\}/);
+  assert.match(pitr, /runSelectedTimewebProductionPitr[\s\S]*validateSecretInventory\s*\(\s*\{\s*environment:\s*effectEnvironment\s*\}/);
+  assert.match(pitr, /switchAndObserveProductionWalArchive[\s\S]*validateSecretInventory\s*\(\s*\{\s*environment:\s*effectEnvironment\s*\}/);
   assert.match(wrapper, /validateSecretInventory\s*\(\s*\{\s*environment:/);
 });
 
@@ -170,4 +170,74 @@ test("blocks selected PITR and WAL switch exports before their first effect when
     observeWal: async () => { walEffects += 1; return { status: "passed" }; },
   }), /inventory/i);
   assert.equal(walEffects, 0);
+});
+
+test("binds one frozen validated environment to all twelve PITR effect and cleanup envelopes", async () => {
+  const module = await import(`../../scripts/timeweb-production-pitr.mjs?bound-environment=${Date.now()}-${Math.random()}`);
+  const validation = await import(`../../scripts/backup-evidence-validation.mjs?bound-environment=${Date.now()}-${Math.random()}`);
+  const sha = (value) => `sha256:${value.repeat(64)}`;
+  const entries = [{
+    key: "basebackups_005/base_00000001000000000000000A/tar_partitions/part_001.tar.lz4",
+    size: 1,
+    sha256: sha("6"),
+  }];
+  const inventory = { entries, objectCount: 1, totalBytes: 1 };
+  const evidence = {
+    version: "1",
+    kind: "base-backup",
+    producer: { commitSha: "a".repeat(40), treeSha: "b".repeat(40), postgresImageDigest: sha("c"), walGVersion: "v3.0.8" },
+    database: { slot: "production", systemIdentifier: "7532076200787175519", postgresMajor: 17, schemaVersion: 10, migrationCount: 10, migrationManifestSha256: sha("d") },
+    storage: { provider: "timeweb-s3", endpointOrigin: "https://s3.twcstorage.ru", region: "ru-1", addressing: "path-style", authorityMode: "shared-pilot", bucket: "orivra-backet", prefix: "s3://orivra-backet/proofline/v1/production/7532076200787175519", encryption: "wal-g-libsodium", encryptionKeyIdSha256: sha("e") },
+    backup: { id: "base_00000001000000000000000A", startedAt: "2026-08-12T03:00:00.000000Z", completedAt: "2026-08-12T03:01:00.000000Z", startLsn: "0/A000028", stopLsn: "0/B0001F8", startWalSegment: "00000001000000000000000A", stopWalSegment: "00000001000000000000000B", timeline: 1 },
+    inventory: { ...inventory, canonicalSha256: validation.sha256(Buffer.from(validation.canonicalJson(inventory), "utf8")) },
+    status: "completed",
+  };
+  const backupEvidenceBytes = Buffer.from(validation.canonicalJson(evidence), "utf8");
+  const sourceEnvironment = { PROOFLINE_SENTINEL: "verified" };
+  const calls = [];
+  const validateSecretInventory = async ({ environment: received }) => {
+    assert.notEqual(received, sourceEnvironment);
+    assert.equal(Object.isFrozen(received), true);
+    assert.equal(received.PROOFLINE_SENTINEL, "verified");
+    sourceEnvironment.PROOFLINE_SENTINEL = "mutated-after-validation";
+  };
+  const resultFor = (input) => {
+    if (input.phase === "create-base-backup") return { status: "passed" };
+    if (input.phase === "switch-wal-after-backup") return { status: "passed", switchedWalSegment: "00000001000000000000000B" };
+    if (input.phase === "observe-switched-wal-archived") return { status: "passed", source: "postgres-archive-status", switchedWalSegment: "00000001000000000000000B", archivePendingAgeSeconds: 0 };
+    if (input.phase === "select-backup") return { status: "passed", backupId: evidence.backup.id, encrypted: true, backupCompletedAt: evidence.backup.completedAt, lastArchivedAt: evidence.backup.completedAt, systemIdentifier: evidence.database.systemIdentifier, timeline: 1 };
+    if (input.phase === "create-fresh-volume") return { status: "passed", wasAbsent: true, volumeId: `proofline-pitr-${input.productionRunId}` };
+    if (input.phase === "restore-selected-backup") return { status: "passed", backupId: input.selected.backupId, volumeId: input.volumeId };
+    if (input.phase === "verify-restored-database") return { status: "passed", schemaVersion: 10, restoreEvidenceSha256: sha("f") };
+    if (input.phase === "remove-fresh-volume") return { status: "passed", removed: true };
+    throw new Error("phase");
+  };
+  const runner = async (input) => { calls.push(input); return resultFor(input); };
+  await module.runDefaultTimewebProductionPitr({
+    productionRunId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+    runner,
+    environment: sourceEnvironment,
+    validateSecretInventory,
+    clock: { now: () => "2026-08-12T03:02:00Z" },
+  });
+  sourceEnvironment.PROOFLINE_SENTINEL = "verified";
+  await module.runSelectedTimewebProductionPitr({
+    productionRunId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+    backupEvidenceBytes,
+    archivePendingAgeSeconds: 0,
+    runner,
+    environment: sourceEnvironment,
+    validateSecretInventory,
+    clock: { now: () => "2026-08-12T03:02:00Z" },
+  });
+  assert.equal(calls.length, 12);
+  const defaultBound = calls[0].environment;
+  const selectedBound = calls[8].environment;
+  assert.ok(calls.slice(0, 8).every(({ environment: received }) => received === defaultBound));
+  assert.ok(calls.slice(8).every(({ environment: received }) => received === selectedBound));
+  assert.notEqual(defaultBound, selectedBound);
+  assert.equal(defaultBound.PROOFLINE_SENTINEL, "verified");
+  assert.equal(selectedBound.PROOFLINE_SENTINEL, "verified");
+  assert.equal(Object.isFrozen(defaultBound), true);
+  assert.equal(Object.isFrozen(selectedBound), true);
 });

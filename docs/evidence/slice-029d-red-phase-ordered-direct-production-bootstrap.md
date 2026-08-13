@@ -446,3 +446,17 @@ the Product FAIL report is
 Typecheck and the exact affected 9/9 tests PASS. The first serialized static run
 reported one transient retained failure while the new 299 cases passed; the
 immediate identical no-edit serialized rerun completed 300/300 PASS.
+
+The next exact candidate `a5612eabbef0b56809abe37d9a8e3329a95fba51` /
+tree `a18d75db5f26a0b5a2d46eacdfd81ffb4d9c578b` added all missing guards, but
+both independent reviews found the validated environment was discarded from
+the default/selected PITR phase envelopes. The default runner consequently
+merged ambient process state into Compose instead of consuming the no-follow
+validated snapshot. The correction freezes one private environment copy and
+passes that exact object through all twelve backup/WAL/metadata/volume/
+restore/verify/cleanup envelopes. The Core FAIL report is
+`/private/tmp/orivra-release-a56/verifiers/a5612ea/core-verifier.md`, SHA-256
+`574ab9c527ad09f870997cdea75e790da3e2b3a2d2f0036eb6407f32def10195`;
+the Product FAIL report is
+`/private/tmp/orivra-release-a56/verifiers/a5612ea/product-verifier.md`, SHA-256
+`0b576be53226a329459793fd5216f2595b0eaaa0260633efb2a3d857163bcf87`.

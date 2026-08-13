@@ -104,28 +104,29 @@ export async function switchAndObserveProductionWalArchive({
   switchWal = switchProductionWal,
   observeWal = observeProductionWalArchived,
 } = {}) {
-  await validateSecretInventory({ environment });
-  const switched = await switchWal(environment);
-  return observeWal(switched, environment);
+  const effectEnvironment = Object.freeze({ ...environment });
+  await validateSecretInventory({ environment: effectEnvironment });
+  const switched = await switchWal(effectEnvironment);
+  return observeWal(switched, effectEnvironment);
 }
 
 async function defaultPhaseRunner(input) {
   const volumeId = `proofline-pitr-${input.productionRunId}`;
   if (input.phase === "create-base-backup") {
-    await compose(["run", "--rm", "--no-deps", "base-backup"]);
+    await compose(["run", "--rm", "--no-deps", "base-backup"], input.environment);
     return { status: "passed" };
   }
   if (input.phase === "switch-wal-after-backup") {
-    return switchProductionWal();
+    return switchProductionWal(input.environment);
   }
   if (input.phase === "observe-switched-wal-archived") {
-    return observeProductionWalArchived(input.switched);
+    return observeProductionWalArchived(input.switched, input.environment);
   }
   if (input.phase === "select-backup") {
     return Promise.all([
-      compose(["run", "--rm", "--no-deps", "backup-status"]),
-      compose(["exec", "-T", "postgres", "psql", "-U", "proofline", "-d", "proofline", "-Atc", "SELECT system_identifier FROM pg_control_system()"]),
-      compose(["exec", "-T", "postgres", "psql", "-U", "proofline", "-d", "proofline", "-Atc", "SELECT coalesce(to_char(last_archived_time AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'), '') FROM pg_stat_archiver"]),
+      compose(["run", "--rm", "--no-deps", "backup-status"], input.environment),
+      compose(["exec", "-T", "postgres", "psql", "-U", "proofline", "-d", "proofline", "-Atc", "SELECT system_identifier FROM pg_control_system()"], input.environment),
+      compose(["exec", "-T", "postgres", "psql", "-U", "proofline", "-d", "proofline", "-Atc", "SELECT coalesce(to_char(last_archived_time AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'), '') FROM pg_stat_archiver"], input.environment),
     ]).then(([detailText, systemText, archivedText]) => {
       const backupIds = [...detailText.matchAll(/"backup_name"\s*:\s*"(base_[0-9A-F]{24})"/g)].map((match) => match[1]);
       const backupId = backupIds.at(-1);
@@ -139,12 +140,13 @@ async function defaultPhaseRunner(input) {
     });
   }
   if (input.phase === "create-fresh-volume") {
-    return runDocker(["volume", "inspect", volumeId], 64 * 1024).then(
+    return runDocker(["volume", "inspect", volumeId], 64 * 1024, input.environment).then(
       () => { throw new Error("restore volume exists"); },
-      () => runDocker(["volume", "create", "--label", "com.orivra.scope=production-pitr", volumeId], 64 * 1024).then(() => ({ status: "passed", volumeId, wasAbsent: true })),
+      () => runDocker(["volume", "create", "--label", "com.orivra.scope=production-pitr", volumeId], 64 * 1024, input.environment).then(() => ({ status: "passed", volumeId, wasAbsent: true })),
     );
   }
-  const environment = {
+  const recoveryEnvironment = {
+    ...input.environment,
     PROOFLINE_PITR_VOLUME_NAME: volumeId,
     PROOFLINE_RESTORE_BACKUP_ID: input.selected?.backupId ?? "",
     PROOFLINE_BACKUP_SYSTEM_IDENTIFIER: input.selected?.systemIdentifier ?? "",
@@ -152,12 +154,12 @@ async function defaultPhaseRunner(input) {
     PROOFLINE_RECOVERY_TARGET_TIMELINE: String(input.selected?.timeline ?? ""),
   };
   if (input.phase === "restore-selected-backup") {
-    return compose(["--profile", "production-recovery", "run", "--rm", "--no-deps", "pitr-restore"], environment, true)
+    return compose(["--profile", "production-recovery", "run", "--rm", "--no-deps", "pitr-restore"], recoveryEnvironment, true)
       .then(() => ({ status: "passed", backupId: input.selected.backupId, volumeId }));
   }
   if (input.phase === "verify-restored-database") {
-    return compose(["--profile", "production-recovery", "up", "--detach", "--no-build", "--pull", "never", "--wait", "pitr-postgres"], environment, true)
-      .then(() => compose(["--profile", "production-recovery", "run", "--rm", "--no-deps", "pitr-verify"], environment, true))
+    return compose(["--profile", "production-recovery", "up", "--detach", "--no-build", "--pull", "never", "--wait", "pitr-postgres"], recoveryEnvironment, true)
+      .then(() => compose(["--profile", "production-recovery", "run", "--rm", "--no-deps", "pitr-verify"], recoveryEnvironment, true))
       .then((text) => {
         const value = JSON.parse(text.trim());
         if (value?.status !== "passed" || value.schemaVersion !== 10 || value.pgIsInRecovery !== true || value.systemIdentifier !== input.selected.systemIdentifier) throw new Error("restore verification");
@@ -165,9 +167,9 @@ async function defaultPhaseRunner(input) {
       });
   }
   if (input.phase === "remove-fresh-volume") {
-    return compose(["--profile", "production-recovery", "rm", "--stop", "--force", "pitr-verify", "pitr-postgres", "pitr-restore"], environment, true)
+    return compose(["--profile", "production-recovery", "rm", "--stop", "--force", "pitr-verify", "pitr-postgres", "pitr-restore"], recoveryEnvironment, true)
       .catch(() => undefined)
-      .then(() => runDocker(["volume", "rm", "--force", volumeId], 64 * 1024).catch(() => undefined))
+      .then(() => runDocker(["volume", "rm", "--force", volumeId], 64 * 1024, input.environment).catch(() => undefined))
       .then(() => ({ status: "passed", removed: true }));
   }
   throw new Error("phase");
@@ -182,32 +184,34 @@ export async function runDefaultTimewebProductionPitr({
 }) {
   let volumeCreated = false;
   let selected;
+  let effectEnvironment;
   try {
     if (!RUN_ID.test(productionRunId ?? "")) throw new Error("run id");
-    await validateSecretInventory({ environment });
+    effectEnvironment = Object.freeze({ ...environment });
+    await validateSecretInventory({ environment: effectEnvironment });
     const authority = { productionRunId, provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true };
-    await runner({ ...authority, phase: "create-base-backup" });
-    const switched = await runner({ ...authority, phase: "switch-wal-after-backup" });
+    await runner({ ...authority, phase: "create-base-backup", environment: effectEnvironment });
+    const switched = await runner({ ...authority, phase: "switch-wal-after-backup", environment: effectEnvironment });
     if (switched?.status !== "passed" || !WAL_SEGMENT.test(switched.switchedWalSegment ?? "")) {
       throw new Error("archive observation");
     }
-    const archive = await runner({ ...authority, phase: "observe-switched-wal-archived", switched });
+    const archive = await runner({ ...authority, phase: "observe-switched-wal-archived", switched, environment: effectEnvironment });
     if (archive?.status !== "passed" || archive.source !== "postgres-archive-status" ||
       archive.switchedWalSegment !== switched.switchedWalSegment ||
       !Number.isSafeInteger(archive.archivePendingAgeSeconds) || archive.archivePendingAgeSeconds < 0 ||
       archive.archivePendingAgeSeconds > MAXIMUM_ARCHIVE_PENDING_SECONDS) {
       throw new Error("archive freshness");
     }
-    selected = await runner({ ...authority, phase: "select-backup", archive });
+    selected = await runner({ ...authority, phase: "select-backup", archive, environment: effectEnvironment });
     if (selected?.status !== "passed" || !BASE_BACKUP.test(selected.backupId ?? "") || selected.encrypted !== true ||
       !Number.isFinite(Date.parse(selected.backupCompletedAt)) || !Number.isFinite(Date.parse(selected.lastArchivedAt)) ||
       !Number.isSafeInteger(selected.timeline) || selected.timeline < 1 || !/^[1-9][0-9]*$/.test(selected.systemIdentifier ?? "")) throw new Error("selected backup");
-    const created = await runner({ ...authority, phase: "create-fresh-volume", selected });
+    const created = await runner({ ...authority, phase: "create-fresh-volume", selected, environment: effectEnvironment });
     if (created?.status !== "passed" || created.wasAbsent !== true || created.volumeId !== `proofline-pitr-${productionRunId}`) throw new Error("fresh volume");
     volumeCreated = true;
-    const restored = await runner({ ...authority, phase: "restore-selected-backup", selected, volumeId: created.volumeId });
+    const restored = await runner({ ...authority, phase: "restore-selected-backup", selected, volumeId: created.volumeId, environment: effectEnvironment });
     if (restored?.status !== "passed" || restored.backupId !== selected.backupId || restored.volumeId !== created.volumeId) throw new Error("restore");
-    const verified = await runner({ ...authority, phase: "verify-restored-database", selected, volumeId: created.volumeId });
+    const verified = await runner({ ...authority, phase: "verify-restored-database", selected, volumeId: created.volumeId, environment: effectEnvironment });
     if (verified?.status !== "passed" || verified.schemaVersion !== 10 || !SHA256.test(verified.restoreEvidenceSha256 ?? "")) throw new Error("verify");
     const now = Date.parse(clock.now());
     const backupAt = Date.parse(selected.backupCompletedAt);
@@ -220,7 +224,7 @@ export async function runDefaultTimewebProductionPitr({
   } catch (cause) {
     throw Object.assign(new Error("TIMEWEB_PRODUCTION_PITR_FAILED: Timeweb production PITR failed"), { code: "TIMEWEB_PRODUCTION_PITR_FAILED", cause });
   } finally {
-    if (volumeCreated) await runner({ productionRunId, provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true, phase: "remove-fresh-volume", selected }).catch(() => undefined);
+    if (volumeCreated) await runner({ productionRunId, provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true, phase: "remove-fresh-volume", selected, environment: effectEnvironment }).catch(() => undefined);
   }
 }
 
@@ -235,11 +239,13 @@ export async function runSelectedTimewebProductionPitr({
 } = {}) {
   let volumeCreated = false;
   let selected;
+  let effectEnvironment;
   try {
     if (!RUN_ID.test(productionRunId ?? "") || !Buffer.isBuffer(backupEvidenceBytes) ||
       !Number.isSafeInteger(archivePendingAgeSeconds) || archivePendingAgeSeconds < 0 ||
       archivePendingAgeSeconds > MAXIMUM_ARCHIVE_PENDING_SECONDS) throw new Error("authority");
-    await validateSecretInventory({ environment });
+    effectEnvironment = Object.freeze({ ...environment });
+    await validateSecretInventory({ environment: effectEnvironment });
     const evidence = parseCanonicalBackupEvidence(backupEvidenceBytes);
     if (evidence.database.slot !== "production" || evidence.storage.provider !== "timeweb-s3" ||
       evidence.storage.endpointOrigin !== "https://s3.twcstorage.ru" || evidence.storage.region !== "ru-1" ||
@@ -255,12 +261,12 @@ export async function runSelectedTimewebProductionPitr({
       timeline: evidence.backup.timeline,
     });
     const authority = { productionRunId, provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true };
-    const created = await runner({ ...authority, phase: "create-fresh-volume", selected });
+    const created = await runner({ ...authority, phase: "create-fresh-volume", selected, environment: effectEnvironment });
     if (created?.status !== "passed" || created.wasAbsent !== true || created.volumeId !== `proofline-pitr-${productionRunId}`) throw new Error("fresh volume");
     volumeCreated = true;
-    const restored = await runner({ ...authority, phase: "restore-selected-backup", selected, volumeId: created.volumeId });
+    const restored = await runner({ ...authority, phase: "restore-selected-backup", selected, volumeId: created.volumeId, environment: effectEnvironment });
     if (restored?.status !== "passed" || restored.backupId !== selected.backupId || restored.volumeId !== created.volumeId) throw new Error("restore");
-    const verified = await runner({ ...authority, phase: "verify-restored-database", selected, volumeId: created.volumeId });
+    const verified = await runner({ ...authority, phase: "verify-restored-database", selected, volumeId: created.volumeId, environment: effectEnvironment });
     if (verified?.status !== "passed" || verified.schemaVersion !== 10 || !SHA256.test(verified.restoreEvidenceSha256 ?? "")) throw new Error("verify");
     const age = Math.floor((Date.parse(clock.now()) - Date.parse(selected.backupCompletedAt)) / 1000);
     if (!Number.isSafeInteger(age) || age < 0) throw new Error("clock");
@@ -274,7 +280,7 @@ export async function runSelectedTimewebProductionPitr({
   } catch (cause) {
     throw Object.assign(new Error("TIMEWEB_PRODUCTION_PITR_FAILED: Timeweb production PITR failed"), { code: "TIMEWEB_PRODUCTION_PITR_FAILED", cause });
   } finally {
-    if (volumeCreated) await runner({ productionRunId, provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true, phase: "remove-fresh-volume", selected }).catch(() => undefined);
+    if (volumeCreated) await runner({ productionRunId, provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true, phase: "remove-fresh-volume", selected, environment: effectEnvironment }).catch(() => undefined);
   }
 }
 
@@ -309,8 +315,7 @@ export async function runTimewebProductionPitr({ runId, adapters }) {
   try {
     if (!RUN_ID.test(runId ?? "")) throw new Error("run id");
     if (!adapters) {
-      await validateTimewebProductionSecretInventory({ environment: process.env });
-      return await runDefaultTimewebProductionPitr({ productionRunId: runId, validateSecretInventory: async () => ({ status: "passed" }) });
+      return await runDefaultTimewebProductionPitr({ productionRunId: runId, environment: process.env });
     }
     adapters ??= defaultAdapters();
     const authority = { provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true, runId };

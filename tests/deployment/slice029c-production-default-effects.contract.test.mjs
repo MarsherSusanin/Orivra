@@ -190,7 +190,7 @@ test("the Timeweb PITR default restores one selected encrypted backup into a fre
   const pitrSource = await readFile(resolve(root, "scripts/timeweb-production-pitr.mjs"), "utf8");
   assert.doesNotMatch(pitrSource, /PROOFLINE_RECOVERY_TARGET_TIMELINE:\s*["']latest["']/);
   assert.doesNotMatch(pitrSource, /\],\s*1024\s*\*\s*1024,\s*environment\)\)\.trim\(\)/);
-  assert.match(pitrSource, /validateSecretInventory\s*\(\s*\{\s*environment\s*\}\s*\)[\s\S]*switchWal\(environment\)[\s\S]*observeWal\(switched, environment\)/);
+  assert.match(pitrSource, /validateSecretInventory\s*\(\s*\{\s*environment:\s*effectEnvironment\s*\}\s*\)[\s\S]*switchWal\(effectEnvironment\)[\s\S]*observeWal\(switched, effectEnvironment\)/);
   assert.doesNotMatch(recoveryCompose, /ports:|docker\.sock|MINIO|localhost:9000/i);
 });
 
