@@ -267,3 +267,13 @@ not resolve the production relayer-manifest authority imported by the new live
 gate. The Docker build stage now copies that exact checked-in production module
 before compiling the worker entrypoint. No image, registry or server effect was
 accepted from the failed attempt.
+
+The next exact candidate attempt passed the unified test, coverage and real
+PostgreSQL inventories and both offline build passes, then failed closed before
+the QA Compose journey because the smoke runner did not materialize and bind
+the now-mandatory replay-bootstrap stage root. The QA runner now owns that path
+inside its already private run-scoped directory and supplies it only as the
+required Compose interpolation input; worker remains absent from the QA
+service inventory. The same outer lifecycle removes the stage with every other
+temporary input. No candidate, registry or server effect was accepted from the
+failed attempt.

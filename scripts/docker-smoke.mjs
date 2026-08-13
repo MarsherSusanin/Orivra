@@ -161,7 +161,9 @@ async function prepareTemporaryDirectory(temporaryDirectory) {
   }
   const safeConsumerEvidenceRoot = join(temporaryDirectory, "safe-consumer-evidence");
   const safeConsumerWorkerHandoff = join(temporaryDirectory, "safe-consumer-worker-handoff.json");
+  const replayBootstrapStageRoot = join(temporaryDirectory, "replay-bootstrap-stage");
   await mkdir(safeConsumerEvidenceRoot, { mode: 0o700 });
+  await mkdir(replayBootstrapStageRoot, { mode: 0o700 });
   await writeFile(safeConsumerWorkerHandoff, "{}", { mode: 0o400 });
   return {
     environment: {
@@ -184,6 +186,7 @@ async function prepareTemporaryDirectory(temporaryDirectory) {
       PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
       PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT: safeConsumerEvidenceRoot,
       PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE: safeConsumerWorkerHandoff,
+      PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: replayBootstrapStageRoot,
       PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: secretPaths.workerReplayBundle,
       PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
         secretPaths.workerReplayPreflightReport,

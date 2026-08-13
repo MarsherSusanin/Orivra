@@ -370,6 +370,8 @@ test("runs only the bounded exact-origin HTTPS Caddy/Web/PostgreSQL/API smoke", 
   assert.notEqual(script, "", "scripts/docker-smoke.mjs must exist");
   assert.match(script, /mkdtemp/);
   assert.match(script, /runQaSmokeLifecycle/);
+  assert.match(script, /replay-bootstrap-stage/);
+  assert.match(script, /PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:\s*replayBootstrapStageRoot/);
   assert.match(script, /assertExactTlsPortAvailable/);
   assert.match(script, /PROOFLINE_PUBLIC_ORIGIN/);
   assert.match(script, /https:\/\/127\.0\.0\.1/);
