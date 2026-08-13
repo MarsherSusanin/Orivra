@@ -427,3 +427,22 @@ The independent mode-0400 Product FAIL report is
 SHA-256 `926357e005d182be2e4c613cc52d8fdabddf719adfa9d8ae06826b151772c521`.
 The direct-entry correction passes typecheck, the exact affected 8/8 tests and
 the full serialized deployment static inventory at 299/299.
+
+Both independent reviews rejected follow-up commit
+`9ad6336951784d1f9c2a3d589bf0c91e92b3de44` / tree
+`1aa1da3f1a42177f2600ad7aa526f0f0031656e1`: the active host `timeweb-pitr`
+command uses the distinct selected-backup runner, which still reached its
+Docker-backed fresh-volume phase before an internal inventory guard. The same
+audit found the exported WAL switch/observe boundary could reach Compose
+without its own guard. The corrective matrix now covers default PITR, selected
+PITR and WAL switch/observe exports with exact zero effects on invalid
+inventory, and validates caller-supplied environments again inside the pilot
+backup/retention boundaries. The Core FAIL report is
+`/private/tmp/orivra-release-9ad/verifiers/9ad6336/core-verifier.md`, SHA-256
+`6397e868cb45bc18e5583f3ed365659c7b8f40df65d42f3d89fa50bf013a2fdb`;
+the Product FAIL report is
+`/private/tmp/orivra-release-9ad/verifiers/9ad6336/product-verifier.md`, SHA-256
+`41a8a480a6406b1238e539c2db46e07c111d2f9cbd327d2de444f9a4a45f9ab2`.
+Typecheck and the exact affected 9/9 tests PASS. The first serialized static run
+reported one transient retained failure while the new 299 cases passed; the
+immediate identical no-edit serialized rerun completed 300/300 PASS.

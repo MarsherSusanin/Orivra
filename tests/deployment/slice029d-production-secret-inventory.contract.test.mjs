@@ -132,6 +132,8 @@ test("uses O_NOFOLLOW capture and validates in every production entry before Doc
   }
   assert.match(live, /validateSecretInventory\s*\(\s*\{\s*environment\s*\}/);
   assert.match(pitr, /runDefaultTimewebProductionPitr[\s\S]*validateSecretInventory\s*\(\s*\{\s*environment\s*\}/);
+  assert.match(pitr, /runSelectedTimewebProductionPitr[\s\S]*validateSecretInventory\s*\(\s*\{\s*environment\s*\}/);
+  assert.match(pitr, /switchAndObserveProductionWalArchive[\s\S]*validateSecretInventory\s*\(\s*\{\s*environment\s*\}/);
   assert.match(wrapper, /validateSecretInventory\s*\(\s*\{\s*environment:/);
 });
 
@@ -144,4 +146,28 @@ test("blocks the exported default PITR runner before its first phase when invent
     validateSecretInventory: async () => { throw Object.assign(new Error("inventory"), { code: "TIMEWEB_PRODUCTION_SECRET_INVENTORY_INVALID" }); },
   }), /TIMEWEB_PRODUCTION_PITR_FAILED|inventory/i);
   assert.equal(effects, 0);
+});
+
+test("blocks selected PITR and WAL switch exports before their first effect when inventory is invalid", async () => {
+  const module = await import(`../../scripts/timeweb-production-pitr.mjs?selected-inventory=${Date.now()}-${Math.random()}`);
+  const invalidInventory = async () => {
+    throw Object.assign(new Error("inventory"), { code: "TIMEWEB_PRODUCTION_SECRET_INVENTORY_INVALID" });
+  };
+  let selectedEffects = 0;
+  await assert.rejects(module.runSelectedTimewebProductionPitr({
+    productionRunId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+    backupEvidenceBytes: Buffer.from("{}"),
+    archivePendingAgeSeconds: 0,
+    runner: async () => { selectedEffects += 1; return { status: "passed" }; },
+    validateSecretInventory: invalidInventory,
+  }), /TIMEWEB_PRODUCTION_PITR_FAILED|inventory/i);
+  assert.equal(selectedEffects, 0);
+
+  let walEffects = 0;
+  await assert.rejects(module.switchAndObserveProductionWalArchive({
+    validateSecretInventory: invalidInventory,
+    switchWal: async () => { walEffects += 1; return { status: "passed" }; },
+    observeWal: async () => { walEffects += 1; return { status: "passed" }; },
+  }), /inventory/i);
+  assert.equal(walEffects, 0);
 });

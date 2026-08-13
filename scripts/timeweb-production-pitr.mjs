@@ -98,9 +98,15 @@ async function observeProductionWalArchived({ switchedWalSegment, switchedAt }, 
   }
 }
 
-export async function switchAndObserveProductionWalArchive({ environment = {} } = {}) {
-  const switched = await switchProductionWal(environment);
-  return observeProductionWalArchived(switched, environment);
+export async function switchAndObserveProductionWalArchive({
+  environment = process.env,
+  validateSecretInventory = validateTimewebProductionSecretInventory,
+  switchWal = switchProductionWal,
+  observeWal = observeProductionWalArchived,
+} = {}) {
+  await validateSecretInventory({ environment });
+  const switched = await switchWal(environment);
+  return observeWal(switched, environment);
 }
 
 async function defaultPhaseRunner(input) {
@@ -224,6 +230,8 @@ export async function runSelectedTimewebProductionPitr({
   archivePendingAgeSeconds,
   runner = defaultPhaseRunner,
   clock = { now: () => new Date().toISOString() },
+  environment = process.env,
+  validateSecretInventory = validateTimewebProductionSecretInventory,
 } = {}) {
   let volumeCreated = false;
   let selected;
@@ -231,6 +239,7 @@ export async function runSelectedTimewebProductionPitr({
     if (!RUN_ID.test(productionRunId ?? "") || !Buffer.isBuffer(backupEvidenceBytes) ||
       !Number.isSafeInteger(archivePendingAgeSeconds) || archivePendingAgeSeconds < 0 ||
       archivePendingAgeSeconds > MAXIMUM_ARCHIVE_PENDING_SECONDS) throw new Error("authority");
+    await validateSecretInventory({ environment });
     const evidence = parseCanonicalBackupEvidence(backupEvidenceBytes);
     if (evidence.database.slot !== "production" || evidence.storage.provider !== "timeweb-s3" ||
       evidence.storage.endpointOrigin !== "https://s3.twcstorage.ru" || evidence.storage.region !== "ru-1" ||

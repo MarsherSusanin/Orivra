@@ -76,6 +76,7 @@ export async function loadTimewebProductionRuntimeEnvironment() {
 export async function createTimewebPilotBackup({ environment } = {}) {
   try {
     environment ??= await loadTimewebProductionRuntimeEnvironment();
+    await validateTimewebProductionSecretInventory({ environment });
     await compose(["run", "--rm", "--no-deps", "base-backup"], environment);
     const rows = JSON.parse(await compose(["run", "--rm", "--no-deps", "backup-status"], environment));
     const backupId = Array.isArray(rows) ? rows.at(-1)?.backup_name : undefined;
@@ -147,9 +148,10 @@ export async function observeSealedTimewebPilotBackup({ backupEvidenceSha256, ar
 
 export async function restoreSelectedTimewebPilotBackup({ productionRunId, backupEvidenceSha256, archivePendingAgeSeconds } = {}) {
   try {
+    const environment = await loadTimewebProductionRuntimeEnvironment();
     const bytes = await privateBytes(SELECTED, 1024 * 1024);
     if (sha256(bytes) !== backupEvidenceSha256) throw new Error("binding");
-    return await runSelectedTimewebProductionPitr({ productionRunId, backupEvidenceBytes: bytes, archivePendingAgeSeconds });
+    return await runSelectedTimewebProductionPitr({ productionRunId, backupEvidenceBytes: bytes, archivePendingAgeSeconds, environment });
   } catch (cause) { throw failure(cause); }
 }
 
@@ -158,6 +160,7 @@ export async function retainAuthorizedTimewebPilotBackups({ backupEvidenceSha256
   let encryptionKeyBytes;
   try {
     environment ??= await loadTimewebProductionRuntimeEnvironment();
+    await validateTimewebProductionSecretInventory({ environment });
     evidenceBytes = await privateBytes(SELECTED, 1024 * 1024);
     encryptionKeyBytes = await privateBytes(environment.PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE);
     const evidence = parseCanonicalBackupEvidence(evidenceBytes);
