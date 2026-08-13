@@ -250,7 +250,7 @@ async function terminateFixtureProcesses(pids) {
 
 for (let repetition = 1; repetition <= 12; repetition += 1) {
   test(`does not settle before a TERM-resistant process group is reaped (${repetition}/12)`, {
-    timeout: 4_000,
+    timeout: 15_000,
   }, async () => {
     const module = await optionalImport("scripts/recovery-async-child.mjs");
     assert.equal(typeof module.runBoundedRecoveryChild, "function");

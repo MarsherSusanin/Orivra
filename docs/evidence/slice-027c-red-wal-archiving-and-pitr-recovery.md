@@ -801,3 +801,22 @@ dependencies, lockfiles, Docker and network state remain untouched.
 
 Until those gates pass, Proofline has no accepted 027C runtime or recovery
 evidence and no Spaces, actual RPO/RTO, hosted restore or promotion evidence.
+
+### Final-candidate reap harness budget correction
+
+On exact clean base `ef35362f2dded751661e1144cf61fe94cde636bd` / tree
+`daa62c07815850d845010746f38118c0fff92ca0`, the final credential-free
+candidate completed typecheck, 271 files / 2607 tests, all coverage gates,
+real PostgreSQL with zero skips, Solidity, build, Sites and Action before the
+serialized deployment inventory ended 290/291 on the retained macOS
+TERM-resistant process-reap timing control. The identical static inventory
+immediately passed 291/291 without a source edit; this classified an exhausted
+per-test wall-clock budget under accumulated candidate load, not a weakened
+reap assertion or production failure.
+
+The harness-only correction raises the twelve repeated controls' outer Node
+test budget from four to fifteen seconds. Their child timeout remains 150 ms,
+SIGTERM grace remains 30 ms, and every case still requires both recorded PIDs
+to be absent before the promise settles. No recovery implementation, command,
+environment, evidence, Docker, network, credential or deployment boundary is
+changed.
