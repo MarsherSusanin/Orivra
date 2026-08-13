@@ -409,3 +409,21 @@ the root/path/mode/owner/inode/byte negative matrix. Typecheck PASS and the
 serialized deployment static inventory is 298/298 PASS. Browser tooling remains
 operator-side only; this correction neither installs Chromium on the VDS nor
 creates a container, network, volume, registry, provider or hosted effect.
+
+Product review additionally found that the exported low-level default PITR
+runner could be called directly before the outer CLI inventory guard. The
+corrective contract now requires that entrypoint itself to validate before its
+first `create-base-backup` phase; an invalid inventory yields zero runner
+effects. The rejected exact commit
+`d7bf8913aaa0b08dd9468163909e9b45f9b7fee0` / tree
+`d489db40c30899e4edf54fe3401fe01f6cc485d1` also lost clean status when
+unrelated `tmp/orivra-dorahacks` files appeared. Those user-owned hackathon
+files remain local and are now excluded from Git by the follow-up
+`f7d9629` commit; they were never tracked by `main`. The mode-0400 Core FAIL
+report is `/private/tmp/orivra-release-d7b/verifiers/d7bf891/core-verifier.md`,
+SHA-256 `0efc9adf01370e90820f719c8daf2c14aaf3504f7b6408fe08d777795773a827`.
+The independent mode-0400 Product FAIL report is
+`/private/tmp/orivra-release-d7b/verifiers/d7bf891/product-verifier.md`,
+SHA-256 `926357e005d182be2e4c613cc52d8fdabddf719adfa9d8ae06826b151772c521`.
+The direct-entry correction passes typecheck, the exact affected 8/8 tests and
+the full serialized deployment static inventory at 299/299.

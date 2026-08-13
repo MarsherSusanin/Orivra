@@ -113,7 +113,7 @@ test("rejects root, path, ownership, mode and shared-byte deviations before Dock
 });
 
 test("uses O_NOFOLLOW capture and validates in every production entry before Docker", async () => {
-  const [inventory, host, wrapper, pilotBackup, daily, live, canary] = await Promise.all([
+  const [inventory, host, wrapper, pilotBackup, daily, live, canary, pitr] = await Promise.all([
     readFile(resolve(root, "scripts/timeweb-production-secret-inventory.mjs"), "utf8"),
     readFile(resolve(root, "scripts/timeweb-production-host-command.mjs"), "utf8"),
     readFile(resolve(root, "scripts/compose-production.mjs"), "utf8"),
@@ -121,6 +121,7 @@ test("uses O_NOFOLLOW capture and validates in every production entry before Doc
     readFile(resolve(root, "scripts/run-timeweb-daily-backup.mjs"), "utf8"),
     readFile(resolve(root, "scripts/timeweb-production-live-runs.mjs"), "utf8"),
     readFile(resolve(root, "scripts/timeweb-production-canary-observation.mjs"), "utf8"),
+    readFile(resolve(root, "scripts/timeweb-production-pitr.mjs"), "utf8"),
   ]);
   assert.match(inventory, /O_NOFOLLOW/);
   assert.match(inventory, /handle\.stat\s*\(/);
@@ -130,5 +131,17 @@ test("uses O_NOFOLLOW capture and validates in every production entry before Doc
     assert.match(source, /validateTimewebProductionSecretInventory\s*\(/, name);
   }
   assert.match(live, /validateSecretInventory\s*\(\s*\{\s*environment\s*\}/);
+  assert.match(pitr, /runDefaultTimewebProductionPitr[\s\S]*validateSecretInventory\s*\(\s*\{\s*environment\s*\}/);
   assert.match(wrapper, /validateSecretInventory\s*\(\s*\{\s*environment:/);
+});
+
+test("blocks the exported default PITR runner before its first phase when inventory is invalid", async () => {
+  const module = await import(`../../scripts/timeweb-production-pitr.mjs?inventory=${Date.now()}-${Math.random()}`);
+  let effects = 0;
+  await assert.rejects(module.runDefaultTimewebProductionPitr({
+    productionRunId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+    runner: async () => { effects += 1; return { status: "passed" }; },
+    validateSecretInventory: async () => { throw Object.assign(new Error("inventory"), { code: "TIMEWEB_PRODUCTION_SECRET_INVENTORY_INVALID" }); },
+  }), /TIMEWEB_PRODUCTION_PITR_FAILED|inventory/i);
+  assert.equal(effects, 0);
 });

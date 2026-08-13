@@ -145,6 +145,7 @@ test("the Timeweb PITR default restores one selected encrypted backup into a fre
     productionRunId: PRODUCTION_RUN_ID,
     runner,
     clock: { now: () => "2026-08-12T03:01:00Z" },
+    validateSecretInventory: async () => ({ status: "passed" }),
   }), {
     status: "passed", provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru",
     region: "ru-1", bucket: "orivra-backet", pathStyle: true,
@@ -168,6 +169,7 @@ test("the Timeweb PITR default restores one selected encrypted backup into a fre
         ? archivedObservation
         : phaseResult(input),
       clock: { now: () => "2026-08-12T03:01:00Z" },
+      validateSecretInventory: async () => ({ status: "passed" }),
     }), /TIMEWEB_PRODUCTION_PITR_FAILED|archive freshness|archive observation/i);
   }
   calls.length = 0;
@@ -179,6 +181,7 @@ test("the Timeweb PITR default restores one selected encrypted backup into a fre
       return phaseResult(input);
     },
     clock: { now: () => "2026-08-12T03:01:00Z" },
+    validateSecretInventory: async () => ({ status: "passed" }),
   }), /TIMEWEB_PRODUCTION_PITR_FAILED|restore verification failed/);
   assert.equal(calls.at(-1).phase, "remove-fresh-volume");
   const recoveryCompose = await readFile(resolve(root, "deploy/compose.production-recovery.yaml"), "utf8").catch(() => "");

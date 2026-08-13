@@ -167,11 +167,18 @@ async function defaultPhaseRunner(input) {
   throw new Error("phase");
 }
 
-export async function runDefaultTimewebProductionPitr({ productionRunId, runner = defaultPhaseRunner, clock = { now: () => new Date().toISOString() } }) {
+export async function runDefaultTimewebProductionPitr({
+  productionRunId,
+  runner = defaultPhaseRunner,
+  clock = { now: () => new Date().toISOString() },
+  environment = process.env,
+  validateSecretInventory = validateTimewebProductionSecretInventory,
+}) {
   let volumeCreated = false;
   let selected;
   try {
     if (!RUN_ID.test(productionRunId ?? "")) throw new Error("run id");
+    await validateSecretInventory({ environment });
     const authority = { productionRunId, provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true };
     await runner({ ...authority, phase: "create-base-backup" });
     const switched = await runner({ ...authority, phase: "switch-wal-after-backup" });
@@ -294,7 +301,7 @@ export async function runTimewebProductionPitr({ runId, adapters }) {
     if (!RUN_ID.test(runId ?? "")) throw new Error("run id");
     if (!adapters) {
       await validateTimewebProductionSecretInventory({ environment: process.env });
-      return await runDefaultTimewebProductionPitr({ productionRunId: runId });
+      return await runDefaultTimewebProductionPitr({ productionRunId: runId, validateSecretInventory: async () => ({ status: "passed" }) });
     }
     adapters ??= defaultAdapters();
     const authority = { provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true, runId };
