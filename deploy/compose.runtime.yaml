@@ -168,7 +168,7 @@ services:
         target: worker_coston2_private_key
     volumes:
       - type: bind
-        source: ${PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:-/opt/orivra/absent-replay-bootstrap-stage}
+        source: ${PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:?PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT is required}
         target: /run/proofline/replay-bootstrap-stage
         bind:
           create_host_path: false

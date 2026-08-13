@@ -661,8 +661,31 @@ export async function runTimewebPhaseOrderedProductionPilot(input) {
       return state.browser;
     }
     if (phase === "seal-browser-acceptance") return state.browser;
+    if (phase === "observe-cutover-checkpoint") {
+      state.cutoverCheckpoint = validatePhaseOrderedCutoverCheckpoint({
+        checkpoint: await session.run({
+          id: "canary-observe",
+          checkpointId: "cutover",
+          dueAt: activation.activatedAt,
+          persistedLiveRuns: state.live,
+          browserAcceptanceSha256: state.browser.sha256,
+        }),
+        activation,
+        externalObservation: state.external,
+        browserReceipt: { id: "append-browser-acceptance", status: state.browser.status, sha256: state.browser.sha256 },
+        expectedBrowserAcceptanceSha256: lifecycleAuthority.browserAcceptanceSha256,
+        persistedLiveRuns: state.live,
+      });
+      return state.cutoverCheckpoint;
+    }
+    if (phase === "append-cutover-checkpoint") {
+      if (!state.cutoverCheckpoint) throw failure("PRODUCTION_CANARY_FAILED", "Production cutover checkpoint is invalid");
+      const appended = await input.checkpointStore.append(state.cutoverCheckpoint);
+      if (appended?.status !== "passed") throw failure("PRODUCTION_CANARY_FAILED", "Production cutover checkpoint append failed");
+      return appended;
+    }
     if (phase === "append-deployment-evidence") {
-      if (state.browser?.sha256 !== lifecycleAuthority.browserAcceptanceSha256) {
+      if (state.browser?.sha256 !== lifecycleAuthority.browserAcceptanceSha256 || !state.cutoverCheckpoint) {
         throw failure("PRODUCTION_OBSERVATION_INVALID", "Production browser acceptance authority is invalid");
       }
       const deployment = ProductionDeploymentEvidenceV2Schema.parse({
@@ -697,6 +720,31 @@ export async function runTimewebPhaseOrderedProductionPilot(input) {
   });
   return deepFreeze({ ...result, environment: "production", deploymentId: resource.deploymentId,
     deploymentEvidenceSha256: state.deploymentEvidenceSha256, runId: run.runId, deploymentPublished });
+}
+
+export function validatePhaseOrderedCutoverCheckpoint({
+  checkpoint,
+  activation,
+  externalObservation,
+  browserReceipt,
+  expectedBrowserAcceptanceSha256,
+  persistedLiveRuns,
+} = {}) {
+  try {
+    const parsed = ProductionCanaryCheckpointV2Schema.parse(checkpoint);
+    if (parsed.id !== "cutover" || parsed.dueAt !== activation?.activatedAt || activation?.status !== "passed" ||
+      browserReceipt?.id !== "append-browser-acceptance" || browserReceipt.status !== "passed" ||
+      browserReceipt.sha256 !== expectedBrowserAcceptanceSha256 ||
+      !Array.isArray(persistedLiveRuns?.runIds) || persistedLiveRuns.status !== "persisted" ||
+      JSON.stringify(parsed.checks.liveCoston2.runIds) !== JSON.stringify(persistedLiveRuns.runIds) ||
+      (externalObservation && (!Number.isFinite(Date.parse(externalObservation.observedAt)) ||
+        Date.parse(parsed.observedAt) < Date.parse(externalObservation.observedAt)))) {
+      throw new Error("cutover checkpoint binding");
+    }
+    return deepFreeze(parsed);
+  } catch (cause) {
+    throw failure("PRODUCTION_CANARY_FAILED", "PRODUCTION_CANARY_FAILED: Production cutover checkpoint is invalid", { cause });
+  }
 }
 
 export async function resumeTimewebProductionCanary(input) {

@@ -199,3 +199,21 @@ Syntax and typecheck pass. The exact two-file focus is 34 retained controls
 PASS / 3 intentional RED: phase grammar and canonical checkpoint handoff for
 the P0, plus the real Compose environment bind for the P1. Serialized
 deployment static is 287 PASS / the same 3 RED. Sites remains 46/46 PASS.
+
+## Core fe18 corrective Author GREEN
+
+The production correction closes the two frozen failures without changing
+public evidence schemas. The phase grammar now observes and appends a strict
+canonical `cutover` checkpoint after browser seal and before deployment
+evidence. It binds activation time, browser receipt and the exact two persisted
+Coston2 run IDs; observe or append failure rolls Caddy back before the pinned
+session closes and writes zero deployment PASS.
+
+The host Compose adapter now rejects ambient/caller replay-stage variables and
+injects exactly `/opt/orivra/replay-bootstrap-stage`, while the Compose mount
+has no fallback and keeps `create_host_path: false`.
+
+Typecheck passes; the affected three-file deployment focus is 43/43 PASS and
+the serialized deployment static inventory is 290/290 PASS. This remains
+Author GREEN pending two independent reports on the final clean tree. It is
+not publication, hosted, deployed, Timeweb, Coston2 or security PASS.

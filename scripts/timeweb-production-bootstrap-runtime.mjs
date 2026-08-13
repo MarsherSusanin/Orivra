@@ -43,6 +43,8 @@ export const PRODUCTION_BOOTSTRAP_PHASES = Object.freeze([
   "activate-caddy",
   "external-browser-acceptance",
   "seal-browser-acceptance",
+  "observe-cutover-checkpoint",
+  "append-cutover-checkpoint",
   "append-deployment-evidence",
 ]);
 
@@ -68,6 +70,8 @@ const PHASE_REQUIREMENTS = Object.freeze({
   "activate-caddy": ["backupEvidenceFile", "replayBundleFile", "replayPreflightReportFile"],
   "external-browser-acceptance": ["backupEvidenceFile", "replayBundleFile", "replayPreflightReportFile"],
   "seal-browser-acceptance": ["backupEvidenceFile", "replayBundleFile", "replayPreflightReportFile"],
+  "observe-cutover-checkpoint": OUTPUT_KEYS,
+  "append-cutover-checkpoint": OUTPUT_KEYS,
   "append-deployment-evidence": OUTPUT_KEYS,
 });
 

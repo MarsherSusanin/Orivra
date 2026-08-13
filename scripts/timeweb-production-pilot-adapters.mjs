@@ -224,7 +224,11 @@ export async function createProductionPilotAdapters({ secretFiles }) {
     replayPreflightReportFile: requiredEnvironmentPath("PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE"),
     backupEvidenceFile: requiredEnvironmentPath("PROOFLINE_BACKUP_EVIDENCE_FILE"),
   });
-  void PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT;
+  const replayBootstrapStageAuthority = Object.freeze({
+    path: PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT,
+    owner: "production-host",
+    createHostPath: false,
+  });
   const relayerKeyPath = requiredEnvironmentPath("PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE");
   let activeSession;
   let provisionedTarget;
@@ -294,6 +298,7 @@ export async function createProductionPilotAdapters({ secretFiles }) {
   }
 
   return {
+    replayBootstrapStageAuthority,
     fileInputs,
     staticFileInputs,
     inspectFile: lstat,

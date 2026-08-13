@@ -46,6 +46,8 @@ const runtimeComposeEnvironment = {
   PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/proofline-worker-replay-bundle.json",
   PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
     "/tmp/proofline-worker-replay-preflight-report.json",
+  PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:
+    "/opt/orivra/replay-bootstrap-stage",
   PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE: "/tmp/proofline-postgres-admin-database-url",
   PROOFLINE_MIGRATOR_DATABASE_URL_FILE: "/tmp/proofline-migrator-database-url",
   PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE: "/tmp/proofline-recording-importer-database-url",

@@ -382,7 +382,14 @@ function defaultAdapters() {
       };
     } },
     compose: { async runExactPhase(input) {
-      const env = await loadRuntimeEnvironment(input.imageEnvironment);
+      let env = await loadRuntimeEnvironment(input.imageEnvironment);
+      if (input.phase === "replay-bootstrap") {
+        env = bindOwnedReplayBootstrapComposeEnvironment({
+          runtimeEnvironment: env,
+          stageRoot: input.stageRoot,
+          createHostPath: input.createHostPath,
+        });
+      }
       if (input.phase === "safe-consumer-deployer") {
         const runId = env.PROOFLINE_PRODUCTION_RUN_ID;
         if (!RUN_ID.test(runId ?? "")) throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID");
@@ -683,6 +690,23 @@ export async function runOwnedReplayBootstrapStageLifecycle({
     const primary = failure("TIMEWEB_HOST_REPLAY_STAGE_INVALID", "Replay-bootstrap staging lifecycle is invalid", cause);
     if (cleanup.length) throw new AggregateError([primary, ...cleanup], "Replay-bootstrap staging and cleanup failed", { cause: primary });
     throw primary;
+  }
+}
+
+export function bindOwnedReplayBootstrapComposeEnvironment({
+  runtimeEnvironment,
+  stageRoot,
+  createHostPath,
+} = {}) {
+  try {
+    if (!runtimeEnvironment || typeof runtimeEnvironment !== "object" || Array.isArray(runtimeEnvironment) ||
+      Object.hasOwn(runtimeEnvironment, "PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT") ||
+      stageRoot !== REPLAY_STAGE_ROOT || createHostPath !== false) {
+      throw new Error("replay stage authority");
+    }
+    return deepFreeze({ ...runtimeEnvironment, PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: REPLAY_STAGE_ROOT });
+  } catch (cause) {
+    throw failure("TIMEWEB_HOST_REPLAY_STAGE_INVALID", "Replay-bootstrap Compose authority is invalid", cause);
   }
 }
 

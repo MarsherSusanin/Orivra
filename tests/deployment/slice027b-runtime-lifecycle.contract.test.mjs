@@ -40,6 +40,7 @@ const environment = {
   PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
   PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT: "/tmp/safe-consumer-evidence",
   PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE: "/tmp/safe-consumer-worker-handoff.json",
+  PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: "/opt/orivra/replay-bootstrap-stage",
   PROOFLINE_WORKER_REPLAY_BUNDLE_FILE: "/tmp/worker-replay-bundle.json",
   PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE:
     "/tmp/worker-replay-preflight-report.json",

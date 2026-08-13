@@ -1,6 +1,6 @@
 # Slice 029D — Phase-ordered direct-production bootstrap
 
-Status: Corrective RED after independent Core FAIL on fe18f10
+Status: Corrective Author GREEN after independent Core FAIL on fe18f10; independent reverification pending
 
 Decision: [ADR 0045](../adr/0045-phase-ordered-direct-production-bootstrap.md)
 
@@ -83,6 +83,12 @@ acceptance or rollback authority.
 The prior author GREEN is superseded by corrective RED for the missing initial
 cutover checkpoint and fixed replay-stage Compose binding. No credential,
 registry, server or provider effect is claimed by this correction.
+
+The corrective implementation now records the strict host-observed `cutover`
+checkpoint after browser evidence and before deployment evidence, and binds
+the exact host-owned replay stage into Compose without a default or ambient
+path. The correction is Author GREEN only until two independent verifiers pass
+the exact final commit/tree.
 
 ## Exclusions
 
