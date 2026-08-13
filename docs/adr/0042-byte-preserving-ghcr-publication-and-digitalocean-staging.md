@@ -1,17 +1,20 @@
 # ADR 0042: Byte-preserving GHCR publication and DigitalOcean staging
 
-- Status: Accepted contract; GHCR publication complete and independently
-  verified; isolated DigitalOcean staging pending
+- Status: Accepted contract; historical GHCR publication complete; refreshed
+  Timeweb direct-pilot publication pending
 - Date: 2026-08-12
 - Refines: ADR 0029, ADR 0035, ADR 0036, ADR 0037, ADR 0039, ADR 0041
 
 ## Context
 
 The current release candidate is complete on exact commit
-`081362877e6f05a94368c60cc0dc4ea20d338fba` / tree
-`5e661b933aeb53a0fa87c5e7d50ed2659d0a6542`. Its canonical candidate SHA-256
-is `d00f9ebd20f027bbad54c3f8d946ae3f7e7bb1c6739928aca9c0eb8e65b937fb`.
-Core and Product independently PASS that exact tree. This authorizes an
+`4f421dc297ee0c737a4e744694c6f022d2b94ad6` / tree
+`1bbbbadeee1cbfdedd17a8a4bca35c8524ec535b`. Its canonical candidate SHA-256
+is `c34c28a64f91f301ef518105d42adce725d02360cbbd7cf8c36d42e9429d5f32`.
+Core and Product independently PASS that exact tree with report SHA-256 values
+`179a98bd82f09a61960da42f4e824bb3ebd4b92c15ae488c7bd409fb2d60cc87`
+and `30d1fc44bc0721fafd0f9a8975b26b179423f4c5c624bf64806e310f0ffffff8`.
+This authorizes an
 operator to provide narrowly scoped 028B credentials, but does not itself
 publish a registry image, provision a VDS or prove hosted staging.
 

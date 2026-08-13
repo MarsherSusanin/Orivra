@@ -612,3 +612,14 @@ mode-0400 report SHA-256 values are respectively
 and `sha256:30d1fc44bc0721fafd0f9a8975b26b179423f4c5c624bf64806e310f0ffffff8`.
 Fresh byte-preserving GHCR publication remains pending and no deployment claim
 is made by the verifier reports.
+
+The first publisher-authority commit `d952a05b4cef6e76bd2fcf6313a3675dd58a9481`
+/ tree `485d497781a58191e98450a38a6c5bb26e2c9f9c` was rejected by Core before
+publication because three active operating-document sections still named the
+immediately prior `0813628` / `d00f9ebd…` tuple as current authority and the
+causal test did not forbid that exact prior tuple. Product verification was
+halted with no PASS. The durable mode-0400 Core FAIL report has SHA-256
+`sha256:71fc99344b38a4488dae00cf027e37502d50fc798c709e63e0166fdc9f16ae57`.
+The corrective wave changes only active documentation and the publisher
+authority test; candidate, verifier reports and all five OCI archives remain
+byte-identical.

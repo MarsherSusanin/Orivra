@@ -714,8 +714,10 @@ lowercase `ghcr.io/<owner>/<package>` repositories in frozen image order. The
 token file is a regular non-symlink mode-0400 file under a private operator
 root; do not paste its value into the shell, environment, Git or Codex chat.
 The evidence parent must already be mode 0700 and the output must not exist.
-The command is fixed to candidate `d00f9ebd…` and exact Core/Product report
-hashes. It verifies all five archives before the first registry request and
+The command is fixed to candidate `c34c28a6…` and the exact Core/Product report
+hashes `179a98bd…` / `30d1fc44…`. The immediately prior
+`0813628` / `d00f9ebd…` authority is not accepted by the executable publisher.
+It verifies all five archives before the first registry request and
 writes mode-0400 evidence only after five exact remote manifest-digest checks.
 The earlier 028B implementation received two independent PASS reports on exact
 commit `70f63cb0c4fac0c7661cb734896575be07edfa70` / tree
