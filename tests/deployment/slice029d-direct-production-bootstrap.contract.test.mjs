@@ -41,8 +41,8 @@ test("accepts ADR 0045 and freezes 029D without claiming publication or deployme
     readFile(resolve(root, "docs/development/product-roadmap.md"), "utf8"),
   ]);
   assert.match(index, /0045-phase-ordered-direct-production-bootstrap/);
-  assert.match(adr, /Status: Accepted boundary; corrective Author GREEN, independent reverification pending/);
-  assert.match(slice, /Status: Corrective Author GREEN after independent Core FAIL on fe18f10; independent reverification pending/);
+  assert.match(adr, /Status: Accepted boundary; corrective RED after independent Core FAIL on c737113/);
+  assert.match(slice, /Status: Corrective RED after independent Core FAIL on c737113/);
   assert.match(roadmap, /361bac3[\s\S]*obsolete undeployable images[\s\S]*must not be published/i);
   assert.doesNotMatch(`${adr}\n${slice}`, /hosted PASS|deployed PASS|production PASS/i);
 });

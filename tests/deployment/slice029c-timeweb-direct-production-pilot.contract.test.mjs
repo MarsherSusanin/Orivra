@@ -541,7 +541,7 @@ test("24-hour canary resumes from append-only checkpoints and cannot terminal-pa
   const deploymentText = contracts.canonicalSerializeProductionDeploymentEvidenceV2(deployment);
   const deploymentEvidenceBytes = Buffer.from(deploymentText, "utf8");
   const expectedDeploymentEvidenceSha256 = digest(deploymentEvidenceBytes);
-  const state = [checkpoint("cutover", "2026-08-12T03:00:00Z")];
+  const state = [checkpoint("cutover", "2026-08-12T03:00:00Z", "2026-08-12T03:00:01Z")];
   assert.deepEqual(contracts.ProductionCanaryCheckpointV2Schema.parse(state[0]), state[0]);
   const promotions = [];
   let now = "2026-08-12T03:00:01Z";
@@ -570,7 +570,7 @@ test("24-hour canary resumes from append-only checkpoints and cannot terminal-pa
   assert.equal((await invoke()).status, "canary-pending");
   assert.equal(observations, 0);
   assert.equal(promotions.length, 0);
-  now = "2026-08-12T03:15:00Z";
+  now = "2026-08-12T03:15:01Z";
   await assert.rejects(invoke({
     observe: async ({ id, dueAt }) => ({
       ...checkpoint(id, dueAt, now),
@@ -597,4 +597,35 @@ test("24-hour canary resumes from append-only checkpoints and cannot terminal-pa
   assert.equal(promotion.productionDeploymentEvidenceSha256, expectedDeploymentEvidenceSha256);
   assert.equal(promotion.canary.durationSeconds, 86400);
   assert.deepEqual(promotion.canary.checkpoints.map(({ id }) => id), ["cutover", "post-cutover-15m", "post-cutover-1h", "post-cutover-24h"]);
+  assert.deepEqual(promotion.canary.checkpoints.map(({ dueAt }) => dueAt), [
+    deployment.cutover.activatedAt,
+    "2026-08-12T03:15:00Z",
+    "2026-08-12T04:00:00Z",
+    "2026-08-13T03:00:00Z",
+  ]);
+});
+
+test("rejects a first cutover checkpoint whose due time is not the deployment activation", async () => {
+  const module = await runtime();
+  const value = await fixture();
+  const contracts = await import("../../packages/contracts/src/production-promotion-runtime.mjs").catch(() => ({}));
+  const deployment = productionDeploymentEvidenceV2(value);
+  const deploymentText = contracts.canonicalSerializeProductionDeploymentEvidenceV2(deployment);
+  const deploymentEvidenceBytes = Buffer.from(deploymentText, "utf8");
+  const mismatched = checkpoint("cutover", "2026-08-12T03:00:01Z", "2026-08-12T03:00:02Z");
+  let observations = 0;
+  let appends = 0;
+  await assert.rejects(module.resumeTimewebProductionCanary({
+    deploymentEvidenceBytes,
+    expectedDeploymentEvidenceSha256: digest(deploymentEvidenceBytes),
+    clock: { now: () => "2026-08-12T03:15:01Z" },
+    checkpointStore: {
+      load: async () => [mismatched],
+      append: async () => { appends += 1; },
+    },
+    observe: async () => { observations += 1; return checkpoint("post-cutover-15m", "2026-08-12T03:15:01Z"); },
+    appendPromotionEvidence: async () => { appends += 1; },
+  }), /PRODUCTION_CANARY_FAILED|cutover checkpoint/i);
+  assert.equal(observations, 0);
+  assert.equal(appends, 0);
 });

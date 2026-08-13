@@ -1,6 +1,6 @@
 # ADR 0045: Phase-ordered direct-production bootstrap
 
-- Status: Accepted boundary; corrective Author GREEN, independent reverification pending
+- Status: Accepted boundary; corrective RED after independent Core FAIL on c737113
 - Date: 2026-08-13
 - Refines: ADR 0044
 - Slice: [029D](../slices/029d-phase-ordered-direct-production-bootstrap.md)
@@ -73,6 +73,14 @@ strict-parsed as `ProductionCanaryCheckpointV2`, canonically appended through
 the checkpoint store, and must be the first `cutover` entry later loaded by
 `resumeTimewebProductionCanary`. Observation or append failure occurs before
 deployment evidence, rolls Caddy back, and only then closes the pinned session.
+
+The canary epoch is the first checkpoint's `dueAt`, which equals
+`deployment.cutover.activatedAt`; it is never the later host-clock
+`observedAt`. All later due times are exact offsets of 900, 3600 and 86400
+seconds from that activation. Resume rejects a first checkpoint whose `dueAt`
+does not equal the deployment activation before observation, append or
+promotion. A delayed but valid cutover observation remains eligible for one
+canonical terminal `ProductionPromotionEvidenceV2`.
 
 Any failure after activation rolls Caddy back through the still-open pinned
 session before its exact-once close. No deployment PASS is written first.

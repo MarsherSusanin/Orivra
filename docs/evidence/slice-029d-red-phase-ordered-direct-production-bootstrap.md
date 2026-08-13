@@ -224,3 +224,25 @@ FAIL report is `/private/tmp/orivra-release-c737/verifiers/c737113/product-verif
 SHA-256 `92067e8dfb0d779cedb211079f8c4bb5a26d6d7295bffa4c9dac4ffa16122e28`.
 This compatibility correction changes only those status assertions and this
 chronology; it does not alter production bytes.
+
+## Core c737 canary-epoch corrective RED
+
+Independent Core verification rejected exact candidate
+`c7371130d9ed22cbf4a4dce00de708c1945666ca` / tree
+`5ae1a114726b590f9e84cf8853bbf15399542c44`. The formal report is
+`/private/tmp/orivra-release-c737/verifiers/c737113/core-verifier.md`, SHA-256
+`686d9530fea4a0c0632600c1f93e3b70f35cb0867b4a70b9a3df7ceb9ae723d2`.
+
+The accepted first `cutover` checkpoint can be observed after its due time.
+Resume must nevertheless derive the 15-minute, 1-hour and 24-hour due times
+from `cutover.dueAt == deployment.cutover.activatedAt`, not from
+`cutover.observedAt`. The corrective test carries a real one-second observation
+delay through all four append-only checkpoints and requires a canonical
+terminal `ProductionPromotionEvidenceV2`. A separate causal case rejects a
+first checkpoint whose due time differs from activation before observation,
+append or promotion. This tests/docs-only RED makes no hosted, deployed,
+Timeweb, Coston2, registry or security PASS claim.
+
+Syntax and typecheck pass. The exact affected two-file focus is 25 retained
+controls PASS / 2 intentional RED, and serialized deployment static is 289
+PASS / the same 2 RED. Sites remains 46/46 PASS.

@@ -1,6 +1,6 @@
 # Slice 029D — Phase-ordered direct-production bootstrap
 
-Status: Corrective Author GREEN after independent Core FAIL on fe18f10; independent reverification pending
+Status: Corrective RED after independent Core FAIL on c737113
 
 Decision: [ADR 0045](../adr/0045-phase-ordered-direct-production-bootstrap.md)
 
@@ -53,6 +53,9 @@ acceptance or rollback authority.
 - the phase-ordered path observes and canonically appends its real first
   `cutover` checkpoint before deployment evidence; that exact entry starts the
   resumable 15m/1h/24h chain;
+- the resumable chain anchors every due time to the first `cutover.dueAt`,
+  exactly equal to deployment activation, never to a later observation time;
+  a mismatched first due time fails before any new observation or append;
 - the fixed owned replay stage is bound by the host into the actual Compose
   environment with no ambient/default/caller path authority;
 - the production-used browser adapter adds only root devDependency
