@@ -217,3 +217,10 @@ Typecheck passes; the affected three-file deployment focus is 43/43 PASS and
 the serialized deployment static inventory is 290/290 PASS. This remains
 Author GREEN pending two independent reports on the final clean tree. It is
 not publication, hosted, deployed, Timeweb, Coston2 or security PASS.
+
+The first independent Product reverification of `c737113` stopped on two stale
+tests that still required the superseded RED document status. Its mode-0400
+FAIL report is `/private/tmp/orivra-release-c737/verifiers/c737113/product-verifier.md`,
+SHA-256 `92067e8dfb0d779cedb211079f8c4bb5a26d6d7295bffa4c9dac4ffa16122e28`.
+This compatibility correction changes only those status assertions and this
+chronology; it does not alter production bytes.
