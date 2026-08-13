@@ -764,13 +764,19 @@ export async function resumeTimewebProductionCanary(input) {
     throw failure("PRODUCTION_DEPLOYMENT_EVIDENCE_INVALID", "Production deployment evidence is invalid", { cause });
   }
   const stored = await input.checkpointStore.load();
-  if (!Array.isArray(stored) || stored.length < 1 || stored.length > 4 || stored[0]?.id !== "cutover" || !Number.isFinite(Date.parse(stored[0].observedAt))) {
+  if (!Array.isArray(stored) || stored.length < 1 || stored.length > 4) {
     throw failure("PRODUCTION_CANARY_FAILED", "Production canary failed");
   }
-  const cutoverAt = stored[0].observedAt;
+  let checkpoints;
+  try { checkpoints = stored.map((entry) => ProductionCanaryCheckpointV2Schema.parse(entry)); }
+  catch (cause) { throw failure("PRODUCTION_CANARY_FAILED", "Production canary failed", { cause }); }
+  const cutoverAt = deployment.cutover.activatedAt;
   const expectedIds = directCanaryDefinitions.map(([id]) => id);
-  if (stored.some((entry, index) => entry.id !== expectedIds[index])) throw failure("PRODUCTION_CANARY_FAILED", "Production canary failed");
-  const next = directCanaryDefinitions[stored.length];
+  if (checkpoints.some((entry, index) => entry.id !== expectedIds[index] ||
+    entry.dueAt !== addSeconds(cutoverAt, directCanaryDefinitions[index][1]))) {
+    throw failure("PRODUCTION_CANARY_FAILED", "PRODUCTION_CANARY_FAILED: Production cutover checkpoint is invalid");
+  }
+  const next = directCanaryDefinitions[checkpoints.length];
   if (!next) return deepFreeze({ status: "passed" });
   const dueAt = addSeconds(cutoverAt, next[1]);
   if (nowMs < Date.parse(dueAt)) return deepFreeze({ status: "canary-pending", nextCheckpoint: next[0], dueAt });
@@ -780,7 +786,7 @@ export async function resumeTimewebProductionCanary(input) {
   if (observed.id !== next[0] || observed.dueAt !== dueAt || observed.observedAt !== now) throw failure("PRODUCTION_CANARY_FAILED", "Production canary failed");
   await input.checkpointStore.append(observed);
   if (next[0] !== "post-cutover-24h") return deepFreeze({ status: "canary-pending", nextCheckpoint: expectedIds[stored.length + 1] });
-  const checkpoints = [...stored, observed];
+  checkpoints = [...checkpoints, observed];
   const promotion = ProductionPromotionEvidenceV2Schema.parse({ version: "2", kind: "digitalocean-production-promotion-evidence", status: "passed", verification: "verified", promotionClaim: true,
     producer: deployment.producer, publicationEvidenceSha256: deployment.publicationEvidenceSha256,
     productionDeploymentEvidenceSha256: input.expectedDeploymentEvidenceSha256, runId: deployment.run.runId, operatorId: deployment.run.operatorId,

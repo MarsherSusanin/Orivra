@@ -1,6 +1,6 @@
 # ADR 0045: Phase-ordered direct-production bootstrap
 
-- Status: Accepted boundary; corrective RED after independent Core FAIL on c737113
+- Status: Accepted boundary; corrective Author GREEN, independent reverification pending
 - Date: 2026-08-13
 - Refines: ADR 0044
 - Slice: [029D](../slices/029d-phase-ordered-direct-production-bootstrap.md)

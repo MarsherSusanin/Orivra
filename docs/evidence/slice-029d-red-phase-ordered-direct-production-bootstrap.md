@@ -246,3 +246,14 @@ Timeweb, Coston2, registry or security PASS claim.
 Syntax and typecheck pass. The exact affected two-file focus is 25 retained
 controls PASS / 2 intentional RED, and serialized deployment static is 289
 PASS / the same 2 RED. Sites remains 46/46 PASS.
+
+## Core c737 canary-epoch corrective Author GREEN
+
+The production resume path now treats the deployment activation time and the
+canonical first checkpoint `dueAt` as the single canary epoch. A delayed real
+observation no longer shifts the 15-minute, 1-hour or 24-hour boundaries, and
+the complete stored prefix is schema-checked against the fixed schedule before
+any new observation or append. A mismatched first due time therefore fails
+before effects. The correction remains Author GREEN pending two fresh
+independent reports on one exact clean tree; it is not a hosted, deployed or
+security PASS.

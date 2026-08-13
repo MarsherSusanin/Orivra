@@ -1,6 +1,6 @@
 # Slice 029D — Phase-ordered direct-production bootstrap
 
-Status: Corrective RED after independent Core FAIL on c737113
+Status: Corrective Author GREEN after independent Core FAIL on c737113; independent reverification pending
 
 Decision: [ADR 0045](../adr/0045-phase-ordered-direct-production-bootstrap.md)
 
