@@ -347,6 +347,7 @@ test("seals canonical bootstrap artifacts atomically and never follows a symlink
 
 test("rolls public Caddy back before closing the pinned session on every post-activation failure", async () => {
   const module = await runtime();
+  const browserSha256 = `sha256:${"b".repeat(64)}`;
   for (const failingPhase of ["external-browser-acceptance", "seal-browser-acceptance", "append-deployment-evidence"]) {
     const calls = [];
     await assert.rejects(module.runTimewebProductionBootstrapLifecycle({
@@ -357,6 +358,7 @@ test("rolls public Caddy back before closing the pinned session on every post-ac
         if (phase === "observe-wal-freshness") return { status: "passed", archivePendingAgeSeconds: 30, switchedWalArchived: true };
         if (phase === "replay-bootstrap") return { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY };
         if (phase === "persisted-live-coston2") return { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_RELAYER, ETH_RELAYER] };
+        if (phase === "seal-browser-acceptance") return { id: "append-browser-acceptance", status: "passed", sha256: browserSha256 };
         return { status: "passed" };
       },
       rollbackCaddy: async () => calls.push("rollback-caddy"),
@@ -369,6 +371,7 @@ test("rolls public Caddy back before closing the pinned session on every post-ac
 
 test("publishes no deployment evidence after any producer, seal or validation failure", async () => {
   const module = await runtime();
+  const browserSha256 = `sha256:${"b".repeat(64)}`;
   const failures = [
     "create-timeweb-backup", "seal-backup-evidence", "observe-wal-freshness", "timeweb-pitr",
     "replay-bootstrap", "seal-replay-pair", "deep-validate-replay-pair",
@@ -384,6 +387,7 @@ test("publishes no deployment evidence after any producer, seal or validation fa
         if (phase === "observe-wal-freshness") return { status: "passed", archivePendingAgeSeconds: 30, switchedWalArchived: true };
         if (phase === "replay-bootstrap") return { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY };
         if (phase === "persisted-live-coston2") return { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_RELAYER, ETH_RELAYER] };
+        if (phase === "seal-browser-acceptance") return { id: "append-browser-acceptance", status: "passed", sha256: browserSha256 };
         return { status: "passed" };
       },
       rollbackCaddy: async () => calls.push("rollback-caddy"),

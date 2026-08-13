@@ -94,3 +94,9 @@ intentional RED, serialized deployment static remains 248 control PASS / 34
 intentional RED, and Sites remains 46 PASS. The two new pure failures are the
 absent V2 schema field and its consequent fail-closed rollback parse; the
 deployment failures remain confined to the already frozen production seams.
+
+The retained-fixture compatibility follow-up makes generic lifecycle controls
+return the exact browser host append receipt before they can reach deployment
+append, and extends the retained host-command inventory with the already
+frozen backup, WAL-freshness, PITR, retention and replay-bootstrap commands in
+production phase order. It changes no runtime authority or historical V1 data.
