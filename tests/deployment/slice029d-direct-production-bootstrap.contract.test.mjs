@@ -37,8 +37,8 @@ test("accepts ADR 0045 and freezes 029D without claiming publication or deployme
     readFile(resolve(root, "docs/development/product-roadmap.md"), "utf8"),
   ]);
   assert.match(index, /0045-phase-ordered-direct-production-bootstrap/);
-  assert.match(adr, /Status: Accepted boundary; intentional RED/);
-  assert.match(slice, /Status: Intentional RED/);
+  assert.match(adr, /Status: Accepted boundary; Author GREEN, independent verification pending/);
+  assert.match(slice, /Status: Author GREEN; independent Core and Product\/Integration verification pending/);
   assert.match(roadmap, /361bac3[\s\S]*obsolete undeployable images[\s\S]*must not be published/i);
   assert.doesNotMatch(`${adr}\n${slice}`, /hosted PASS|deployed PASS|production PASS/i);
 });
@@ -301,7 +301,7 @@ test("leases only the submitted bootstrap run and never a foreign queued command
   await assert.rejects(mismatched.claimNextCommand(), /PRODUCTION_REPLAY_BOOTSTRAP_RUN_SCOPE_INVALID/);
 
   const [bootstrapSource, entrySource] = await Promise.all([
-    readFile(resolve(root, "apps/worker/src/bootstrap.ts"), "utf8"),
+    readFile(resolve(root, "apps/worker/src/production-replay-bootstrap-worker.ts"), "utf8"),
     readFile(resolve(root, "apps/worker/src/production-replay-bootstrap.ts"), "utf8"),
   ]);
   assert.match(bootstrapSource, /createRunScopedReplayBootstrapRepository\s*\(/);

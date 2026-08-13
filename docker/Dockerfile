@@ -63,6 +63,7 @@ COPY --from=dependency-cache /workspace/node_modules /app/node_modules
 COPY --from=build --chown=node:node /workspace/apps/worker/dist/worker.js /app/apps/worker/dist/worker.js
 COPY --from=build --chown=node:node /workspace/apps/worker/dist/safe-consumer-deployer.js /app/apps/worker/dist/safe-consumer-deployer.js
 COPY --from=build --chown=node:node /workspace/apps/worker/dist/production-live-gate.js /app/apps/worker/dist/production-live-gate.js
+COPY --from=build --chown=node:node /workspace/apps/worker/dist/production-replay-bootstrap.js /app/apps/worker/dist/production-replay-bootstrap.js
 COPY --from=build --chown=node:node /workspace/contracts/ProoflineUrlInvariant.sol /app/contracts/ProoflineUrlInvariant.sol
 USER node
 CMD ["node", "/app/apps/worker/dist/worker.js"]

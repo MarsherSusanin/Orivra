@@ -6,6 +6,7 @@ import {
   ProductionDeploymentEvidenceV1Schema,
   ProductionDeploymentEvidenceV2Schema,
   ProductionPilotPreflightEvidenceV1Schema,
+  ProductionPilotPreflightEvidenceV2Schema,
   ProductionPromotionAuthorizationV1Schema,
   ProductionPromotionAuthorizationV2Schema,
   ProductionPromotionEvidenceV1Schema,
@@ -20,6 +21,7 @@ import {
   canonicalSerializeProductionDeploymentEvidence,
   canonicalSerializeProductionDeploymentEvidenceV2,
   canonicalSerializeProductionPilotPreflightEvidence,
+  canonicalSerializeProductionPilotPreflightEvidenceV2,
   canonicalSerializeProductionPromotionAuthorization,
   canonicalSerializeProductionPromotionAuthorizationV2,
   canonicalSerializeProductionPromotionEvidence,
@@ -35,6 +37,7 @@ import {
   checksumProductionDeploymentEvidence,
   checksumProductionDeploymentEvidenceV2,
   checksumProductionPilotPreflightEvidence,
+  checksumProductionPilotPreflightEvidenceV2,
   checksumProductionPromotionAuthorization,
   checksumProductionPromotionAuthorizationV2,
   checksumProductionPromotionEvidence,
@@ -54,6 +57,7 @@ export {
   ProductionDeploymentEvidenceV1Schema,
   ProductionDeploymentEvidenceV2Schema,
   ProductionPilotPreflightEvidenceV1Schema,
+  ProductionPilotPreflightEvidenceV2Schema,
   ProductionPromotionAuthorizationV1Schema,
   ProductionPromotionAuthorizationV2Schema,
   ProductionPromotionEvidenceV1Schema,
@@ -68,6 +72,7 @@ export {
   canonicalSerializeProductionDeploymentEvidence,
   canonicalSerializeProductionDeploymentEvidenceV2,
   canonicalSerializeProductionPilotPreflightEvidence,
+  canonicalSerializeProductionPilotPreflightEvidenceV2,
   canonicalSerializeProductionPromotionAuthorization,
   canonicalSerializeProductionPromotionAuthorizationV2,
   canonicalSerializeProductionPromotionEvidence,
@@ -83,6 +88,7 @@ export {
   checksumProductionDeploymentEvidence,
   checksumProductionDeploymentEvidenceV2,
   checksumProductionPilotPreflightEvidence,
+  checksumProductionPilotPreflightEvidenceV2,
   checksumProductionPromotionAuthorization,
   checksumProductionPromotionAuthorizationV2,
   checksumProductionPromotionEvidence,
@@ -104,6 +110,7 @@ export type TimewebS3PilotAuthorityV1 = z.infer<typeof TimewebS3PilotAuthorityV1
 export type SafeConsumerRegistryV1 = z.infer<typeof SafeConsumerRegistryV1Schema>;
 export type SafeConsumerDeploymentEvidenceV1 = z.infer<typeof SafeConsumerDeploymentEvidenceV1Schema>;
 export type ProductionPilotPreflightEvidenceV1 = z.infer<typeof ProductionPilotPreflightEvidenceV1Schema>;
+export type ProductionPilotPreflightEvidenceV2 = z.infer<typeof ProductionPilotPreflightEvidenceV2Schema>;
 export type ProductionTargetV2 = z.infer<typeof ProductionTargetV2Schema>;
 export type ProductionPromotionAuthorizationV2 = z.infer<typeof ProductionPromotionAuthorizationV2Schema>;
 export type ProductionDeploymentEvidenceV2 = z.infer<typeof ProductionDeploymentEvidenceV2Schema>;

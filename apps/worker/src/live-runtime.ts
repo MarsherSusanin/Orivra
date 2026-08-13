@@ -16,7 +16,11 @@ import {
   type PreflightPorts,
   type RawDaProof,
 } from "@proofline/fdc-coston2";
-import { canonicalJson, diagnoseConsumerRequest } from "@proofline/domain";
+import {
+  canonicalJson,
+  diagnoseConsumerRequest,
+  resolveProductionRelayerReplayAlias,
+} from "@proofline/domain";
 import { first as jqFirst } from "jq-wasm/inline";
 import {
   concatHex,
@@ -225,7 +229,14 @@ function consumerAbi(): Abi {
 
 function resolveSafeConsumerAddress(runtimeConfig: LiveCoston2RuntimeConfig, manifest: Web2JsonManifestV1): Address {
   const manifestSha256 = `sha256:${createHash("sha256").update(canonicalJson(Coston2Web2JsonManifestV1Schema.parse(manifest))).digest("hex")}`;
-  const matches = runtimeConfig.safeConsumerRegistry.entries.filter((entry) => entry.manifestSha256 === manifestSha256);
+  let registryManifestSha256 = manifestSha256;
+  if (manifest.submission.mode === "relayer") {
+    registryManifestSha256 = resolveProductionRelayerReplayAlias({
+      relayerManifest: manifest,
+      relayerManifestSha256: manifestSha256,
+    }).replayManifestSha256;
+  }
+  const matches = runtimeConfig.safeConsumerRegistry.entries.filter((entry) => entry.manifestSha256 === registryManifestSha256);
   if (matches.length !== 1) throw createFdcError("schema-invalid", "SAFE_CONSUMER_REGISTRY_INVALID", "Safe consumer registry has no exact manifest binding", false, {});
   return matches[0].consumerAddress;
 }

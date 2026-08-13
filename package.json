@@ -38,9 +38,9 @@
     "release:candidate": "node scripts/mlp-candidate-freeze.mjs",
     "release:publish": "node scripts/ghcr-publication.mjs",
     "test:action:artifact": "vitest run tests/action-artifact-sync.contract.test.ts --reporter=verbose",
-    "compose:production": "node scripts/compose-production.mjs"
-    ,"production:canary:resume": "node scripts/resume-production-canary.mjs --state-root /var/lib/orivra/production-canary"
-    ,"production:backup:daily": "node scripts/run-timeweb-daily-backup.mjs"
+    "compose:production": "node scripts/compose-production.mjs",
+    "production:canary:resume": "node scripts/resume-production-canary.mjs --state-root /var/lib/orivra/production-canary",
+    "production:backup:daily": "node scripts/run-timeweb-daily-backup.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
@@ -66,6 +66,7 @@
     "fast-check": "^4.5.3",
     "happy-dom": "^20.11.1",
     "pg": "^8.22.0",
+    "playwright-core": "^1.62.1",
     "solc": "^0.8.36",
     "testcontainers": "^11.14.0",
     "typescript": "^7.0.2",

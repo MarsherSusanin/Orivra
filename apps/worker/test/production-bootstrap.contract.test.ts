@@ -91,6 +91,8 @@ describe("Slice 004 honest backend coverage scope", () => {
       "apps/api/src/server.ts",
       "apps/worker/src/entry.ts",
       "apps/worker/src/production-live-gate-entry.ts",
+      "apps/worker/src/production-replay-bootstrap.ts",
+      "apps/worker/src/production-replay-bootstrap-worker.ts",
       "apps/worker/src/safe-consumer-deployer-entry.ts",
       "packages/action/src/entry.ts",
       "packages/cli/src/bin.ts",

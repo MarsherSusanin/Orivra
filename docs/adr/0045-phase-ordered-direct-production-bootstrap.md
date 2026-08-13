@@ -1,6 +1,6 @@
 # ADR 0045: Phase-ordered direct-production bootstrap
 
-- Status: Accepted boundary; intentional RED
+- Status: Accepted boundary; Author GREEN, independent verification pending
 - Date: 2026-08-13
 - Refines: ADR 0044
 - Slice: [029D](../slices/029d-phase-ordered-direct-production-bootstrap.md)
@@ -175,10 +175,11 @@ therefore rolls Caddy back before the pinned session closes.
 
 - ADR 0044 schemas and rollback authority remain compatible; only the active
   first-start lifecycle is refined.
-- 029D must produce new images, repeat the credential-free freeze and obtain
+- 029D now requires new images, a repeated credential-free freeze and
   two stopped-tree PASS reports before any fresh GHCR publication.
-- Existing 029C publication readiness is explicitly revoked; no provider,
-  registry, VDS, Timeweb or live effect is authorized by this RED.
+- Existing 029C publication readiness remains explicitly revoked; this author
+  GREEN does not authorize provider, registry, VDS, Timeweb or live effects
+  before the new freeze and two independent PASS reports.
 - The worker build must copy its freshly built
   `dist/production-replay-bootstrap.js` into the final worker image at
   `/app/apps/worker/dist/production-replay-bootstrap.js`; Compose cannot depend

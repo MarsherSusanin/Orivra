@@ -13,6 +13,8 @@ export default defineConfig({
       exclude: [
         "apps/worker/src/entry.ts",
         "apps/worker/src/production-live-gate-entry.ts",
+        "apps/worker/src/production-replay-bootstrap.ts",
+        "apps/worker/src/production-replay-bootstrap-worker.ts",
         "apps/worker/src/safe-consumer-deployer-entry.ts",
       ],
       thresholds: {

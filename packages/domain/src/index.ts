@@ -20,6 +20,11 @@ export {
   resolveWeb2JsonTemplate,
 } from "./web2json-template-catalog";
 export {
+  getProductionRelayerManifest,
+  resolveProductionRelayerReplayAlias,
+  verifyProductionRelayerReplayAlias,
+} from "./production-relayer-manifest";
+export {
   createFrozenOciReleaseManifest,
   createFrozenOciReleaseReceipt,
   deriveCanonicalOciArchiveEntries,

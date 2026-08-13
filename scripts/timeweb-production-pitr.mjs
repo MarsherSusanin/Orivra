@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { selectRecoveryBackupMetadata } from "./recovery-selected-backup-metadata.mjs";
+import { parseCanonicalBackupEvidence } from "./backup-evidence-validation.mjs";
 
 const RUN_ID = /^prod_[0-9A-Z]{26}$/;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
@@ -199,6 +200,57 @@ export async function runDefaultTimewebProductionPitr({ productionRunId, runner 
       bucket: authority.bucket, pathStyle: true, baseBackupId: selected.backupId, restoreVolumeId: created.volumeId,
       volumeWasFresh: true, restoreEvidenceSha256: verified.restoreEvidenceSha256,
       backupAgeSeconds: Math.floor((now - backupAt) / 1000), archivePendingAgeSeconds: archive.archivePendingAgeSeconds });
+  } catch (cause) {
+    throw Object.assign(new Error("TIMEWEB_PRODUCTION_PITR_FAILED: Timeweb production PITR failed"), { code: "TIMEWEB_PRODUCTION_PITR_FAILED", cause });
+  } finally {
+    if (volumeCreated) await runner({ productionRunId, provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true, phase: "remove-fresh-volume", selected }).catch(() => undefined);
+  }
+}
+
+export async function runSelectedTimewebProductionPitr({
+  productionRunId,
+  backupEvidenceBytes,
+  archivePendingAgeSeconds,
+  runner = defaultPhaseRunner,
+  clock = { now: () => new Date().toISOString() },
+} = {}) {
+  let volumeCreated = false;
+  let selected;
+  try {
+    if (!RUN_ID.test(productionRunId ?? "") || !Buffer.isBuffer(backupEvidenceBytes) ||
+      !Number.isSafeInteger(archivePendingAgeSeconds) || archivePendingAgeSeconds < 0 ||
+      archivePendingAgeSeconds > MAXIMUM_ARCHIVE_PENDING_SECONDS) throw new Error("authority");
+    const evidence = parseCanonicalBackupEvidence(backupEvidenceBytes);
+    if (evidence.database.slot !== "production" || evidence.storage.provider !== "timeweb-s3" ||
+      evidence.storage.endpointOrigin !== "https://s3.twcstorage.ru" || evidence.storage.region !== "ru-1" ||
+      evidence.storage.bucket !== "orivra-backet" || evidence.storage.addressing !== "path-style" ||
+      evidence.storage.authorityMode !== "shared-pilot") throw new Error("storage authority");
+    selected = Object.freeze({
+      status: "passed",
+      backupId: evidence.backup.id,
+      encrypted: true,
+      backupCompletedAt: evidence.backup.completedAt,
+      lastArchivedAt: evidence.backup.completedAt,
+      systemIdentifier: evidence.database.systemIdentifier,
+      timeline: evidence.backup.timeline,
+    });
+    const authority = { productionRunId, provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true };
+    const created = await runner({ ...authority, phase: "create-fresh-volume", selected });
+    if (created?.status !== "passed" || created.wasAbsent !== true || created.volumeId !== `proofline-pitr-${productionRunId}`) throw new Error("fresh volume");
+    volumeCreated = true;
+    const restored = await runner({ ...authority, phase: "restore-selected-backup", selected, volumeId: created.volumeId });
+    if (restored?.status !== "passed" || restored.backupId !== selected.backupId || restored.volumeId !== created.volumeId) throw new Error("restore");
+    const verified = await runner({ ...authority, phase: "verify-restored-database", selected, volumeId: created.volumeId });
+    if (verified?.status !== "passed" || verified.schemaVersion !== 10 || !SHA256.test(verified.restoreEvidenceSha256 ?? "")) throw new Error("verify");
+    const age = Math.floor((Date.parse(clock.now()) - Date.parse(selected.backupCompletedAt)) / 1000);
+    if (!Number.isSafeInteger(age) || age < 0) throw new Error("clock");
+    return Object.freeze({
+      status: "passed", provider: authority.provider, endpoint: authority.endpoint, region: authority.region,
+      bucket: authority.bucket, pathStyle: true, baseBackupId: selected.backupId,
+      restoreVolumeId: created.volumeId, volumeWasFresh: true,
+      restoreEvidenceSha256: verified.restoreEvidenceSha256,
+      backupAgeSeconds: age, archivePendingAgeSeconds,
+    });
   } catch (cause) {
     throw Object.assign(new Error("TIMEWEB_PRODUCTION_PITR_FAILED: Timeweb production PITR failed"), { code: "TIMEWEB_PRODUCTION_PITR_FAILED", cause });
   } finally {

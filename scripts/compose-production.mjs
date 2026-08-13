@@ -3,6 +3,10 @@ import { lstat, readdir } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseProductionBackupConfiguration } from "./backup-configuration.mjs";
+import {
+  PRODUCTION_BOOTSTRAP_OUTPUTS,
+  validateProductionBootstrapPhaseInputs,
+} from "./timeweb-production-bootstrap-runtime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPOSITORY_COMPONENT = "[a-z0-9]+(?:[._-][a-z0-9]+)*";
@@ -61,6 +65,45 @@ const SAFE_CONSUMER_FILES = [
   "safe-consumer-deployment-evidence.v1.json",
   "safe-consumer-registry.v1.json",
 ];
+
+const EARLY_BOOTSTRAP_SERVICES = Object.freeze([
+  "postgres",
+  "db-role-bootstrap",
+  "migrator",
+  "api",
+  "safe-consumer-deployer",
+]);
+
+function phaseForServices(services) {
+  if (!Array.isArray(services)) return null;
+  if (services.length > 0 && services.every((service) => EARLY_BOOTSTRAP_SERVICES.includes(service))) {
+    return services.at(-1) === "safe-consumer-deployer" ? "safe-consumer-deployer" : `start-${services.at(-1)}`;
+  }
+  if (services.length === 1 && services[0] === "timeweb-pitr") return "timeweb-pitr";
+  if (services.length === 1 && services[0] === "replay-bootstrap") return "replay-bootstrap";
+  if (services.length === 1 && services[0] === "worker") return "start-worker";
+  return "append-deployment-evidence";
+}
+
+export async function runPhaseAwareProductionCompose({
+  services = [],
+  outputPaths = PRODUCTION_BOOTSTRAP_OUTPUTS,
+  inspectPath = lstat,
+  validateCanonical,
+  runDocker,
+} = {}) {
+  const phase = phaseForServices(services);
+  if (!phase || typeof runDocker !== "function") {
+    throw new Error("Production phase-aware Compose command is invalid");
+  }
+  await validateProductionBootstrapPhaseInputs({
+    phase,
+    outputPaths,
+    inspectPath,
+    validateCanonical,
+  });
+  return runDocker(Object.freeze([...services]));
+}
 
 export async function validateSafeConsumerEvidenceLifecycle({ evidenceRoot, workerHandoffPath, phase }) {
   const invalid = (code) => Object.assign(new Error(`${code}: safe consumer evidence lifecycle is invalid`), { code });

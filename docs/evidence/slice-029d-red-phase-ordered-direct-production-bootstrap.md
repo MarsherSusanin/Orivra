@@ -139,3 +139,37 @@ cross-binding before staging, exact-run PostgreSQL claim authority, no-follow
 UID/GID-1000 owned stage lifecycle, and a fresh build-stage copy into the final
 worker image. No credential, Docker, network, server, build or production
 effect is part of this evidence.
+
+The GREEN implementation closes all five causal boundaries. The exact
+three-file focus is now 38/38 PASS, the affected PostgreSQL repository focus is
+28/28 PASS, typecheck is PASS, and serialized deployment static is 288/288
+PASS after an unchanged retained 027C timing control passed both isolated and
+immediate no-edit serialized reruns. Retained V2 fixtures were mechanically
+updated to the already frozen live-relayer evidence and mandatory browser
+digest; no production contract was weakened.
+
+## Author GREEN matrix
+
+The final author candidate separates the replay-bootstrap worker factory and
+entry graph from the ordinary long-lived worker, preserving the retained
+worker purity and environment-authority boundary while building and copying a
+distinct immutable entry. The pure relayer-to-replay alias is browser-safe and
+derives both live identities from canonical replay-equivalent manifests.
+
+Final pre-freeze gates on the same production bytes are PASS: typecheck;
+contracts/domain 59 files and 667 tests at 100% statements, branches,
+functions and lines; backend 123 files / 1,232 tests at 91.90% lines and
+86.94% branches; worker 26 files / 265 tests at 91.18% lines and 86.11%
+branches; real Testcontainers PostgreSQL 22 files / 163 tests with zero skips;
+Web 71 files / 601 tests at 92.57% lines and 85.91% branches; Solidity 30
+files / 395 tests; E2E 3 files / 7 tests; build and protected Sites 46/46;
+Action artifact sync 1/1; full root matrix 266 files / 2,564 tests with only
+the 43 configured environment-gated skips. The serialized deployment static
+inventory is 288/288 PASS. The earlier sandbox-only `listen EPERM` and one
+unchanged retained timing failure were excluded only after the exact no-edit
+outside-sandbox/serialized reruns passed.
+
+This is author-local GREEN, not either independent verifier report, not a
+fresh frozen release, and not publication, hosted, deployed, live Coston2,
+Timeweb backup/PITR or security PASS. Scan 8852 remains user-canceled and the
+accepted deferred 027C evidence-integrity risk remains open.

@@ -125,7 +125,72 @@ services:
         condition: service_healthy
       safe-consumer-deployer:
         condition: service_completed_successfully
+      replay-bootstrap:
+        condition: service_completed_successfully
     networks:
+      - db_internal
+      - worker_egress
+
+  replay-bootstrap:
+    <<: *runtime-service-defaults
+    image: ${PROOFLINE_WORKER_IMAGE:?PROOFLINE_WORKER_IMAGE is required}
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    restart: "no"
+    command: ["node", "/app/apps/worker/dist/production-replay-bootstrap.js"]
+    env_file:
+      - path: ./deploy/worker-runtime-fixed.env
+        required: true
+    environment:
+      DATABASE_URL_FILE: /run/secrets/worker_database_url
+      PROOFLINE_API_ORIGIN: http://api:8080
+      PROOFLINE_COSTON2_DA_URL: ${PROOFLINE_COSTON2_DA_URL:-https://ctn2-data-availability.flare.network}
+      PROOFLINE_COSTON2_PRIVATE_KEY_FILE: /run/secrets/worker_coston2_private_key
+      PROOFLINE_COSTON2_RPC_URL: ${PROOFLINE_COSTON2_RPC_URL:-https://coston2-api.flare.network/ext/C/rpc}
+      PROOFLINE_DA_TIMEOUT_MS: "15000"
+      PROOFLINE_PRODUCTION_RUN_ID: ${PROOFLINE_PRODUCTION_RUN_ID:-}
+      PROOFLINE_RECEIPT_POLL_TIMEOUT_MS: "25000"
+      PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: ${PROOFLINE_RELAYER_BALANCE_FLOOR_WEI:?PROOFLINE_RELAYER_BALANCE_FLOOR_WEI is required}
+      PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: ${PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA:?PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA is required}
+      PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: ${PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI:?PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI is required}
+      PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: /run/proofline/replay-bootstrap-stage
+      PROOFLINE_SAFE_CONSUMER_REGISTRY_FILE: /run/proofline/evidence/safe-consumer-registry.v1.json
+      PROOFLINE_VERIFIER_API_KEY_FILE: /run/secrets/worker_verifier_api_key
+      PROOFLINE_VERIFIER_URL: ${PROOFLINE_VERIFIER_URL:-https://fdc-verifiers-testnet.flare.network}
+    secrets:
+      - source: worker_database_url
+        target: worker_database_url
+      - source: worker_verifier_api_key
+        target: worker_verifier_api_key
+      - source: worker_coston2_private_key
+        target: worker_coston2_private_key
+    volumes:
+      - type: bind
+        source: ${PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:-/opt/orivra/absent-replay-bootstrap-stage}
+        target: /run/proofline/replay-bootstrap-stage
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE:?PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE is required}
+        target: /run/proofline/evidence/safe-consumer-registry.v1.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${PROOFLINE_SAFE_CONSUMER_DEPLOYMENT_WORKER_HANDOFF_FILE:-/opt/orivra/absent-safe-consumer-deployment-evidence}
+        target: /run/proofline/evidence/safe-consumer-deployment-evidence.v1.json
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      api:
+        condition: service_healthy
+      safe-consumer-deployer:
+        condition: service_completed_successfully
+    networks:
+      - app_internal
       - db_internal
       - worker_egress
 

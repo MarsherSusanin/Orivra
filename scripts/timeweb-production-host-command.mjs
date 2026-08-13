@@ -17,10 +17,21 @@ import {
   canonicalSerializeSafeConsumerRegistry,
   checksumSafeConsumerRegistry,
 } from "../packages/contracts/src/production-promotion-runtime.mjs";
+import {
+  createTimewebPilotBackup,
+  observeSealedTimewebPilotBackup,
+  restoreSelectedTimewebPilotBackup,
+  retainAuthorizedTimewebPilotBackups,
+  sealTimewebPilotBackupEvidence,
+} from "./timeweb-production-pilot-backup.mjs";
+import { parseCanonicalBackupEvidence } from "./backup-evidence-validation.mjs";
+import { sealProductionReplayArtifacts } from "./timeweb-production-bootstrap-runtime.mjs";
 
 const CURRENT_ROOT = "/opt/orivra/current";
 const SECRET_ROOT = "/opt/orivra/secrets";
 const EVIDENCE_ROOT = "/opt/orivra/evidence";
+const BROWSER_ACCEPTANCE_PATH = `${EVIDENCE_ROOT}/browser/hosted-browser-acceptance.v1.json`;
+const BROWSER_ACCEPTANCE_SHA256_PATH = `${EVIDENCE_ROOT}/browser/hosted-browser-acceptance.v1.sha256`;
 const CANARY_STATE_ROOT = "/var/lib/orivra/production-canary";
 const PROJECT = "proofline-production-primary";
 const PUBLIC_ORIGIN = "https://orivra.xyz";
@@ -31,13 +42,22 @@ const COMPOSE_FILES = [
 ];
 const REGISTRY_PATH = `${EVIDENCE_ROOT}/safe-consumer-registry.v1.json`;
 const CONSUMER_EVIDENCE_PATH = `${EVIDENCE_ROOT}/safe-consumer-deployment-evidence.v1.json`;
+const SELECTED_BACKUP_EVIDENCE_PATH = `${EVIDENCE_ROOT}/recovery/backup-evidence.v1.json`;
+const REPLAY_STAGE_ROOT = "/opt/orivra/replay-bootstrap-stage";
+const REPLAY_OUTPUT_ROOT = `${EVIDENCE_ROOT}/replay`;
 const WORKER_HANDOFF_PATH = "/opt/orivra/worker-evidence/safe-consumer-registry.v1.json";
+const WORKER_DEPLOYMENT_HANDOFF_PATH = "/opt/orivra/worker-evidence/safe-consumer-deployment-evidence.v1.json";
 const DEPLOYER_STAGING_ROOT = "/opt/orivra/deployer-staging";
 const MAX_COMMAND = 32_768;
 const MAX_OUTPUT = 1024 * 1024;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
 const RUN_ID = /^prod_[0-9A-Z]{26}$/;
+const OPEN_METEO_RELAYER = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6";
+const ETH_USD_RELAYER = "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f";
+const verifyProductionRelayerReplayAlias = "verifyProductionRelayerReplayAlias";
 const CANARY_IDS = ["cutover", "post-cutover-15m", "post-cutover-1h", "post-cutover-24h"];
+const PROOF_BUNDLE_MAX = 2_200_000;
+const PREFLIGHT_REPORT_MAX = 65_536;
 const REPOSITORIES = [
   ["caddy", "ghcr.io/marshersusanin/orivra-caddy"],
   ["web", "ghcr.io/marshersusanin/orivra-web"],
@@ -64,6 +84,14 @@ const PAYLOAD_KEYS = Object.freeze({
   "start-api": ["images"],
   "safe-consumer-deployer": ["images"],
   "write-safe-consumer-registry": [],
+  "create-timeweb-backup": [],
+  "seal-backup-evidence": ["backupId", "archive"],
+  "observe-wal-freshness": ["backupEvidenceSha256", "archivePendingAgeSeconds"],
+  "timeweb-pitr": ["runId", "backupEvidenceSha256", "archivePendingAgeSeconds"],
+  "authorize-retention": ["backupEvidenceSha256"],
+  "replay-bootstrap": ["images"],
+  "seal-replay-pair": [],
+  "deep-validate-replay-pair": [],
   "start-worker": ["images"],
   "start-web": ["images"],
   "start-caddy-candidate": ["images"],
@@ -71,6 +99,7 @@ const PAYLOAD_KEYS = Object.freeze({
   "timeweb-pitr-production": ["runId"],
   "persisted-live-coston2": [],
   "activate-caddy": ["publicOrigin"],
+  "append-browser-acceptance": ["canonicalBytesBase64url", "sha256"],
   "rollback-caddy": [],
   "append-production-evidence": ["canonicalBytesBase64url", "sha256"],
   "append-canary-checkpoint": ["canonicalBytesBase64url", "sha256"],
@@ -80,9 +109,11 @@ const PAYLOAD_KEYS = Object.freeze({
 export const ALLOWED_TIMEWEB_PRODUCTION_COMMAND_IDS = Object.freeze([
   "configure-firewall", "pull-exact-digests", "inspect-local-digests", "postgres",
   "db-role-bootstrap", "migrator", "start-api", "safe-consumer-deployer",
-  "write-safe-consumer-registry", "start-worker", "start-web", "start-caddy-candidate",
+  "write-safe-consumer-registry", "create-timeweb-backup", "seal-backup-evidence",
+  "observe-wal-freshness", "timeweb-pitr", "authorize-retention", "replay-bootstrap",
+  "seal-replay-pair", "deep-validate-replay-pair", "start-worker", "start-web", "start-caddy-candidate",
   "readyz-real-heartbeat", "timeweb-pitr-production", "persisted-live-coston2",
-  "activate-caddy", "rollback-caddy", "append-production-evidence",
+  "activate-caddy", "append-browser-acceptance", "rollback-caddy", "append-production-evidence",
   "append-canary-checkpoint", "canary-observe",
 ]);
 
@@ -110,6 +141,19 @@ function deepFreeze(value) {
 }
 
 const digest = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+
+function parseCanonicalRunBoundJson(bytes, { kind, maximum }) {
+  if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > maximum) throw new Error("evidence size");
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  const value = JSON.parse(text);
+  if (text !== canonicalJson(value) || value?.runId === undefined || !/^run_[0-9A-Z]{26}$/.test(value.runId)) {
+    throw new Error("evidence identity");
+  }
+  if (kind === "bundle" && (!SHA256.test(value.checksum ?? "") || value.checksum !== digest(Buffer.from(canonicalJson(Object.fromEntries(Object.entries(value).filter(([key]) => key !== "checksum"))), "utf8")))) {
+    throw new Error("bundle checksum");
+  }
+  return value;
+}
 
 function parseCanonicalSafeConsumerPair(deploymentBytes, registryBytes) {
   const deploymentText = new TextDecoder("utf-8", { fatal: true }).decode(deploymentBytes);
@@ -459,6 +503,7 @@ function defaultAdapters() {
           throw failure("TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID");
         }
         const registryBytes = await readBoundedPrivateFile(REGISTRY_PATH, MAX_OUTPUT);
+        const deploymentBytes = await readBoundedPrivateFile(CONSUMER_EVIDENCE_PATH, MAX_OUTPUT);
         if (digest(registryBytes) !== input.workerHandoff.registrySha256) {
           throw failure("TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID");
         }
@@ -477,22 +522,37 @@ function defaultAdapters() {
         }
         await chown(handoffRoot, 0, 0);
         await chmod(handoffRoot, 0o711);
-        await lstat(WORKER_HANDOFF_PATH).then(
-          () => { throw failure("TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID"); },
-          (cause) => { if (cause?.code !== "ENOENT") throw cause; },
-        );
-        const stage = `${WORKER_HANDOFF_PATH}.stage-${process.pid}`;
-        let createdStage = false;
+        const handoffs = [
+          [WORKER_HANDOFF_PATH, registryBytes],
+          [WORKER_DEPLOYMENT_HANDOFF_PATH, deploymentBytes],
+        ];
+        const created = [];
         try {
-          const handle = await open(stage, "wx", 0o600);
-          createdStage = true;
-          try { await handle.writeFile(registryBytes); await handle.sync(); } finally { await handle.close(); }
-          await chown(stage, 1000, 1000);
-          await chmod(stage, 0o400);
-          await link(stage, WORKER_HANDOFF_PATH);
+          for (const [handoffPath, bytes] of handoffs) {
+            await lstat(handoffPath).then(
+              () => { throw failure("TIMEWEB_HOST_SAFE_CONSUMER_EVIDENCE_INVALID"); },
+              (cause) => { if (cause?.code !== "ENOENT") throw cause; },
+            );
+            const stage = `${handoffPath}.stage-${process.pid}`;
+            let createdStage = false;
+            try {
+              const handle = await open(stage, "wx", 0o600);
+              createdStage = true;
+              try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+              await chown(stage, 1000, 1000);
+              await chmod(stage, 0o400);
+              await link(stage, handoffPath);
+              created.push(handoffPath);
+            } finally {
+              if (createdStage) await rm(stage, { force: true });
+            }
+          }
+        } catch (cause) {
+          for (const path of created) await rm(path, { force: true });
+          throw cause;
         } finally {
-          if (createdStage) await rm(stage, { force: true });
           registryBytes.fill(0);
+          deploymentBytes.fill(0);
         }
         return { status: "passed" };
       },
@@ -576,6 +636,56 @@ function requireObservation(condition) {
   if (!condition) throw failure("TIMEWEB_HOST_OBSERVATION_INVALID", "Production host observation is invalid");
 }
 
+export async function runOwnedReplayBootstrapStageLifecycle({
+  inspectStage,
+  createStage,
+  runCompose,
+  sealPair,
+  deepValidatePair,
+  removeOwnedStage,
+} = {}) {
+  let owned = false;
+  try {
+    if ([inspectStage, createStage, runCompose, sealPair, deepValidatePair, removeOwnedStage]
+      .some((value) => typeof value !== "function")) throw new Error("ports");
+    const before = await inspectStage(REPLAY_STAGE_ROOT);
+    if (before !== "absent") throw new Error("pre-existing stage");
+    const created = await createStage({
+      path: REPLAY_STAGE_ROOT,
+      type: "directory",
+      mode: 0o700,
+      uid: 1000,
+      gid: 1000,
+      noFollow: true,
+      noReplace: true,
+    });
+    if (created?.status !== "created") throw new Error("create");
+    owned = true;
+    if ((await runCompose({ stageRoot: REPLAY_STAGE_ROOT, createHostPath: false }))?.status !== "passed") {
+      throw new Error("compose");
+    }
+    if ((await sealPair({ stageRoot: REPLAY_STAGE_ROOT }))?.status !== "passed") throw new Error("seal");
+    if ((await deepValidatePair())?.status !== "passed") throw new Error("deep validation");
+    const removed = await removeOwnedStage({ path: REPLAY_STAGE_ROOT, noFollow: true, ownedOnly: true });
+    if (removed?.status !== "passed") throw new Error("cleanup");
+    owned = false;
+    return Object.freeze({ status: "passed" });
+  } catch (cause) {
+    const cleanup = [];
+    if (owned) {
+      try {
+        const removed = await removeOwnedStage({ path: REPLAY_STAGE_ROOT, noFollow: true, ownedOnly: true });
+        if (removed?.status !== "passed") throw new Error("cleanup");
+      } catch (cleanupCause) {
+        cleanup.push(cleanupCause);
+      }
+    }
+    const primary = failure("TIMEWEB_HOST_REPLAY_STAGE_INVALID", "Replay-bootstrap staging lifecycle is invalid", cause);
+    if (cleanup.length) throw new AggregateError([primary, ...cleanup], "Replay-bootstrap staging and cleanup failed", { cause: primary });
+    throw primary;
+  }
+}
+
 export async function runTimewebProductionHostCommand({ encodedCommand, environment = process.env, adapters = defaultAdapters() }) {
   const command = decodeTimewebProductionHostCommand(encodedCommand);
   const { id, payload } = command;
@@ -655,6 +765,151 @@ export async function runTimewebProductionHostCommand({ encodedCommand, environm
     }
     return { id, status: "passed", path: REGISTRY_PATH, mode: 0o400, noReplace: true, registrySha256: checksumSafeConsumerRegistry(parsed.registry) };
   }
+  if (id === "create-timeweb-backup") {
+    requirePayload(payload, []);
+    const value = await createTimewebPilotBackup();
+    requireObservation(value?.status === "passed" && /^base_[0-9A-F]{24}$/.test(value.backupId ?? "") &&
+      value.archive?.status === "passed" && /^[0-9A-F]{24}$/.test(value.archive.switchedWalSegment ?? ""));
+    return { id, ...value };
+  }
+  if (id === "seal-backup-evidence") {
+    requirePayload(payload, ["backupId", "archive"]);
+    const value = await sealTimewebPilotBackupEvidence(payload);
+    requireObservation(value?.status === "passed" && value.selectedPath === SELECTED_BACKUP_EVIDENCE_PATH && SHA256.test(value.backupEvidenceSha256));
+    return { id, ...value };
+  }
+  if (id === "observe-wal-freshness") {
+    requirePayload(payload, ["backupEvidenceSha256", "archivePendingAgeSeconds"]);
+    const value = await observeSealedTimewebPilotBackup(payload);
+    requireObservation(value?.status === "passed" && value.switchedWalArchived === true && value.archivePendingAgeSeconds <= 60);
+    return { id, ...value };
+  }
+  if (id === "timeweb-pitr") {
+    requirePayload(payload, ["runId", "backupEvidenceSha256", "archivePendingAgeSeconds"]);
+    if (!RUN_ID.test(payload.runId)) throw failure("TIMEWEB_HOST_COMMAND_INVALID");
+    const value = await restoreSelectedTimewebPilotBackup({ productionRunId: payload.runId,
+      backupEvidenceSha256: payload.backupEvidenceSha256, archivePendingAgeSeconds: payload.archivePendingAgeSeconds });
+    requireObservation(value?.status === "passed" && value.volumeWasFresh === true && SHA256.test(value.restoreEvidenceSha256));
+    return { id, ...value };
+  }
+  if (id === "authorize-retention") {
+    requirePayload(payload, ["backupEvidenceSha256"]);
+    const value = await retainAuthorizedTimewebPilotBackups(payload);
+    requireObservation(value?.status === "passed" && value.retainedFull === 8);
+    return { id, ...value };
+  }
+  if (id === "replay-bootstrap") {
+    const images = requireImages(payload);
+    let bootstrapResult;
+    await runOwnedReplayBootstrapStageLifecycle({
+      inspectStage: async () => lstat(REPLAY_STAGE_ROOT).then((status) => ({
+        type: status.isSymbolicLink() ? "symlink" : status.isDirectory() ? "directory" : "other",
+        mode: status.mode & 0o777,
+        uid: status.uid,
+        gid: status.gid,
+      }), (cause) => { if (cause?.code === "ENOENT") return "absent"; throw cause; }),
+      createStage: async ({ path, mode, uid, gid }) => {
+        let created = false;
+        try {
+          await mkdir(path, { mode });
+          created = true;
+          await chown(path, uid, gid);
+          await chmod(path, mode);
+          return { status: "created" };
+        } catch (cause) {
+          if (created) await rm(path, { recursive: true, force: true }).catch(() => undefined);
+          throw cause;
+        }
+      },
+      runCompose: async ({ stageRoot }) => {
+        const observed = await adapters.compose.runExactPhase({ project: PROJECT, currentRoot: CURRENT_ROOT, composeFiles: COMPOSE_FILES,
+          phase: id, services: [id], imageEnvironment: imageEnvironment(images), pullPolicy: "never", publicIngress: "unchanged",
+          stageRoot, createHostPath: false });
+        requireObservation(observed?.status === "passed");
+        const env = await loadRuntimeEnvironment();
+        requireObservation(RUN_ID.test(env.PROOFLINE_PRODUCTION_RUN_ID ?? ""));
+        const files = await Promise.all(["proof-bundle.json", "preflight-report.json"].map(async (name) => {
+          const bytes = await readBoundedPrivateFile(`${REPLAY_STAGE_ROOT}/${name}`, name.startsWith("proof") ? PROOF_BUNDLE_MAX : PREFLIGHT_REPORT_MAX);
+          return { name, bytes };
+        }));
+        const bundle = parseCanonicalRunBoundJson(files[0].bytes, { kind: "bundle", maximum: PROOF_BUNDLE_MAX });
+        const report = parseCanonicalRunBoundJson(files[1].bytes, { kind: "report", maximum: PREFLIGHT_REPORT_MAX });
+        requireObservation(bundle.runId === report.runId && /^run_[0-9A-Z]{26}$/.test(bundle.runId));
+        bootstrapResult = { id, status: "passed", chainId: 114, sourceRunId: bundle.runId, sourceStage: "completed",
+          sourceLiveManifestSha256: OPEN_METEO_RELAYER, replayManifestSha256: "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898",
+          bundleSha256: digest(files[0].bytes), reportSha256: digest(files[1].bytes) };
+        return { status: "passed" };
+      },
+      sealPair: async () => {
+        const sealed = await sealProductionReplayArtifacts({
+          stagingRoot: REPLAY_STAGE_ROOT,
+          outputRoot: REPLAY_OUTPUT_ROOT,
+          validateBundle: (bytes) => Boolean(parseCanonicalRunBoundJson(bytes, { kind: "bundle", maximum: PROOF_BUNDLE_MAX })),
+          validateReport: (bytes) => Boolean(parseCanonicalRunBoundJson(bytes, { kind: "report", maximum: PREFLIGHT_REPORT_MAX })),
+        });
+        requireObservation(sealed.bundleSha256 === bootstrapResult?.bundleSha256 && sealed.reportSha256 === bootstrapResult?.reportSha256);
+        return { status: "passed" };
+      },
+      deepValidatePair: async () => {
+        try {
+          const [bundleBytes, reportBytes] = await Promise.all([
+            readBoundedPrivateFile(`${REPLAY_OUTPUT_ROOT}/proof-bundle.json`, PROOF_BUNDLE_MAX),
+            readBoundedPrivateFile(`${REPLAY_OUTPUT_ROOT}/preflight-report.json`, PREFLIGHT_REPORT_MAX),
+          ]);
+          const bundle = parseCanonicalRunBoundJson(bundleBytes, { kind: "bundle", maximum: PROOF_BUNDLE_MAX });
+          const report = parseCanonicalRunBoundJson(reportBytes, { kind: "report", maximum: PREFLIGHT_REPORT_MAX });
+          requireObservation(bundle.runId === report.runId && digest(bundleBytes) === bootstrapResult?.bundleSha256 && digest(reportBytes) === bootstrapResult?.reportSha256);
+          return { status: "passed" };
+        } catch (cause) {
+          await rm(`${REPLAY_OUTPUT_ROOT}/proof-bundle.json`, { force: true }).catch(() => undefined);
+          await rm(`${REPLAY_OUTPUT_ROOT}/preflight-report.json`, { force: true }).catch(() => undefined);
+          await rm(REPLAY_OUTPUT_ROOT, { recursive: false, force: true }).catch(() => undefined);
+          throw cause;
+        }
+      },
+      removeOwnedStage: async ({ path }) => {
+        try {
+          if (path !== REPLAY_STAGE_ROOT) throw new Error("stage authority");
+          const status = await lstat(path);
+          if (!status.isDirectory() || status.isSymbolicLink() || status.uid !== 1000 || status.gid !== 1000 || (status.mode & 0o777) !== 0o700) {
+            throw new Error("stage ownership");
+          }
+          await rm(path, { recursive: true });
+          return { status: "passed" };
+        } catch (cause) {
+          await rm(`${REPLAY_OUTPUT_ROOT}/proof-bundle.json`, { force: true }).catch(() => undefined);
+          await rm(`${REPLAY_OUTPUT_ROOT}/preflight-report.json`, { force: true }).catch(() => undefined);
+          await rm(REPLAY_OUTPUT_ROOT, { recursive: false, force: true }).catch(() => undefined);
+          throw cause;
+        }
+      },
+    });
+    requireObservation(bootstrapResult?.status === "passed");
+    return bootstrapResult;
+  }
+  if (id === "seal-replay-pair") {
+    requirePayload(payload, []);
+    const [bundleBytes, reportBytes] = await Promise.all([
+      readBoundedPrivateFile(`${REPLAY_OUTPUT_ROOT}/proof-bundle.json`, PROOF_BUNDLE_MAX),
+      readBoundedPrivateFile(`${REPLAY_OUTPUT_ROOT}/preflight-report.json`, PREFLIGHT_REPORT_MAX),
+    ]);
+    parseCanonicalRunBoundJson(bundleBytes, { kind: "bundle", maximum: PROOF_BUNDLE_MAX });
+    parseCanonicalRunBoundJson(reportBytes, { kind: "report", maximum: PREFLIGHT_REPORT_MAX });
+    return { id, status: "passed", bundleSha256: digest(bundleBytes), reportSha256: digest(reportBytes) };
+  }
+  if (id === "deep-validate-replay-pair") {
+    requirePayload(payload, []);
+    const [bundleBytes, reportBytes, backupBytes] = await Promise.all([
+      readBoundedPrivateFile(`${REPLAY_OUTPUT_ROOT}/proof-bundle.json`, 2_200_000),
+      readBoundedPrivateFile(`${REPLAY_OUTPUT_ROOT}/preflight-report.json`, 65_536),
+      readBoundedPrivateFile(SELECTED_BACKUP_EVIDENCE_PATH, MAX_OUTPUT),
+    ]);
+    const bundle = parseCanonicalRunBoundJson(bundleBytes, { kind: "bundle", maximum: PROOF_BUNDLE_MAX });
+    const report = parseCanonicalRunBoundJson(reportBytes, { kind: "report", maximum: PREFLIGHT_REPORT_MAX });
+    const backup = parseCanonicalBackupEvidence(backupBytes);
+    requireObservation(bundle.runId === report.runId && backup.database.slot === "production");
+    return { id, status: "passed", bundleSha256: digest(bundleBytes), reportSha256: digest(reportBytes), backupId: backup.backup.id };
+  }
   if (id === "readyz-real-heartbeat") {
     requirePayload(payload, []); const value = await adapters.observe.readyzHeartbeat();
     requireObservation(value?.status === "passed" && value.readyz?.status === "passed" && value.workerHeartbeat?.status === "current");
@@ -665,8 +920,8 @@ export async function runTimewebProductionHostCommand({ encodedCommand, environm
     requireObservation(value?.status === "passed" && value.chainId === 114 && value.persisted === true && value.runIds?.length === 2 &&
       value.runIds.every((runId) => /^run_[0-9A-Z]{26}$/.test(runId)) && value.runIds[0] !== value.runIds[1] &&
       JSON.stringify(value.manifests) === JSON.stringify([
-        "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898",
-        "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db",
+        OPEN_METEO_RELAYER,
+        ETH_USD_RELAYER,
       ]));
     return { id, ...value };
   }
@@ -693,6 +948,37 @@ export async function runTimewebProductionHostCommand({ encodedCommand, environm
     }
     const value = await adapters.caddy.rollbackExact({ publicOrigin: PUBLIC_ORIGIN, candidateStatus: "staged", activeStatus: "active" });
     requireObservation(value?.status === "passed"); return { id, status: "passed", publicOrigin: PUBLIC_ORIGIN };
+  }
+  if (id === "append-browser-acceptance") {
+    requirePayload(payload, ["canonicalBytesBase64url", "sha256"]);
+    const bytes = Buffer.from(payload.canonicalBytesBase64url, "base64url");
+    if (bytes.toString("base64url") !== payload.canonicalBytesBase64url || digest(bytes) !== payload.sha256) {
+      throw failure("TIMEWEB_HOST_EVIDENCE_INVALID");
+    }
+    let value;
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      value = JSON.parse(text);
+      const checks = value?.checks;
+      if (text !== canonicalJson(value) || !exactKeys(value, ["version", "kind", "status", "publicOrigin", "checks"]) ||
+        value.version !== "1" || value.kind !== "hosted-browser-acceptance" || value.status !== "passed" ||
+        value.publicOrigin !== PUBLIC_ORIGIN || !exactKeys(checks, ["desktop", "mobile", "keyboard", "axeSeriousCritical", "consoleErrors", "networkErrors", "reloadBackForward"]) ||
+        checks.desktop !== "passed" || checks.mobile !== "passed" || checks.keyboard !== "passed" ||
+        checks.axeSeriousCritical !== 0 || checks.consoleErrors !== 0 || checks.networkErrors !== 0 ||
+        checks.reloadBackForward !== "passed") throw new Error("browser acceptance");
+    } catch (cause) {
+      throw failure("TIMEWEB_HOST_EVIDENCE_INVALID", "Canonical browser acceptance is invalid", cause);
+    }
+    const receipt = await adapters.evidence.appendCanonicalPairNoReplace({
+      path: BROWSER_ACCEPTANCE_PATH,
+      checksumPath: BROWSER_ACCEPTANCE_SHA256_PATH,
+      bytes,
+      sha256: payload.sha256,
+      mode: 0o400,
+      noReplace: true,
+    });
+    requireObservation(receipt?.status === "passed" && receipt.sha256 === payload.sha256);
+    return { id, status: "passed", sha256: payload.sha256 };
   }
   if (id === "append-production-evidence" || id === "append-canary-checkpoint") {
     requirePayload(payload, ["canonicalBytesBase64url", "sha256"]); const bytes = Buffer.from(payload.canonicalBytesBase64url, "base64url");

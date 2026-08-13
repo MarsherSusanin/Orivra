@@ -295,6 +295,20 @@ export function parseWorkerRuntimeConfig(
   }
 }
 
+export function parseWorkerReplayBootstrapRuntimeConfig(
+  environment: Environment,
+): WorkerRuntimeConfiguration {
+  return parseWorkerRuntimeConfig({
+    ...environment,
+    PROOFLINE_DEPLOYMENT_ID: `deployment_${"0".repeat(64)}`,
+    PROOFLINE_RELEASE_TREE_SHA: "0".repeat(40),
+    PROOFLINE_REPLAY_BUNDLE_PATH:
+      "/run/proofline/bootstrap-unavailable/proof-bundle.json",
+    PROOFLINE_REPLAY_PREFLIGHT_REPORT_PATH:
+      "/run/proofline/bootstrap-unavailable/preflight-report.json",
+  });
+}
+
 export async function loadWorkerSafeConsumerRegistry(config: WorkerRuntimeConfiguration) {
   try {
     const canonical = await readBoundedRegularFile(

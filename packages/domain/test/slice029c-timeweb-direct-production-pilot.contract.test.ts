@@ -172,7 +172,10 @@ describe("Slice 029C direct-production pilot authority", () => {
       checks: {
         exactDigestPull: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
         timewebPitr: { status: "passed", restoreEvidenceSha256: sha("8"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
-        liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: safeConsumers.entries.map(({ manifestSha256 }) => manifestSha256) },
+        liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [
+          "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6",
+          "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f",
+        ] },
       },
       cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-12T03:00:00Z", browserAcceptanceSha256: sha("9") },
     };

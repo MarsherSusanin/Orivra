@@ -1,6 +1,6 @@
 # Slice 029D — Phase-ordered direct-production bootstrap
 
-Status: Intentional RED; post-effect activation rollback correction pending
+Status: Author GREEN; independent Core and Product/Integration verification pending
 
 Decision: [ADR 0045](../adr/0045-phase-ordered-direct-production-bootstrap.md)
 
@@ -54,7 +54,7 @@ acceptance or rollback authority.
   `playwright-core@1.62.1` through its exact lock graph; protected Sites bytes
   remain unchanged and any additional dependency or lock drift fails closed.
 
-## Intentional RED
+## Frozen RED and GREEN closure
 
 1. retained 027A/027B Compose contracts require the exact nine-service model,
    replay one-shot hardening and worker dependency;
@@ -75,9 +75,10 @@ acceptance or rollback authority.
 7. the worker final image contains the freshly built replay-bootstrap entry at
    the exact Compose command path; host build output is never a runtime input.
 
-Expected RED is missing `replay-bootstrap` Compose/runtime production and the
-new import-safe bootstrap lifecycle. No credential, Docker, network, server or
-provider effect is part of this slice.
+The frozen RED was the missing `replay-bootstrap` Compose/runtime production
+and import-safe bootstrap lifecycle. Author implementation now closes every
+causal RED without weakening the contract. No credential, registry, server or
+provider effect is claimed by this author GREEN.
 
 ## Exclusions
 

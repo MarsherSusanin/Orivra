@@ -7,6 +7,7 @@ const canonicalJson = productionDomain.canonicalJson!;
 const getWeb2JsonTemplateDetail = productionDomain.getWeb2JsonTemplateDetail!;
 const getProductionRelayerManifest = productionDomain.getProductionRelayerManifest!;
 const verifyProductionRelayerReplayAlias = productionDomain.verifyProductionRelayerReplayAlias!;
+const resolveProductionRelayerReplayAlias = productionDomain.resolveProductionRelayerReplayAlias!;
 
 const OPEN_REPLAY = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
 const ETH_REPLAY = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
@@ -30,6 +31,7 @@ describe("029D production relayer manifests", () => {
       expect(publicDetail.manifest.submission.mode).toBe("replay");
       expect(sha(publicDetail.manifestCanonicalJson)).toBe(replaySha);
       expect(relayer.manifest.submission.mode).toBe("relayer");
+      expect(sha(relayer.manifestCanonicalJson)).toBe(relayerSha);
       expect(relayer.manifestSha256).toBe(relayerSha);
       expect(Object.fromEntries(Object.entries(relayer.manifest).filter(([key]) => key !== "submission")))
         .toEqual(Object.fromEntries(Object.entries(publicDetail.manifest).filter(([key]) => key !== "submission")));
@@ -84,5 +86,36 @@ describe("029D production relayer manifests", () => {
       { ...base, replayManifestSha256: ETH_REPLAY },
       { ...base, replayConsumerIdentity: { ...consumerIdentity, runtimeCodeSha256: `sha256:${"d".repeat(64)}` } },
     ]) expect(() => verifyProductionRelayerReplayAlias(invalid)).toThrow(/PRODUCTION_REPLAY_ALIAS_INVALID/);
+  });
+
+  it("fails closed for unknown, malformed, mismatched and non-relayer alias authority", () => {
+    const live = getProductionRelayerManifest("open-meteo-current-weather");
+    expect(resolveProductionRelayerReplayAlias({
+      relayerManifest: live.manifest,
+      relayerManifestSha256: OPEN_RELAYER,
+    })).toEqual(expect.objectContaining({
+      id: "open-meteo-current-weather",
+      sourceLiveManifestSha256: OPEN_RELAYER,
+      replayManifestSha256: OPEN_REPLAY,
+    }));
+    for (const invalid of [
+      { relayerManifest: null, relayerManifestSha256: OPEN_RELAYER },
+      { relayerManifest: { ...live.manifest, submission: { ...live.manifest.submission, mode: "replay" } }, relayerManifestSha256: OPEN_RELAYER },
+      { relayerManifest: live.manifest, relayerManifestSha256: `sha256:${"f".repeat(64)}` },
+      { relayerManifest: { ...live.manifest, consumer: { ...live.manifest.consumer, expectedHost: "example.invalid" } }, relayerManifestSha256: OPEN_RELAYER },
+    ]) expect(() => resolveProductionRelayerReplayAlias(invalid)).toThrow(/PRODUCTION_REPLAY_ALIAS_INVALID/);
+
+    const unrecognizedRelayer = {
+      ...live.manifest,
+      submission: { ...live.manifest.submission, feeCapWei: "1" },
+    };
+    expect(() => resolveProductionRelayerReplayAlias({
+      relayerManifest: unrecognizedRelayer,
+      relayerManifestSha256: sha(canonicalJson(unrecognizedRelayer)),
+    })).toThrow(/PRODUCTION_REPLAY_ALIAS_INVALID/);
+
+    expect(() => getProductionRelayerManifest("unknown" as never)).toThrow(/PRODUCTION_REPLAY_ALIAS_INVALID/);
+    expect(() => verifyProductionRelayerReplayAlias({ relayerManifest: null, replayManifest: null }))
+      .toThrow(/PRODUCTION_REPLAY_ALIAS_INVALID/);
   });
 });

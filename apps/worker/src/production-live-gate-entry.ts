@@ -1,5 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { getWeb2JsonTemplateDetail } from "@proofline/domain";
+import {
+  getProductionRelayerManifest,
+  resolveProductionRelayerReplayAlias as verifyProductionRelayerReplayAlias,
+} from "@proofline/domain";
+import { resolveProductionLiveManifestAuthorities } from "../../../scripts/production-relayer-manifest-authority.mjs";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Hex } from "viem";
 import { runProductionPersistedLiveGate } from "./production-live-gate-runtime.mjs";
@@ -8,8 +12,8 @@ const API_ORIGIN = "http://api:8080";
 const PUBLIC_ORIGIN = "https://orivra.xyz";
 const KEY_FILE = "/run/secrets/worker_coston2_private_key";
 const MANIFESTS = [
-  ["open-meteo-current-weather", "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898"],
-  ["eth-usd", "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db"],
+  ["open-meteo-current-weather", "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6"],
+  ["eth-usd", "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f"],
 ] as const;
 
 function requiredRunId(argv: string[]) {
@@ -61,11 +65,17 @@ try {
 }
 let walletSession: Record<string, any> | undefined;
 const submittedManifests = new Map<string, string>();
-const manifestsBySha = new Map<string, unknown>(MANIFESTS.map(([id, sha]) => {
-  const detail = getWeb2JsonTemplateDetail(id);
-  if (!detail || detail.template.manifestSha256 !== sha) throw new Error("Production manifest authority is unavailable");
-  return [sha, detail.manifest];
-}));
+const manifestAuthorities = MANIFESTS.map(([id, sha]) => {
+  const authority = getProductionRelayerManifest(id);
+  if (authority.manifestSha256 !== sha) throw new Error("Production manifest authority is unavailable");
+  return authority;
+});
+await resolveProductionLiveManifestAuthorities({
+  authorities: manifestAuthorities,
+  expectedReplayManifestSha256s: manifestAuthorities.map((authority) => authority.replayManifestSha256),
+  resolveAlias: verifyProductionRelayerReplayAlias,
+});
+const manifestsBySha = new Map<string, unknown>(manifestAuthorities.map((authority) => [authority.manifestSha256, authority.manifest]));
 
 const result = await runProductionPersistedLiveGate({
   productionRunId,

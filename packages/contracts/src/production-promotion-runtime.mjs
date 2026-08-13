@@ -163,6 +163,8 @@ export const ApplicationRollbackAuthorizationV1Schema = z.object({
 
 const OpenMeteoManifestSha256 = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
 const EthUsdManifestSha256 = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
+const OpenMeteoRelayerManifestSha256 = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6";
+const EthUsdRelayerManifestSha256 = "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f";
 
 const ConsumerDeploymentSchema = (templateId, manifestSha256, contractName) => z.object({
   templateId: z.literal(templateId),
@@ -279,27 +281,36 @@ const ProductionGhcrPreflightImagesSchema = z.tuple([
   }
 })));
 
-const PreflightChecksSchema = z.tuple([
-  z.object({ check: z.literal("dns-target"), status: z.literal("passed"), dnsName: z.string(), addresses: z.tuple([z.literal("72.56.81.28")]) }).strict(),
-  z.object({ check: z.literal("ssh-host-key"), status: z.literal("passed"), host: z.string(), port: z.literal(22), expectedHostKeySha256: Sha256Schema, observedHostKeySha256: Sha256Schema }).strict()
-    .refine((value) => value.expectedHostKeySha256 === value.observedHostKeySha256, { path: ["observedHostKeySha256"] }),
-  z.object({ check: z.literal("read-only-ghcr"), status: z.literal("passed"), registry: z.literal("ghcr.io"), access: z.literal("read-only"),
-    images: ProductionGhcrPreflightImagesSchema }).strict(),
-  z.object({ check: z.literal("secret-files"), status: z.literal("passed"), fileIdsSha256: Sha256Schema, valuesExposed: z.literal(false) }).strict(),
-  z.object({ check: z.literal("timeweb-s3-authority"), status: z.literal("passed"), authoritySha256: Sha256Schema, authorityMode: z.literal("shared-pilot"),
+const DnsTargetPreflightCheckSchema = z.object({ check: z.literal("dns-target"), status: z.literal("passed"), dnsName: z.string(), addresses: z.tuple([z.literal("72.56.81.28")]) }).strict();
+const SshHostKeyPreflightCheckSchema = z.object({ check: z.literal("ssh-host-key"), status: z.literal("passed"), host: z.string(), port: z.literal(22), expectedHostKeySha256: Sha256Schema, observedHostKeySha256: Sha256Schema }).strict()
+    .refine((value) => value.expectedHostKeySha256 === value.observedHostKeySha256, { path: ["observedHostKeySha256"] });
+const ReadOnlyGhcrPreflightCheckSchema = z.object({ check: z.literal("read-only-ghcr"), status: z.literal("passed"), registry: z.literal("ghcr.io"), access: z.literal("read-only"),
+  images: ProductionGhcrPreflightImagesSchema }).strict();
+const SecretFilesPreflightCheckSchema = z.object({ check: z.literal("secret-files"), status: z.literal("passed"), fileIdsSha256: Sha256Schema, valuesExposed: z.literal(false) }).strict();
+const TimewebS3PreflightCheckSchema = z.object({ check: z.literal("timeweb-s3-authority"), status: z.literal("passed"), authoritySha256: Sha256Schema, authorityMode: z.literal("shared-pilot"),
     endpoint: z.literal("https://s3.twcstorage.ru"), region: z.literal("ru-1"), bucket: z.literal("orivra-backet"), pathStyle: z.literal(true),
     capabilities: z.tuple(["PUT", "HEAD", "LIST", "GET", "DELETE"].map((operation) =>
-      z.object({ operation: z.literal(operation), status: z.literal("passed") }).strict())) }).strict(),
-  z.object({ check: z.literal("replay-bundle"), status: z.literal("passed"), bundleSha256: Sha256Schema, reportSha256: Sha256Schema }).strict(),
-  z.object({ check: z.literal("safe-consumer-manifests"), status: z.literal("passed"), registrySha256: Sha256Schema, manifests: z.tuple([
+      z.object({ operation: z.literal(operation), status: z.literal("passed") }).strict())) }).strict();
+const ReplayBundlePreflightCheckSchema = z.object({ check: z.literal("replay-bundle"), status: z.literal("passed"), bundleSha256: Sha256Schema, reportSha256: Sha256Schema }).strict();
+const SafeConsumerManifestsPreflightCheckSchema = z.object({ check: z.literal("safe-consumer-manifests"), status: z.literal("passed"), registrySha256: Sha256Schema, manifests: z.tuple([
     z.tuple([z.literal("open-meteo-current-weather"), z.literal(OpenMeteoManifestSha256)]),
     z.tuple([z.literal("eth-usd"), z.literal(EthUsdManifestSha256)]),
-  ]) }).strict(),
-  z.object({ check: z.literal("live-coston2"), status: z.literal("passed"), chainId: z.literal(114),
+  ]) }).strict();
+const LiveCoston2PreflightCheckSchema = z.object({ check: z.literal("live-coston2"), status: z.literal("passed"), chainId: z.literal(114),
     rpcUrl: z.literal("https://coston2-api.flare.network/ext/C/rpc"),
     dataAvailabilityUrl: z.literal("https://ctn2-data-availability.flare.network"),
     relayerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/), balanceWei: z.string().regex(/^(?:0|[1-9][0-9]*)$/),
-    authorization: z.literal("configured") }).strict(),
+    authorization: z.literal("configured") }).strict();
+
+const PreflightChecksSchema = z.tuple([
+  DnsTargetPreflightCheckSchema,
+  SshHostKeyPreflightCheckSchema,
+  ReadOnlyGhcrPreflightCheckSchema,
+  SecretFilesPreflightCheckSchema,
+  TimewebS3PreflightCheckSchema,
+  ReplayBundlePreflightCheckSchema,
+  SafeConsumerManifestsPreflightCheckSchema,
+  LiveCoston2PreflightCheckSchema,
 ]);
 
 export const ProductionPilotPreflightEvidenceV1Schema = z.object({
@@ -309,6 +320,23 @@ export const ProductionPilotPreflightEvidenceV1Schema = z.object({
   targetSha256: Sha256Schema,
   objectStoreAuthoritySha256: Sha256Schema,
   checks: PreflightChecksSchema,
+}).strict();
+
+export const ProductionPilotPreflightEvidenceV2Schema = z.object({
+  version: z.literal("2"),
+  kind: z.literal("production-pilot-preflight-evidence"),
+  status: z.literal("passed"),
+  targetSha256: Sha256Schema,
+  objectStoreAuthoritySha256: Sha256Schema,
+  checks: z.tuple([
+    DnsTargetPreflightCheckSchema,
+    SshHostKeyPreflightCheckSchema,
+    ReadOnlyGhcrPreflightCheckSchema,
+    SecretFilesPreflightCheckSchema,
+    TimewebS3PreflightCheckSchema,
+    SafeConsumerManifestsPreflightCheckSchema,
+    LiveCoston2PreflightCheckSchema,
+  ]),
 }).strict();
 
 const RunV2Schema = z.object({ runId: RunIdSchema, operatorId: OperatorIdSchema, completedAt: TimestampSchema }).strict();
@@ -334,12 +362,14 @@ export const ProductionDeploymentEvidenceV2Schema = z.object({
     readyz: PassedSchema,
     workerHeartbeat: z.object({ status: z.literal("current") }).strict(),
     timewebPitr: z.object({ status: z.literal("passed"), restoreEvidenceSha256: Sha256Schema, backupAgeSeconds: z.number().int().nonnegative(), archivePendingAgeSeconds: z.number().int().nonnegative().max(60) }).strict(),
-    liveCoston2: z.object({ status: z.literal("persisted"), runIds: LiveRunIdsSchema, manifests: z.tuple([z.literal(OpenMeteoManifestSha256), z.literal(EthUsdManifestSha256)]) }).strict(),
+    liveCoston2: z.object({ status: z.literal("persisted"), runIds: LiveRunIdsSchema,
+      manifests: z.tuple([z.literal(OpenMeteoRelayerManifestSha256), z.literal(EthUsdRelayerManifestSha256)]) }).strict(),
   }).strict(),
   cutover: z.object({
     status: z.literal("passed"),
     publicOrigin: z.literal("https://orivra.xyz"),
     activatedAt: TimestampSchema,
+    browserAcceptanceSha256: Sha256Schema,
   }).strict(),
 }).strict();
 
@@ -371,7 +401,8 @@ export const ProductionPromotionEvidenceV2Schema = z.object({
   verification: z.literal("verified"), promotionClaim: z.literal(true), producer: ProducerSchema,
   publicationEvidenceSha256: Sha256Schema, productionDeploymentEvidenceSha256: Sha256Schema,
   runId: RunIdSchema, operatorId: OperatorIdSchema,
-  cutover: z.object({ status: z.literal("passed"), publicOrigin: z.string().url(), activatedAt: TimestampSchema }).strict(),
+  cutover: z.object({ status: z.literal("passed"), publicOrigin: z.string().url(), activatedAt: TimestampSchema,
+    browserAcceptanceSha256: Sha256Schema }).strict(),
   canary: z.object({ durationSeconds: z.literal(86400), checkpoints: CanaryTupleV2Schema }).strict(),
   completedAt: TimestampSchema,
 }).strict().superRefine((value, context) => {
@@ -423,6 +454,7 @@ export const checksumApplicationRollbackAuthorization = (value) => checksum(cano
 export const canonicalSerializeTimewebS3PilotAuthority = (value) => serialize(TimewebS3PilotAuthorityV1Schema, value);
 export const canonicalSerializeSafeConsumerDeploymentEvidence = (value) => serialize(SafeConsumerDeploymentEvidenceV1Schema, value);
 export const canonicalSerializeProductionPilotPreflightEvidence = (value) => serialize(ProductionPilotPreflightEvidenceV1Schema, value);
+export const canonicalSerializeProductionPilotPreflightEvidenceV2 = (value) => serialize(ProductionPilotPreflightEvidenceV2Schema, value);
 export const canonicalSerializeProductionTargetV2 = (value) => serialize(ProductionTargetV2Schema, value);
 export const canonicalSerializeProductionPromotionAuthorizationV2 = (value) => serialize(ProductionPromotionAuthorizationV2Schema, value);
 export const canonicalSerializeProductionDeploymentEvidenceV2 = (value) => serialize(ProductionDeploymentEvidenceV2Schema, value);
@@ -432,6 +464,7 @@ export const canonicalSerializeApplicationRollbackAuthorizationV2 = (value) => s
 export const checksumTimewebS3PilotAuthority = (value) => checksum(canonicalSerializeTimewebS3PilotAuthority(value));
 export const checksumSafeConsumerDeploymentEvidence = (value) => checksum(canonicalSerializeSafeConsumerDeploymentEvidence(value));
 export const checksumProductionPilotPreflightEvidence = (value) => checksum(canonicalSerializeProductionPilotPreflightEvidence(value));
+export const checksumProductionPilotPreflightEvidenceV2 = (value) => checksum(canonicalSerializeProductionPilotPreflightEvidenceV2(value));
 export const checksumProductionTargetV2 = (value) => checksum(canonicalSerializeProductionTargetV2(value));
 export const checksumProductionPromotionAuthorizationV2 = (value) => checksum(canonicalSerializeProductionPromotionAuthorizationV2(value));
 export const checksumProductionDeploymentEvidenceV2 = (value) => checksum(canonicalSerializeProductionDeploymentEvidenceV2(value));

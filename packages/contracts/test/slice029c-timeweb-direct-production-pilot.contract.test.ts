@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 const OPEN_METEO = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
 const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
+const OPEN_METEO_RELAYER = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6";
+const ETH_USD_RELAYER = "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f";
 const sha = (digit: string) => `sha256:${digit.repeat(64).slice(0, 64)}`;
 const repositories = [
   ["caddy", "ghcr.io/marshersusanin/orivra-caddy"],
@@ -226,6 +228,14 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
     expect(module.ProductionPilotPreflightEvidenceV1Schema.parse(evidence)).toEqual(evidence);
     expect(module.canonicalSerializeProductionPilotPreflightEvidence(evidence)).toBe(canonicalJson(evidence));
     expect(module.checksumProductionPilotPreflightEvidence(evidence)).toBe(checksum(evidence));
+    const evidenceV2 = {
+      ...evidence,
+      version: "2",
+      checks: evidence.checks.filter((value) => value.check !== "replay-bundle"),
+    };
+    expect(module.ProductionPilotPreflightEvidenceV2Schema.parse(evidenceV2)).toEqual(evidenceV2);
+    expect(module.canonicalSerializeProductionPilotPreflightEvidenceV2(evidenceV2)).toBe(canonicalJson(evidenceV2));
+    expect(module.checksumProductionPilotPreflightEvidenceV2(evidenceV2)).toBe(checksum(evidenceV2));
     expect(module.ProductionPilotPreflightEvidenceV1Schema.parse({
       ...evidence,
       checks: evidence.checks.map((value) => value.check === "read-only-ghcr"
@@ -323,7 +333,7 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       checks: {
         exactDigestPull: { status: "passed" }, readyz: { status: "passed" }, workerHeartbeat: { status: "current" },
         timewebPitr: { status: "passed", restoreEvidenceSha256: sha("8"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
-        liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] },
+        liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO_RELAYER, ETH_USD_RELAYER] },
       },
       cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-12T03:00:00Z", browserAcceptanceSha256: sha("9") },
     };
@@ -384,7 +394,7 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
       version: "2", kind: "digitalocean-production-promotion-evidence", status: "passed", verification: "verified", promotionClaim: true,
       producer: { commitSha: "1".repeat(40), treeSha: "2".repeat(40) }, publicationEvidenceSha256: sha("3"),
       productionDeploymentEvidenceSha256: sha("4"), runId: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
-      operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4", cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: checkpoints[0].dueAt },
+      operatorId: "operator_01K2Q4P6R8T0V2X4Z6B8D0F2H4", cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: checkpoints[0].dueAt, browserAcceptanceSha256: sha("9") },
       canary: { durationSeconds: 86400, checkpoints }, completedAt: checkpoints.at(-1)?.observedAt,
     };
     expect(module.ProductionPromotionEvidenceV2Schema.parse(evidence)).toEqual(evidence);

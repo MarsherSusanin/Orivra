@@ -7,12 +7,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { privateKeyToAccount } from "viem/accounts";
 import { canonicalJson } from "./backup-evidence-validation.mjs";
+import {
+  createProductionPlaywrightBrowserAdapter,
+  runProductionHostedBrowserAcceptance,
+} from "./timeweb-production-browser-acceptance.mjs";
 
 const RPC = "https://coston2-api.flare.network/ext/C/rpc";
 const DA = "https://ctn2-data-availability.flare.network";
 const HOST_RUNNER = "/opt/orivra/current/scripts/timeweb-production-host-command.mjs";
 const MAX_OUTPUT = 1024 * 1024;
 const PROJECT = "proofline-production-primary";
+const PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT = "/opt/orivra/replay-bootstrap-stage";
 const HOST_MAPPINGS = Object.freeze({
   "pull-exact-digests": "pull-exact-digests",
   "inspect-local-digests": "inspect-local-digests",
@@ -22,6 +27,14 @@ const HOST_MAPPINGS = Object.freeze({
   "start-api": "start-api",
   "safe-consumer-deployer": "safe-consumer-deployer",
   "write-safe-consumer-registry": "write-safe-consumer-registry",
+  "create-timeweb-backup": "create-timeweb-backup",
+  "seal-backup-evidence": "seal-backup-evidence",
+  "observe-wal-freshness": "observe-wal-freshness",
+  "timeweb-pitr": "timeweb-pitr",
+  "authorize-retention": "authorize-retention",
+  "replay-bootstrap": "replay-bootstrap",
+  "seal-replay-pair": "seal-replay-pair",
+  "deep-validate-replay-pair": "deep-validate-replay-pair",
   "start-worker": "start-worker",
   "start-web": "start-web",
   "start-caddy-candidate": "start-caddy-candidate",
@@ -77,11 +90,14 @@ export function createTimewebProductionHostCommandAdapter({ images, runId, invok
     if (!hostId || command.environment !== "production" || command.composeProject !== PROJECT) {
       throw failure("PRODUCTION_HOST_COMMAND_INVALID", "Production host command is invalid");
     }
+    const imagePhases = ["pull-exact-digests", "inspect-local-digests", "postgres", "db-role-bootstrap", "migrator", "start-api", "safe-consumer-deployer", "replay-bootstrap", "start-worker", "start-web", "start-caddy-candidate"];
     const payload = hostId === "timeweb-pitr-production"
       ? { runId }
-      : ["pull-exact-digests", "inspect-local-digests", "postgres", "db-role-bootstrap", "migrator", "start-api", "safe-consumer-deployer", "start-worker", "start-web", "start-caddy-candidate"].includes(hostId)
+      : imagePhases.includes(hostId)
         ? { images: frozenImages }
-        : {};
+        : command?.payload && typeof command.payload === "object"
+          ? structuredClone(command.payload)
+          : {};
     return invoke({ executable: "/usr/bin/node", arguments: [HOST_RUNNER, "--command", encodeHostCommand(hostId, payload)] });
   } });
 }
@@ -196,18 +212,23 @@ function requiredEnvironmentPath(name) {
 }
 
 export async function createProductionPilotAdapters({ secretFiles }) {
-  const fileInputs = Object.freeze({
+  const staticFileInputs = Object.freeze({
     ghcrPullTokenFile: secretFiles.ghcrPullToken, sshPrivateKeyFile: secretFiles.sshPrivateKey,
     timewebS3AccessKeyFile: secretFiles.timewebAccessKey, timewebS3SecretKeyFile: secretFiles.timewebSecretKey,
     backupEncryptionKeyFile: secretFiles.backupEncryptionKey,
     productionSecretRoot: requiredEnvironmentPath("PROOFLINE_PRODUCTION_SECRET_ROOT"),
+  });
+  const fileInputs = Object.freeze({
+    ...staticFileInputs,
     replayBundleFile: requiredEnvironmentPath("PROOFLINE_WORKER_REPLAY_BUNDLE_FILE"),
     replayPreflightReportFile: requiredEnvironmentPath("PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE"),
     backupEvidenceFile: requiredEnvironmentPath("PROOFLINE_BACKUP_EVIDENCE_FILE"),
   });
+  void PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT;
   const relayerKeyPath = requiredEnvironmentPath("PROOFLINE_WORKER_COSTON2_PRIVATE_KEY_FILE");
   let activeSession;
   let provisionedTarget;
+  const browserAdapter = createProductionPlaywrightBrowserAdapter();
 
   async function remote(request) {
     if (!activeSession) throw failure("PRODUCTION_HOST_COMMAND_FAILED", "Production host session is not open");
@@ -266,8 +287,15 @@ export async function createProductionPilotAdapters({ secretFiles }) {
     return session;
   }
 
+  async function openAuthorizedSession({ endpoint, expectedHostKeySha256, images, runId }) {
+    const session = await createPinnedSession(endpoint, expectedHostKeySha256, { images, runId });
+    activeSession = session;
+    return session;
+  }
+
   return {
     fileInputs,
+    staticFileInputs,
     inspectFile: lstat,
     preflightAdapter: { async verify(id, { authority, files }) {
       const base = { version: "1", kind: "production-pilot-preflight-observation", check: id, status: "passed" };
@@ -310,11 +338,9 @@ export async function createProductionPilotAdapters({ secretFiles }) {
         finally { await oneShot.close(); }
       },
     },
-    sshAdapter: { async openPinnedSession({ endpoint, expectedHostKeySha256, images, runId }) {
-      const session = await createPinnedSession(endpoint, expectedHostKeySha256, { images, runId });
-      activeSession = session;
-      return session;
-    } },
+    sshAdapter: { openPinnedSession: openAuthorizedSession },
+    openAuthorizedSession,
+    remote,
     appendProductionEvidence: (entry) => remote({ id: "append-production-evidence", payload: { canonicalBytesBase64url: Buffer.from(entry.bytes).toString("base64url"), sha256: sha256(entry.bytes) } }),
     cutoverAdapter: {
       async activateCaddy({ publicOrigin }) {
@@ -330,6 +356,20 @@ export async function createProductionPilotAdapters({ secretFiles }) {
       },
       async observeExternalHttps({ publicOrigin }) { const response = await fetch(`${publicOrigin}/api/healthz`, { redirect: "error", signal: AbortSignal.timeout(20_000) }); if (!response.ok) throw failure("PRODUCTION_CUTOVER_FAILED", "External HTTPS failed"); return { status: "passed", publicOrigin, observedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z") }; },
       rollbackCaddy: () => remote({ id: "rollback-caddy", payload: {} }),
+    },
+    browserEvidenceHostAdapter: {
+      appendBrowserAcceptance: ({ id, canonicalBytesBase64url, sha256: expectedSha256 }) =>
+        remote({ id, payload: { canonicalBytesBase64url, sha256: expectedSha256 } }),
+    },
+    browserAcceptanceAdapter: {
+      run: ({ activation }) => runProductionHostedBrowserAcceptance({
+        activation,
+        browserAdapter,
+        hostAdapter: {
+          appendBrowserAcceptance: ({ id, canonicalBytesBase64url, sha256: expectedSha256 }) =>
+            remote({ id, payload: { canonicalBytesBase64url, sha256: expectedSha256 } }),
+        },
+      }),
     },
     checkpointStore: { append: (entry) => {
       const bytes = Buffer.from(canonicalJson(entry), "utf8");

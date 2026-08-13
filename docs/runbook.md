@@ -1014,6 +1014,10 @@ notes. This inventory records only stable identifiers and storage boundaries.
 | Evidence root | `/opt/orivra/evidence`, root-owned mode `0700` |
 | State root | `/opt/orivra/state`, root-owned and not publicly served |
 | GHCR repositories | `ghcr.io/marshersusanin/orivra-{caddy,web,api,worker,postgres-recovery}` |
+| Operator credential directory | `/private/tmp/orivra-credentials`; mode `0700`, individual files mode `0400`, values never documented or passed in argv |
+| Operator credential filenames | `ghcr-write-token`, `ghcr-read-token`, `production-ssh-key`, `production-known-hosts`, `timeweb-access-key`, `timeweb-secret-key`, `backup-encryption-key`, `coston2-relayer-private-key` |
+| Active object store | Timeweb S3 `https://s3.twcstorage.ru`, region `ru-1`, bucket `orivra-backet`, path-style, private Standard/shared-pilot |
+| Excluded object-store authority | Swift credentials and endpoints are never installed or used; DigitalOcean Spaces remains historical V1 only |
 
 The prepared VDS source is synchronized from GitHub `main` into immutable
 `/opt/orivra/releases/<commit>` directories and selected through the atomic

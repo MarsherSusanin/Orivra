@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./dist/worker.js",
   "scripts": {
-    "build": "../../node_modules/.bin/esbuild src/entry.ts --bundle --platform=node --format=esm --target=node22 --banner:js='import { createRequire } from \"node:module\"; const require = createRequire(import.meta.url);' --outfile=dist/worker.js --external:pg --external:solc && ../../node_modules/.bin/esbuild src/safe-consumer-deployer-entry.ts --bundle --platform=node --format=esm --target=node22 --banner:js='import { createRequire } from \"node:module\"; const require = createRequire(import.meta.url);' --outfile=dist/safe-consumer-deployer.js --external:solc && npm run build:production-live-gate",
+    "build": "../../node_modules/.bin/esbuild src/entry.ts --bundle --platform=node --format=esm --target=node22 --banner:js='import { createRequire } from \"node:module\"; const require = createRequire(import.meta.url);' --outfile=dist/worker.js --external:pg --external:solc && ../../node_modules/.bin/esbuild src/safe-consumer-deployer-entry.ts --bundle --platform=node --format=esm --target=node22 --banner:js='import { createRequire } from \"node:module\"; const require = createRequire(import.meta.url);' --outfile=dist/safe-consumer-deployer.js --external:solc && npm run build:production-replay-bootstrap && npm run build:production-live-gate",
+    "build:production-replay-bootstrap": "esbuild src/production-replay-bootstrap.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/production-replay-bootstrap.js",
     "build:production-live-gate": "esbuild src/production-live-gate-entry.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/production-live-gate.js",
     "start": "node dist/worker.js"
   },

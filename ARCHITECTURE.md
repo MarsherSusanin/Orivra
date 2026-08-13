@@ -410,10 +410,12 @@ non-circular cutover live observation, UID-1000-only staging followed by root
 no-replace sealing, resumable terminal promotion and canonical browser
 acceptance; fresh exact-tree verification remains required.
 
-Recovery contract использует off-host WAL archiving и base backup для PITR в
-private S3-compatible DigitalOcean Spaces. Credential-free acceptance должна
-выполнять MinIO restore drill в отдельный volume. Droplet backup не является
-database backup или PITR plan.
+Active production recovery uses off-host WAL archiving and base backups in
+private Timeweb S3 at the exact ADR 0044 endpoint, region, bucket and
+path-style authority. DigitalOcean Spaces is historical V1 data only and
+cannot authorize the active path. Credential-free acceptance continues to use
+the MinIO restore drill in a separate volume; a Droplet backup is not database
+backup or PITR evidence.
 
 Эти release paths реализованы и герметично проверяются локально только в своей
 текущей executable части. Первый 027A image/Compose/Caddy candidate отклонён;

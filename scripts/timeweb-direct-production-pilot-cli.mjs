@@ -1,5 +1,8 @@
 import { fileURLToPath } from "node:url";
-import { runTimewebDirectProductionPilot } from "./digitalocean-production-promotion-runtime.mjs";
+import {
+  runTimewebDirectProductionPilot,
+  runTimewebPhaseOrderedProductionPilot,
+} from "./digitalocean-production-promotion-runtime.mjs";
 import { createProductionPilotAdapters } from "./timeweb-production-pilot-adapters.mjs";
 import { canonicalJson } from "./backup-evidence-validation.mjs";
 import { readBoundedPrivateFile } from "./private-file-runtime.mjs";
@@ -20,8 +23,11 @@ const argumentMap = Object.freeze({
   "timeweb-secret-key-file": ["secret", "timewebSecretKey"],
   "backup-encryption-key-file": ["secret", "backupEncryptionKey"],
 });
-const BROWSER_ACCEPTANCE = "/opt/orivra/evidence/hosted-browser-acceptance.v1.json";
-const BROWSER_ACCEPTANCE_SHA256 = "/opt/orivra/evidence/hosted-browser-acceptance.v1.sha256";
+import { PRODUCTION_BOOTSTRAP_OUTPUTS } from "./timeweb-production-bootstrap-runtime.mjs";
+const BROWSER_ACCEPTANCE = "/opt/orivra/evidence/browser/hosted-browser-acceptance.v1.json";
+const BROWSER_ACCEPTANCE_SHA256 = "/opt/orivra/evidence/browser/hosted-browser-acceptance.v1.sha256";
+void BROWSER_ACCEPTANCE;
+void BROWSER_ACCEPTANCE_SHA256;
 
 function invalid(message = "Production pilot CLI requires absolute file arguments") {
   throw Object.assign(new Error(message), { code: "PRODUCTION_PILOT_CLI_INVALID" });
@@ -52,7 +58,7 @@ async function readChecksum(path) {
 
 async function executeProductionPilot({ authorityFiles, adapters }) {
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-  return runTimewebDirectProductionPilot({
+  const authority = {
     publicationEvidenceBytes: await readBoundedPrivateFile(authorityFiles.publicationEvidence, { maximumBytes: 1024 * 1024 }),
     expectedPublicationEvidenceSha256: await readChecksum(authorityFiles.publicationEvidenceSha256),
     productionTargetBytes: await readBoundedPrivateFile(authorityFiles.productionTarget, { maximumBytes: 1024 * 1024 }),
@@ -62,11 +68,16 @@ async function executeProductionPilot({ authorityFiles, adapters }) {
     promotionAuthorizationBytes: await readBoundedPrivateFile(authorityFiles.promotionAuthorization, { maximumBytes: 1024 * 1024 }),
     expectedPromotionAuthorizationSha256: await readChecksum(authorityFiles.promotionAuthorizationSha256),
     runBytes: await readBoundedPrivateFile(authorityFiles.run, { maximumBytes: 64 * 1024 }),
-    browserAcceptanceBytes: await readBoundedPrivateFile(BROWSER_ACCEPTANCE, { maximumBytes: 1024 * 1024 }),
-    expectedBrowserAcceptanceSha256: await readChecksum(BROWSER_ACCEPTANCE_SHA256),
     now,
     clock: { now: () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z") },
     ...adapters,
+  };
+  if (typeof adapters.browserAcceptanceAdapter?.run !== "function") {
+    return runTimewebDirectProductionPilot(authority);
+  }
+  return runTimewebPhaseOrderedProductionPilot({
+    ...authority,
+    outputPaths: PRODUCTION_BOOTSTRAP_OUTPUTS,
   });
 }
 

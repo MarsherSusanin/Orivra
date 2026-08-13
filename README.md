@@ -169,6 +169,9 @@ blockchain-операций.
   replay-bootstrap one-shot precedes the ordinary worker, while real browser
   acceptance follows public cutover. Exact `361bac3` images are therefore
   obsolete/undeployable and must not be published.
+  The author implementation is now GREEN on the full local matrix; a fresh
+  immutable freeze and two independent exact-tree PASS reports remain the only
+  blockers before publication and direct production launch.
   Public replay template SHAs remain stable; live production uses exact
   relayer SHAs `1fb914f9…f7cfe6` and `eaed1554…57f9f`, accepted only through an
   exact request/consumer/consumer-byte alias back to the replay-keyed registry

@@ -12,6 +12,7 @@ import {
   canonicalSerializeSafeConsumerRegistry,
   checksumProductionDeploymentEvidence,
   checksumProductionPilotPreflightEvidence,
+  checksumProductionPilotPreflightEvidenceV2,
   checksumProductionPromotionAuthorization,
   checksumProductionPromotionAuthorizationV2,
   checksumProductionTarget,
@@ -24,6 +25,11 @@ import {
   verifyProductionPromotionHandoff,
 } from "../packages/domain/src/production-promotion-runtime.mjs";
 import { sha256Bytes } from "../packages/contracts/src/release-runtime.mjs";
+import {
+  PRODUCTION_BOOTSTRAP_OUTPUTS,
+  STATIC_PREFLIGHT_IDS,
+  runTimewebProductionBootstrapLifecycle,
+} from "./timeweb-production-bootstrap-runtime.mjs";
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const preflightIds = Object.freeze([
@@ -261,12 +267,20 @@ export async function runApplicationRollback(input) {
 
 const directPreflightIds = Object.freeze([
   "dns-target", "ssh-host-key", "read-only-ghcr", "secret-files", "timeweb-s3-authority",
-  "replay-bundle", "safe-consumer-manifests", "live-coston2",
+  "safe-consumer-manifests", "live-coston2",
 ]);
+if (JSON.stringify(directPreflightIds) !== JSON.stringify(STATIC_PREFLIGHT_IDS)) {
+  throw new Error("Production bootstrap preflight authority drifted");
+}
 const directFileKeys = Object.freeze([
   "ghcrPullTokenFile", "sshPrivateKeyFile", "timewebS3AccessKeyFile", "timewebS3SecretKeyFile",
-  "backupEncryptionKeyFile", "productionSecretRoot", "replayBundleFile", "replayPreflightReportFile",
-  "backupEvidenceFile",
+  "backupEncryptionKeyFile", "productionSecretRoot",
+]);
+const legacyDirectPreflightIds = Object.freeze([
+  ...directPreflightIds.slice(0, 5), "replay-bundle", ...directPreflightIds.slice(5),
+]);
+const legacyDirectFileKeys = Object.freeze([
+  ...directFileKeys, "replayBundleFile", "replayPreflightReportFile", "backupEvidenceFile",
 ]);
 const directRegistryOutput = "/opt/orivra/evidence/safe-consumer-registry.v1.json";
 const directCommandIds = Object.freeze([
@@ -280,6 +294,8 @@ const directCanaryDefinitions = Object.freeze([
 ]);
 const openMeteoSha = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
 const ethUsdSha = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
+const openMeteoRelayerSha = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6";
+const ethUsdRelayerSha = "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f";
 
 function parseBrowserAcceptance(bytes, expectedSha256, publicOrigin) {
   try {
@@ -313,10 +329,22 @@ function parseDirectRun(bytes, operatorId, completedAt) {
 }
 
 function snapshotDirectFiles(value) {
-  if (!exactKeys(value, directFileKeys)) throw failure("PRODUCTION_PROMOTION_INPUT_INVALID", "Production promotion input is invalid");
+  if (!exactKeys(value, legacyDirectFileKeys)) throw failure("PRODUCTION_PROMOTION_INPUT_INVALID", "Production promotion input is invalid");
+  const copy = {};
+  for (const key of legacyDirectFileKeys) {
+    const path = value[key];
+    if (typeof path !== "string" || !path.startsWith("/") || path.includes("\0")) {
+      throw failure("PRODUCTION_PROMOTION_INPUT_INVALID", "Production promotion input is invalid");
+    }
+    copy[key] = path;
+  }
+  return deepFreeze(copy);
+}
+
+function snapshotStaticDirectFiles(value) {
   const copy = {};
   for (const key of directFileKeys) {
-    const path = value[key];
+    const path = value?.[key];
     if (typeof path !== "string" || !path.startsWith("/") || path.includes("\0")) {
       throw failure("PRODUCTION_PROMOTION_INPUT_INVALID", "Production promotion input is invalid");
     }
@@ -327,7 +355,7 @@ function snapshotDirectFiles(value) {
 
 async function verifyDirectFileInputs(files, inspectFile) {
   if (typeof inspectFile !== "function") throw failure("PRODUCTION_PREFLIGHT_INVALID", "Production pilot preflight is invalid");
-  for (const key of directFileKeys) {
+  for (const key of legacyDirectFileKeys) {
     const stat = await inspectFile(files[key]);
     const root = key === "productionSecretRoot";
     if (!stat || stat.isSymbolicLink() || (root ? !stat.isDirectory() : !stat.isFile()) ||
@@ -388,6 +416,11 @@ function directPreflightEvidence(authority, observations, files) {
   };
 }
 
+function directStaticPreflightEvidence(authority, observations, files) {
+  const legacy = directPreflightEvidence(authority, observations, files);
+  return deepFreeze({ ...legacy, version: "2" });
+}
+
 function requireDirectCommand(id, observed, authority) {
   if (!observed || (id === "persisted-live-coston2" ? !["passed", "persisted"].includes(observed.status) : observed.status !== "passed")) {
     throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
@@ -418,7 +451,7 @@ function requireDirectCommand(id, observed, authority) {
     throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
   }
   if (id === "persisted-live-coston2" && (!Array.isArray(observed.runIds) || observed.runIds.length !== 2 || observed.runIds[0] === observed.runIds[1] ||
-    observed.runIds.some((runId) => !/^run_[0-9A-Z]{26}$/.test(runId)) || JSON.stringify(observed.manifests) !== JSON.stringify([openMeteoSha, ethUsdSha]))) {
+    observed.runIds.some((runId) => !/^run_[0-9A-Z]{26}$/.test(runId)) || JSON.stringify(observed.manifests) !== JSON.stringify([openMeteoRelayerSha, ethUsdRelayerSha]))) {
     throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
   }
   if (id === "persisted-live-coston2") {
@@ -444,7 +477,7 @@ export async function runTimewebDirectProductionPilot(input) {
   const run = parseDirectRun(input.runBytes, authority.authorization.operatorId, now);
   const files = snapshotDirectFiles(input.fileInputs);
   const preflightObservations = [];
-  for (const id of directPreflightIds) preflightObservations.push(requireDirectPreflight(id, await input.preflightAdapter?.verify(id, { authority, files }), authority, files));
+  for (const id of legacyDirectPreflightIds) preflightObservations.push(requireDirectPreflight(id, await input.preflightAdapter?.verify(id, { authority, files }), authority, files));
   await verifyDirectFileInputs(files, input.inspectFile);
   const preflightEvidence = directPreflightEvidence(authority, preflightObservations, files);
   const plan = createDirectProductionPilotPlan(authority);
@@ -520,7 +553,8 @@ export async function runTimewebDirectProductionPilot(input) {
         timewebPitr: { status: "passed", restoreEvidenceSha256: observations["timeweb-pitr-production"].restoreEvidenceSha256,
           backupAgeSeconds: observations["timeweb-pitr-production"].backupAgeSeconds, archivePendingAgeSeconds: observations["timeweb-pitr-production"].archivePendingAgeSeconds },
         liveCoston2: { status: "persisted", runIds: observations["persisted-live-coston2"].runIds, manifests: observations["persisted-live-coston2"].manifests } },
-      cutover: { status: "passed", publicOrigin: authority.target.publicOrigin, activatedAt: activated.activatedAt },
+      cutover: { status: "passed", publicOrigin: authority.target.publicOrigin, activatedAt: activated.activatedAt,
+        browserAcceptanceSha256: browserAcceptance.sha256 },
     });
     const deploymentBytes = Buffer.from(canonicalSerializeProductionDeploymentEvidenceV2(deployment), "utf8");
     await input.appendProductionEvidence({ filename: "production-deployment-evidence.v2.json", bytes: deploymentBytes });
@@ -542,6 +576,127 @@ export async function runTimewebDirectProductionPilot(input) {
     }
   }
   throw failureCause;
+}
+
+export async function runTimewebPhaseOrderedProductionPilot(input) {
+  const authority = verifyDirectProductionPilotHandoff(input);
+  const now = input.clock?.now?.();
+  if (typeof now !== "string" || !Number.isFinite(Date.parse(now))) throw failure("PRODUCTION_PREFLIGHT_INVALID", "Production pilot preflight is invalid");
+  const run = parseDirectRun(input.runBytes, authority.authorization.operatorId, now);
+  const files = snapshotStaticDirectFiles(input.staticFileInputs ?? input.fileInputs);
+  for (const key of directFileKeys) {
+    const stat = await input.inspectFile?.(files[key]);
+    const root = key === "productionSecretRoot";
+    if (!stat || stat.isSymbolicLink() || (root ? !stat.isDirectory() : !stat.isFile()) ||
+      (stat.mode & 0o777) !== (root ? 0o500 : 0o400) || (!root && (!Number.isSafeInteger(stat.size) || stat.size <= 0))) {
+      throw failure("PRODUCTION_PREFLIGHT_INVALID", "Production pilot preflight is invalid", { check: "secret-files" });
+    }
+  }
+  for (const path of Object.values(PRODUCTION_BOOTSTRAP_OUTPUTS)) {
+    const status = await input.inspectFile(path).catch((cause) => cause?.code === "ENOENT" ? null : Promise.reject(cause));
+    if (status !== null) throw failure("PRODUCTION_PREFLIGHT_INVALID", "Production bootstrap output already exists");
+  }
+  const preflightObservations = [];
+  for (const id of directPreflightIds) {
+    preflightObservations.push(requireDirectPreflight(id, await input.preflightAdapter?.verify(id, { authority, files }), authority, files));
+  }
+  const preflightEvidence = directStaticPreflightEvidence(authority, preflightObservations, files);
+  const plan = createDirectProductionPilotPlan(authority);
+  let resource;
+  let session;
+  let activation;
+  let deploymentPublished = false;
+  const state = {};
+  const host = (id, payload = {}) => session.run({ id, environment: "production", composeProject: authority.target.composeProject,
+    images: authority.images, payload });
+  const execute = async (phase, lifecycleAuthority = {}) => {
+    if (phase === "static-preflight") {
+      resource = await input.productionAdapter.provision({ environment: "production", target: authority.target, plan });
+      await input.productionAdapter.applyFirewall({ resource, ingress: [80, 443], environment: "production" });
+      session = await input.sshAdapter.openPinnedSession({ endpoint: { host: resource.sshHost, port: 22 },
+        expectedHostKeySha256: authority.target.sshEndpoint.hostKeySha256, images: authority.images, runId: run.runId });
+      if (!session || session.observedHostKeySha256 !== authority.target.sshEndpoint.hostKeySha256 || typeof session.run !== "function") {
+        throw failure("PRODUCTION_SSH_HOST_KEY_MISMATCH", "Production SSH host key mismatch");
+      }
+      await host("install-read-only-pull-credential");
+      await host("pull-exact-digests");
+      const digests = await host("inspect-local-digests");
+      requireDirectCommand("inspect-local-digests", digests, authority);
+      return { status: "passed" };
+    }
+    const simple = {
+      "start-postgres": "start-postgres", "db-role-bootstrap": "db-role-bootstrap", migrator: "migrator",
+      "start-api": "start-api", "safe-consumer-deployer": "safe-consumer-deployer", "start-worker": "start-worker",
+      "start-web": "start-web", "start-caddy-candidate": "start-caddy-candidate",
+    }[phase];
+    if (simple) {
+      const observed = await host(simple);
+      if (simple === "migrator") state.migrator = requireDirectCommand("migrator", observed, authority);
+      if (simple === "safe-consumer-deployer") state.safeConsumers = requireDirectCommand("safe-consumer-deployer", observed, authority);
+      if (simple === "start-worker") state.ready = requireDirectCommand("readyz-real-heartbeat", await host("readyz-real-heartbeat"), authority);
+      return observed;
+    }
+    if (phase === "seal-safe-consumer") {
+      state.registrySeal = requireDirectCommand("write-safe-consumer-registry", await host("write-safe-consumer-registry"), authority);
+      return { status: "passed" };
+    }
+    if (phase === "create-timeweb-backup") { state.backup = await host(phase); return state.backup; }
+    if (phase === "seal-backup-evidence") { state.backupEvidence = await host(phase, { backupId: state.backup.backupId, archive: state.backup.archive }); return state.backupEvidence; }
+    if (phase === "observe-wal-freshness") { state.wal = await host(phase, { backupEvidenceSha256: state.backupEvidence.backupEvidenceSha256, archivePendingAgeSeconds: state.backupEvidence.archivePendingAgeSeconds }); return state.wal; }
+    if (phase === "timeweb-pitr") { state.pitr = await host(phase, { runId: run.runId, backupEvidenceSha256: state.backupEvidence.backupEvidenceSha256, archivePendingAgeSeconds: state.wal.archivePendingAgeSeconds }); return state.pitr; }
+    if (phase === "authorize-retention") return host(phase, { backupEvidenceSha256: state.backupEvidence.backupEvidenceSha256 });
+    if (phase === "replay-bootstrap") { state.replay = await host(phase); return state.replay; }
+    if (phase === "seal-replay-pair") return host(phase);
+    if (phase === "deep-validate-replay-pair") { state.replayPair = await host(phase); return state.replayPair; }
+    if (phase === "persisted-live-coston2") { state.live = requireDirectCommand("persisted-live-coston2", await host("persisted-live-coston2"), authority); return state.live; }
+    if (phase === "activate-caddy") {
+      activation = await input.cutoverAdapter.activateCaddy({ publicOrigin: authority.target.publicOrigin, target: authority.target });
+      if (activation?.status !== "passed" || activation.publicOrigin !== authority.target.publicOrigin || !Number.isFinite(Date.parse(activation.activatedAt))) throw failure("PRODUCTION_CUTOVER_FAILED", "Production cutover failed");
+      return activation;
+    }
+    if (phase === "external-browser-acceptance") {
+      state.external = await input.cutoverAdapter.observeExternalHttps({ publicOrigin: authority.target.publicOrigin, target: authority.target });
+      if (state.external?.status !== "passed" || state.external.publicOrigin !== authority.target.publicOrigin) throw failure("PRODUCTION_CUTOVER_FAILED", "Production external HTTPS observation failed");
+      state.browser = await input.browserAcceptanceAdapter.run({ activation });
+      return state.browser;
+    }
+    if (phase === "seal-browser-acceptance") return state.browser;
+    if (phase === "append-deployment-evidence") {
+      if (state.browser?.sha256 !== lifecycleAuthority.browserAcceptanceSha256) {
+        throw failure("PRODUCTION_OBSERVATION_INVALID", "Production browser acceptance authority is invalid");
+      }
+      const deployment = ProductionDeploymentEvidenceV2Schema.parse({
+        version: "2", kind: "digitalocean-production-deployment-evidence", status: "passed", verification: "verified", productionClaim: true,
+        producer: authority.publication.producer, publicationEvidenceSha256: authority.publicationEvidenceSha256,
+        frozenReleaseManifestSha256: authority.publication.frozenRelease.frozenReleaseManifestSha256,
+        promotionAuthorizationSha256: checksumProductionPromotionAuthorizationV2(authority.authorization),
+        preflightEvidenceSha256: checksumProductionPilotPreflightEvidenceV2(preflightEvidence), target: authority.target, run,
+        pullCredential: { registry: "ghcr.io", access: "read-only" }, images: authority.images,
+        topology: { publicService: "caddy", publicPorts: [80, 443], privateServices: ["web", "api", "worker", "postgres"], forbiddenPublicPorts: [5432, 8080], dockerSocketMounted: false },
+        database: { migrationManifestSha256: state.migrator.migrationManifestSha256, targetVersion: 10, schemaVersion: 10, roleBootstrap: { status: "passed" }, migration: { status: "passed" } },
+        objectStore: authority.objectStore, safeConsumers: state.safeConsumers.registry,
+        checks: { exactDigestPull: { status: "passed" }, readyz: state.ready.readyz, workerHeartbeat: state.ready.workerHeartbeat,
+          timewebPitr: { status: "passed", restoreEvidenceSha256: state.pitr.restoreEvidenceSha256, backupAgeSeconds: state.pitr.backupAgeSeconds, archivePendingAgeSeconds: state.pitr.archivePendingAgeSeconds },
+          liveCoston2: { status: "persisted", runIds: state.live.runIds, manifests: state.live.manifests } },
+        cutover: { status: "passed", publicOrigin: authority.target.publicOrigin, activatedAt: activation.activatedAt,
+          browserAcceptanceSha256: state.browser.sha256 },
+      });
+      const bytes = Buffer.from(canonicalSerializeProductionDeploymentEvidenceV2(deployment), "utf8");
+      await input.appendProductionEvidence({ filename: "production-deployment-evidence.v2.json", bytes });
+      deploymentPublished = true;
+      state.deploymentEvidenceSha256 = sha256Bytes(bytes);
+      return { status: "passed" };
+    }
+    throw new Error(`Unknown phase ${phase}`);
+  };
+  const result = await runTimewebProductionBootstrapLifecycle({
+    outputPaths: input?.outputPaths ?? PRODUCTION_BOOTSTRAP_OUTPUTS,
+    execute,
+    rollbackCaddy: () => input.cutoverAdapter.rollbackCaddy({ target: authority.target }),
+    closeSession: () => session?.close?.(),
+  });
+  return deepFreeze({ ...result, environment: "production", deploymentId: resource.deploymentId,
+    deploymentEvidenceSha256: state.deploymentEvidenceSha256, runId: run.runId, deploymentPublished });
 }
 
 export async function resumeTimewebProductionCanary(input) {

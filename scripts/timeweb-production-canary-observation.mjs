@@ -7,10 +7,10 @@ import { readBoundedPrivateFile } from "./private-file-runtime.mjs";
 
 const IDS = ["cutover", "post-cutover-15m", "post-cutover-1h", "post-cutover-24h"];
 const PUBLIC_ORIGIN = "https://orivra.xyz";
-const OPEN_METEO = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
-const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
-const BROWSER_ACCEPTANCE = "/opt/orivra/evidence/hosted-browser-acceptance.v1.json";
-const BROWSER_ACCEPTANCE_SHA256 = "/opt/orivra/evidence/hosted-browser-acceptance.v1.sha256";
+const OPEN_METEO = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6";
+const ETH_USD = "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f";
+const BROWSER_ACCEPTANCE = "/opt/orivra/evidence/browser/hosted-browser-acceptance.v1.json";
+const BROWSER_ACCEPTANCE_SHA256 = "/opt/orivra/evidence/browser/hosted-browser-acceptance.v1.sha256";
 const sha256 = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 
 function canonicalJson(value) {

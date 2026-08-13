@@ -49,6 +49,26 @@ export const POSTGRES_QUERIES = {
     WHERE command.id = candidate.id
     RETURNING command.*
   `,
+  claimNextCommandForRun: `
+    WITH candidate AS (
+      SELECT id
+      FROM proofline_private.run_commands
+      WHERE run_id = $3
+        AND ((status = 'queued' AND available_at <= now()) OR
+             (status = 'leased' AND lease_expires_at <= now()))
+      ORDER BY available_at, created_at
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    UPDATE proofline_private.run_commands AS command
+    SET status = 'leased',
+        lease_token = $1,
+        lease_expires_at = now() + $2::interval,
+        attempts = attempts + 1
+    FROM candidate
+    WHERE command.id = candidate.id
+    RETURNING command.*
+  `,
   lockRun:
     "SELECT last_sequence, projection FROM proofline_private.runs WHERE id = $1 FOR UPDATE",
   loadEvents:
@@ -863,15 +883,19 @@ export function createPostgresCommandRepository(input: {
       }
     },
 
-    async claimNextCommand() {
+    async claimNextCommand(runId?: string) {
       const client = await input.pool.connect();
       const claimToken = randomUUID();
       try {
         await client.query("BEGIN");
-        const result = await client.query(POSTGRES_QUERIES.claimNextCommand, [
-          claimToken,
-          "30 seconds",
-        ]);
+        const result = await client.query(
+          runId === undefined
+            ? POSTGRES_QUERIES.claimNextCommand
+            : POSTGRES_QUERIES.claimNextCommandForRun,
+          runId === undefined
+            ? [claimToken, "30 seconds"]
+            : [claimToken, "30 seconds", runId],
+        );
         const row = result.rows[0];
         if (!row) {
           await client.query("COMMIT");
@@ -981,6 +1005,13 @@ export function createPostgresCommandRepository(input: {
       } finally {
         client.release();
       }
+    },
+
+    async claimNextCommandForRun(runId: string) {
+      if (!/^run_[0-9A-Z]{26}$/.test(runId)) {
+        throw new Error("Run-scoped command lease is invalid");
+      }
+      return this.claimNextCommand(runId);
     },
 
     async completeCommand(
