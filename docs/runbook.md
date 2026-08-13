@@ -1029,6 +1029,20 @@ mode-0400 safe-consumer registry and the ADR 0044 Timeweb shared-pilot storage
 authority are installed. The shared pilot is an explicit temporary exception
 rather than a least-authority claim. Do not substitute fixtures or start a
 worker that cannot produce live persisted evidence.
+
+ADR 0045 changes first start: the fixed `backup-evidence.v1.json` is the
+immutable selected handoff, while daily backup evidence remains append-only by
+backup ID and cannot overwrite it. Missing late outputs are accepted only for
+the exact early aliases `postgres`, `db-role-bootstrap`, `migrator`, `api` and
+`safe-consumer-deployer`; generic runtime `up` and replay-bootstrap, worker,
+PITR or canary consumers fail before Docker until their inputs exist.
+Replay-bootstrap uses only the live worker plus persisted API path for one
+terminal Open-Meteo run, exporting its cross-bound bundle/report while
+ordinary replay loaders remain unavailable. After activation, the production
+browser adapter records desktop/mobile, keyboard, axe, console/network and
+reload/back-forward results. Any producer, seal or validation failure writes
+no deployment evidence; post-activation failure rolls Caddy back before the
+pinned session closes.
 Docker Engine `29.1.3`, Compose `2.40.3`, fail2ban and unattended upgrades are
 active. UFW denies inbound traffic by default, permits public 80/443, rate-limits
 22 and restricts the provider monitoring agent on 10050 to its explicit

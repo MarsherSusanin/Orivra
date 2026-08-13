@@ -38,6 +38,12 @@ Static preflight never opens those nonexistent files and contains no replay,
 backup or browser PASS. Their later canonical checksums are deployment
 observations, not input authorization.
 
+The fixed `backup-evidence.v1.json` is the immutable pilot-selected handoff for
+this deployment/PITR. Daily scheduler evidence remains append-only under its
+exact backup ID; it never overwrites the selected handoff or another daily
+record. Selecting a newer daily backup requires a separate canonical
+no-replace handoff and checksum transition before a consuming phase.
+
 ### Exact phase order
 
 One pinned-session lifecycle executes:
@@ -74,6 +80,13 @@ manifest tuple. It cannot import a test adapter, accept a generic command, or
 start the ordinary worker. The ordinary worker depends on successful replay
 bootstrap and the root seal/deep-validation boundary.
 
+The bootstrap is a live-only bounded worker+API orchestrator. Through the API
+auth/project/idempotent-command path it submits exact Open-Meteo, processes the
+same terminal Coston2 run with worker-only relayer authority, then exports that
+persisted run's `/bundle` and `/preflight` bytes. Run ID and manifest SHA match
+across terminal run, bundle, report and staged pair. Ordinary replay file
+loaders and replay handlers are unavailable inside bootstrap.
+
 ### Phase-aware input validation and sealing
 
 Compose input validation is phase-aware. Late outputs may be absent only in
@@ -88,6 +101,13 @@ no-replace rename. Parent/final directories are root-private. A failed parser,
 symlink, wrong mode/owner, checksum mismatch, duplicate output, partial write,
 timeout or cleanup failure leaves zero final artifact and never exposes secret
 bytes or paths in argv, evidence or logs.
+
+The browser producer is a production-used external browser adapter invoked
+only after recorded Caddy activation. It proves desktop and mobile journeys,
+keyboard operation, zero serious/critical axe findings, zero console/network
+errors and reload/back-forward restoration, then writes one canonical
+mode-0400 no-replace artifact. Any browser or seal failure is post-effect and
+therefore rolls Caddy back before session close.
 
 ## Consequences
 

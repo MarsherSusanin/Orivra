@@ -22,9 +22,16 @@ included. Final RED/control counts are appended after focused classification.
 ## Classification
 
 Syntax and `npm run typecheck` PASS. The new bootstrap suite plus retained
-027A/027B Compose lifecycle is 29 controls PASS plus 12 causal intentional RED:
-four exact nine-service/dependency failures and eight missing production-used
-phase-runtime/replay/artifact/rollback seams. Serialized deployment static is
-261 controls PASS plus the same 12 RED. Sites is 46/46 PASS. Diff-check is
+027A/027B Compose lifecycle is 29 controls PASS plus 16 causal intentional RED:
+four exact nine-service/dependency failures and twelve missing production-used
+phase-runtime, live replay export, browser adapter, phase-aware Compose,
+artifact and rollback seams. Serialized deployment static is 261 controls PASS
+plus the same 16 RED. Sites is 46/46 PASS. Diff-check is
 clean. These failures are the frozen production gap; there is no harness,
 fixture, Docker or external-effect failure.
+
+The follow-up causal inventory additionally freezes the live worker+API
+Open-Meteo run-to-bundle/report export, immutable selected backup versus
+append-only daily backup IDs, the production-used post-activation browser
+adapter, early Compose service aliases versus consuming/generic-up denial, and
+zero deployment evidence across every producer/seal/validation failure.
