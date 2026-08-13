@@ -277,3 +277,9 @@ required Compose interpolation input; worker remains absent from the QA
 service inventory. The same outer lifecycle removes the stage with every other
 temporary input. No candidate, registry or server effect was accepted from the
 failed attempt.
+
+The following candidate attempt proved that the same mandatory Compose input
+also belongs to the separate runtime and recovery runners. Both now create the
+same run-owned private stage beneath their existing temporary roots and bind it
+without a fallback. Narrow tests freeze all three runner seams. No registry or
+server effect was accepted from that pre-runtime failure.

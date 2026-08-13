@@ -525,6 +525,8 @@ test("freezes a credential-free runtime lifecycle gate without an actual worker 
     readFile(resolve(root, "scripts/docker-runtime-smoke.mjs"), "utf8").catch(() => ""),
   ]);
   assert.equal(packageJson.scripts?.["test:docker:runtime"], "node scripts/docker-runtime-smoke.mjs");
+  assert.match(script, /replay-bootstrap-stage/);
+  assert.match(script, /PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:\s*replayBootstrapStageRoot/);
   assert.match(script, /db-role-bootstrap/);
   assert.match(script, /migrator/);
   assert.match(script, /\/api\/healthz/);

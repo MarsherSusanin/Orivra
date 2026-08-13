@@ -251,6 +251,8 @@ test("adds a dedicated executable recovery gate without weakening existing Docke
   assert.equal(packageJson.scripts?.["test:docker:runtime"], "node scripts/docker-runtime-smoke.mjs");
   assert.equal(packageJson.scripts?.["test:docker:recovery"], "node scripts/docker-recovery-gate.mjs");
   assert.notEqual(gate, "", "recovery Docker gate must exist");
+  assert.match(gate, /replay-bootstrap-stage/);
+  assert.match(gate, /PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:\s*replayBootstrapStageRoot/);
   assert.match(gate, /proofline-027c-[a-z0-9-]+/i);
   assert.match(gate, /--pull["',\s]+never/);
   assert.match(gate, /--network["',\s]+none/);
