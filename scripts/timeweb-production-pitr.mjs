@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { selectRecoveryBackupMetadata } from "./recovery-selected-backup-metadata.mjs";
 import { parseCanonicalBackupEvidence } from "./backup-evidence-validation.mjs";
 import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
+import { validateTimewebProductionSecretInventory } from "./timeweb-production-secret-inventory.mjs";
 
 const RUN_ID = /^prod_[0-9A-Z]{26}$/;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
@@ -291,7 +292,10 @@ function defaultAdapters() {
 export async function runTimewebProductionPitr({ runId, adapters }) {
   try {
     if (!RUN_ID.test(runId ?? "")) throw new Error("run id");
-    if (!adapters) return await runDefaultTimewebProductionPitr({ productionRunId: runId });
+    if (!adapters) {
+      await validateTimewebProductionSecretInventory({ environment: process.env });
+      return await runDefaultTimewebProductionPitr({ productionRunId: runId });
+    }
     adapters ??= defaultAdapters();
     const authority = { provider: "timeweb-s3", endpoint: "https://s3.twcstorage.ru", region: "ru-1", bucket: "orivra-backet", pathStyle: true, runId };
     const backup = await adapters.createBaseBackup(authority);

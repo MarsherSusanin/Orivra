@@ -87,6 +87,7 @@ test("the production live default executes one worker-owned API persistence gate
       commands.push(command);
       return { status: 0, stdout: `${canonicalJson(workerResult)}\n`, stderr: "" };
     },
+    validateSecretInventory: async () => ({ status: "passed" }),
   });
   assert.deepEqual(await defaultAdapter({ productionRunId: PRODUCTION_RUN_ID }), workerResult);
   assert.deepEqual(commands, [{

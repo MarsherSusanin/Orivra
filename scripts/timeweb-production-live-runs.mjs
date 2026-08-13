@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
+import { validateTimewebProductionSecretInventory } from "./timeweb-production-secret-inventory.mjs";
 
 const OPEN_METEO = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6";
 const ETH_USD = "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f";
@@ -36,10 +37,12 @@ function defaultRunCommand(command) {
 export function createDefaultTimewebProductionLiveRunsAdapter({
   runCommand = defaultRunCommand,
   environment = { PATH: "/usr/bin:/bin" },
+  validateSecretInventory = validateTimewebProductionSecretInventory,
 } = {}) {
   return async ({ productionRunId }) => {
     try {
       if (!/^prod_[0-9A-Z]{26}$/.test(productionRunId ?? "")) throw new Error("run id");
+      await validateSecretInventory({ environment });
       const result = await runCommand({
         file: "docker",
         args: ["compose", "--project-name", "proofline-production-primary", "--file", "/opt/orivra/current/compose.yaml", "--file", "/opt/orivra/current/deploy/compose.runtime.yaml", "exec", "-T", "worker", "node", "/app/apps/worker/dist/production-live-gate.js", "--run-id", productionRunId],

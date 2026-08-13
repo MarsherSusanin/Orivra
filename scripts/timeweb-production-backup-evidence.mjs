@@ -14,6 +14,7 @@ import {
 import { collectCiphertextInventory } from "./recovery-inventory.mjs";
 import { selectRecoveryBackupMetadata } from "./recovery-selected-backup-metadata.mjs";
 import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
+import { validateTimewebProductionSecretInventory } from "./timeweb-production-secret-inventory.mjs";
 
 const ROOT = "/opt/orivra/current";
 const EVIDENCE_ROOT = "/opt/orivra/evidence/recovery/backups";
@@ -99,6 +100,7 @@ async function inventoryReader(systemIdentifier, accessKey, secretKey) {
 }
 
 export async function createCanonicalTimewebBackupEvidence({ backupId, archive, environment = process.env }) {
+  await validateTimewebProductionSecretInventory({ environment });
   const accessBytes = await privateBytes(environment.PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE);
   const secretBytes = await privateBytes(environment.PROOFLINE_BACKUP_READER_SECRET_ACCESS_KEY_FILE);
   const encryptionBytes = await privateBytes(environment.PROOFLINE_BACKUP_ENCRYPTION_KEY_FILE);

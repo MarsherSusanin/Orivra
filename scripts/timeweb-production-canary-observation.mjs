@@ -5,6 +5,7 @@ import { ProductionCanaryCheckpointV2Schema, ProductionDeploymentEvidenceV2Schem
 import { switchAndObserveProductionWalArchive } from "./timeweb-production-pitr.mjs";
 import { readBoundedPrivateFile } from "./private-file-runtime.mjs";
 import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
+import { validateTimewebProductionSecretInventory } from "./timeweb-production-secret-inventory.mjs";
 
 const IDS = ["cutover", "post-cutover-15m", "post-cutover-1h", "post-cutover-24h"];
 const PUBLIC_ORIGIN = "https://orivra.xyz";
@@ -138,6 +139,7 @@ export async function observeTimewebProductionCanary({ id, dueAt, publicOrigin =
       const checks = await observeChecks({ id, dueAt, source: "production-host" });
       return ProductionCanaryCheckpointV2Schema.parse({ version: "2", kind: "production-canary-checkpoint", id, dueAt, observedAt, status: "passed", checks });
     }
+    if (!adapters) await validateTimewebProductionSecretInventory({ environment: process.env });
     const time = await (clock ?? productionClock).readSynchronizedHostTime();
     if (time?.source !== "production-host" || time.maximumSkewSeconds !== 5 || !Number.isInteger(time.observedSkewSeconds) || time.observedSkewSeconds < 0 || time.observedSkewSeconds > 5 || !Number.isFinite(Date.parse(time.now))) throw new Error("host clock");
     if (Date.parse(time.now) < Date.parse(dueAt)) throw notDue();

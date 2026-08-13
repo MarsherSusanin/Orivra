@@ -389,3 +389,23 @@ requires two byte-identical private copies with per-consumer ownership, keeps
 the containing directory root-owned mode 0500 and forbids world-readable
 secrets or root containers. No deployment evidence or public ingress was
 created by the rejected attempt.
+
+Independent Core review of the first split-file implementation rejected exact
+commit `0b1751db9118cc430bc7469de047877c9aa9fabb` / tree
+`cc1070e3f6a333eac139b9366c4b4946620222eb`: the Compose mapping was correct,
+but production still accepted caller-selected, mode-0644, wrong-owner and
+byte-mismatched files before Docker. Its mode-0400 FAIL report is
+`/private/tmp/orivra-release-0b1/verifiers/0b1751d/core-verifier.md`, SHA-256
+`f4334acb97d6a8e1fdb0cda7a9952fcea46f57577b0638769590d99f2e6bc681`.
+Corrective RED requires one production-used no-follow inventory validator in
+the host command, canonical Compose wrapper, pilot/daily backup, live-run and
+canary paths. It freezes root-owned mode 0500, exact fixed paths, regular
+mode-0400 UID/GID 1000 or 999 files and byte equality for the database URL and
+the three shared-pilot access/secret-key copies before the first Docker effect.
+
+Corrective Author GREEN adds one shared production validator and installs it at
+all of those executable boundaries. Its focused contract is 3/3 PASS, including
+the root/path/mode/owner/inode/byte negative matrix. Typecheck PASS and the
+serialized deployment static inventory is 298/298 PASS. Browser tooling remains
+operator-side only; this correction neither installs Chromium on the VDS nor
+creates a container, network, volume, registry, provider or hosted effect.

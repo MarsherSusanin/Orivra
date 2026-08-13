@@ -19,6 +19,9 @@ acceptance or rollback authority.
   Web/Caddy → cutover/browser seal → cutover checkpoint → deployment evidence;
 - runtime Compose contains exactly nine definitions with one additional
   hardened one-shot `replay-bootstrap`, not a ninth long-lived service;
+- the production host and every direct Compose/backup/live/canary entry verify
+  the exact root-owned mode-0500 secret root, distinct mode-0400 UID/GID
+  1000/999 files and shared-authority byte equality before Docker;
 - replay bootstrap is worker-owned, chain 114, manifest-bound, bounded and
   production-only; its API-authenticated exact Open-Meteo terminal run is the
   sole source of cross-bound persisted `/bundle` and `/preflight` bytes, while

@@ -6,6 +6,7 @@ import { parseCanonicalBackupEvidence, sha256 } from "./backup-evidence-validati
 import { createCanonicalTimewebBackupEvidence } from "./timeweb-production-backup-evidence.mjs";
 import { runSelectedTimewebProductionPitr, switchAndObserveProductionWalArchive } from "./timeweb-production-pitr.mjs";
 import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
+import { validateTimewebProductionSecretInventory } from "./timeweb-production-secret-inventory.mjs";
 
 const ROOT = "/opt/orivra/current";
 const SELECTED = "/opt/orivra/evidence/recovery/backup-evidence.v1.json";
@@ -65,6 +66,7 @@ export async function loadTimewebProductionRuntimeEnvironment() {
       if (index < 1 || !/^[A-Z][A-Z0-9_]*$/.test(line.slice(0, index)) || line.slice(index + 1).includes("\0")) throw new Error("runtime environment");
       result[line.slice(0, index)] = line.slice(index + 1);
     }
+    await validateTimewebProductionSecretInventory({ environment: result });
     return Object.freeze({ ...process.env, ...result });
   } finally {
     await handle?.close().catch(() => undefined);

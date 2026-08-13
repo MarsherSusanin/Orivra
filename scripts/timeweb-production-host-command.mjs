@@ -30,6 +30,7 @@ import {
   bindFixedReplayBootstrapComposeInterpolationEnvironment,
   bindOwnedReplayBootstrapComposeEnvironment,
 } from "./timeweb-production-compose-environment.mjs";
+import { validateTimewebProductionSecretInventory } from "./timeweb-production-secret-inventory.mjs";
 
 export {
   bindFixedReplayBootstrapComposeInterpolationEnvironment,
@@ -353,6 +354,7 @@ async function loadRuntimeEnvironment(extra = {}) {
     }
     result[line.slice(0, index)] = line.slice(index + 1);
   }
+  await validateTimewebProductionSecretInventory({ environment: result });
   return { ...result, ...extra };
 }
 
@@ -391,6 +393,7 @@ function defaultAdapters() {
   return {
     firewall: { applyExact: applyExactTimewebFirewall },
     registry: { async openReadOnly() {
+      await loadRuntimeEnvironment();
       const token = await readPrivateAuthorityFile(`${SECRET_ROOT}/ghcr-pull-token`, { maximumBytes: 4096 });
       await runProcess("/usr/bin/docker", ["login", "ghcr.io", "--username", "MarsherSusanin", "--password-stdin"], { input: token });
       token.fill(0);

@@ -8,6 +8,7 @@ import {
   validateProductionBootstrapPhaseInputs,
 } from "./timeweb-production-bootstrap-runtime.mjs";
 import { bindFixedReplayBootstrapComposeInterpolationEnvironment } from "./timeweb-production-compose-environment.mjs";
+import { validateTimewebProductionSecretInventory } from "./timeweb-production-secret-inventory.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPOSITORY_COMPONENT = "[a-z0-9]+(?:[._-][a-z0-9]+)*";
@@ -184,6 +185,7 @@ export async function runProductionCompose({
   dockerExecutable = "docker",
   environment = process.env,
   runtime = false,
+  validateSecretInventory = validateTimewebProductionSecretInventory,
 } = {}) {
   if (composeArguments.some((argument) =>
     argument === "--file" || argument === "-f" ||
@@ -209,6 +211,9 @@ export async function runProductionCompose({
     }
     if (composeArguments.includes("up")) {
       await validateRuntimeInputFiles(composeEnvironment, composeArguments);
+    }
+    await validateSecretInventory({ environment: composeEnvironment });
+    if (composeArguments.includes("up")) {
       const explicitWorker = composeArguments.includes("worker") && !composeArguments.includes("safe-consumer-deployer");
       await validateSafeConsumerEvidenceLifecycle({
         evidenceRoot: composeEnvironment.PROOFLINE_SAFE_CONSUMER_EVIDENCE_ROOT,

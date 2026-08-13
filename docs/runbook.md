@@ -859,6 +859,16 @@ runtime copy is bound read-only into the non-root worker. It is not evidence and
 is removed with the run. The phases are separate so Compose does not create a
 bind source before the deployer and root seal commit it.
 
+Before the first production Docker command, the host validates
+`/opt/orivra/secrets` as a root-owned mode-0500 non-symlink directory. Every
+Compose secret source must be its exact fixed regular non-symlink mode-0400
+path and owned by the consuming UID/GID: application/bootstrap inputs by
+1000:1000 and PostgreSQL/backup inputs by 999:999. The UID-1000
+`backup_bootstrap_database_url` and UID-999 `backup_database_url` must be
+byte-identical. Writer/reader/retention copies of the shared-pilot Timeweb
+access key and secret key must also be byte-identical while remaining distinct
+files. Any path, inode, ownership, mode or byte mismatch aborts before Docker.
+
 Only Caddy publishes 80/443. PostgreSQL 5432 and API/worker ports remain
 private, with no Docker socket. Stage V2 deployment evidence only after schema
 10/10, `/readyz`, current real-worker heartbeat, Timeweb PITR,

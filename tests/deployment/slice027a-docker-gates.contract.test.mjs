@@ -325,6 +325,7 @@ test("validates immutable production image references before any Compose effect"
         PROOFLINE_WORKER_IMAGE: `proofline/worker@sha256:${digest}`,
       },
       runtime: true,
+      validateSecretInventory: async () => ({ status: "passed" }),
     }));
     await assert.rejects(productionCompose.runProductionCompose({
       composeArguments: ["--file", "deploy/compose.qa.yaml", "config"],
@@ -344,6 +345,7 @@ test("validates immutable production image references before any Compose effect"
         PROOFLINE_WORKER_IMAGE: `proofline/worker@sha256:${digest}`,
       },
       runtime: true,
+      validateSecretInventory: async () => ({ status: "passed" }),
     });
     records = await readJsonLines(fake.log);
     assert.ok(records.at(-1).args.includes("deploy/compose.runtime.yaml"));

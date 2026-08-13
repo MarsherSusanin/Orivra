@@ -427,6 +427,7 @@ appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "
       composeArguments: ["up", "--detach"],
       dockerExecutable: executable,
       environment: runtimeEnvironment,
+      validateSecretInventory: async () => ({ status: "passed" }),
     });
     const calls = (await readFile(log, "utf8")).trim().split(/\r?\n/).map(JSON.parse);
     assert.equal(calls.length, 1);
@@ -438,6 +439,7 @@ appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "
         composeArguments: [command],
         dockerExecutable: executable,
         environment: runtimeEnvironment,
+        validateSecretInventory: async () => ({ status: "passed" }),
       }), /one-shot|migration|runtime|up/i);
     }
     assert.equal((await readFile(log, "utf8")).trim().split(/\r?\n/).length, 1);
@@ -466,6 +468,7 @@ appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "
           composeArguments: ["up", "--detach"],
           dockerExecutable: executable,
           environment: candidate,
+          validateSecretInventory: async () => ({ status: "passed" }),
         }),
         (error) => {
           assert.equal(

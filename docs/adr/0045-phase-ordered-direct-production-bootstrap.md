@@ -107,6 +107,12 @@ secret directory therefore materializes byte-identical, mode-0400 copies when
 one authority is consumed by different non-root identities: the role bootstrap
 copy is owned by UID 1000 and the backup-runtime copy by UID 999. No shared
 world-readable file, root container or permission relaxation is allowed.
+Every production Compose entry validates that inventory through bounded
+`O_NOFOLLOW` descriptors before Docker: exact fixed paths, distinct inodes by
+path, regular mode-0400 files, UID/GID 1000 or 999 as consumed, and
+byte-identical database-URL plus shared-pilot Timeweb access/secret-key copies.
+Wrong root ownership/mode, symlinks, substitutions or mismatched bytes abort
+before a container, network or volume can be created.
 
 ### One-shot replay bootstrap
 
