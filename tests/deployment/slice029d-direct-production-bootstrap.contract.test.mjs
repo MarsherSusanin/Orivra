@@ -373,6 +373,56 @@ test("rolls public Caddy back before closing the pinned session on every post-ac
   }
 });
 
+test("treats an activate-caddy post-effect failure as rollback-bound before session close", async () => {
+  const module = await runtime();
+  const scenarios = [
+    { cleanupFails: false },
+    { cleanupFails: true },
+  ];
+  for (const { cleanupFails } of scenarios) {
+    const calls = [];
+    const activationFailure = Object.assign(new Error("activation response invalid after remote effect"), { cutoverApplied: true });
+    const rollbackFailure = new Error("rollback failed");
+    const closeFailure = new Error("close failed");
+    let rejected;
+    try {
+      await module.runTimewebProductionBootstrapLifecycle({
+        outputPaths,
+        execute: async (phase) => {
+          calls.push(phase);
+          if (phase === "activate-caddy") throw activationFailure;
+          if (phase === "observe-wal-freshness") return { status: "passed", archivePendingAgeSeconds: 30, switchedWalArchived: true };
+          if (phase === "replay-bootstrap") return { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY };
+          if (phase === "persisted-live-coston2") return { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_RELAYER, ETH_RELAYER] };
+          return { status: "passed" };
+        },
+        rollbackCaddy: async () => {
+          calls.push("rollback-caddy");
+          if (cleanupFails) throw rollbackFailure;
+        },
+        closeSession: async () => {
+          calls.push("close-session");
+          if (cleanupFails) throw closeFailure;
+        },
+      });
+    } catch (error) {
+      rejected = error;
+    }
+    assert.ok(rejected, cleanupFails ? "aggregate cleanup failure" : "activation failure");
+    assert.deepEqual(calls.slice(-3), ["activate-caddy", "rollback-caddy", "close-session"]);
+    assert.equal(calls.includes("append-deployment-evidence"), false);
+    if (cleanupFails) {
+      assert.equal(rejected instanceof AggregateError, true);
+      assert.equal(rejected.errors[0].cause, activationFailure);
+      assert.equal(rejected.errors[1], rollbackFailure);
+      assert.equal(rejected.errors[2], closeFailure);
+    } else {
+      assert.equal(rejected.code, "PRODUCTION_BOOTSTRAP_FAILED");
+      assert.equal(rejected.cause, activationFailure);
+    }
+  }
+});
+
 test("publishes no deployment evidence after any producer, seal or validation failure", async () => {
   const module = await runtime();
   const browserSha256 = `sha256:${"b".repeat(64)}`;

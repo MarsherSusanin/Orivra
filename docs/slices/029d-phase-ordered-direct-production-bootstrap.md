@@ -1,6 +1,6 @@
 # Slice 029D — Phase-ordered direct-production bootstrap
 
-Status: Intentional RED on exact `361bac3` / `fe8e771`
+Status: Intentional RED; post-effect activation rollback correction pending
 
 Decision: [ADR 0045](../adr/0045-phase-ordered-direct-production-bootstrap.md)
 

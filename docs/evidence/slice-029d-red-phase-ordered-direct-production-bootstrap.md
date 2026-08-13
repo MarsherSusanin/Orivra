@@ -105,3 +105,12 @@ The final fixture-only follow-up also returns that exact receipt from the
 primary backup/replay lifecycle happy path and keeps the retained 029C
 `start-web` / `start-caddy-candidate` / `readyz-real-heartbeat` /
 `timeweb-pitr-production` relative order while inserting the 029D commands.
+
+The post-effect activation correction freezes `activate-caddy` errors carrying
+`cutoverApplied: true` as rollback-bound even when the phase call rejects
+before returning an observation. Rollback precedes pinned-session close; the
+original activation failure remains first in deterministic cleanup aggregation,
+and deployment evidence is never appended. On the active production WIP,
+typecheck and syntax pass; the 029D file is 15 control PASS / 1 causal RED,
+serialized deployment static is 281 control PASS / 2 intentional RED (this
+case plus the already frozen host-command expansion), and Sites is 46 PASS.
