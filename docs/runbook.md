@@ -1043,6 +1043,15 @@ browser adapter records desktop/mobile, keyboard, axe, console/network and
 reload/back-forward results. Any producer, seal or validation failure writes
 no deployment evidence; post-activation failure rolls Caddy back before the
 pinned session closes.
+
+The terminal bootstrap/live source is not the public replay manifest. Use
+Open-Meteo relayer SHA `1fb914f…f7cfe6` and ETH/USD relayer SHA
+`eaed1554…57f9f` for live submissions; keep replay SHAs `26a1b91f…c898` and
+`7aed4a24…b2db` for the public catalog, safe-consumer registry and ordinary
+replay lookup. Before RPC, verify the fixed relayer-to-replay alias and exact
+request/consumer/every-non-mode field plus generated consumer bytes. The replay
+handoff binds both source live SHA and replay SHA. Cross-source or direct raw
+relayer replay authority fails closed.
 Docker Engine `29.1.3`, Compose `2.40.3`, fail2ban and unattended upgrades are
 active. UFW denies inbound traffic by default, permits public 80/443, rate-limits
 22 and restricts the provider monitoring agent on 10050 to its explicit

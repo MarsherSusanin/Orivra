@@ -24,6 +24,9 @@ acceptance or rollback authority.
   sole source of cross-bound persisted `/bundle` and `/preflight` bytes, while
   ordinary replay handlers are unavailable; no fixture, test adapter or
   generic worker bypass exists;
+- preserve the two public replay template SHAs and replay-keyed consumer
+  registry; define exact submission-only Open-Meteo/ETH relayer SHAs for live
+  effects and require a strict manifest/consumer-byte alias before RPC;
 - phase-aware validation permits absence only before the corresponding
   producer and requires canonical mode-0400 regular inputs before every
   consumer;
@@ -46,6 +49,9 @@ acceptance or rollback authority.
 3. existing ordinary-worker deep-validation tests remain unchanged controls;
 4. current canonical docs revoke publication authority for the undeployable
    361bac3 images.
+5. pure/deployment relayer-authority tests reject replay SHA as a live
+   submission, raw relayer SHA as replay/registry authority and cross-source
+   aliasing before the first RPC effect.
 
 Expected RED is missing `replay-bootstrap` Compose/runtime production and the
 new import-safe bootstrap lifecycle. No credential, Docker, network, server or

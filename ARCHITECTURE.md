@@ -387,15 +387,20 @@ alone exposes 80/443. Typed readiness, heartbeat, Timeweb PITR and both live
 runs precede deployment evidence. Explicit Caddy cutover precedes resumable
 trusted-clock 0/15m/1h/24h evidence. V1 history and canonical rollback remain
 parseable but cannot authorize V2 effects.
-The active Open-Meteo authority uses official-verifier-compatible JQ without
-`round` and canonical manifest SHA `26a1b91f…c898`; every catalog, registry,
-deployment, worker and live-run binding must agree before effects.
+The active public Open-Meteo authority uses official-verifier-compatible JQ
+without `round` and canonical replay SHA `26a1b91f…c898`; catalog, registry,
+deployment and replay lookup bind that identity. Live effects instead use the
+exact relayer identity below through the strict submission-only alias.
 ADR 0045 removes a first-start cycle without weakening those bindings. Static
 preflight reserves absent backup/replay/browser outputs; private database/API,
 consumer seal, first Timeweb backup/WAL/PITR, a bounded replay-bootstrap
 one-shot, ordinary worker/two live runs, Caddy activation and real browser
 acceptance then execute in that order before deployment evidence. Compose has
 nine definitions but retains the same long-lived application set.
+Public catalog and registry identity remains replay-mode. Live production uses
+two distinct relayer-mode manifest identities; a pure submission-only alias
+must prove identical request, consumer and generated consumer bytes before the
+live worker can resolve the replay-keyed safe-consumer address.
 Exact `4c828ea` / `8f2e086` failed both
 independent verifiers because the concrete pinned session closed before
 rollback. The corrective lifecycle is local GREEN: rollback/teardown runs

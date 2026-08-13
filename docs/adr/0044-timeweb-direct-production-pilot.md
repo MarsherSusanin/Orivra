@@ -145,9 +145,12 @@ deployment PASS.
 The Open-Meteo SHA above replaces verifier-incompatible historical SHA
 `sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8`.
 Only `| round` was removed from JQ; query, ABI, URL/consumer policy and all
-other bytes remain fixed. Registry, deployment evidence, worker selection and
-both persisted-live observations must use the new canonical SHA. Mixing old
-and new authority fails before consumer deployment or release evidence.
+other bytes remain fixed. Registry, deployment evidence and ordinary replay
+selection use the new canonical replay SHA. ADR 0045 refines live effects to
+separate canonical relayer-mode identities, strictly aliased to these replay
+entries by submission-only difference and identical generated consumer bytes.
+Mixing historical, replay and live authority outside that exact alias fails
+before consumer deployment, RPC or release evidence.
 
 The production command owns compilation and deployment; the generic promotion
 runtime cannot accept a caller-authored registry as success. It loads the two

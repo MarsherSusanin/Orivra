@@ -126,6 +126,13 @@ acceptance is post-cutover and rollback-bound. A verifier must reject any
 generic Compose/file validator that recreates the cycle or bypasses phase
 authority.
 
+The public catalog and safe-consumer registry remain replay-keyed. The
+production author derives separate canonical relayer-mode Open-Meteo and ETH
+manifests and uses a pure strict submission-only alias with identical generated
+consumer bytes before the live worker reaches RPC. Core and Product verifiers
+independently reject replay SHA used as live authority, relayer SHA used
+directly as replay authority, or cross-source aliasing.
+
 Rollback verification must prove that a prior schema-compatible verified
 remote digest is present in immutable publication/deployment evidence bound to
 its `frozenReleaseManifestSha256`. The release manifest provides compatibility

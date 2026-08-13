@@ -102,6 +102,11 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
   the ordinary worker; public browser acceptance follows explicit cutover and
   remains rollback-bound. Compose has nine service definitions without adding
   a ninth long-lived service.
+- Public replay manifests and the safe-consumer registry retain their exact
+  replay SHAs. Production live effects use separate canonical relayer-mode
+  SHAs and may resolve those replay-keyed consumers only through a pure strict
+  alias proving submission is the sole manifest difference and generated
+  consumer bytes/hashes are identical. Cross-source aliasing fails before RPC.
 - Application rollback may select only a prior schema-compatible verified
   remote digest from immutable publication/deployment evidence bound to its
   `frozenReleaseManifestSha256`. The frozen manifest supplies schema metadata,

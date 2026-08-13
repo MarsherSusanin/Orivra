@@ -160,7 +160,7 @@ blockchain-операций.
   A bounded official-verifier probe rejected the old Open-Meteo `round` JQ
   filter and accepted the exact no-`round` replacement. The production-author
   GREEN binds canonical SHA `26a1b91f…c898` through catalog, registry,
-  deployment, worker and live-run authority; exact-tree Core/Product
+  deployment and replay authority; exact-tree Core/Product
   verification is pending and no hosted or production PASS is claimed.
   Explicit Caddy cutover and its canonical checkpoint precede deployment evidence; trusted-clock
   cutover/15m/1h/24h checkpoints are resumable and cannot terminal-PASS early.
@@ -169,6 +169,10 @@ blockchain-операций.
   replay-bootstrap one-shot precedes the ordinary worker, while real browser
   acceptance follows public cutover. Exact `361bac3` images are therefore
   obsolete/undeployable and must not be published.
+  Public replay template SHAs remain stable; live production uses exact
+  relayer SHAs `1fb914f9…f7cfe6` and `eaed1554…57f9f`, accepted only through an
+  exact request/consumer/consumer-byte alias back to the replay-keyed registry
+  before RPC.
   Historical V1 contracts and canonical rollback binding remain parseable but
   cannot authorize V2 effects. Exact candidate `4c828ea` / tree `8f2e086` was
   rejected by both Core and Product verification because its concrete pinned

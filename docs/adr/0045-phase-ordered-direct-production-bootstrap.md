@@ -87,6 +87,35 @@ persisted run's `/bundle` and `/preflight` bytes. Run ID and manifest SHA match
 across terminal run, bundle, report and staged pair. Ordinary replay file
 loaders and replay handlers are unavailable inside bootstrap.
 
+Public catalog/replay identity remains byte-identical:
+
+- Open-Meteo replay: `sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898`;
+- ETH/USD replay: `sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db`.
+
+Production live submission uses separate canonical manifests which differ
+only at `submission.mode: "relayer"`:
+
+- Open-Meteo relayer (927 canonical bytes):
+  `sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6`;
+- ETH/USD relayer (629 canonical bytes):
+  `sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f`.
+
+Safe-consumer registry/address lookup stays keyed by the public replay SHA.
+Before RPC or any relayer effect, one pure strict alias verifier proves the
+ordered live-relayer SHA maps to the corresponding replay SHA, both canonical
+manifests are equal in request, consumer, network, fee cap and every field
+except submission mode, and their generated consumer bytes/hash are identical.
+The worker live gate uses relayer identity plus that verified alias. The
+ordinary replay worker keeps exact replay lookup unchanged.
+
+For replay bootstrap, the terminal source run is the Open-Meteo relayer
+identity. Its persisted bundle/preflight may seed the ordinary replay path only
+after terminal proof/consumer evidence and the strict alias relation validate;
+the handoff records both `sourceLiveManifestSha256` and
+`replayManifestSha256`. Raw relayer SHA used directly as registry/replay
+authority, arbitrary aliases and cross-source request/consumer mismatches fail
+before RPC/effect.
+
 ### Phase-aware input validation and sealing
 
 Compose input validation is phase-aware. Late outputs may be absent only in

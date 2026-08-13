@@ -35,3 +35,32 @@ Open-Meteo run-to-bundle/report export, immutable selected backup versus
 append-only daily backup IDs, the production-used post-activation browser
 adapter, early Compose service aliases versus consuming/generic-up denial, and
 zero deployment evidence across every producer/seal/validation failure.
+
+## Submission-mode identity corrective RED
+
+The active public Open-Meteo and ETH manifests are both canonical replay-mode
+bytes. API/worker relayer effects require a persisted relayer-mode manifest, so
+using those replay SHAs for the 029D live gates is impossible. The correction
+preserves public replay compatibility and freezes separate submission-only
+relayer identities: Open-Meteo
+`sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6`
+(927 bytes) and ETH/USD
+`sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f`
+(629 bytes).
+
+Safe-consumer registry remains replay-keyed. A strict pure alias proves the
+live relayer/replay manifests differ only at submission mode and produce the
+same consumer bytes before any RPC. Replay bootstrap records relayer source and
+replay target identities after terminal proof/consumer validation. Raw or
+cross-source aliasing is intentional RED and cannot be hidden by mocks.
+
+This correction was frozen from exact clean base
+`504f9edc994eb982ce3678de346b686d762c6541` / tree
+`1ac4f19cabe4ba422dbf5cd70e6b9d625d04e30f`. Typecheck and all 46 Sites
+controls pass. Focused domain classification is 5 controls PASS / 3 intentional
+RED; exact 029D deployment classification is 1 control PASS / 14 intentional
+RED; the retained 029C+029D integration set is 27 PASS / 26 intentional RED.
+Serialized deployment static is 249 PASS / 30 intentional RED, all at the
+already frozen missing phase-order or new relayer/alias/schema production
+boundaries. No Docker, network, credential, server, build or production effect
+was run.

@@ -221,6 +221,9 @@ the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
   runs, cutover/browser and deployment evidence then execute in fixed order.
   Exact `361bac3` / `fe8e771` remains publisher-ready only for obsolete
   undeployable images and must not be published or deployed.
+  The correction also preserves public replay identities while assigning exact
+  submission-only relayer identities to live Open-Meteo/ETH runs; a strict
+  alias to the replay-keyed consumer registry is required before RPC.
 
   ADR 0044 supersedes the active ADR 0043 production boundary without executing it. The
   current canonical publication evidence SHA-256 is

@@ -7,8 +7,9 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const OPEN_METEO = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
-const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
+const OPEN_REPLAY = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
+const OPEN_RELAYER = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6";
+const ETH_RELAYER = "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f";
 const outputPaths = Object.freeze({
   backupEvidenceFile: "/opt/orivra/evidence/recovery/backup-evidence.v1.json",
   replayBundleFile: "/opt/orivra/evidence/replay/proof-bundle.json",
@@ -122,12 +123,13 @@ test("runs backup, WAL freshness, PITR and replay bootstrap before the ordinary 
       if (phase === "observe-wal-freshness") return { status: "passed", archivePendingAgeSeconds: 30, switchedWalArchived: true };
       if (phase === "replay-bootstrap") return {
         status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
-        sourceStage: "completed", manifestSha256: OPEN_METEO,
+        sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER,
+        replayManifestSha256: OPEN_REPLAY,
       };
       if (phase === "persisted-live-coston2") return {
         status: "persisted",
         runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"],
-        manifests: [OPEN_METEO, ETH_USD],
+        manifests: [OPEN_RELAYER, ETH_RELAYER],
       };
       return { status: "passed" };
     },
@@ -147,16 +149,18 @@ test("replay bootstrap is production-only, bounded and cannot import a test adap
   assert.equal(typeof module.validateProductionReplayBootstrapResult, "function");
   assert.deepEqual(module.validateProductionReplayBootstrapResult({
     status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
-    sourceStage: "completed", manifestSha256: OPEN_METEO,
+    sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER,
+    replayManifestSha256: OPEN_REPLAY,
   }), {
     status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
-    sourceStage: "completed", manifestSha256: OPEN_METEO,
+    sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER,
+    replayManifestSha256: OPEN_REPLAY,
   });
   for (const invalid of [
-    { status: "passed", chainId: 1, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", manifestSha256: OPEN_METEO },
-    { status: "passed", chainId: 114, sourceRunId: "fixture", sourceStage: "completed", manifestSha256: OPEN_METEO },
-    { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "pending", manifestSha256: OPEN_METEO },
-    { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", manifestSha256: `sha256:${"0".repeat(64)}` },
+    { status: "passed", chainId: 1, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY },
+    { status: "passed", chainId: 114, sourceRunId: "fixture", sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY },
+    { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "pending", sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY },
+    { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", sourceLiveManifestSha256: OPEN_REPLAY, replayManifestSha256: OPEN_REPLAY },
   ]) assert.throws(() => module.validateProductionReplayBootstrapResult(invalid), /PRODUCTION_REPLAY_BOOTSTRAP_INVALID/);
   assert.match(source, /production-replay-bootstrap/);
   assert.doesNotMatch(source, /NODE_ENV|test-adapter|fixture|startOrdinaryWorker|bypass/i);
@@ -170,26 +174,34 @@ test("replay bootstrap uses only the live worker plus persisted API path and exp
   const reportBytes = Buffer.from('{"kind":"preflight-report-v1","runId":"run_01K2Q4P6R8T0V2X4Z6B8D0F2H4"}', "utf8");
   const result = await module.runProductionReplayBootstrap({
     chainId: 114,
-    manifestSha256: OPEN_METEO,
+    relayerManifestSha256: OPEN_RELAYER,
+    replayManifestSha256: OPEN_REPLAY,
     deadlineMs: 120_000,
     ports: {
       authenticateApiSession: async () => { calls.push("authenticate-api"); return { status: "authenticated" }; },
       createApiProject: async () => { calls.push("create-project"); return { status: "created", projectId: "project_01K2Q4P6R8T0V2X4Z6B8D0F2H4" }; },
-      submitPersistedRun: async (input) => { calls.push("submit-run"); assert.equal(input.manifestSha256, OPEN_METEO); return { runId }; },
-      processWorkerCommand: async (input) => { calls.push("process-worker-command"); assert.equal(input.runId, runId); return { status: "completed", runId, manifestSha256: OPEN_METEO }; },
-      readPersistedRun: async () => { calls.push("read-run"); return { stage: "completed", runId, manifestSha256: OPEN_METEO }; },
-      exportPersistedBundle: async () => { calls.push("export-bundle"); return { runId, manifestSha256: OPEN_METEO, bytes: bundleBytes }; },
-      exportPersistedPreflightReport: async () => { calls.push("export-preflight"); return { runId, manifestSha256: OPEN_METEO, bytes: reportBytes }; },
-      stageCanonicalPair: async (pair) => { calls.push("stage-pair"); assert.deepEqual(pair, { runId, manifestSha256: OPEN_METEO, bundleBytes, reportBytes }); return { status: "staged" }; },
+      submitPersistedRun: async (input) => { calls.push("submit-run"); assert.equal(input.manifestSha256, OPEN_RELAYER); return { runId }; },
+      processWorkerCommand: async (input) => { calls.push("process-worker-command"); assert.equal(input.runId, runId); return { status: "completed", runId, manifestSha256: OPEN_RELAYER }; },
+      readPersistedRun: async () => { calls.push("read-run"); return { stage: "completed", runId, proofVerified: true, manifestSha256: OPEN_RELAYER }; },
+      exportPersistedBundle: async () => { calls.push("export-bundle"); return { runId, manifestSha256: OPEN_RELAYER, bytes: bundleBytes }; },
+      exportPersistedPreflightReport: async () => { calls.push("export-preflight"); return { runId, manifestSha256: OPEN_RELAYER, bytes: reportBytes }; },
+      verifyRelayerReplayAlias: async (input) => {
+        calls.push("verify-replay-alias");
+        assert.equal(input.sourceLiveManifestSha256, OPEN_RELAYER);
+        assert.equal(input.replayManifestSha256, OPEN_REPLAY);
+        return { runId, replayManifestSha256: OPEN_REPLAY, bundleBytes, reportBytes };
+      },
+      stageCanonicalPair: async (pair) => { calls.push("stage-pair"); assert.deepEqual(pair, { runId, replayManifestSha256: OPEN_REPLAY, bundleBytes, reportBytes }); return { status: "staged" }; },
       loadReplayBundle: async () => { throw new Error("ordinary replay loader is unavailable"); },
       loadReplayPreflightReport: async () => { throw new Error("ordinary replay loader is unavailable"); },
       handleReplayCommand: async () => { throw new Error("ordinary replay handler is unavailable"); },
     },
   });
-  assert.deepEqual(calls, ["authenticate-api", "create-project", "submit-run", "process-worker-command", "read-run", "export-bundle", "export-preflight", "stage-pair"]);
+  assert.deepEqual(calls, ["authenticate-api", "create-project", "submit-run", "process-worker-command", "read-run", "export-bundle", "export-preflight", "verify-replay-alias", "stage-pair"]);
   assert.deepEqual(result, {
     status: "passed", chainId: 114, sourceRunId: runId, sourceStage: "completed",
-    manifestSha256: OPEN_METEO,
+    sourceLiveManifestSha256: OPEN_RELAYER,
+    replayManifestSha256: OPEN_REPLAY,
     bundleSha256: `sha256:${createHash("sha256").update(bundleBytes).digest("hex")}`,
     reportSha256: `sha256:${createHash("sha256").update(reportBytes).digest("hex")}`,
   });
@@ -296,8 +308,8 @@ test("rolls public Caddy back before closing the pinned session on every post-ac
         calls.push(phase);
         if (phase === failingPhase) throw new Error(`failed ${phase}`);
         if (phase === "observe-wal-freshness") return { status: "passed", archivePendingAgeSeconds: 30, switchedWalArchived: true };
-        if (phase === "replay-bootstrap") return { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", manifestSha256: OPEN_METEO };
-        if (phase === "persisted-live-coston2") return { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] };
+        if (phase === "replay-bootstrap") return { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY };
+        if (phase === "persisted-live-coston2") return { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_RELAYER, ETH_RELAYER] };
         return { status: "passed" };
       },
       rollbackCaddy: async () => calls.push("rollback-caddy"),
@@ -323,8 +335,8 @@ test("publishes no deployment evidence after any producer, seal or validation fa
         calls.push(phase);
         if (phase === failingPhase) throw new Error(`failed ${phase}`);
         if (phase === "observe-wal-freshness") return { status: "passed", archivePendingAgeSeconds: 30, switchedWalArchived: true };
-        if (phase === "replay-bootstrap") return { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", manifestSha256: OPEN_METEO };
-        if (phase === "persisted-live-coston2") return { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] };
+        if (phase === "replay-bootstrap") return { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", sourceLiveManifestSha256: OPEN_RELAYER, replayManifestSha256: OPEN_REPLAY };
+        if (phase === "persisted-live-coston2") return { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_RELAYER, ETH_RELAYER] };
         return { status: "passed" };
       },
       rollbackCaddy: async () => calls.push("rollback-caddy"),
