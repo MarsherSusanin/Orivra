@@ -103,7 +103,7 @@ describe("Slice 025A static template catalog and resolver", () => {
           temperature_unit: "celsius",
           timezone: "UTC",
         },
-        jq: ".current | {temperatureTenthsCelsius: (.temperature_2m * 10 | round), observedAt: .time}",
+        jq: ".current | {temperatureTenthsCelsius: (.temperature_2m * 10), observedAt: .time}",
         abiSignature:
           '{"components":[{"internalType":"int256","name":"temperatureTenthsCelsius","type":"int256"},{"internalType":"string","name":"observedAt","type":"string"}],"name":"data","type":"tuple"}',
       },
@@ -123,7 +123,7 @@ describe("Slice 025A static template catalog and resolver", () => {
       submission: { mode: "replay", feeCapWei: "20000000000000000" },
     });
     expect(detail.manifestCanonicalJson).toBe(canonicalJson(manifest));
-    expect(exactDigest(manifest)).toBe("sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8");
+    expect(exactDigest(manifest)).toBe("sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898");
     expect(detail.template.manifestSha256).toBe(exactDigest(manifest));
     expect(detail.provenance).toEqual({
       kind: "proofline-builtin",

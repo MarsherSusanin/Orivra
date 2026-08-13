@@ -191,7 +191,11 @@ the same applies to DigitalOcean, GHCR pull and live Coston2 configuration.
   preflights, exact two-consumer registry, schema/readiness/Timeweb-PITR/live
   deployment evidence, explicit Caddy cutover and trusted-clock 0/15m/1h/24h
   checkpoints. A code change returns the plan to focused RED/GREEN and two
-  fresh stopped-tree verifiers. Exact candidate `4c828ea` / tree `8f2e086`
+  fresh stopped-tree verifiers. Exact `0c8bc13` / `01d8497` is corrective RED
+  because the official verifier rejects the old Open-Meteo `round` filter;
+  exact no-`round` SHA `26a1b91f…c898` must propagate through every catalog,
+  registry, deployment, worker and persisted-live binding. Earlier candidate
+  `4c828ea` / tree `8f2e086`
   failed both Core and Product verification: the concrete pinned session closed
   before post-cutover rollback. The corrective lifecycle is local GREEN with
   rollback or teardown before one exact close and deterministic error order, in addition to the

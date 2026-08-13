@@ -526,6 +526,23 @@ five-file deployment focus is 37 retained controls PASS plus one causal
 intentional RED; serialized deployment static is 260 PASS plus the same one
 RED; Sites is 46/46 PASS. Diff-check is clean.
 
+## Official-verifier Open-Meteo JQ compatibility RED
+
+A bounded real verifier probe returned HTTP 200 `INVALID: INVALID JQ FILTER`
+for the frozen Open-Meteo JQ expression containing `| round`. Removing only
+that unsupported builtin returned HTTP 200 `VALID`; the unchanged Coinbase
+manifest also returned `VALID`. No secret, token, request authorization or raw
+response payload is recorded here.
+
+The corrected canonical Open-Meteo manifest SHA-256 is
+`sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898`.
+Tests now freeze those exact canonical bytes and propagate their identity
+through catalog/provenance, the two-consumer registry, deployment evidence,
+worker selection and both live-run gates. Production retains the former SHA and
+filter on this intentional-RED base, so no fixture substitution can create a
+false GREEN. This tests/docs-only wave performs no server, verifier, network,
+credential, Docker, consumer-deployment or live-chain effect.
+
 ## Pinned-session lifecycle GREEN closure
 
 The production orchestrator now preserves the pinned session until rollback or
@@ -538,3 +555,23 @@ tests at 100%, the full Vitest inventory 264 files/2559 tests plus only the
 configured skips, and Sites 46/46 PASS. Exact-tree verification is pending; no
 credential, network, host, registry, chain, Timeweb or production effect was
 run and no hosted/deployed/security PASS is claimed.
+
+## Current Open-Meteo verifier-compatibility RED classification
+
+This later correction supersedes the prior local-GREEN status without changing
+its historical evidence. On exact clean base
+`0c8bc13311097468a5506f8b6249466dbe1c52dd` / tree
+`01d84973650983318ff26ec47cf38b750d6eff9b`, syntax and typecheck PASS. The
+catalog/029C pure focus is 49 retained controls PASS plus eight causal RED; the
+worker focus is 72 retained controls PASS plus two causal RED; the deployment
+029C focus is 22 retained controls PASS plus 16 causal RED; and the affected
+API/Web public-template surface is 66 retained controls PASS plus 31 causal
+RED. These overlapping failures all expose production's former manifest bytes
+or SHA rather than substituting a corrected fixture at an authority boundary.
+
+Serialized deployment static is 247 PASS plus the same 16 deployment RED. One
+unchanged process-group control was blocked by sandbox `kill EPERM` in that
+run and passed 1/1 when rerun alone with host process permissions. Sites is
+46/46 PASS and diff-check is clean. No production file, generated artifact,
+dependency, lock, server, credential, Docker resource or external effect was
+changed or used by this RED wave.

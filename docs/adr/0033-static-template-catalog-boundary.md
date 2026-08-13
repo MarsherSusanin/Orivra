@@ -55,11 +55,19 @@ manifest. It uses HTTPS GET `https://api.open-meteo.com/v1/forecast` with the
 exact query `latitude=52.52`, `longitude=13.41`,
 `current=temperature_2m`, `temperature_unit=celsius`, `timezone=UTC` and
 `forecast_days=1`. Its JQ is
-`.current | {temperatureTenthsCelsius: (.temperature_2m * 10 | round), observedAt: .time}`
+`.current | {temperatureTenthsCelsius: (.temperature_2m * 10), observedAt: .time}`
 and its official JSON ABI parameter is one `data` tuple with an `int256`
 `temperatureTenthsCelsius` followed by a `string` `observedAt`. Trust binds the
 exact scheme, host, `/v1/forecast` path and complete query. Submission is replay
 with fee cap `20000000000000000` wei.
+
+The official verifier accepts the multiplication expression but rejects the JQ
+`round` builtin as `INVALID JQ FILTER`. A bounded production probe observed
+HTTP 200 with that exact failure, then HTTP 200 `VALID` after removing only
+`| round`; the unchanged Coinbase manifest also returned `VALID`. The accepted
+Open-Meteo manifest SHA-256 is
+`sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898`.
+No token, request authorization or response body is recorded by this decision.
 
 The public contracts are strict and bounded:
 

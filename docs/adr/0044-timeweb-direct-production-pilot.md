@@ -1,6 +1,6 @@
 # ADR 0044: Timeweb direct-production pilot and resumable 24-hour acceptance
 
-- Status: Accepted boundary; session-lifecycle corrective GREEN, exact-tree verification pending
+- Status: Accepted boundary; Open-Meteo verifier-compatibility RED on exact 0c8bc13 / 01d8497
 - Date: 2026-08-12
 - Supersedes active production portions of: ADR 0037, ADR 0042, ADR 0043
 - Retains: all V1 schemas as historical compatibility data types
@@ -128,7 +128,7 @@ with no-replace semantics only after both consumer deployments succeed.
 `SafeConsumerRegistryV1` contains exactly two ordered entries:
 
 1. `open-meteo-current-weather`, revision 1, manifest SHA-256
-   `sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8`;
+   `sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898`;
 2. `eth-usd`, revision 1, manifest SHA-256
    `sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db`.
 
@@ -138,6 +138,13 @@ two distinct non-zero Coston2 addresses. It writes canonical mode-0400
 starts. Worker selection is by manifest SHA through that file; one global safe
 consumer address is forbidden. Partial deployment writes neither registry nor
 deployment PASS.
+
+The Open-Meteo SHA above replaces verifier-incompatible historical SHA
+`sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8`.
+Only `| round` was removed from JQ; query, ABI, URL/consumer policy and all
+other bytes remain fixed. Registry, deployment evidence, worker selection and
+both persisted-live observations must use the new canonical SHA. Mixing old
+and new authority fails before consumer deployment or release evidence.
 
 The production command owns compilation and deployment; the generic promotion
 runtime cannot accept a caller-authored registry as success. It loads the two

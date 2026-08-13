@@ -385,8 +385,12 @@ digest plan without staging. PostgreSQL/bootstrap/migration precede exact
 Open-Meteo/ETH consumer deployment, worker registry and applications; Caddy
 alone exposes 80/443. Typed readiness, heartbeat, Timeweb PITR and both live
 runs precede deployment evidence. Explicit Caddy cutover precedes resumable
-trusted-clock 0/15m/1h/24h evidence. V1 history and canonical rollback remain,
-but cannot authorize V2 effects. Exact `4c828ea` / `8f2e086` failed both
+trusted-clock 0/15m/1h/24h evidence. V1 history and canonical rollback remain
+parseable but cannot authorize V2 effects.
+The active Open-Meteo authority uses official-verifier-compatible JQ without
+`round` and canonical manifest SHA `26a1b91f…c898`; every catalog, registry,
+deployment, worker and live-run binding must agree before effects.
+Exact `4c828ea` / `8f2e086` failed both
 independent verifiers because the concrete pinned session closed before
 rollback. The corrective lifecycle is local GREEN: rollback/teardown runs
 through the live session, then one close, with deterministic failure aggregation. The earlier replacement

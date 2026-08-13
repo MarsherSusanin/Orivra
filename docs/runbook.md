@@ -822,6 +822,11 @@ shared-pilot authority, accepted replay bundle/report, the ordered Open-Meteo/
 ETH manifest pair and live chain-114 configuration. Generic status is not an
 observation. The generated safe-consumer registry is not a preflight input;
 its fixed path must be absent and is later published mode 0400/no-replace.
+The Open-Meteo manifest uses JQ
+`.current | {temperatureTenthsCelsius: (.temperature_2m * 10), observedAt: .time}`
+and SHA `sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898`.
+The official verifier rejects the former `round` builtin. Catalog, registry,
+deployment, worker and persisted-live authority must all bind this one SHA.
 Production maps the five
 publication references exactly to the five `PROOFLINE_*_IMAGE` variables,
 pulls/re-inspects by digest and starts:

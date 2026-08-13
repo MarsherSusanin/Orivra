@@ -34,7 +34,10 @@ catalog, manifest-digest and public HTTP/browser trust boundary.
   canonical `eth-usd` resolution and contains no duplicate Coinbase manifest.
 
 The Open-Meteo manifest digest is
-`sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8`.
+`sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898`.
+Its JQ expression multiplies `temperature_2m` by ten without the unsupported
+`round` builtin; those canonical bytes are the only accepted revision-1
+Open-Meteo authority.
 The preserved exact ETH/USD manifest digest is
 `sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db`.
 

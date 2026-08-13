@@ -1,6 +1,6 @@
 # Slice 029C — Timeweb direct-production pilot
 
-Status: Session-lifecycle corrective GREEN; exact-tree Core/Product verification pending
+Status: Open-Meteo verifier-compatibility RED on exact `0c8bc13` / `01d8497`
 
 Decision: [ADR 0044](../adr/0044-timeweb-direct-production-pilot.md)
 
@@ -38,6 +38,10 @@ over explicitly and resume strict acceptance through a real 24-hour boundary.
 - preserve database-first composition and Caddy-only 80/443 ingress;
 - deploy Open-Meteo then ETH/USD consumers deterministically and write the
   canonical worker registry before worker startup;
+- bind Open-Meteo to verifier-compatible canonical manifest SHA
+  `sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898`
+  and reject the former `round`-bearing SHA throughout registry, deployment,
+  worker selection and persisted-live evidence;
 - extend retained runtime Compose to exactly eight services with one hardened
   one-shot deployer; give UID 1000 only a dedicated run-scoped staging
   directory, then have the root host cross-bind and no-replace seal its pair

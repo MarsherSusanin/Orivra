@@ -121,7 +121,7 @@ describe("Slice 029C direct-production pilot authority", () => {
       "write-safe-consumer-registry", "worker", "web", "caddy-candidate",
     ]);
     expect(plan.safeConsumerManifestOrder).toEqual([
-      ["open-meteo-current-weather", "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8"],
+      ["open-meteo-current-weather", "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898"],
       ["eth-usd", "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db"],
     ]);
     expect(plan.safeConsumerRegistryFile).toBe("/opt/orivra/evidence/safe-consumer-registry.v1.json");
@@ -154,7 +154,7 @@ describe("Slice 029C direct-production pilot authority", () => {
     const safeConsumers = {
       version: "1", kind: "safe-consumer-registry", chainId: 114,
       entries: [
-        { templateId: "open-meteo-current-weather", revision: 1, manifestSha256: "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8", consumerAddress: "0x1111111111111111111111111111111111111111" },
+        { templateId: "open-meteo-current-weather", revision: 1, manifestSha256: "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898", consumerAddress: "0x1111111111111111111111111111111111111111" },
         { templateId: "eth-usd", revision: 1, manifestSha256: "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db", consumerAddress: "0x2222222222222222222222222222222222222222" },
       ],
     };

@@ -11,7 +11,7 @@ const RUN_IDS = [
   "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
   "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5",
 ];
-const OPEN_METEO = "sha256:18cd4d6b5c2d8e84ca0d2004c5a013f7f9c9387eed0d1de23ce00df8f167c4e8";
+const OPEN_METEO = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
 const ETH_USD = "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
 const sha = (digit) => `sha256:${digit.repeat(64)}`;
 const canonicalJson = (value) => value === null || typeof value !== "object"
