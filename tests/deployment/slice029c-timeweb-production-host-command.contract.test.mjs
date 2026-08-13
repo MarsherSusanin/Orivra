@@ -149,7 +149,7 @@ const productionEvidence = {
     timewebPitr: { status: "passed", restoreEvidenceSha256: sha("9"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
     liveCoston2: { status: "persisted", runIds: RUN_IDS, manifests: [OPEN_METEO_RELAYER, ETH_USD_RELAYER] },
   },
-  cutover: { status: "passed", publicOrigin: PUBLIC_ORIGIN, activatedAt: "2026-08-12T03:00:00Z" },
+  cutover: { status: "passed", publicOrigin: PUBLIC_ORIGIN, activatedAt: "2026-08-12T03:00:00Z", browserAcceptanceSha256: sha("b") },
 };
 const canaryCheckpoint = {
   version: "2", kind: "production-canary-checkpoint", id: "post-cutover-15m",

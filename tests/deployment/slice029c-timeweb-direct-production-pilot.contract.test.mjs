@@ -174,7 +174,7 @@ function productionDeploymentEvidenceV2(value) {
       timewebPitr: { status: "passed", restoreEvidenceSha256: sha("8"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
       liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO_RELAYER, ETH_USD_RELAYER] },
     },
-    cutover: { status: "passed", publicOrigin: value.target.publicOrigin, activatedAt: "2026-08-12T03:00:00Z" },
+    cutover: { status: "passed", publicOrigin: value.target.publicOrigin, activatedAt: "2026-08-12T03:00:00Z", browserAcceptanceSha256: BROWSER_ACCEPTANCE_SHA },
   };
 }
 
@@ -304,12 +304,15 @@ test("direct pilot deploys exactly two manifest-bound consumers and writes the r
   assert.deepEqual(deployment.cutover, {
     status: "passed", publicOrigin: value.target.publicOrigin,
     activatedAt: "2026-08-12T03:00:00Z",
+    browserAcceptanceSha256: BROWSER_ACCEPTANCE_SHA,
   });
   const contracts = await import("../../packages/contracts/src/production-promotion-runtime.mjs").catch(() => ({}));
   assert.deepEqual(contracts.ProductionDeploymentEvidenceV2Schema.parse(deployment), deployment);
   assert.equal(contracts.canonicalSerializeProductionDeploymentEvidenceV2(deployment), Buffer.from(deploymentEntry.bytes).toString("utf8"));
   assert.throws(() => contracts.ProductionDeploymentEvidenceV2Schema.parse({ ...deployment, cutover: { ...deployment.cutover, status: "failed" } }));
   assert.throws(() => contracts.ProductionDeploymentEvidenceV2Schema.parse({ ...deployment, cutover: { ...deployment.cutover, publicOrigin: "https://evil.invalid" } }));
+  assert.throws(() => contracts.ProductionDeploymentEvidenceV2Schema.parse({ ...deployment, cutover: { status: "passed", publicOrigin: value.target.publicOrigin, activatedAt: "2026-08-12T03:00:00Z" } }));
+  assert.throws(() => contracts.ProductionDeploymentEvidenceV2Schema.parse({ ...deployment, cutover: { ...deployment.cutover, browserAcceptanceSha256: "sha256:bad" } }));
   assert.deepEqual(deployment.safeConsumers, registry);
   assert.equal(deployment.objectStore.authorityMode, "shared-pilot");
   assert.equal(deployment.stagingDeploymentEvidenceSha256, undefined);

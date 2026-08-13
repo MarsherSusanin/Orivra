@@ -38,7 +38,8 @@ acceptance or rollback authority.
 - that adapter sends canonical bytes/SHA only through exact host command
   `append-browser-acceptance`; the host publishes the fixed mode-0400
   no-replace pair under `/opt/orivra/evidence/browser/`, and its returned SHA
-  binds canary plus deployment evidence;
+  binds canary plus mandatory V2 `cutover.browserAcceptanceSha256` before
+  deployment evidence append; V1 remains unchanged;
 - post-activation browser/evidence failure rolls Caddy back before session
   close and cannot publish deployment PASS.
 

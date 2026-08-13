@@ -83,7 +83,7 @@ async function productionDeploymentEvidenceV2() {
       timewebPitr: { status: "passed", restoreEvidenceSha256: sha("restore"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
       liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO_RELAYER, ETH_USD_RELAYER] },
     },
-    cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-12T03:00:00Z" },
+    cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-12T03:00:00Z", browserAcceptanceSha256: sha("browser-acceptance") },
   };
 }
 

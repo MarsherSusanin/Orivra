@@ -241,6 +241,17 @@ test("produces canonical desktop/mobile browser acceptance only after public act
 test("binds the host-persisted browser digest into canary and deployment authority", async () => {
   const module = await runtime();
   const browserSha256 = `sha256:${"b".repeat(64)}`;
+  assert.equal(typeof module.validateProductionDeploymentBrowserBinding, "function");
+  assert.equal(module.validateProductionDeploymentBrowserBinding({
+    browserReceipt: { id: "append-browser-acceptance", status: "passed", sha256: browserSha256 },
+    cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-13T03:00:00Z", browserAcceptanceSha256: browserSha256 },
+  }), browserSha256);
+  for (const cutover of [
+    { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-13T03:00:00Z" },
+    { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-13T03:00:00Z", browserAcceptanceSha256: `sha256:${"0".repeat(64)}` },
+  ]) assert.throws(() => module.validateProductionDeploymentBrowserBinding({
+    browserReceipt: { id: "append-browser-acceptance", status: "passed", sha256: browserSha256 }, cutover,
+  }), /PRODUCTION_BROWSER_EVIDENCE_INVALID/);
   const calls = [];
   const result = await module.runTimewebProductionBootstrapLifecycle({
     outputPaths,

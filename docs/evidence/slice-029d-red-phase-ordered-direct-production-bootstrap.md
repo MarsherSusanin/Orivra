@@ -83,3 +83,14 @@ controls pass. The browser/host focus is 12 PASS / 18 intentional RED;
 serialized deployment static is 248 PASS / 34 intentional RED. New failures
 are confined to the missing exact host allowlist/append, returned-digest
 authority and canonical browser-directory production surfaces.
+
+The follow-up V2 correction makes `cutover.browserAcceptanceSha256` mandatory
+in `ProductionDeploymentEvidenceV2` canonical bytes/checksum and cross-binds it
+to the exact host append receipt. Missing, malformed or receipt-mismatched SHA
+fails before deployment evidence append. Historical V1 schemas and bytes are
+unchanged. Typecheck and syntax pass; the pure focus is 13 control PASS / 2
+intentional RED, the four deployment files are 20 control PASS / 24
+intentional RED, serialized deployment static remains 248 control PASS / 34
+intentional RED, and Sites remains 46 PASS. The two new pure failures are the
+absent V2 schema field and its consequent fail-closed rollback parse; the
+deployment failures remain confined to the already frozen production seams.

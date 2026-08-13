@@ -325,11 +325,14 @@ describe("Slice 029C Timeweb direct-production pilot contracts", () => {
         timewebPitr: { status: "passed", restoreEvidenceSha256: sha("8"), backupAgeSeconds: 60, archivePendingAgeSeconds: 30 },
         liveCoston2: { status: "persisted", runIds: ["run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5"], manifests: [OPEN_METEO, ETH_USD] },
       },
-      cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-12T03:00:00Z" },
+      cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-12T03:00:00Z", browserAcceptanceSha256: sha("9") },
     };
     expect(module.ProductionDeploymentEvidenceV2Schema.parse(deployment)).toEqual(deployment);
     expect(module.canonicalSerializeProductionDeploymentEvidenceV2(deployment)).toBe(canonicalJson(deployment));
     expect(module.checksumProductionDeploymentEvidenceV2(deployment)).toBe(checksum(deployment));
+    expect(module.canonicalSerializeProductionDeploymentEvidenceV2(deployment)).toContain(sha("9"));
+    expect(() => module.ProductionDeploymentEvidenceV2Schema.parse({ ...deployment, cutover: { status: "passed", publicOrigin: "https://orivra.xyz", activatedAt: "2026-08-12T03:00:00Z" } })).toThrow();
+    expect(() => module.ProductionDeploymentEvidenceV2Schema.parse({ ...deployment, cutover: { ...deployment.cutover, browserAcceptanceSha256: "sha256:bad" } })).toThrow();
   });
 
   it("retains rollback V1 as data but requires a separately canonical V2 authority for V2 effect", async () => {

@@ -141,7 +141,10 @@ the no-replace root-private mode-0400 pair only at
 `/opt/orivra/evidence/browser/hosted-browser-acceptance.v1.json` and adjacent
 `.sha256`. No generic writer or caller-selected path exists. The returned exact
 SHA is the sole browser authority passed into cutover canary and deployment
-evidence. Any browser, host append or later evidence failure is post-effect and
+evidence as mandatory `cutover.browserAcceptanceSha256`. V2 canonical schema,
+serialization and checksum bind it; missing, malformed or receipt-mismatched
+digest fails before deployment evidence append. Historical V1 is unchanged.
+Any browser, host append or later evidence failure is post-effect and
 therefore rolls Caddy back before the pinned session closes.
 
 ## Consequences
