@@ -517,6 +517,23 @@ test("binds the owned replay stage into the real Compose environment without amb
   }
 });
 
+test("gives bootstrap and backup containers separate mode-0400 copies of the shared database authority", async () => {
+  const [backupCompose, runbook, adr] = await Promise.all([
+    readFile(resolve(root, "deploy/compose.backup.yaml"), "utf8"),
+    readFile(resolve(root, "docs/runbook.md"), "utf8"),
+    readFile(resolve(root, "docs/adr/0045-phase-ordered-direct-production-bootstrap.md"), "utf8"),
+  ]);
+  const bootstrap = backupCompose.slice(backupCompose.indexOf("  db-role-bootstrap:"), backupCompose.indexOf("  base-backup:"));
+  const backupServices = backupCompose.slice(backupCompose.indexOf("  base-backup:"));
+  assert.match(bootstrap, /source:\s*backup_bootstrap_database_url[\s\S]*target:\s*backup_database_url/);
+  assert.doesNotMatch(bootstrap, /source:\s*backup_database_url\b/);
+  assert.match(backupServices, /source:\s*backup_database_url\b/);
+  assert.match(backupCompose, /backup_bootstrap_database_url:[\s\S]*PROOFLINE_BACKUP_BOOTSTRAP_DATABASE_URL_FILE/);
+  assert.match(runbook, /backup_bootstrap_database_url[^\n]*UID-?1000/i);
+  assert.match(runbook, /UID-?999[^\n]*backup_database_url|backup_database_url[^\n]*UID-?999/i);
+  assert.match(adr, /byte-identical[\s\S]*mode-0400[\s\S]*UID 1000[\s\S]*UID 999/i);
+});
+
 test("strictly parses and cross-binds the canonical safe-consumer pair into the direct-runtime result envelope", async () => {
   const module = await feature();
   const states = [

@@ -102,6 +102,12 @@ pilot and daily backup paths, PITR, live-run and canary observers. Each caller
 rejects an ambient or caller-supplied value before a Docker effect; only the
 owned replay-bootstrap lifecycle may create or consume the fixed directory.
 
+Docker file-backed secrets preserve host ownership. The root-owned mode-0500
+secret directory therefore materializes byte-identical, mode-0400 copies when
+one authority is consumed by different non-root identities: the role bootstrap
+copy is owned by UID 1000 and the backup-runtime copy by UID 999. No shared
+world-readable file, root container or permission relaxation is allowed.
+
 ### One-shot replay bootstrap
 
 Production Compose has nine service definitions: the retained eight plus one

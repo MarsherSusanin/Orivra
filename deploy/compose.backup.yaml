@@ -74,7 +74,7 @@ services:
         target: worker_database_url
       - source: recording_importer_database_url
         target: recording_importer_database_url
-      - source: backup_database_url
+      - source: backup_bootstrap_database_url
         target: backup_database_url
 
   base-backup:
@@ -160,6 +160,8 @@ networks:
   backup_egress: {}
 
 secrets:
+  backup_bootstrap_database_url:
+    file: ${PROOFLINE_BACKUP_BOOTSTRAP_DATABASE_URL_FILE:?PROOFLINE_BACKUP_BOOTSTRAP_DATABASE_URL_FILE is required}
   backup_database_url:
     file: ${PROOFLINE_BACKUP_DATABASE_URL_FILE:?PROOFLINE_BACKUP_DATABASE_URL_FILE is required}
   backup_writer_access_key_id:

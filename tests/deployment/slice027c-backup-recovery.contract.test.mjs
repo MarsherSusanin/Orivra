@@ -183,6 +183,7 @@ test("adds exact file-only backup secrets without exposing values or arbitrary f
   ]);
   for (const name of [
     "PROOFLINE_BACKUP_DATABASE_URL_FILE",
+    "PROOFLINE_BACKUP_BOOTSTRAP_DATABASE_URL_FILE",
     "PROOFLINE_BACKUP_WRITER_ACCESS_KEY_ID_FILE",
     "PROOFLINE_BACKUP_WRITER_SECRET_ACCESS_KEY_FILE",
     "PROOFLINE_BACKUP_READER_ACCESS_KEY_ID_FILE",

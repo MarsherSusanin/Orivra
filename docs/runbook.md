@@ -1011,6 +1011,7 @@ notes. This inventory records only stable identifiers and storage boundaries.
 | VDS SSH host key | Ed25519 fingerprint `SHA256:EXN987qSpCkErUcUPMlz3bCTkQEPkPBNmTJ1UeEIrBg` |
 | Release root | `/opt/orivra/releases/<commit>`; `/opt/orivra/current` is the active symlink |
 | Server secret root | `/opt/orivra/secrets`, root-owned mode `0500`; secret files mode `0400` |
+| Non-root secret ownership | application/bootstrap inputs are owned by UID 1000; PostgreSQL/backup inputs by UID 999; `backup_bootstrap_database_url` is a byte-identical UID-1000 copy of UID-999 `backup_database_url` |
 | Evidence root | `/opt/orivra/evidence`, root-owned mode `0700` |
 | State root | `/opt/orivra/state`, root-owned and not publicly served |
 | GHCR repositories | `ghcr.io/marshersusanin/orivra-{caddy,web,api,worker,postgres-recovery}` |

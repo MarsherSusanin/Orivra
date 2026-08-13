@@ -377,3 +377,15 @@ The next correction routes that canonical wrapper through the same fixed
 binder, rejects caller/ambient replay authority before Docker, and expands the
 production Compose caller inventory to cover the wrapper alongside host,
 pilot backup, backup evidence, daily backup, PITR, live-run and canary paths.
+
+## VDS file-secret ownership corrective RED
+
+The first real container start on the accepted host reached exact image pull
+and then PostgreSQL failed before initialization because the root-owned
+mode-0400 password bind was unreadable to non-root UID 999. The same audit
+found one database URL consumed by both UID-1000 role bootstrap and UID-999
+backup jobs; one mode-0400 inode cannot safely serve both. Corrective RED
+requires two byte-identical private copies with per-consumer ownership, keeps
+the containing directory root-owned mode 0500 and forbids world-readable
+secrets or root containers. No deployment evidence or public ingress was
+created by the rejected attempt.

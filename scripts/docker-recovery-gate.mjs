@@ -370,6 +370,7 @@ async function prepareSecrets(directory) {
     backup_encryption_key: randomBytes(32).toString("base64"),
     backup_evidence: "{}",
   };
+  values.backup_bootstrap_database_url = values.backup_database_url;
   const paths = {};
   for (const [name, value] of Object.entries(values)) {
     const path = join(directory, name);
@@ -435,6 +436,8 @@ async function environmentFor(directory, producerIdentity, sourceRoot) {
     PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE: paths.importer_database_url,
     PROOFLINE_POSTGRES_PASSWORD_FILE: paths.postgres_password,
     PROOFLINE_BACKUP_DATABASE_URL_FILE: paths.backup_database_url,
+    PROOFLINE_BACKUP_BOOTSTRAP_DATABASE_URL_FILE:
+      paths.backup_bootstrap_database_url,
     PROOFLINE_BACKUP_WRITER_ACCESS_KEY_ID_FILE: paths.backup_writer_access_key_id,
     PROOFLINE_BACKUP_WRITER_SECRET_ACCESS_KEY_FILE:
       paths.backup_writer_secret_access_key,
