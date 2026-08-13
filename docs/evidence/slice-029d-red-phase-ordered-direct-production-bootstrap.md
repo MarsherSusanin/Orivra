@@ -283,3 +283,15 @@ also belongs to the separate runtime and recovery runners. Both now create the
 same run-owned private stage beneath their existing temporary roots and bind it
 without a fallback. Narrow tests freeze all three runner seams. No registry or
 server effect was accepted from that pre-runtime failure.
+
+Independent Core verification then found that the recovery runner supplied the
+new stage but its exact credential-free environment allowlist still rejected
+the name before Compose. The correction adds only that run-owned path to the
+frozen allowlist. The recorded-product Compose gate now also creates the same
+private input so interpolation cannot depend on ambient state. The interrupted
+candidate produced no registry or server effect.
+
+The exact rejected identity was `c7f16b75ac8e9dc73d976f615fe39ace08bda542`
+/ tree `31338245c4fc21a2716a926a2f89c915b5f9e341`. Its mode-0400 Core
+report is `/private/tmp/orivra-release-c7f/verifiers/c7f16b7/core-verifier.md`,
+SHA-256 `4381cdfd1f3d985d9f74790357c9528b36812a261a8d7063bda0421ef37cc3f3`.

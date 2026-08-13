@@ -72,11 +72,13 @@ test("029A product gate has exact scoped Compose and temporary cleanup", async (
   assert.match(source, /recursive:\s*true/);
 });
 
-test("029A materializes a private canonical worker handoff for Compose interpolation", async () => {
+test("029A materializes private worker handoff and replay stage inputs for Compose interpolation", async () => {
   const source = await readFile(new URL("../../scripts/mlp-product-compose.mjs", import.meta.url), "utf8");
   assert.match(source, /canonicalSerializeSafeConsumerRegistry/);
   assert.match(source, /PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE:\s*paths\.safeConsumerWorkerHandoff/);
   assert.match(source, /safeConsumerWorkerHandoff[\s\S]*mode:\s*0o400/);
+  assert.match(source, /PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:\s*paths\.replayBootstrapStage/);
+  assert.match(source, /mkdir\(paths\.replayBootstrapStage,\s*\{\s*mode:\s*0o700\s*\}\)/);
   assert.doesNotMatch(source, /PROOFLINE_SAFE_CONSUMER_ADDRESS/);
 });
 

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { request as httpsRequest } from "node:https";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -168,6 +168,8 @@ async function createEnvironment(temporaryDirectory) {
       },
     ],
   }), { mode: 0o400, flag: "wx" });
+  paths.replayBootstrapStage = join(temporaryDirectory, "replay-bootstrap-stage");
+  await mkdir(paths.replayBootstrapStage, { mode: 0o700 });
   const git = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
   if (git.status !== 0 || !/^[a-f0-9]{40}\n?$/.test(git.stdout ?? "")) fail();
   const dockerHost = process.env.DOCKER_HOST;
@@ -196,6 +198,7 @@ async function createEnvironment(temporaryDirectory) {
     PROOFLINE_WORKER_REPLAY_PREFLIGHT_REPORT_FILE: paths.replayPreflight,
     PROOFLINE_POSTGRES_PASSWORD_FILE: paths.postgresPassword,
     PROOFLINE_SAFE_CONSUMER_WORKER_HANDOFF_FILE: paths.safeConsumerWorkerHandoff,
+    PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: paths.replayBootstrapStage,
     PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
     PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
     PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",
