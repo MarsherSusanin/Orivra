@@ -4,5 +4,5 @@ RUN addgroup -S -g 10001 proofline && \
     adduser -S -D -H -u 10001 -G proofline proofline && \
     mkdir -p /data/caddy /config/caddy && \
     chown -R 10001:10001 /data /config
-COPY deploy/caddy/Caddyfile /etc/caddy/Caddyfile
+COPY --chmod=0444 deploy/caddy/Caddyfile /etc/caddy/Caddyfile
 USER 10001:10001

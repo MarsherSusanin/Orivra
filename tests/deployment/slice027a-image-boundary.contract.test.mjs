@@ -149,6 +149,7 @@ test("pins the custom non-root Caddy image to the exact Linux/amd64 manifest", a
     /^FROM --platform=linux\/amd64 caddy@sha256:d8c17a862962def15cde69863a3a463f25a2664942eafd7bdbf050e9c3116b83\b/m,
   );
   assert.match(dockerfile, /USER\s+(?:caddy|[1-9][0-9]*)/i);
+  assert.match(dockerfile, /COPY\s+--chmod=0444\s+deploy\/caddy\/Caddyfile\s+\/etc\/caddy\/Caddyfile/i);
   assert.doesNotMatch(dockerfile, /latest|2\.10(?:\s|$)|USER\s+root/i);
 });
 

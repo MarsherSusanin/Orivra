@@ -212,6 +212,11 @@ the frozen recovery image contains the WAL-G binary but no populated public CA
 bundle; missing host trust material therefore fails before a Timeweb backup can
 be accepted.
 
+The production Caddy image runs as UID/GID 10001 and its checked-in
+`/etc/caddy/Caddyfile` must be copied mode `0444`. A root-only mode `0400`
+config is an invalid image even when its digest and non-root runtime identity
+otherwise match.
+
 ```bash
 npm run docker:prefetch
 node scripts/docker-build.mjs
