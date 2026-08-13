@@ -354,17 +354,24 @@ function composeArguments(action, services = []) {
   return args;
 }
 
+export async function applyExactTimewebFirewall({ sshSource, publicTcpPorts, runProcess: invoke = runProcess }) {
+  if (isIP(sshSource) === 0 || !Array.isArray(publicTcpPorts) ||
+    publicTcpPorts.length !== 2 || publicTcpPorts[0] !== 80 || publicTcpPorts[1] !== 443 ||
+    typeof invoke !== "function") {
+    throw failure("TIMEWEB_HOST_FIREWALL_INVALID", "Production firewall authority is invalid");
+  }
+  await invoke("/usr/sbin/ufw", ["--force", "reset"]);
+  await invoke("/usr/sbin/ufw", ["default", "deny", "incoming"]);
+  await invoke("/usr/sbin/ufw", ["default", "allow", "outgoing"]);
+  await invoke("/usr/sbin/ufw", ["allow", "from", sshSource, "to", "any", "port", "22", "proto", "tcp"]);
+  for (const port of publicTcpPorts) await invoke("/usr/sbin/ufw", ["allow", `${port}/tcp`]);
+  await invoke("/usr/sbin/ufw", ["--force", "enable"]);
+  return Object.freeze({ status: "passed" });
+}
+
 function defaultAdapters() {
   return {
-    firewall: { async applyExact({ sshSource, publicTcpPorts }) {
-      await runProcess("/usr/sbin/ufw", ["--force", "reset"]);
-      await runProcess("/usr/sbin/ufw", ["default", "deny", "incoming"]);
-      await runProcess("/usr/sbin/ufw", ["default", "allow", "outgoing"]);
-      await runProcess("/usr/sbin/ufw", ["allow", "from", sshSource, "to", "any", "port", "22", "proto", "tcp"]);
-      for (const port of publicTcpPorts) await runProcess("/usr/sbin/ufw", ["allow", String(port), "tcp"]);
-      await runProcess("/usr/sbin/ufw", ["--force", "enable"]);
-      return { status: "passed" };
-    } },
+    firewall: { applyExact: applyExactTimewebFirewall },
     registry: { async openReadOnly() {
       const token = await readPrivateAuthorityFile(`${SECRET_ROOT}/ghcr-pull-token`, { maximumBytes: 4096 });
       await runProcess("/usr/bin/docker", ["login", "ghcr.io", "--username", "MarsherSusanin", "--password-stdin"], { input: token });

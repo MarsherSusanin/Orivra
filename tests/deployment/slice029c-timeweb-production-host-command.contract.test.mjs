@@ -253,6 +253,28 @@ test("derives the SSH allow rule only from SSH_CONNECTION and freezes Caddy-only
   }
 });
 
+test("applies Ubuntu-compatible exact UFW rules before reporting firewall PASS", async () => {
+  const module = await feature();
+  assert.equal(typeof module.applyExactTimewebFirewall, "function");
+  const calls = [];
+  assert.deepEqual(await module.applyExactTimewebFirewall({
+    sshSource: "203.0.113.10",
+    publicTcpPorts: [80, 443],
+    runProcess: async (executable, arguments_) => { calls.push([executable, arguments_]); return ""; },
+  }), { status: "passed" });
+  assert.deepEqual(calls, [
+    ["/usr/sbin/ufw", ["--force", "reset"]],
+    ["/usr/sbin/ufw", ["default", "deny", "incoming"]],
+    ["/usr/sbin/ufw", ["default", "allow", "outgoing"]],
+    ["/usr/sbin/ufw", ["allow", "from", "203.0.113.10", "to", "any", "port", "22", "proto", "tcp"]],
+    ["/usr/sbin/ufw", ["allow", "80/tcp"]],
+    ["/usr/sbin/ufw", ["allow", "443/tcp"]],
+    ["/usr/sbin/ufw", ["--force", "enable"]],
+  ]);
+  assert.equal(calls.some(([, arguments_]) => arguments_.join(" ") === "allow 80 tcp"), false);
+  assert.equal(calls.some(([, arguments_]) => arguments_.join(" ") === "allow 443 tcp"), false);
+});
+
 test("opens one read-only GHCR session, pulls exact five digests and independently inspects the same refs", async () => {
   const module = await feature();
   const events = [];

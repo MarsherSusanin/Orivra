@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -52,6 +54,21 @@ async function load(path) {
   return import(`${path}?contract=${Date.now()}-${Math.random()}`).catch(() => ({}));
 }
 
+async function runNode(arguments_) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, arguments_, { stdio: ["ignore", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.once("close", (code) => resolve({
+      code,
+      stdout: Buffer.concat(stdout).toString("utf8"),
+      stderr: Buffer.concat(stderr).toString("utf8"),
+    }));
+  });
+}
+
 test("maps every internal pilot command to one canonical --command host envelope and keeps the install marker effect-free", async () => {
   const module = await load("../../scripts/timeweb-production-pilot-adapters.mjs");
   assert.equal(typeof module.createTimewebProductionHostCommandAdapter, "function");
@@ -61,9 +78,9 @@ test("maps every internal pilot command to one canonical --command host envelope
     invoke: async (invocation) => {
       invocations.push(invocation);
       assert.equal(invocation.executable, "/usr/bin/node");
-      assert.equal(invocation.arguments.length, 3);
-      assert.deepEqual(invocation.arguments.slice(0, 2), [HOST_RUNNER, "--command"]);
-      const encoded = invocation.arguments[2];
+      assert.equal(invocation.arguments.length, 4);
+      assert.deepEqual(invocation.arguments.slice(0, 3), ["--preserve-symlinks-main", HOST_RUNNER, "--command"]);
+      const encoded = invocation.arguments[3];
       assert.match(encoded, /^[A-Za-z0-9_-]+$/);
       const text = Buffer.from(encoded, "base64url").toString("utf8");
       const envelope = JSON.parse(text);
@@ -81,13 +98,38 @@ test("maps every internal pilot command to one canonical --command host envelope
   assert.equal(invocations.length, 0);
   for (const [internalId, hostId, payload] of expectedMappings) {
     await adapter.run({ id: internalId, environment: "production", composeProject: "proofline-production-primary" });
-    const encoded = invocations.at(-1).arguments[2];
+    const encoded = invocations.at(-1).arguments[3];
     assert.deepEqual(JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")), {
       version: "1", kind: "timeweb-production-host-command", id: hostId, payload,
     });
   }
   assert.equal(invocations.length, expectedMappings.length);
   await assert.rejects(adapter.run({ id: "arbitrary", command: "id" }), /PRODUCTION_HOST_COMMAND|invalid/i);
+});
+
+test("executes the production host CLI through the current symlink instead of silently returning empty output", async (t) => {
+  const module = await load("../../scripts/timeweb-production-pilot-adapters.mjs");
+  let invocation;
+  const adapter = module.createTimewebProductionHostCommandAdapter({
+    images,
+    runId: RUN_ID,
+    invoke: async (value) => { invocation = value; return { id: "postgres", status: "passed" }; },
+  });
+  await adapter.run({ id: "start-postgres", environment: "production", composeProject: "proofline-production-primary" });
+  const temporary = await mkdtemp(`${tmpdir()}/orivra-host-main-`);
+  t.after(() => rm(temporary, { recursive: true, force: true }));
+  const current = resolve(temporary, "current");
+  await symlink(root, current, "dir");
+  const symlinkRunner = resolve(current, "scripts/timeweb-production-host-command.mjs");
+  const arguments_ = [...invocation.arguments];
+  arguments_[arguments_.indexOf(HOST_RUNNER)] = symlinkRunner;
+  arguments_[arguments_.length - 1] = Buffer.from(canonicalJson({
+    version: "1", kind: "timeweb-production-host-command", id: "unsupported", payload: {},
+  }), "utf8").toString("base64url");
+  const result = await runNode(arguments_);
+  assert.notEqual(result.code, 0);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /\{"code":"TIMEWEB_PRODUCTION_HOST_COMMAND_FAILED","status":"failed"\}/);
 });
 
 test("normalizes the real nested Caddy host result while retaining post-effect rollback authority", async () => {

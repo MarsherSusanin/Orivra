@@ -85,6 +85,14 @@ canonical terminal `ProductionPromotionEvidenceV2`.
 Any failure after activation rolls Caddy back through the still-open pinned
 session before its exact-once close. No deployment PASS is written first.
 
+The production host entry is executed from the fixed
+`/opt/orivra/current` release symlink with Node
+`--preserve-symlinks-main`; every one-shot, canary and pinned-session command
+uses that same argv grammar so the file-URL main guard executes rather than
+silently returning an empty response. Host firewall setup uses Ubuntu UFW's
+exact `allow 80/tcp` and `allow 443/tcp` grammar after default-deny incoming
+and the SSH source-IP rule, and enables UFW only after all rules succeed.
+
 ### One-shot replay bootstrap
 
 Production Compose has nine service definitions: the retained eight plus one

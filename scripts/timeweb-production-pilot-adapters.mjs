@@ -15,6 +15,7 @@ import {
 const RPC = "https://coston2-api.flare.network/ext/C/rpc";
 const DA = "https://ctn2-data-availability.flare.network";
 const HOST_RUNNER = "/opt/orivra/current/scripts/timeweb-production-host-command.mjs";
+const HOST_NODE_ARGUMENTS = Object.freeze(["--preserve-symlinks-main", HOST_RUNNER]);
 const MAX_OUTPUT = 1024 * 1024;
 const PROJECT = "proofline-production-primary";
 const PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT = "/opt/orivra/replay-bootstrap-stage";
@@ -55,6 +56,10 @@ function encodeHostCommand(id, payload) {
     id,
     payload,
   }), "utf8").toString("base64url");
+}
+
+function hostCommandArguments(id, payload) {
+  return [...HOST_NODE_ARGUMENTS, "--command", encodeHostCommand(id, payload)];
 }
 
 export function normalizeTimewebCaddyActivationResult(value, { expectedPublicOrigin }) {
@@ -98,7 +103,7 @@ export function createTimewebProductionHostCommandAdapter({ images, runId, invok
         : command?.payload && typeof command.payload === "object"
           ? structuredClone(command.payload)
           : {};
-    return invoke({ executable: "/usr/bin/node", arguments: [HOST_RUNNER, "--command", encodeHostCommand(hostId, payload)] });
+    return invoke({ executable: "/usr/bin/node", arguments: hostCommandArguments(hostId, payload) });
   } });
 }
 
@@ -268,17 +273,17 @@ export async function createProductionPilotAdapters({ secretFiles }) {
     const session = {
       observedHostKeySha256: observed.sha256,
       async request(request) {
-        return invoke({ executable: "/usr/bin/node", arguments: [HOST_RUNNER, "--command", encodeHostCommand(request.id, request.payload ?? {})] });
+        return invoke({ executable: "/usr/bin/node", arguments: hostCommandArguments(request.id, request.payload ?? {}) });
       },
       async run(command) {
         if (!hostAdapter) throw failure("PRODUCTION_HOST_COMMAND_INVALID", "Production host command authority is unavailable");
         if (command?.id === "canary-observe" && command.checkpointId === "cutover") {
-          return invoke({ executable: "/usr/bin/node", arguments: [HOST_RUNNER, "--command", encodeHostCommand("canary-observe", {
+          return invoke({ executable: "/usr/bin/node", arguments: hostCommandArguments("canary-observe", {
             id: "cutover",
             dueAt: command.dueAt,
             persistedLiveRuns: command.persistedLiveRuns,
             browserAcceptanceSha256: command.browserAcceptanceSha256,
-          })] });
+          }) });
         }
         return hostAdapter.run(command);
       },
@@ -385,6 +390,6 @@ export async function createProductionPilotAdapters({ secretFiles }) {
 }
 
 export async function createProductionCanaryObservation({ id, dueAt }) {
-  const text = await run("/usr/bin/node", [HOST_RUNNER, "--command", encodeHostCommand("canary-observe", { id, dueAt })]);
+  const text = await run("/usr/bin/node", hostCommandArguments("canary-observe", { id, dueAt }));
   try { return JSON.parse(text); } catch (cause) { throw failure("CANARY_OBSERVATION_INVALID", "Production canary observation is invalid", cause); }
 }

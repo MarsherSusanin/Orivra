@@ -295,3 +295,24 @@ The exact rejected identity was `c7f16b75ac8e9dc73d976f615fe39ace08bda542`
 / tree `31338245c4fc21a2716a926a2f89c915b5f9e341`. Its mode-0400 Core
 report is `/private/tmp/orivra-release-c7f/verifiers/c7f16b7/core-verifier.md`,
 SHA-256 `4381cdfd1f3d985d9f74790357c9528b36812a261a8d7063bda0421ef37cc3f3`.
+
+## Real VDS pre-effect host-runner and firewall correction
+
+A bounded production-host probe made no deployment acceptance claim and found
+two deterministic pre-effect failures. Invoking
+`/opt/orivra/current/scripts/timeweb-production-host-command.mjs` through the
+release symlink allowed Node to realpath the main module, so the exact file-URL
+main guard returned exit 0 with empty stdout. Separately, Ubuntu rejected the
+split UFW arguments `allow 80 tcp` and `allow 443 tcp`; because setup begins
+with reset, the failed sequence left UFW inactive.
+
+The correction gives every production host invocation the exact Node
+`--preserve-symlinks-main` argument and freezes a real symlink-process test
+whose unsupported command must execute and fail with the bounded JSON error.
+The firewall adapter now emits exact source-IP SSH, default-deny incoming,
+`allow 80/tcp`, `allow 443/tcp`, then enable, returning the unchanged bounded
+PASS envelope only after the sequence succeeds. The exact two-file focus is
+25/25 PASS; typecheck passes, serialized deployment static is 293/293 PASS and
+Sites is 46/46 PASS. No credential, network, VDS, Docker, registry or
+deployment effect was performed by this local correction; fresh independent
+verification remains required.
