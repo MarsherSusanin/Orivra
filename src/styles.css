@@ -3788,6 +3788,43 @@ a {
   color: var(--text);
 }
 
+.settings-mcp-config {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(9, 19, 26, 0.72);
+}
+
+.settings-mcp-config label {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.settings-mcp-config input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 13px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #09131a;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.settings-mcp-config input:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.settings-mcp-config p {
+  margin: 0;
+  color: var(--amber);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .settings-reveal-actions {
   display: flex;
   align-items: center;

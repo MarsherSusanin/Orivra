@@ -51,5 +51,6 @@ ADR фиксирует архитектурное решение, которое
 | [0046](0046-global-wallet-session-chrome.md) | One global session-only SIWE chrome exposes verified-wallet state without mixing share or project-token authority |
 | [0047](0047-risk-classified-release-lanes.md) | UI-only, deployment-runtime and backend/persistence changes use distinct fail-fast release lanes without weakening candidate or verifier evidence |
 | [0048](0048-replay-command-group-identity.md) | Replay rekeys source command groups, not individual events, so persisted recovery relationships remain valid without trusting source command identifiers |
+| [0049](0049-local-stdio-mcp-agent-connector.md) | Local stdio MCP exposes bounded replay/evidence/Consumer Lab tools through existing CLI project-token authority without wallet or relayer effects |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

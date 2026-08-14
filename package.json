@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && node scripts/prepare-sites-build.mjs",
+    "build:mcp": "npm run build --workspace @proofline/mcp",
     "test": "vitest run",
     "test:contracts": "vitest run packages/contracts/test",
     "test:core": "vitest run packages/domain/test",

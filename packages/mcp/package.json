@@ -1,0 +1,26 @@
+{
+  "name": "@proofline/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": "./src/index.ts",
+  "bin": {
+    "orivra-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "../../node_modules/.bin/esbuild src/bin.ts --bundle --platform=node --format=esm --target=node22 --banner:js='#!/usr/bin/env node' --outfile=dist/index.js"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "@proofline/contracts": "0.1.0",
+    "@proofline/domain": "0.1.0",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0"
+  }
+}

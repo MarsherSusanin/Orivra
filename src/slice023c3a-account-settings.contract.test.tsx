@@ -29,6 +29,7 @@ const SESSION_REQUEST: WalletSessionRequestV1 = {
 
 type SettingsModule = {
   AccountSettings: ComponentType<{ onRequireWallet(): void }>;
+  buildOrivraMcpConfig(checkoutPath: string, token: string, apiUrl?: string): string;
 };
 
 type ContextModule = {
@@ -244,9 +245,9 @@ describe("Slice 023C3A authenticated account Settings", () => {
     const list = screen.getByRole("list", { name: "Access tokens" });
     const items = within(list).getAllByRole("listitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      expect.stringMatching(/Release gate.*action.*active/i),
-      expect.stringMatching(/Old workstation.*cli.*expired/i),
-      expect.stringMatching(/Former laptop.*cli.*revoked/i),
+      expect.stringMatching(/Release gate.*GitHub Action.*active/i),
+      expect.stringMatching(/Old workstation.*CLI \/ MCP.*expired/i),
+      expect.stringMatching(/Former laptop.*CLI \/ MCP.*revoked/i),
     ]);
     const result = await axe.run(rendered.container, {
       rules: { "color-contrast": { enabled: false } },
@@ -350,6 +351,46 @@ describe("Slice 023C3A authenticated account Settings", () => {
     for (const spy of [log, warn, error, replace, push, browserStorageWrite]) {
       expect(JSON.stringify(spy.mock.calls)).not.toContain(RAW_TOKEN);
     }
+  });
+
+  it("copies a local MCP config only from the CLI one-time reveal and clears its secrets on close", async () => {
+    const checkout = "/Users/operator/Proofline";
+    const user = userEvent.setup();
+    const writeText = installClipboardWriteText();
+    const stored = storage();
+    await renderSettings(services(), stored);
+    expect(screen.getByRole("option", { name: "CLI / MCP" })).toBeVisible();
+    await user.clear(screen.getByRole("textbox", { name: "Label" }));
+    await user.type(screen.getByRole("textbox", { name: "Label" }), "Local agent");
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    const reveal = await screen.findByRole("dialog", { name: "Save this token now" });
+    expect(within(reveal).getByRole("button", { name: "Copy MCP config" })).toBeDisabled();
+    await user.type(within(reveal).getByRole("textbox", { name: "Local checkout path" }), checkout);
+    const configButton = within(reveal).getByRole("button", { name: "Copy MCP config" });
+    expect(configButton).toBeEnabled();
+    await user.click(configButton);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    const config = JSON.parse(String(writeText.mock.calls[0]![0])) as {
+      mcpServers: { orivra: { command: string; args: string[]; env: Record<string, string> } };
+    };
+    expect(config.mcpServers.orivra).toEqual({
+      command: "node",
+      args: [`${checkout}/packages/mcp/dist/index.js`],
+      env: {
+        PROOFLINE_API_URL: "https://orivra.xyz/api",
+        PROOFLINE_PROJECT_TOKEN: RAW_TOKEN,
+      },
+    });
+    expect(within(reveal).getByText(/MCP config copied/)).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(RAW_TOKEN);
+    expect(document.body.textContent).not.toContain(checkout);
+    expect(stored.values()).not.toContain(RAW_TOKEN);
+    expect(Object.values(sessionStorage)).not.toContain(RAW_TOKEN);
+    expect(Object.values(localStorage)).not.toContain(RAW_TOKEN);
   });
 
   it("retains the form and renders only fixed safe copy when issuance fails", async () => {

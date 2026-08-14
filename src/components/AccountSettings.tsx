@@ -41,14 +41,50 @@ function clipboardWrite(): ((value: string) => Promise<void>) | null {
   }
 }
 
+function isAbsoluteCheckoutPath(value: string): boolean {
+  if (value.length === 0 || value.length > 4096 || /[\u0000-\u001f\u007f]/u.test(value)) return false;
+  return value.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(value);
+}
+
+export function buildOrivraMcpConfig(
+  checkoutPath: string,
+  token: string,
+  apiUrl = "https://orivra.xyz/api",
+): string {
+  const path = checkoutPath.trim();
+  if (!isAbsoluteCheckoutPath(path)) throw new Error("The checkout path must be absolute.");
+  const separator = /^[A-Za-z]:[\\/]/u.test(path) ? "\\" : "/";
+  const normalized = path.replace(/[\\/]+$/u, "");
+  return JSON.stringify({
+    mcpServers: {
+      orivra: {
+        command: "node",
+        args: [`${normalized}${separator}packages${separator}mcp${separator}dist${separator}index.js`],
+        env: {
+          PROOFLINE_API_URL: apiUrl,
+          PROOFLINE_PROJECT_TOKEN: token,
+        },
+      },
+    },
+  }, null, 2);
+}
+
+function tokenKindLabel(kind: AccountTokenSummaryV1["kind"]): string {
+  return kind === "cli" ? "CLI / MCP" : "GitHub Action";
+}
+
 function TokenRevealDialog({
   token,
+  kind,
   onClear,
 }: {
   token: string;
+  kind: AccountTokenSummaryV1["kind"];
   onClear(): void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copiedKind, setCopiedKind] = useState<"token" | "config" | null>(null);
+  const [checkoutPath, setCheckoutPath] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
@@ -74,11 +110,14 @@ function TokenRevealDialog({
     try {
       await writeClipboard!(token);
       setCopied(true);
+      setCopiedKind("token");
       setCopyFailed(false);
     } catch {
       setCopyFailed(true);
     }
   }, [token, writeClipboard]);
+
+  const checkoutPathValid = isAbsoluteCheckoutPath(checkoutPath.trim());
 
   const trapFocus = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
@@ -178,8 +217,25 @@ function TokenRevealDialog({
                 {token}
               </div>
               <p className="settings-token-hint">
-                Export as <code>PROOFLINE_PROJECT_TOKEN</code> for CLI or Action use.
+                Export as <code>PROOFLINE_PROJECT_TOKEN</code> for CLI, MCP or Action use.
               </p>
+              {kind === "cli" ? (
+                <div className="settings-mcp-config">
+                  <label htmlFor="settings-mcp-checkout">Local checkout path</label>
+                  <input
+                    id="settings-mcp-checkout"
+                    value={checkoutPath}
+                    placeholder="/absolute/path/to/orivra-checkout"
+                    autoComplete="off"
+                    spellCheck="false"
+                    onChange={(event) => {
+                      setCheckoutPath(event.currentTarget.value);
+                      setCopyFailed(false);
+                    }}
+                  />
+                  <p>This MCP config contains the raw token. Copy it only into a trusted local client.</p>
+                </div>
+              ) : null}
               {writeClipboard === null ? (
                 <p className="settings-safe-error">Clipboard access is unavailable. Copy the token manually.</p>
               ) : null}
@@ -194,7 +250,24 @@ function TokenRevealDialog({
                 >
                   <Copy size={18} aria-hidden="true" />{writeClipboard === null ? "Copy unavailable" : "Copy"}
                 </button>
-                {copied ? <span className="copy-status" aria-live="polite">Copied. Escape closes this reveal.</span> : null}
+                {kind === "cli" ? (
+                  <button
+                    className="entry-secondary"
+                    type="button"
+                    disabled={writeClipboard === null || !checkoutPathValid}
+                    onClick={() => {
+                      const config = buildOrivraMcpConfig(checkoutPath, token);
+                      void writeClipboard!(config).then(() => {
+                        setCopied(true);
+                        setCopiedKind("config");
+                        setCopyFailed(false);
+                      }, () => setCopyFailed(true));
+                    }}
+                  >
+                    <Copy size={18} aria-hidden="true" />Copy MCP config
+                  </button>
+                ) : null}
+                {copied ? <span className="copy-status" aria-live="polite">{copiedKind === "config" ? "MCP config copied." : "Token copied."} Escape closes this reveal.</span> : null}
               </div>
             </>
           )}
@@ -346,7 +419,7 @@ export function AccountSettings({
   const [errors, setErrors] = useState<{ label?: string; expiresInDays?: string }>({});
   const [failure, setFailure] = useState(false);
   const [issuing, setIssuing] = useState(false);
-  const [revealToken, setRevealToken] = useState<string | null>(null);
+  const [revealToken, setRevealToken] = useState<{ token: string; kind: AccountTokenSummaryV1["kind"] } | null>(null);
   const [accountRefreshFailed, setAccountRefreshFailed] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<AccountTokenSummaryV1 | null>(null);
   const [revokePending, setRevokePending] = useState(false);
@@ -449,7 +522,7 @@ export function AccountSettings({
       try {
         const created = await createAccountToken({ idempotencyKey, request });
         if (!mounted.current || !browserAuthorized.current) return;
-        setRevealToken(created.token);
+        setRevealToken({ token: created.token, kind: request.kind });
       } catch {
         setFailure(true);
       } finally {
@@ -568,7 +641,7 @@ export function AccountSettings({
           <Wallet size={36} aria-hidden="true" />
           <div>
             <h2>Sign in to manage access</h2>
-            <p>Verify a Coston2 EOA before issuing a CLI or GitHub Action token.</p>
+            <p>Verify a Coston2 EOA before issuing a CLI / MCP or GitHub Action token.</p>
           </div>
           <button className="entry-primary" type="button" onClick={onRequireWallet}>
             Sign in with wallet
@@ -634,7 +707,7 @@ export function AccountSettings({
               return (
                 <li key={token.tokenId}>
                   <Key size={19} aria-hidden="true" />
-                  <div className="settings-token-details"><strong>{token.label}</strong><span>{token.kind}</span></div>
+                  <div className="settings-token-details"><strong>{token.label}</strong><span>{tokenKindLabel(token.kind)}</span></div>
                   <div className="settings-token-actions">
                     <span className={`settings-token-status is-${status}`}>{status}</span>
                     {token.revokedAt === null ? (
@@ -655,7 +728,7 @@ export function AccountSettings({
               );
             })}
           </ul>
-        ) : <p className="settings-empty">No CLI or Action credentials yet.</p>}
+        ) : <p className="settings-empty">No CLI / MCP or Action credentials yet.</p>}
       </section>
 
       <section className="settings-panel" aria-labelledby="settings-generate-title">
@@ -671,7 +744,7 @@ export function AccountSettings({
               const value = event.currentTarget.value;
               if (value === "cli" || value === "action") setKind(value);
             }}>
-              <option value="cli">CLI</option>
+              <option value="cli">CLI / MCP</option>
               <option value="action">GitHub Action</option>
             </select>
           </label>
@@ -727,7 +800,7 @@ export function AccountSettings({
         <p>Remove this browser session without disconnecting or prompting the wallet provider.</p>
       </section>
 
-      {revealToken ? <TokenRevealDialog token={revealToken} onClear={() => setRevealToken(null)} /> : null}
+      {revealToken ? <TokenRevealDialog token={revealToken.token} kind={revealToken.kind} onClear={() => setRevealToken(null)} /> : null}
       {revokeTarget ? (
         <AccessConfirmationDialog
           title={`Revoke ${revokeTarget.label}?`}

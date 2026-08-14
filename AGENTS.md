@@ -26,6 +26,11 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
 - API owns authentication, idempotent commands and PostgreSQL composition; it never receives user or relayer private keys.
 - Worker is the only owner of the relayer key and external live effects.
 - Web, CLI and Action consume public contracts and the persisted API path; do not add a direct live-worker release gate.
+- The local `@proofline/mcp` stdio adapter uses only the persisted API path with
+  existing `kind: "cli"` project tokens. It exposes bounded replay, evidence and
+  Consumer Lab operations; wallet, relayer, private-key, RPC and live-submission
+  effects are outside its tool boundary. MCP is built from a user checkout and
+  is never installed on the production VDS.
 - Run events are append-only. Preserve ordering, terminal immutability, idempotency and byte-identical replay.
 - Production adapters fail closed. Test adapters must not be importable or callable outside `NODE_ENV=test`.
 

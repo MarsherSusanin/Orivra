@@ -415,7 +415,7 @@ worker readiness. Hosting is not provisioned.
 EOA signature получает 12-часовую session для одного default project. Raw token
 возвращается один раз; база хранит только keyed digest. Не создавайте token rows
 вручную. Только browser session может использовать `GET /v1/account`, выпускать
-CLI/Action token через `POST /v1/account/tokens`, отзывать его через
+CLI/MCP/Action token через `POST /v1/account/tokens`, отзывать его через
 `DELETE /v1/account/tokens/:tokenId` и завершать текущую session через
 `DELETE /v1/auth/wallet/sessions/current`. Issuance требует новый
 `Idempotency-Key: token_issue_<64 lowercase hex>`; raw token возвращается только
@@ -562,6 +562,30 @@ node packages/cli/dist/index.js --help
 ```
 
 Production API commands требуют `PROOFLINE_API_URL` и `PROOFLINE_PROJECT_TOKEN`. Wallet signing использует локальный `PROOFLINE_COSTON2_PRIVATE_KEY`; private key не отправляется API. Доступные команды: `run create`, `run watch`, `run verify`, `bundle export`, `replay`, `demo record`.
+
+### Local stdio MCP
+
+MCP не устанавливается на VDS и не публикуется в npm. Каждый пользователь
+собирает его из своего checkout:
+
+```bash
+npm install
+npm run build:mcp
+```
+
+Затем MCP-клиент запускает `node <checkout>/packages/mcp/dist/index.js` с
+`PROOFLINE_API_URL=https://orivra.xyz/api` и one-time выпущенным
+`PROOFLINE_PROJECT_TOKEN`. Stdout зарезервирован для JSON-RPC; диагностика идёт
+только в stderr. Settings копирует готовый JSON только из one-time
+`CLI / MCP` reveal; он содержит raw secret и должен попасть только в
+доверенную локальную конфигурацию.
+
+Tools: `list_templates`, `get_template`, `list_runs`, `inspect_run`,
+`create_replay_run`, `verify_consumer`, `generate_safe_consumer`,
+`validate_run_bundle`. Полные manifests, events, evidence, bundle и Solidity
+читаются как `orivra://...` resources, а не дублируются в tool result.
+`create_replay_run` всегда принудительно записывает `submission.mode=replay`.
+Wallet, relayer, private key, RPC и live-submission route не входят в MCP boundary.
 
 Canonical URL attack recording не имеет default fixture или replay fallback:
 

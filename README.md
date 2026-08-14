@@ -33,6 +33,25 @@ blockchain-операций. Каждый persisted lifecycle-этап откр�
 restorable `?step=` маршрутом: пройденные Request, Round, Proof, Verify и
 Consumer показывают собственные сохранённые факты, а не повторяют текущую CTA.
 
+## Локальные AI-агенты через MCP
+
+`@proofline/mcp` — локальный stdio MCP-сервер для агентов пользователя. Он
+работает из локального checkout, читает production API через обычный
+project token `kind: "cli"` и открывает только bounded replay/evidence/Consumer Lab
+операции. Wallet, relayer, private key и live submission не являются MCP tools.
+
+```bash
+npm install
+npm run build:mcp
+PROOFLINE_API_URL=https://orivra.xyz/api \
+PROOFLINE_PROJECT_TOKEN=project_... \
+node packages/mcp/dist/index.js
+```
+
+Settings показывает этот тип как `CLI / MCP`. Готовый client config
+формируется только в one-time reveal и попадает в clipboard только по
+явному нажатию. Полный security и tool contract: [ADR 0049](docs/adr/0049-local-stdio-mcp-agent-connector.md).
+
 ## Текущий статус
 
 - Завершён pre-infrastructure product journey 014–021: Runs, Composer,
@@ -56,7 +75,7 @@ Consumer показывают собственные сохранённые фа
   EIP-4361 challenge создаёт стабильный default project и возвращает случайный
   12-часовой browser project token, сохраняя в PostgreSQL только keyed digest.
   Browser-сессия может просматривать account, однократно выпускать и отзывать
-  1–90-дневные CLI/Action tokens и завершать текущую сессию. Runs, deep routes
+  1–90-дневные CLI/MCP/Action tokens и завершать текущую сессию. Runs, deep routes
   и Composer уже используют общий wallet sign-in; следующий Web-срез 023C3A
   подключает `/settings` account view и безопасный one-time token reveal.
 - Реализованы, но не размещены Web, PostgreSQL API, restart-safe worker, CLI,
