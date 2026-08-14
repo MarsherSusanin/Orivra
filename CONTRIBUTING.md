@@ -20,11 +20,13 @@ API state honestly rather than substituting fixtures.
 
 ## Making a change
 
-1. Select an existing item from the
-   [Orivra Public Backlog](https://github.com/users/MarsherSusanin/projects/2)
-   or open an issue for substantial product, persistence, package-boundary, or
-   trust-boundary changes. Backlog priority describes impact, not a delivery
-   date or commitment.
+1. Select an existing item from the public
+   [Product roadmap](https://github.com/users/MarsherSusanin/projects/2/views/2)
+   or a newcomer-friendly item from
+   [Community contributions](https://github.com/users/MarsherSusanin/projects/2/views/5).
+   Open an issue first for substantial product, persistence, package-boundary,
+   or trust-boundary changes that are not represented there. Roadmap priority
+   describes impact and risk, not a delivery date or commitment.
 2. Keep the change focused and add or update an ADR when it changes public
    contracts, persistence semantics, trust boundaries, or the release path.
 3. Add a failing contract or behavior test before implementation when fixing a
