@@ -181,6 +181,7 @@ async function main(environment: NodeJS.ProcessEnv = process.env) {
               break;
             } catch (cause: any) {
               if (cause?.code !== "PREFLIGHT_NOT_READY") throw cause;
+              await runtime.processOne();
               await new Promise((resolve) => setTimeout(resolve, 1_000));
             }
           }

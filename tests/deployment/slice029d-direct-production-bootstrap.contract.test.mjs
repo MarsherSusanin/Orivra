@@ -172,6 +172,7 @@ test("replay bootstrap is production-only, bounded and cannot import a test adap
     { status: "passed", chainId: 114, sourceRunId: "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4", sourceStage: "completed", sourceLiveManifestSha256: OPEN_REPLAY, replayManifestSha256: OPEN_REPLAY },
   ]) assert.throws(() => module.validateProductionReplayBootstrapResult(invalid), /PRODUCTION_REPLAY_BOOTSTRAP_INVALID/);
   assert.match(source, /production-replay-bootstrap/);
+  assert.match(source, /PREFLIGHT_NOT_READY[\s\S]*await runtime\.processOne\(\)/);
   assert.doesNotMatch(source, /NODE_ENV|test-adapter|fixture|startOrdinaryWorker|bypass/i);
 });
 
