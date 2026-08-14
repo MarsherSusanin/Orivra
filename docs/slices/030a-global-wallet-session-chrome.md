@@ -1,6 +1,6 @@
 # Slice 030A — Global wallet session chrome
 
-Status: terminal-focus corrective Author GREEN; independent reverification pending
+Status: Settings-composition corrective RED after Product FAIL
 
 Decision: [ADR 0046](../adr/0046-global-wallet-session-chrome.md)
 

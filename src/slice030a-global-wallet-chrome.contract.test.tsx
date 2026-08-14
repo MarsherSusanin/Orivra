@@ -157,6 +157,7 @@ describe("Slice 030A global wallet session chrome", () => {
   });
 
   it("keeps failed sign-out explicit until retry or local browser forgetting", async () => {
+    window.history.replaceState({}, "", "/app/settings");
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 503 })));
     const revokeCurrentSession = vi.fn(async () => {
       throw new WalletAccessError({
@@ -176,9 +177,11 @@ describe("Slice 030A global wallet session chrome", () => {
     await user.click(profile);
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
     await user.click(screen.getByRole("button", { name: "Confirm sign out" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Server sign out is unavailable");
-    expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
     const dialog = screen.getByRole("dialog", { name: "Sign out this browser?" });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Server sign out is unavailable");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Retry sign-out" })).toBeVisible();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
     await user.tab({ shift: true });
     expect(dialog).toContainElement(document.activeElement as HTMLElement);
     await user.click(screen.getByRole("button", { name: "Forget this browser" }));

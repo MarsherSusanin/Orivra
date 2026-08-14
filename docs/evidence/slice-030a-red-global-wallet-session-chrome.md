@@ -30,3 +30,13 @@ The prior ARIA owner and normal/pending/failed trap boundaries passed. Two
 terminal RED assertions now require both successful server sign-out and local
 `Forget this browser` to focus their newly rendered anonymous sign-in successor
 instead of leaving focus on the document body.
+
+The third Product/Integration wave rejected exact `5e1461d` / `6ba01d7`. Its
+mode-0400 report at
+`/private/tmp/proofline-030a-verifiers/5e1461d/product-verifier.md` has SHA-256
+`4ae1ff74ceb1f8d1973f8a78d1eb61b0d6df2113645ae7a870b25cc16f8191e1`.
+The isolated modal states and terminal successor paths passed, but the real
+Settings composition moved focus to its background `Retry sign-out` control
+after DELETE failure while the global modal remained open. The corrective RED
+now exercises `/app/settings` and requires the open modal to retain focus even
+when the background recovery panel renders.

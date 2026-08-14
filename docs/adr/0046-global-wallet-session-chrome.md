@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted; Slice 030A terminal-focus corrective Author GREEN, reverification pending.
+Accepted; Slice 030A Settings-composition corrective RED after Product FAIL.
 
 ## Context
 

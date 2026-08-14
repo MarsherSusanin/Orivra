@@ -1,6 +1,6 @@
 # Slice 030A GREEN evidence — global wallet session chrome
 
-Status: terminal-focus corrective Author GREEN; independent reverification pending.
+Status: third candidate rejected; Settings-composition corrective RED frozen.
 
 The implementation adds one route-aware wallet session/chrome owner, one
 deterministic dependency-free profile component and separate landing grid
