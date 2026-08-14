@@ -1,6 +1,6 @@
 # Slice 030A — Global wallet session chrome
 
-Status: Author GREEN; independent verification pending
+Status: corrective RED after first independent Core FAIL
 
 Decision: [ADR 0046](../adr/0046-global-wallet-session-chrome.md)
 

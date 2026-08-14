@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import axe from "axe-core";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -176,6 +177,37 @@ describe("Slice 030A global wallet session chrome", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Forget this browser" }));
     expect(await within(topbar()).findByRole("button", { name: "Sign in with wallet" })).toBeVisible();
+  });
+
+  it("keeps the authenticated wallet menu free of serious or critical axe violations", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 503 })));
+    const user = userEvent.setup();
+    render(<App walletAccess={{ services: walletServices(), storage: storage(TOKEN) }} />);
+
+    await user.click(await within(topbar()).findByRole("button", { name: /wallet profile/i }));
+    const menu = screen.getByRole("menu", { name: "Wallet profile" });
+    const results = await axe.run(menu);
+    expect(
+      results.violations.filter(({ impact }) => impact === "serious" || impact === "critical"),
+    ).toEqual([]);
+  });
+
+  it("traps forward and reverse Tab focus inside the sign-out confirmation", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 503 })));
+    const user = userEvent.setup();
+    render(<App walletAccess={{ services: walletServices(), storage: storage(TOKEN) }} />);
+
+    await user.click(await within(topbar()).findByRole("button", { name: /wallet profile/i }));
+    await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
+    const dialog = screen.getByRole("dialog", { name: "Sign out this browser?" });
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.tab({ shift: true });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.tab();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
   });
 
   it("keeps caller project-token authority neutral and never restores or exposes the wallet profile", async () => {

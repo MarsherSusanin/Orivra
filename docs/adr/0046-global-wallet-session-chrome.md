@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted and implemented by Slice 030A; independent verification pending.
+Accepted; Slice 030A corrective RED after first independent Core FAIL.
 
 ## Context
 

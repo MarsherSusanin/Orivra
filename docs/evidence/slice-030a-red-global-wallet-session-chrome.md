@@ -14,3 +14,11 @@ tokens from rendered content, explicit sign-out recovery, keyboard focus
 return, route-aware history restoration, and separate wide/mobile layout
 rules. No API, backend, session-duration, DNS, network, VDS, credential or
 production effect was part of RED.
+
+The first independent Core wave rejected exact `b0f0a6d` / `190c8c8`. Its
+mode-0400 report at
+`/private/tmp/proofline-030a-verifiers/b0f0a6d/core-verifier.md` has SHA-256
+`ba497e947967170f341cb1f20affa7587274fdac0eb64cc69eb8350fd7cc1aed`.
+Two corrective RED cases reproduce the exact findings: the authenticated menu
+must have zero serious/critical axe violations, and forward/reverse Tab must
+remain inside the open sign-out modal.
