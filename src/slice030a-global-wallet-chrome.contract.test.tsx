@@ -134,6 +134,24 @@ describe("Slice 030A global wallet session chrome", () => {
     expect(successor).toHaveFocus();
   });
 
+  it("uses the restored wallet authority in Composer without a duplicate sign-in action", async () => {
+    window.history.replaceState({}, "", "/app/runs/new?step=source");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 503 })));
+    render(<App
+      services={surfaces()}
+      walletAccess={{ services: walletServices(), storage: storage(TOKEN) }}
+    />);
+
+    expect(await within(topbar()).findByRole("button", {
+      name: /wallet profile.*0x66ec.*42dd/i,
+    })).toBeVisible();
+    const composer = screen.getByRole("region", { name: "Choose the public response" });
+    expect(within(composer).queryByRole("button", { name: "Sign in with wallet" }))
+      .not.toBeInTheDocument();
+    expect(within(composer).getByRole("link", { name: "Browse templates" }))
+      .toHaveAttribute("href", "/templates");
+  });
+
   it("shows restoring and retry states without mistaking them for an authenticated identity", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 503 })));
     let rejectRestore!: (cause: unknown) => void;

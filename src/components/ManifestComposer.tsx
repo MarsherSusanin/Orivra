@@ -1043,6 +1043,8 @@ export function ManifestComposer({
             if (sourceError) setSourceError("");
           }}
           onConnect={onConnect}
+          showBrowseTemplates={templateState.state !== "unavailable"}
+          showSignIn={!projectToken}
           onContinue={continueFromSource}
           onAddQuery={addQueryRow}
           onChangeQuery={changeQueryRow}

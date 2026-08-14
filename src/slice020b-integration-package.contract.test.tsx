@@ -176,6 +176,22 @@ describe("Slice 020B Integration Package surface", () => {
     expect(action).toHaveFocus();
   });
 
+  it("starts a fresh run from the completed run manifest", async () => {
+    window.history.replaceState({}, "", `/runs/${RUN_ID}`);
+    const user = userEvent.setup();
+    render(<App projectToken={PROJECT_TOKEN} services={services()} />);
+
+    await user.click(await screen.findByRole("button", {
+      name: "Run this template again",
+    }));
+
+    expect(await screen.findByRole("heading", { name: "New Web2Json run" }))
+      .toBeVisible();
+    expect(screen.getByLabelText("Source URL")).toHaveValue(validManifest.request.url);
+    expect(screen.getByRole("link", { name: "Browse templates" }))
+      .toHaveAttribute("href", "/templates");
+  });
+
   it("downloads exact evidence bytes and emits repository-local integration instructions", async () => {
     window.history.replaceState({}, "", `/runs/${RUN_ID}?panel=integration`);
     render(<App projectToken={PROJECT_TOKEN} services={services()} />);

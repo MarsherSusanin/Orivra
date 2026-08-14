@@ -825,6 +825,13 @@ a {
   line-height: 1.55;
 }
 
+.composer-panel-heading-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
 .composer-import {
   position: relative;
   display: inline-flex;
@@ -4096,6 +4103,16 @@ a {
 
   .composer-panel-heading {
     display: grid;
+  }
+
+  .composer-panel-heading-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .composer-panel-heading-actions .entry-secondary,
+  .composer-panel-heading-actions .composer-import {
+    width: 100%;
   }
 
   .composer-draft-notice {

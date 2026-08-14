@@ -1206,6 +1206,11 @@ function RunCockpit({
                     )}
                     <div className="action-footer">
                       <span>{handoffReady ? "Next step: Add the persisted artifacts to your repository." : "Next step: Verify consumer invariants and enforcement."}</span>
+                      {isProjectAccess && hydratedRun.manifest ? (
+                        <button className="bundle-action" type="button" onClick={createReplacementRun}>
+                          <ArrowClockwise size={16} aria-hidden="true" />Run this template again
+                        </button>
+                      ) : null}
                       {isProjectAccess && bundleState === "verified" && bundleSource ? (
                         <a
                           className="bundle-download"

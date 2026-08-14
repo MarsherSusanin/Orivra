@@ -166,6 +166,8 @@ export function ComposerSourceStep({
   onImportManifest,
   onSourceChange,
   onConnect,
+  showBrowseTemplates,
+  showSignIn,
   onContinue,
   onAddQuery,
   onChangeQuery,
@@ -178,6 +180,8 @@ export function ComposerSourceStep({
   onImportManifest(event: ChangeEvent<HTMLInputElement>): void;
   onSourceChange(value: string): void;
   onConnect(): void;
+  showBrowseTemplates: boolean;
+  showSignIn: boolean;
   onContinue(): void;
 } & QueryHandlers) {
   return (
@@ -188,15 +192,20 @@ export function ComposerSourceStep({
           <h2 id="composer-source-title">Choose the public response</h2>
           <p>Orivra accepts one secure GET source. The browser only records this request definition.</p>
         </div>
-        <label className="composer-import">
-          <FileArrowUp size={18} aria-hidden="true" />Import manifest
-          <input
-            aria-label="Import manifest"
-            type="file"
-            accept="application/json,.json"
-            onChange={onImportManifest}
-          />
-        </label>
+        <div className="composer-panel-heading-actions">
+          {showBrowseTemplates ? (
+            <a className="entry-secondary" href="/templates">Browse templates</a>
+          ) : null}
+          <label className="composer-import">
+            <FileArrowUp size={18} aria-hidden="true" />Import manifest
+            <input
+              aria-label="Import manifest"
+              type="file"
+              accept="application/json,.json"
+              onChange={onImportManifest}
+            />
+          </label>
+        </div>
       </div>
 
       {importError ? <p className="composer-alert" role="alert">{importError}</p> : null}
@@ -243,9 +252,11 @@ export function ComposerSourceStep({
       </div>
 
       <div className="composer-actions">
-        <button className="entry-text-button" type="button" onClick={onConnect}>
-          Sign in with wallet
-        </button>
+        {showSignIn ? (
+          <button className="entry-text-button" type="button" onClick={onConnect}>
+            Sign in with wallet
+          </button>
+        ) : null}
         <button className="entry-primary" type="button" onClick={onContinue}>
           Continue to Transform <ArrowRight size={18} weight="bold" aria-hidden="true" />
         </button>
