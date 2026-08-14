@@ -17,6 +17,7 @@
   <p>
     <a href="https://orivra.xyz">Website</a> ·
     <a href="https://orivra.xyz/demo/canonical-url">Canonical URL attack demo</a> ·
+    <a href="https://github.com/users/MarsherSusanin/projects/2">Public backlog</a> ·
     <a href="ARCHITECTURE.md">Architecture</a> ·
     <a href="CONTRIBUTING.md">Contributing</a> ·
     <a href="SECURITY.md">Security</a>
@@ -54,8 +55,10 @@ different facts**.
 1. Open [orivra.xyz](https://orivra.xyz).
 2. Choose the Open-Meteo Web2Json template and create a replay run. Replay mode
    exercises persisted evidence without broadcasting a blockchain transaction.
-3. Follow the six-stage Run Cockpit and open Consumer Lab when proof evidence is
-   available.
+3. Follow the six-stage Run Cockpit. After proof verification, Consumer changes
+   to `Ready`; select it and use `Verify consumer` to start the project-owned
+   Consumer Lab operation. It is intentionally not an automatic blockchain
+   effect.
 4. Compare the vulnerable-consumer diagnosis with the generated safe consumer
    and export the integration package.
 
@@ -63,8 +66,11 @@ For a wallet-free introduction, open the
 [canonical URL attack demo](https://orivra.xyz/demo/canonical-url). It shows why
 a valid proof is insufficient when the consumer omits the host invariant.
 
-The public deployment is a hackathon pilot, not a security audit or a guarantee
-of production fitness.
+The public deployment runs the Web, API, worker and PostgreSQL composition on
+the selected VDS. It is a hackathon pilot, not a security audit or a guarantee
+of production fitness. Deadline incident restorations may update one service
+ahead of the deferred full candidate verification; the current operational
+snapshot and rollback procedure live in [the runbook](docs/runbook.md).
 
 ### Run the Web locally
 
@@ -236,8 +242,10 @@ open-source-readiness checks, but their success is not a security audit.
 ## Contributing
 
 Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening
-a pull request. Changes must preserve the persisted evidence and authorization
-boundaries rather than replacing them with test-only shortcuts.
+a pull request. The date-free [Orivra Public Backlog](https://github.com/users/MarsherSusanin/projects/2)
+contains contribution-ready product and engineering work. Changes must preserve
+the persisted evidence and authorization boundaries rather than replacing them
+with test-only shortcuts.
 
 ## License
 

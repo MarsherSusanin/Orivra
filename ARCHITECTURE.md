@@ -10,7 +10,7 @@ persisted run API.
 
 ```mermaid
 flowchart LR
-  Surface["Web / CLI / GitHub Action"] --> API["PostgreSQL API"]
+  Surface["Web / CLI / GitHub Action / local MCP"] --> API["PostgreSQL API"]
   API --> DB[("append-only events + commands")]
   Worker["restart-safe worker"] --> DB
   Worker --> Verifier["Web2Json verifier"]
@@ -36,7 +36,7 @@ flowchart LR
 | `packages/fdc-coston2` | Verifier, RPC, registry, Relay и DA ports/adapters | Владеть пользовательским flow или persistence |
 | `apps/api` | Auth, idempotent HTTP commands, journal/artifact reads, PostgreSQL composition | Хранить private keys, выполнять relayer effect |
 | `apps/worker` | Claim persisted commands, выполнять external effects, append outcomes, resume after restart | Принимать команды в обход API или использовать test adapters в production |
-| `src`, `packages/cli`, `packages/action` | Пользовательские surfaces поверх публичных contracts | Дублировать lifecycle или обходить persisted release path |
+| `src`, `packages/cli`, `packages/action`, `packages/mcp` | Пользовательские surfaces поверх публичных contracts и persisted API | Дублировать lifecycle, выполнять arbitrary HTTP или обходить persisted release path |
 
 Разрешённое направление зависимостей: contracts → domain → adapters/composition → surfaces. Pure packages не импортируют runtime composition.
 
@@ -82,7 +82,10 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
 3. Wallet flow возвращает unsigned transaction и принимает отдельно broadcast tx hash. Relayer flow разрешается только авторизованному project token.
 4. Worker получает receipt, вычисляет voting round через system contracts, ждёт Relay finalization и bounded DA proof.
 5. Proof проверяется локально и через `FdcVerification.verifyWeb2Json` с `eth_call`.
-6. Consumer Lab проверяет invariant evidence и генерирует safe consumer.
+6. После persisted proof verification project-owned пользователь явно запускает
+   Consumer Lab. Этап `Consumer` до команды имеет состояние `Ready`, а не
+   `In progress`; API сохраняет diagnostics и генерирует safe consumer без
+   wallet, relayer или нового blockchain effect.
 7. Bundle сериализуется canonical JSON, получает SHA-256 checksum и должен replay byte-identically.
 8. Evidence Receipt и Integration Package связывают exact bundle, manifest,
    Consumer Lab result и safe Solidity для read-only handoff.
@@ -256,6 +259,33 @@ real-browser acceptance. Core and Product independently PASS exact commit
 not release authorization. ADR 0039 owns the next offline OCI freeze.
 
 ## Release architecture and current operational status
+
+### Current authoritative state (2026-08-15)
+
+Orivra is publicly reachable at `https://orivra.xyz`. One DigitalOcean VDS runs
+Caddy, Web, API, worker and PostgreSQL through Docker Compose; Caddy is the only
+public application ingress and same-origin `/api` routes to the private API.
+Timeweb S3 is the active private backup boundary and MinIO remains QA-only.
+
+The current production source symlink and exact per-service image identities
+are operational state, not architecture authority; they are recorded in
+`docs/runbook.md`. The latest Web-only deadline restoration pins an immutable
+`linux/amd64` digest containing the active Consumer `Ready` route and preserves
+the previous Web digest for rollback. `/api/healthz` and `/api/readyz` were
+verified after that switch. API, worker, PostgreSQL and Caddy were not recreated
+by the Web incident.
+
+This running pilot is not a newly frozen full candidate, security audit, PITR
+PASS or two-verifier release PASS. ADR 0047 permits the bounded restoration,
+while the normal candidate matrix and independent Core/Product verification
+remain post-deadline debt. Staging is historical; ADR 0044/0045 define the
+direct-production authority and phase ordering.
+
+### Historical release record
+
+The chronology below explains why the current release controls exist. It is not
+the current deployment inventory and MUST NOT be used as pull or rollback
+authority.
 
 - PR contract: caller-supplied canonical replay bundle, без network и secrets.
 - Merge-queue contract: один persisted Coston2 run через GitHub Action → API → PostgreSQL → worker.
@@ -443,15 +473,11 @@ those bytes, while the promotion parser reached its injected effect with the
 self-consistent triad. Core and Product independently PASS exact commit
 `8137970091197160c3d002084a2b778a4d262034` / tree
 `8c594cc58820670aba66e7b3cbd6f1f818420a19`; canceled scan 8852 remains not a
-security PASS and the deferred inventory-digest validation risk remains open. Нет
-release-ready VDS composition или production
-deployment. В репозитории нет
-`.github/workflows` или настроенного merge queue. Hosting is not yet
-provisioned; ADR 0029 выбирает target, но не доказывает его доступность.
-Credentials выдаются только после завершения credential-free 022–029A,
-единого full matrix и двух независимых PASS на одном tree hash. До этого hosted
-или deployed live Coston2 PASS не заявляется; production Spaces, фактические
-RPO/RTO и SLA evidence также отсутствуют.
+security PASS and the deferred inventory-digest validation risk remains open.
+The VDS composition is now running, but the latest incident-restored tree has
+not completed a new unified candidate and two-verifier release wave. There is
+still no checked-in `.github/workflows` or configured merge queue, and no
+security, SLA or measured RPO/RTO claim follows from the running pilot.
 
 ## Product scope
 
@@ -465,9 +491,9 @@ Product instrumentation остаётся локальным: bounded privacy-saf
 report, сетевого analytics transport нет.
 
 Вне scope: Mainnet execution, custody пользовательских ключей, arbitrary
-methods/headers/body, произвольные Solidity contracts и выполненный production
-deploy. Credential-free composition входит в 027A–029A; provisioning,
-promotion и canary остаются за credential gate.
+methods/headers/body и произвольные Solidity contracts. Production hosting is
+active, while terminal 24-hour promotion evidence, security audit, SLA and
+measured RPO/RTO remain outside the current accepted claims.
 
 ## Решения
 

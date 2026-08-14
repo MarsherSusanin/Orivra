@@ -28,11 +28,11 @@ worker and performs no migration. Persisted journey требует отдель�
 PostgreSQL, API и worker. Без API интерфейс обязан показывать честное
 configuration/network state, а не demo run.
 
-### Выбранная VDS topology, частично реализованная локально
+### Production VDS topology (active)
 
 [ADR 0029](adr/0029-digitalocean-vds-deployment.md) выбирает один
-DigitalOcean Droplet/VDS. Docker Compose должен запускать Web, API, worker и
-PostgreSQL на том же VDS. Caddy остаётся единственным public reverse proxy,
+DigitalOcean Droplet/VDS. Docker Compose запускает Web, API, worker и
+PostgreSQL на том же VDS. Caddy является единственным public reverse proxy,
 завершает TLS и передаёт same-origin `/api/*` в API. Sites остаётся
 compatibility-only artifact, а не production host.
 
@@ -79,10 +79,9 @@ verified schema version и worker heartbeat; stale heartbeat возвращае�
 starts only after exact secret and application-role URL resolution, pure typed
 runtime parsing, one-shot replay-evidence loading, exact schema verification
 and full repository/live-pipeline construction, immediately before the claim
-loop. Candidates `4ac66f9` / tree `477f679` and `a6fb729` / tree `2a1dfc8` are
-both rejected. The latter retained lazy safe-consumer/replay reads and an
-incomplete production Compose worker environment. Этот раздел не является
-actual-worker, hosted или deployed PASS.
+loop. Historical rejected candidates remain in the ADR chronology; they are
+not current runtime authority. The active operational snapshot and incident
+rollback are recorded in sections 7, 10 and 11 below.
 
 ### Slice 027A local container gate
 
@@ -195,8 +194,8 @@ the command-lease heartbeat and the test-only SQL fixture are not actual
 deployment-worker readiness.
 
 Database recovery contract использует continuous WAL archive и base backup для
-PITR в private S3-compatible DigitalOcean Spaces. До получения
-credentials локальный Docker gate выполняет MinIO restore drill в новый
+PITR в private Timeweb S3 (`https://s3.twcstorage.ru`, `ru-1`, path-style).
+Локальный credential-free Docker gate выполняет MinIO restore drill в новый
 изолированный PostgreSQL volume. A Droplet backup does not replace the database
 backup or PITR plan. Он остаётся только дополнительным host-recovery snapshot.
 
@@ -408,7 +407,10 @@ database stop/restart, persistent volume identity and idempotent one-shot jobs.
 Production remains additive/roll-forward only; no down-migration command exists.
 Core and Product independently verified exact commit `527c561` / tree
 `ebdf648`; the SQL heartbeat remains an explicit test fixture, not actual
-worker readiness. Hosting is not provisioned.
+worker readiness. Production is now hosted; current runtime health must be
+checked through `/api/healthz`, `/api/readyz`, the persisted worker heartbeat
+and exact running image identities rather than inferred from this historical
+local gate.
 
 Первичный browser project token выпускают только публичные wallet-auth routes:
 сервер создаёт пятиминутный EIP-4361 challenge, а валидная локально проверенная
@@ -569,7 +571,7 @@ MCP не устанавливается на VDS и не публикуется 
 собирает его из своего checkout:
 
 ```bash
-npm install
+npm ci
 npm run build:mcp
 ```
 
@@ -733,15 +735,21 @@ not convert their focused evidence into a candidate, security, recovery or
 full-release PASS. After the deadline, run the ordinary Lane B/C matrix,
 candidate freeze and two independent verifiers over the accumulated tree.
 
-Current Consumer Lab restoration: production exposed
+Consumer Lab restoration `1717f27`: production exposed
 `CONSUMER_LAB_INVALID` after safe-consumer codegen because canonical artifact
 diagnostics and PostgreSQL `jsonb` diagnostics were compared with
 order-sensitive `JSON.stringify`. The bounded repair uses canonical semantic
 equality, preserves value/checksum/lifecycle fail-closed controls, and keeps a
-successfully generated artifact visible when report loading fails. Only the
-API and Web images may change in the incident rollout. The full Lane C matrix,
-candidate freeze and two independent reports remain explicitly deferred until
-after the deadline; this restoration is not a release or security PASS.
+successfully generated artifact visible when report loading fails.
+
+The follow-up Web-only restoration `dabda0d` fixes the verified-proof boundary:
+an active Consumer stage is `Ready`, selecting `?step=consumer` routes and
+scrolls to the `Verify consumer` action, and completed Consumer evidence remains
+read-only and addressable. It changed only the Web image. Focused Web tests,
+serial Web coverage, typecheck, build, Sites, Action and Mac desktop/mobile
+browser checks passed before the operator explicitly authorized the accelerated
+deploy. The normal candidate freeze and two independent release reports remain
+deferred; neither incident is a release or security PASS.
 
 029A is the credential-free local MLP validation and freeze. Product gates and
 user testing use recorded fixtures through local Docker Compose. 029A runs with
@@ -1143,15 +1151,28 @@ notes. This inventory records only stable identifiers and storage boundaries.
 | Active object store | Timeweb S3 `https://s3.twcstorage.ru`, region `ru-1`, bucket `orivra-backet`, path-style, private Standard/shared-pilot |
 | Excluded object-store authority | Swift credentials and endpoints are never installed or used; DigitalOcean Spaces remains historical V1 only |
 
-The prepared VDS source is synchronized from GitHub `main` into immutable
-`/opt/orivra/releases/<commit>` directories and selected through the atomic
-`/opt/orivra/current` symlink. The earlier prepared release and publication
-evidence were invalidated when the official verifier rejected the historical
-Open-Meteo `round` filter. They are not production authority. Final start must
-use a newly frozen, independently verified and published exact commit; the VDS
-must pull its five publication-authorized immutable digests and never a mutable
-tag. Docker registry config remains root-only mode `0600` with a read-only
-package token. The GHCR write token is never copied to the VDS.
+The VDS source is synchronized into immutable `/opt/orivra/releases/<commit>`
+directories and selected through `/opt/orivra/current`. At the 2026-08-15
+deadline snapshot the active source directory is
+`/opt/orivra/releases/1717f27415dfc975013de891c0080fa626a20284` while GitHub
+`main` has advanced through the Web fix. This split is intentional incident
+state, not a normal release candidate.
+
+The Web-only restoration is pinned to
+`ghcr.io/marshersusanin/orivra-web@sha256:e577643877b55b3b3e9594997f6fcec6115cb74c13ad729d9b8bd190f4f07da0`
+(`linux/amd64`). Its exact rollback image is
+`ghcr.io/marshersusanin/orivra-web@sha256:6a71d9ed6c787a3dac48a388f61f9979c2f85b61ee806b9ee3a37873f2549a8a`;
+the pre-switch mode-0400 runtime file is
+`/opt/orivra/runtime.env.rollback-web-dabda0d`. The incident recreated only
+`web`; API, worker, PostgreSQL and Caddy retained their running containers.
+Public `/api/healthz` returned `ok`, `/api/readyz` returned database/schema/
+worker `ready`, and the served JS SHA-256 matched the bytes inside the Web
+container. These observations are incident evidence, not full release or
+security evidence.
+
+All production images MUST remain immutable digest references. Docker registry
+config remains root-only mode `0600` with a read-only package token. The GHCR
+write token is never copied to the VDS.
 
 The dedicated Coston2 relayer public address is
 `0xf7726036892E1278a3dDC270098ddf9003cA05eb`; only its private key file is
@@ -1189,8 +1210,9 @@ Docker Engine `29.1.3`, Compose `2.40.3`, fail2ban and unattended upgrades are
 active. UFW denies inbound traffic by default, permits public 80/443, rate-limits
 22 and restricts the provider monitoring agent on 10050 to its explicit
 allowlist. PostgreSQL, API, worker and the Docker socket have no public listener.
-No application container is running until exact GHCR publication evidence and
-the required runtime credentials exist.
+Application containers are running. Any replacement or recovery invocation
+still fails closed unless its exact digest, required interpolation authority,
+secret inventory and persisted evidence are present.
 
 Credential storage and rotation rules:
 
@@ -1198,13 +1220,13 @@ Credential storage and rotation rules:
    mode-0400 classic PAT files for `write:packages` and `read:packages`;
 2. the VDS receives only the read-only package token and the runtime secret
    files required by Compose; the write token never reaches the VDS;
-3. GitHub, DigitalOcean, Spaces, verifier and relayer credentials are rotated at
+3. GitHub, DigitalOcean, Timeweb, verifier and relayer credentials are rotated at
    their providers; docs record only their scope/owner and the file that consumes
    them, never their values;
 4. any credential pasted into chat or a terminal is considered exposed and is
    revoked before the next deployment attempt;
 5. after every update verify `main`, the release commit/tree, publication and
-   staging evidence checksums, UFW, listening ports and exact image digests.
+   deployment/incident evidence, UFW, listening ports and exact image digests.
 
 ### Единая полная матрица перед MLP candidate freeze
 
@@ -1230,7 +1252,7 @@ backup/restore gates. До появления соответствующих che
 
 После единого full PASS фиксируются commit и tree hash. Два independent
 verifier одновременно, read-only, проверяют один и тот же tree. Credentials для
-DNS, SSH и Spaces выдаются strictly only after 022–029A, unified full matrix и
+DNS, SSH и Timeweb выдаются strictly only after 022–029A, unified full matrix и
 два независимых PASS; 028B не может начинаться раньше. Любая production-правка
 после freeze требует affected RED/fix, повторной unified matrix и нового exact
 tree hash.
@@ -1270,7 +1292,11 @@ npm run preview
 3. Запустите axe; результат обязан содержать `0` serious и `0` critical violations.
 4. Проверьте application console и network: без ошибок приложения, неожиданных failed requests и browser fetch произвольного source URL.
 5. Проверьте reload, back и forward, восстановление URL state, persisted draft/run/evidence и export с повторным parse.
-6. В Run Cockpit откройте `?step=request`, `round`, `proof`, `verify` и `consumer`: каждый маршрут обязан подсветить выбранный этап и показать его persisted evidence body; текущая CTA не должна подменять исторический этап.
+6. В Run Cockpit откройте `?step=request`, `round`, `proof`, `verify` и
+   `consumer`. Завершённый этап показывает persisted evidence body. Активный
+   Consumer после verified proof показывает `Ready`, прокручивает и переводит
+   фокус на `Verify consumer`; он не должен изображать ещё не созданное
+   consumer evidence.
 7. Запишите commit hash, tree hash, оба viewport, browser/harness, результаты axe, console/network и итоговый PASS либо findings.
 
 В репозитории пока нет команды, которая автоматизирует этот browser gate или выдаёт за него PASS. `npm run test:e2e` PASS не заменяет browser PASS; Product Integration Verification нельзя отметить PASS только на основании `test:e2e`.
@@ -1317,10 +1343,9 @@ PR использует local canonical bundle (`PROOFLINE_REPLAY_BUNDLE_PATH`) 
 Live flow имеет один общий timeout 10 минут. PASS требует persisted run identity, tx hash, voting round, proof checksum, успешную consumer verification, byte-identical replay и отсутствие rebroadcast после записанного tx hash.
 
 В репозитории нет `.github/workflows`; `packages/action/action.yml` — готовый
-Action package, а не доказательство настроенного CI. DigitalOcean VDS target
-выбран ADR 0029, но hosting is not yet provisioned. Live gate ожидаемо
-блокирован отсутствием размещённых API/worker/PostgreSQL, DNS, restricted SSH,
-Spaces/backup evidence и secrets. Не переводите merge queue на direct-worker
+Action package, а не доказательство настроенного CI. Production VDS, DNS,
+API/worker/PostgreSQL и Caddy уже работают, но GitHub merge-queue live gate не
+настроен и не может считаться PASS. Не переводите merge queue на direct-worker
 или simulation fallback.
 
 ## 10. Наблюдаемость и диагностика
@@ -1365,9 +1390,26 @@ Upstream Coston2 outage блокирует release. Override возможен т
 
 ## 11. Rollback и восстановление
 
-- Target provider выбран в ADR 0029. VDS is prepared and exact publication
-  evidence/images are installed, but application promotion/rollback automation
-  is not implemented and the production stack is not promoted or deployed.
+- Production is deployed on the ADR 0029 VDS. For the current Web-only incident,
+  rollback restores the captured mode-0400 runtime file and recreates only
+  `web`; it MUST NOT restart API, worker, PostgreSQL or Caddy:
+
+  ```bash
+  install -o root -g root -m 0400 \
+    /opt/orivra/runtime.env.rollback-web-dabda0d \
+    /opt/orivra/runtime.env
+  env PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT=/opt/orivra/replay-bootstrap-stage \
+    docker compose --project-name proofline-production-primary \
+      --env-file /opt/orivra/runtime.env \
+      -f /opt/orivra/current/compose.yaml \
+      -f /opt/orivra/current/deploy/compose.runtime.yaml \
+      -f /opt/orivra/current/deploy/compose.backup.yaml \
+      up -d --no-deps --pull never --no-build --force-recreate web
+  ```
+
+  After rollback verify the old digest, `/api/healthz`, `/api/readyz` and the
+  affected Mac-browser journey. The fixed replay-stage variable is required for
+  Compose interpolation only; this command does not start replay-bootstrap.
 - Staging и production выбирают verified remote digest из отдельного
   publication evidence, связанного с frozen release manifest checksum;
   server-side
