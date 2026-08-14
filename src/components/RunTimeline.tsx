@@ -4,7 +4,15 @@ import type { RunStage } from "../data/run";
 
 const stageIcons = { complete: Check, active: FileText, pending: Hourglass, failed: Warning };
 
-export function RunTimeline({ stages }: { stages: RunStage[] }) {
+export function RunTimeline({
+  stages,
+  stageHrefs = {},
+  activeStageKey,
+}: {
+  stages: RunStage[];
+  stageHrefs?: Partial<Record<string, string>>;
+  activeStageKey?: string;
+}) {
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,8 +32,9 @@ export function RunTimeline({ stages }: { stages: RunStage[] }) {
       <ol className="timeline" aria-label="Attestation lifecycle">
         {stages.map((stage, index) => {
           const Icon = stage.key === "consumer" && stage.state === "pending" ? UserCircle : stageIcons[stage.state];
-          return (
-            <li className={`timeline-stage is-${stage.state}`} key={stage.key}>
+          const href = stageHrefs[stage.key];
+          const content = (
+            <>
               <span className="stage-label">{stage.label}</span>
               <span className="stage-axis">
                 {index > 0 ? <span className="axis-line axis-before" aria-hidden="true" /> : null}
@@ -37,6 +46,20 @@ export function RunTimeline({ stages }: { stages: RunStage[] }) {
               <span className="stage-status">{stage.status}</span>
               <span className="stage-meta">{stage.time}</span>
               <span className="stage-meta">{stage.duration}</span>
+            </>
+          );
+          return (
+            <li className={`timeline-stage is-${stage.state}`} key={stage.key}>
+              {href ? (
+                <a
+                  className="stage-route"
+                  href={href}
+                  aria-current={activeStageKey === stage.key ? "step" : undefined}
+                  aria-label={`Open ${stage.label} stage · ${stage.status}`}
+                >
+                  {content}
+                </a>
+              ) : content}
             </li>
           );
         })}

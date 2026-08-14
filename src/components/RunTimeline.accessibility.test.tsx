@@ -27,4 +27,21 @@ describe("RunTimeline horizontal scroller accessibility", () => {
     await user.tab();
     expect(scroller).toHaveFocus();
   });
+
+  it("exposes restorable routes for every persisted lifecycle stage", () => {
+    render(
+      <RunTimeline
+        stages={TEST_RUN_STAGES}
+        stageHrefs={Object.fromEntries(
+          TEST_RUN_STAGES.map((stage) => [stage.key, `/runs/run_1?step=${stage.key}`]),
+        )}
+        activeStageKey="request"
+      />,
+    );
+
+    for (const stage of TEST_RUN_STAGES) {
+      expect(document.querySelector(`a[href="/runs/run_1?step=${stage.key}"]`)).not.toBeNull();
+    }
+    expect(document.querySelector('a[aria-current="step"]')).toHaveAccessibleName(/request stage/i);
+  });
 });

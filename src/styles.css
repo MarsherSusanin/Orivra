@@ -1426,11 +1426,34 @@ a {
 }
 
 .timeline-stage {
+  min-width: 0;
+  text-align: center;
+}
+
+.stage-route {
   display: flex;
   min-width: 0;
   flex-direction: column;
   align-items: center;
-  text-align: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.stage-route:hover .stage-node,
+.stage-route:focus-visible .stage-node,
+.stage-route[aria-current="step"] .stage-node {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 5px rgba(45, 200, 243, 0.11);
+}
+
+.stage-route:focus-visible {
+  outline: none;
+}
+
+.stage-route:hover .stage-label,
+.stage-route:focus-visible .stage-label,
+.stage-route[aria-current="step"] .stage-label {
+  color: var(--cyan-soft);
 }
 
 .stage-label {
@@ -1759,6 +1782,12 @@ a {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+}
+
+.run-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .recovery-action:focus-visible {

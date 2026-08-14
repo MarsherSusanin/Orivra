@@ -424,13 +424,17 @@ function recoveryDetail(recovery: RunRecoveryV1): string {
 function RecoveryPanel({
   recovery,
   projectAccess,
+  canReviewPreflight,
   onRefresh,
+  onReviewPreflight,
   onCreateRun,
   onReview,
 }: {
   recovery: RunRecoveryV1;
   projectAccess: boolean;
+  canReviewPreflight: boolean;
   onRefresh(): void;
+  onReviewPreflight(): void;
   onCreateRun(): void;
   onReview(): void;
 }) {
@@ -459,17 +463,24 @@ function RecoveryPanel({
       {"retryAfter" in recovery && recovery.retryAfter ? (
         <p className="run-recovery-next">Expected wait until {new Date(recovery.retryAfter).toLocaleTimeString("en", { timeZone: "UTC", timeZoneName: "short" })}</p>
       ) : null}
-      {recovery.state === "retryable" ? (
-        <button className="recovery-action" type="button" onClick={onRefresh}>
-          <ArrowClockwise size={19} aria-hidden="true" />Refresh status
-        </button>
-      ) : null}
-      {recovery.state === "terminal" && recovery.retrySafety === "new-run-required" && projectAccess ? (
-        <button className="recovery-action" type="button" onClick={onCreateRun}>Create new run</button>
-      ) : null}
-      {recovery.state === "terminal" && recovery.retrySafety === "operator-review" ? (
-        <button className="recovery-action" type="button" onClick={onReview}>Review evidence</button>
-      ) : null}
+      <div className="run-recovery-actions">
+        {canReviewPreflight ? (
+          <button className="recovery-action" type="button" onClick={onReviewPreflight}>
+            Review preflight evidence
+          </button>
+        ) : null}
+        {recovery.state === "retryable" ? (
+          <button className="recovery-action" type="button" onClick={onRefresh}>
+            <ArrowClockwise size={19} aria-hidden="true" />Refresh status
+          </button>
+        ) : null}
+        {recovery.state === "terminal" && recovery.retrySafety === "new-run-required" && projectAccess ? (
+          <button className="recovery-action" type="button" onClick={onCreateRun}>Create new run</button>
+        ) : null}
+        {recovery.state === "terminal" && recovery.retrySafety === "operator-review" ? (
+          <button className="recovery-action" type="button" onClick={onReview}>Review evidence</button>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -498,11 +509,28 @@ function writeDiagnosticsPanel(open: boolean): void {
   writeSecondaryPanel(open ? "diagnostics" : null);
 }
 
-type RunJourneyStep = "preflight" | "submission";
+type RunStageRoute = keyof HydratedRunView["stages"];
+type RunJourneyStep = RunStageRoute | "submission";
+
+const RUN_JOURNEY_STEPS = new Set<RunJourneyStep>([
+  "preflight",
+  "submission",
+  "request",
+  "round",
+  "proof",
+  "verify",
+  "consumer",
+]);
 
 function runStepFromLocation(): RunJourneyStep | null {
   const step = new URLSearchParams(globalThis.location?.search ?? "").get("step");
-  return step === "preflight" || step === "submission" ? step : null;
+  return RUN_JOURNEY_STEPS.has(step as RunJourneyStep) ? step as RunJourneyStep : null;
+}
+
+function runStepHref(step: RunJourneyStep): string {
+  const url = new URL(globalThis.location.href);
+  url.searchParams.set("step", step);
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 function writeRunStep(step: RunJourneyStep): void {
@@ -611,7 +639,8 @@ function RunCockpit({
   );
   const isProjectAccess = resolvedToken.startsWith("project_");
   const effectiveRunStep = runStep ?? (
-    hydratedRun?.stages.preflight === "active" || hydratedRun?.stages.preflight === "failed"
+    !hydratedRun?.recovery &&
+    (hydratedRun?.stages.preflight === "active" || hydratedRun?.stages.preflight === "failed")
       ? "preflight"
       : null
   );
@@ -1017,8 +1046,28 @@ function RunCockpit({
   const handoffReady = consumerTerminal || readOnlyHandoff;
   const proofAvailable = hydratedRun.stages.proof === "completed";
   const activeStage = currentStage(hydratedRun.stages);
+  const selectedTimelineStage: RunStageRoute = effectiveRunStep && effectiveRunStep !== "submission"
+    ? effectiveRunStep
+    : effectiveRunStep === "submission"
+      ? "request"
+      : activeStage.stage;
+  const viewedStage = effectiveRunStep && effectiveRunStep !== "submission"
+    ? { stage: effectiveRunStep, state: hydratedRun.stages[effectiveRunStep] }
+    : activeStage;
   const activeStageLabel = sentenceCase(activeStage.stage);
-  const waitingCopy = pendingActionCopy(activeStage.stage, activeStage.state);
+  const viewedStageLabel = sentenceCase(viewedStage.stage);
+  const waitingCopy = pendingActionCopy(viewedStage.stage, viewedStage.state);
+  const timelineStageHrefs = Object.fromEntries(
+    RUN_STAGE_ORDER.map((stage) => {
+      const step: RunJourneyStep = stage === "request" &&
+        hydratedRun.stages.preflight === "completed" &&
+        hydratedRun.stages.request === "pending" &&
+        !hydratedRun.recovery
+        ? "submission"
+        : stage;
+      return [stage, runStepHref(step)];
+    }),
+  );
   const refreshStatus = () => {
     setHydrationError("");
     setHydrationRevision((value) => value + 1);
@@ -1072,18 +1121,12 @@ function RunCockpit({
                 </span>
               ) : null}
             </header>
-            <RunTimeline stages={timeline} />
-            {hydratedRun.recovery ? (
-              <RecoveryPanel
-                recovery={hydratedRun.recovery}
-                projectAccess={isProjectAccess}
-                onRefresh={refreshStatus}
-                onCreateRun={createReplacementRun}
-                onReview={() => {
-                  if (!diagnosticExpanded) toggleDiagnostics();
-                }}
-              />
-            ) : showsPreflightWorkbench ? (
+            <RunTimeline
+              stages={timeline}
+              stageHrefs={timelineStageHrefs}
+              activeStageKey={selectedTimelineStage}
+            />
+            {showsPreflightWorkbench ? (
               <PreflightWorkbench
                 state={preflightReportState}
                 readOnly={!isProjectAccess}
@@ -1129,6 +1172,23 @@ function RunCockpit({
                   </div>
                 </section>
               )
+            ) : hydratedRun.recovery && (
+              !effectiveRunStep || effectiveRunStep === hydratedRun.recovery.stage
+            ) ? (
+              <RecoveryPanel
+                recovery={hydratedRun.recovery}
+                projectAccess={isProjectAccess}
+                canReviewPreflight={
+                  hydratedRun.stages.preflight === "completed" ||
+                  hydratedRun.recovery.preservedEvidence.includes("preflight")
+                }
+                onRefresh={refreshStatus}
+                onReviewPreflight={returnToPreflight}
+                onCreateRun={createReplacementRun}
+                onReview={() => {
+                  if (!diagnosticExpanded) toggleDiagnostics();
+                }}
+              />
             ) : (
             <section className="next-action" aria-labelledby="next-action-title">
               <span className="next-action-icon" aria-hidden="true"><FileMagnifyingGlass size={51} /></span>
@@ -1167,8 +1227,8 @@ function RunCockpit({
                   <>
                     <h2 id="next-action-title">{waitingCopy.title}</h2>
                     <p>{waitingCopy.description}</p>
-                    <span className={`stage-waiting-state is-${activeStage.state}`}>
-                      {activeStageLabel} · {sentenceCase(activeStage.state)}
+                    <span className={`stage-waiting-state is-${viewedStage.state}`}>
+                      {viewedStageLabel} · {sentenceCase(viewedStage.state)}
                     </span>
                   </>
                 )}

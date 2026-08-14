@@ -1,8 +1,10 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   RUN_ID,
   exactTrustManifest,
+  validPreflightReport,
   validManifest,
 } from "../packages/contracts/test/fixtures";
 import { decodeComposerDraftV1, finalizeWeb2JsonManifestDraft } from "../packages/domain/src";
@@ -155,6 +157,46 @@ describe("Slice 018 recovery surface", () => {
     } else {
       expect(screen.queryByRole("button", { name: /retry command/i })).not.toBeInTheDocument();
     }
+  });
+
+  it("keeps an explicit route back to completed preflight while recovery is scheduled", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", `/runs/${RUN_ID}`);
+    sessionStorage.setItem("proofline:project-token", PROJECT_TOKEN);
+    const wallet = createProjectWalletAccessFixture(PROJECT_TOKEN);
+    const retryingRequest = {
+      ...run("retryable"),
+      stages: {
+        ...run("retryable").stages,
+        preflight: "completed",
+        request: "active",
+      },
+      recovery: {
+        ...recovery("retryable"),
+        stage: "request",
+        preservedEvidence: ["preflight"],
+      },
+    } as unknown as HydratedRunView;
+    const services = surface(vi.fn().mockResolvedValue(retryingRequest));
+    services.getPreflightReport = vi.fn().mockResolvedValue(validPreflightReport);
+    render(<App services={services} walletAccess={wallet.walletAccess} />);
+
+    await user.click(await screen.findByRole("button", { name: /review preflight evidence/i }));
+
+    expect(window.location.search).toBe("?step=preflight");
+    expect(await screen.findByRole("region", { name: /preflight workbench/i })).toBeVisible();
+    expect(screen.queryByRole("region", { name: /run recovery/i })).not.toBeInTheDocument();
+  });
+
+  it("renders a restorable future-stage status route without losing the persisted recovery default", async () => {
+    window.history.replaceState({}, "", `/runs/${RUN_ID}?step=round`);
+    sessionStorage.setItem("proofline:project-token", PROJECT_TOKEN);
+    const wallet = createProjectWalletAccessFixture(PROJECT_TOKEN);
+    render(<App services={surface(vi.fn().mockResolvedValue(run("retryable")))} walletAccess={wallet.walletAccess} />);
+
+    expect(await screen.findByRole("heading", { name: /waiting for round/i })).toBeVisible();
+    expect(screen.getByRole("link", { name: /open round stage/i })).toHaveAttribute("aria-current", "step");
+    expect(screen.queryByRole("region", { name: /run recovery/i })).not.toBeInTheDocument();
   });
 
   it("keeps persisted evidence visible when polling goes offline and offers one refresh", async () => {

@@ -124,6 +124,8 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
 - Show `Proof available`, consumer verification and bundle export only after the persisted proof stage is `completed`; earlier states surface the current stage without implying proof readiness.
 - Keep route filters, Composer step and the active secondary panel in restorable
   URL state so reload, back and forward preserve the user's context.
+- Keep every Run Cockpit lifecycle stage addressable through restorable URL state;
+  completed preflight evidence remains directly reviewable while recovery is active.
 - Keep the dark graphite palette, cyan active state, green completed state, amber diagnostic state, thin dividers, compact developer-tool density, and code-native English UI copy.
 - Keep one persistent global SIWE indicator in the top bar. Ordinary anonymous routes show `Sign in with wallet`; authenticated routes show a locally derived identicon, shortened verified address and an accessible profile menu. Mobile keeps the identicon and menu while hiding the address. Call the identity `Verified wallet`, not `Connected wallet`, because SIWE does not imply a live provider connection.
 - Never mix browser-wallet chrome with run-scoped share or caller-supplied project-token authority. Those routes show only neutral `Shared access` or `Token access`, never restore the browser session and never open the SIWE dialog.
