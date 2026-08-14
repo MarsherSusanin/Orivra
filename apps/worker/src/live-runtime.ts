@@ -134,12 +134,13 @@ function httpsDispatch(input: {
         method: "GET",
         signal: input.signal,
         servername: input.url.hostname,
-        lookup: (_hostname, _options, callback) => {
-          callback(
-            null,
-            input.pinnedAddress,
-            input.pinnedAddress.includes(":") ? 6 : 4,
-          );
+        lookup: (_hostname, options, callback) => {
+          const family = input.pinnedAddress.includes(":") ? 6 : 4;
+          if (options.all) {
+            callback(null, [{ address: input.pinnedAddress, family }]);
+            return;
+          }
+          callback(null, input.pinnedAddress, family);
         },
       },
       (response) => {
