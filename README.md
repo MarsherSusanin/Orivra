@@ -29,7 +29,9 @@ consumer verification → evidence handoff`. Если consumer принимае�
 
 Run Cockpit оставляет пользователю одну последовательность стадий, следующий
 безопасный шаг и точные evidence artifacts вместо набора несвязанных
-blockchain-операций.
+blockchain-операций. Каждый persisted lifecycle-этап открывается своим
+restorable `?step=` маршрутом: пройденные Request, Round, Proof, Verify и
+Consumer показывают собственные сохранённые факты, а не повторяют текущую CTA.
 
 ## Текущий статус
 

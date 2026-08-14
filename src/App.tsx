@@ -24,6 +24,7 @@ import {
   type PreflightReportSurfaceState,
 } from "./components/PreflightWorkbench";
 import { RunTimeline } from "./components/RunTimeline";
+import { RunStageEvidence } from "./components/RunStageEvidence";
 import { RunsIndex } from "./components/RunsIndex";
 import { Sidebar } from "./components/Sidebar";
 import { SubmissionDecision } from "./components/SubmissionDecision";
@@ -646,6 +647,11 @@ function RunCockpit({
   );
   const showsPreflightWorkbench = effectiveRunStep === "preflight";
   const showsSubmissionDecision = effectiveRunStep === "submission";
+  const reviewedPersistedStage = effectiveRunStep &&
+    effectiveRunStep !== "preflight" &&
+    effectiveRunStep !== "submission"
+      ? effectiveRunStep
+      : null;
   const needsPreflightReport = showsPreflightWorkbench || showsSubmissionDecision;
 
   useEffect(() => {
@@ -1172,6 +1178,8 @@ function RunCockpit({
                   </div>
                 </section>
               )
+            ) : reviewedPersistedStage ? (
+              <RunStageEvidence run={hydratedRun} stage={reviewedPersistedStage} />
             ) : hydratedRun.recovery && (
               !effectiveRunStep || effectiveRunStep === hydratedRun.recovery.stage
             ) ? (

@@ -1236,7 +1236,8 @@ npm run preview
 3. Запустите axe; результат обязан содержать `0` serious и `0` critical violations.
 4. Проверьте application console и network: без ошибок приложения, неожиданных failed requests и browser fetch произвольного source URL.
 5. Проверьте reload, back и forward, восстановление URL state, persisted draft/run/evidence и export с повторным parse.
-6. Запишите commit hash, tree hash, оба viewport, browser/harness, результаты axe, console/network и итоговый PASS либо findings.
+6. В Run Cockpit откройте `?step=request`, `round`, `proof`, `verify` и `consumer`: каждый маршрут обязан подсветить выбранный этап и показать его persisted evidence body; текущая CTA не должна подменять исторический этап.
+7. Запишите commit hash, tree hash, оба viewport, browser/harness, результаты axe, console/network и итоговый PASS либо findings.
 
 В репозитории пока нет команды, которая автоматизирует этот browser gate или выдаёт за него PASS. `npm run test:e2e` PASS не заменяет browser PASS; Product Integration Verification нельзя отметить PASS только на основании `test:e2e`.
 
