@@ -144,6 +144,9 @@ function httpsDispatch(input: {
         },
       },
       (response) => {
+        const connectedAddress = normalizeConnectedAddress(
+          response.socket.remoteAddress,
+        );
         const chunks: Uint8Array[] = [];
         let size = 0;
         response.on("data", (chunk: Buffer) => {
@@ -165,9 +168,7 @@ function httpsDispatch(input: {
           );
           resolve({
             status: response.statusCode ?? 0,
-            connectedAddress: normalizeConnectedAddress(
-              response.socket.remoteAddress,
-            ),
+            connectedAddress,
             headers,
             body: new Uint8Array(Buffer.concat(chunks)),
           });
