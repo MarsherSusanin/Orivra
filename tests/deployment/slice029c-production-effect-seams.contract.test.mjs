@@ -201,6 +201,12 @@ test("production deploys the two exact built-ins through pinned official Coston2
   });
 });
 
+test("production compiler accepts solc-normalized invariant import paths", async () => {
+  const source = await readFile(resolve(root, "apps/worker/src/safe-consumer-deployer-entry.ts"), "utf8");
+  assert.match(source, /path\.endsWith\("ProoflineUrlInvariant\.sol"\)/);
+  assert.doesNotMatch(source, /path\.endsWith\("\/ProoflineUrlInvariant\.sol"\)/);
+});
+
 test("consumer deployment fails closed for secret, compiler, chain, balance, receipt, bytecode and duplicate-address faults", async () => {
   const module = await deploymentRuntime();
   assert.equal(typeof module.runProductionSafeConsumerDeployment, "function");

@@ -64,7 +64,7 @@ async function createCompiler() {
         import(path: string) {
           if (path.endsWith("/IWeb2Json.sol")) return { contents: iWeb2Json };
           if (path.endsWith("/ContractRegistry.sol")) return { contents: registry };
-          if (path.endsWith("/ProoflineUrlInvariant.sol")) return { contents: invariant };
+          if (path.endsWith("ProoflineUrlInvariant.sol")) return { contents: invariant };
           return { error: "Unsupported production Solidity import" };
         },
       }));
