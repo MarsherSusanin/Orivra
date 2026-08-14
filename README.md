@@ -1,10 +1,32 @@
-# Orivra
+<div align="center">
+  <img src="src/assets/orivra-mark.svg" width="96" height="96" alt="Orivra logo" />
 
-**Evidence-backed URL trust for Flare Web2Json consumers.**
+  <h1>Orivra</h1>
 
-[Website](https://orivra.xyz) · [Canonical URL attack demo](https://orivra.xyz/demo/canonical-url) · [Architecture](ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Apache-2.0 license](LICENSE)
+  <p><strong>Verify the connection, not just the proof.</strong></p>
+  <p>Evidence-backed URL trust for Flare Web2Json consumers.</p>
 
-![Orivra Run Cockpit showing the persisted Web2Json lifecycle](proofline-run-cockpit-reference.png)
+  <p>
+    <a href="#flare-and-coston2-integration-path"><img src="https://img.shields.io/badge/Flare-Coston2-E62058?style=flat-square" alt="Flare Coston2" /></a>
+    <a href="#flare-and-coston2-integration-path"><img src="https://img.shields.io/badge/FDC-Web2Json-22C7E8?style=flat-square" alt="FDC Web2Json" /></a>
+    <a href="#local-ai-agent-connector"><img src="https://img.shields.io/badge/MCP-Agent--ready-16D6A3?style=flat-square" alt="MCP agent-ready" /></a>
+    <a href="package.json"><img src="https://img.shields.io/badge/TypeScript-7-3178C6?style=flat-square&amp;logo=typescript&amp;logoColor=white" alt="TypeScript 7" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-2EA44F?style=flat-square" alt="Apache-2.0 license" /></a>
+  </p>
+
+  <p>
+    <a href="https://orivra.xyz">Website</a> ·
+    <a href="https://orivra.xyz/demo/canonical-url">Canonical URL attack demo</a> ·
+    <a href="ARCHITECTURE.md">Architecture</a> ·
+    <a href="CONTRIBUTING.md">Contributing</a> ·
+    <a href="SECURITY.md">Security</a>
+  </p>
+</div>
+
+<p align="center">
+  <img src="proofline-run-cockpit-reference.png" width="100%" alt="Orivra Run Cockpit showing the persisted Web2Json lifecycle" />
+</p>
+<p align="center"><sub>Run Cockpit: the persisted Coston2 Web2Json lifecycle from source preflight to integration package.</sub></p>
 
 ## Problem and target user
 
