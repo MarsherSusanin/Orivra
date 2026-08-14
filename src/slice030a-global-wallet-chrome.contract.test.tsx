@@ -104,8 +104,9 @@ describe("Slice 030A global wallet session chrome", () => {
     expect(document.body.innerHTML).not.toContain(TOKEN);
     await user.click(profile);
     const menu = screen.getByRole("menu", { name: "Wallet profile" });
-    expect(menu).toHaveTextContent("Verified wallet");
-    expect(menu).toHaveTextContent(ADDRESS);
+    const popover = menu.closest<HTMLElement>(".wallet-profile-menu");
+    expect(popover).toHaveTextContent("Verified wallet");
+    expect(popover).toHaveTextContent(ADDRESS);
     expect(within(menu).getByRole("menuitem", { name: "Account settings" })).toHaveAttribute("href", "/app/settings");
 
     await waitFor(() => expect(within(menu).getByRole("menuitem", { name: "Copy address" })).toHaveFocus());
@@ -175,6 +176,9 @@ describe("Slice 030A global wallet session chrome", () => {
     await user.click(screen.getByRole("button", { name: "Confirm sign out" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Server sign out is unavailable");
     expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
+    const dialog = screen.getByRole("dialog", { name: "Sign out this browser?" });
+    await user.tab({ shift: true });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
     await user.click(screen.getByRole("button", { name: "Forget this browser" }));
     expect(await within(topbar()).findByRole("button", { name: "Sign in with wallet" })).toBeVisible();
   });

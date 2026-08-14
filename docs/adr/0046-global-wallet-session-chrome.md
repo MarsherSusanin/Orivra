@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted; Slice 030A corrective RED after first independent Core FAIL.
+Accepted; Slice 030A corrective Author GREEN, independent reverification pending.
 
 ## Context
 

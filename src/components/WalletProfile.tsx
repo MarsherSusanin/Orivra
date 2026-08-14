@@ -73,8 +73,17 @@ function focusMenuItem(menu: HTMLElement | null, offset: number) {
   items[(active + offset + items.length) % items.length]?.focus();
 }
 
+function dialogFocusables(dialog: HTMLElement | null): HTMLElement[] {
+  return Array.from(
+    dialog?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) ?? [],
+  ).filter((element) => element.getAttribute("aria-hidden") !== "true");
+}
+
 function SignOutDialog({ onClose }: { onClose(): void }) {
   const { snapshot, signOut, retry, forgetBrowser } = useWalletSession();
+  const dialogRef = useRef<HTMLElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const pending = snapshot.status === "signing-out";
   const failed = snapshot.status === "unavailable" && snapshot.operation === "sign-out";
@@ -84,20 +93,45 @@ function SignOutDialog({ onClose }: { onClose(): void }) {
   }, []);
 
   useEffect(() => {
+    if (pending) dialogRef.current?.focus();
+  }, [pending]);
+
+  useEffect(() => {
     if (snapshot.status === "anonymous") onClose();
   }, [onClose, snapshot.status]);
 
   return (
     <div className="dialog-backdrop wallet-signout-backdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="wallet-signout-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="wallet-signout-title"
+        tabIndex={-1}
         onKeyDown={(event) => {
           if (event.key === "Escape" && !pending) {
             event.preventDefault();
             onClose();
+            return;
+          }
+          if (event.key !== "Tab") return;
+          const items = dialogFocusables(dialogRef.current);
+          if (items.length === 0) {
+            event.preventDefault();
+            dialogRef.current?.focus();
+            return;
+          }
+          const first = items[0];
+          const last = items[items.length - 1];
+          const active = document.activeElement;
+          const activeIndex = items.indexOf(active as HTMLElement);
+          if (event.shiftKey && (active === first || activeIndex === -1)) {
+            event.preventDefault();
+            last?.focus();
+          } else if (!event.shiftKey && (active === last || activeIndex === -1)) {
+            event.preventDefault();
+            first?.focus();
           }
         }}
       >
@@ -158,6 +192,7 @@ function WalletProfileSession({
   const [copied, setCopied] = useState(false);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const verifiedAddressRef = useRef("");
   const authenticatedAddress =
@@ -192,7 +227,7 @@ function WalletProfileSession({
     const closeOutside = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (!menuRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
+      if (!popoverRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
         closeMenu(false);
       }
     };
@@ -269,38 +304,40 @@ function WalletProfileSession({
         <CaretDown size={14} weight="bold" aria-hidden="true" />
       </button>
       {menuOpen ? (
-        <div ref={menuRef} className="wallet-profile-menu" role="menu" aria-label="Wallet profile" onKeyDown={menuKeys}>
+        <div ref={popoverRef} className="wallet-profile-menu">
           <header>
             <span><CheckCircle size={16} weight="fill" aria-hidden="true" />Verified wallet</span>
             <code>{address}</code>
           </header>
-          <button
-            role="menuitem"
-            type="button"
-            onClick={async () => {
-              try {
-                const clipboard = navigator.clipboard;
-                if (!clipboard?.writeText) throw new Error("Clipboard is unavailable");
-                await clipboard.writeText.call(clipboard, address);
-                setCopied(true);
-              } catch {
-                setCopied(false);
-              }
-            }}
-          >
-            <Copy size={17} aria-hidden="true" />{copied ? "Address copied" : "Copy address"}
-          </button>
-          <a role="menuitem" href="/app/settings"><Gear size={17} aria-hidden="true" />Account settings</a>
-          <button
-            role="menuitem"
-            type="button"
-            onClick={() => {
-              closeMenu(false);
-              setConfirmingSignOut(true);
-            }}
-          >
-            <SignOut size={17} aria-hidden="true" />Sign out
-          </button>
+          <div ref={menuRef} role="menu" aria-label="Wallet profile" onKeyDown={menuKeys}>
+            <button
+              role="menuitem"
+              type="button"
+              onClick={async () => {
+                try {
+                  const clipboard = navigator.clipboard;
+                  if (!clipboard?.writeText) throw new Error("Clipboard is unavailable");
+                  await clipboard.writeText.call(clipboard, address);
+                  setCopied(true);
+                } catch {
+                  setCopied(false);
+                }
+              }}
+            >
+              <Copy size={17} aria-hidden="true" />{copied ? "Address copied" : "Copy address"}
+            </button>
+            <a role="menuitem" href="/app/settings"><Gear size={17} aria-hidden="true" />Account settings</a>
+            <button
+              role="menuitem"
+              type="button"
+              onClick={() => {
+                closeMenu(false);
+                setConfirmingSignOut(true);
+              }}
+            >
+              <SignOut size={17} aria-hidden="true" />Sign out
+            </button>
+          </div>
         </div>
       ) : null}
       {confirmingSignOut ? <SignOutDialog onClose={() => {
