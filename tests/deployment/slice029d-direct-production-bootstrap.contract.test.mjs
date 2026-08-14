@@ -173,6 +173,7 @@ test("replay bootstrap is production-only, bounded and cannot import a test adap
   ]) assert.throws(() => module.validateProductionReplayBootstrapResult(invalid), /PRODUCTION_REPLAY_BOOTSTRAP_INVALID/);
   assert.match(source, /production-replay-bootstrap/);
   assert.match(source, /PREFLIGHT_NOT_READY[\s\S]*await runtime\.processOne\(\)/);
+  assert.match(source, /projection\.proofVerified === true \|\|[\s\S]*projection\.stages\?\.verify === "completed"/);
   assert.doesNotMatch(source, /NODE_ENV|test-adapter|fixture|startOrdinaryWorker|bypass/i);
 });
 

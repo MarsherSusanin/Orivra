@@ -225,7 +225,9 @@ async function main(environment: NodeJS.ProcessEnv = process.env) {
           return {
             runId: submittedRunId,
             stage: projection.terminal === true && projection.consumerVerified === true ? "completed" : "failed",
-            proofVerified: projection.proofVerified === true,
+            proofVerified:
+              projection.proofVerified === true ||
+              projection.stages?.verify === "completed",
             manifestSha256: OPEN_METEO_RELAYER,
             request: relayerDetail.manifest.request,
             consumer: relayerDetail.manifest.consumer,
