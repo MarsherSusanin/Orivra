@@ -365,6 +365,19 @@ function composeArguments(action, services = []) {
   return args;
 }
 
+export async function runSynchronousSafeConsumerDeployer({ environment, runProcess: invoke = runProcess } = {}) {
+  const runId = environment?.PROOFLINE_PRODUCTION_RUN_ID;
+  if (!RUN_ID.test(runId ?? "") ||
+    environment.PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT !== `${DEPLOYER_STAGING_ROOT}/${runId}` ||
+    typeof invoke !== "function") {
+    throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID", "Safe-consumer deployer authority is invalid");
+  }
+  await invoke("/usr/bin/docker", composeArguments([
+    "run", "--rm", "--no-deps", "--pull", "never",
+  ], ["safe-consumer-deployer"]), { environment });
+  return Object.freeze({ status: "passed" });
+}
+
 export function createPreservedCurrentNodeArguments(path, arguments_ = []) {
   if (typeof path !== "string" || !path.startsWith(`${CURRENT_ROOT}/scripts/`) ||
     !path.endsWith(".mjs") || !Array.isArray(arguments_) ||
@@ -431,6 +444,8 @@ function defaultAdapters() {
       }
       if (input.phase === "start-caddy-candidate") {
         await runProcess("/usr/bin/docker", composeArguments(["config", "--quiet"]), { environment: env });
+      } else if (input.phase === "safe-consumer-deployer") {
+        await runSynchronousSafeConsumerDeployer({ environment: env });
       } else {
         await runProcess("/usr/bin/docker", composeArguments(["up", "--detach", "--no-build", "--pull", "never", "--force-recreate"], input.services), { environment: env });
       }

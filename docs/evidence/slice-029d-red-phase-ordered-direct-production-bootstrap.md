@@ -460,3 +460,22 @@ restore/verify/cleanup envelopes. The Core FAIL report is
 the Product FAIL report is
 `/private/tmp/orivra-release-a56/verifiers/a5612ea/product-verifier.md`, SHA-256
 `0b576be53226a329459793fd5216f2595b0eaaa0260633efb2a3d857163bcf87`.
+
+## Post-publication safe-consumer deployer race correction
+
+A bounded production-host attempt reached the fixed deployer phase but created
+an empty run-scoped stage. No deployer container remained, and the observed
+relayer nonce was `0x0`, so this attempt supplies no consumer-deployment,
+transaction or deployment-PASS evidence. Source audit isolated the cause: the
+production host used detached `compose up` and immediately attempted to seal
+the still-empty staging pair.
+
+The corrective contract first failed because the production-used synchronous
+deployer seam was absent. The GREEN replacement invokes the one fixed service
+once with `docker compose run --rm --no-deps --pull never
+safe-consumer-deployer`, waits for status zero before seal, propagates a
+nonzero exit without retry or seal, and leaves all unrelated Compose phases
+unchanged. The exact host-command suite is 21/21 PASS, including the causal
+pending-process, argv, single-attempt and failure-before-seal checks. This is
+local author evidence only; it performs no Docker, registry, VDS, credential
+or network effect and is not an independent or deployed-production PASS.

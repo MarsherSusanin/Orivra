@@ -389,6 +389,75 @@ test("maps fixed database-first Compose phases without public Caddy cutover or c
   }), /TIMEWEB_HOST_COMMAND_INVALID|services/i);
 });
 
+test("awaits the fixed safe-consumer deployer one-shot before sealing and never detaches or retries", async () => {
+  const module = await feature();
+  assert.equal(typeof module.runSynchronousSafeConsumerDeployer, "function");
+  const environment = Object.freeze({
+    PATH: "/usr/bin:/bin",
+    PROOFLINE_PRODUCTION_RUN_ID: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+    PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT: "/opt/orivra/deployer-staging/prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+  });
+  const calls = [];
+  let release;
+  let settled = false;
+  const pending = module.runSynchronousSafeConsumerDeployer({
+    environment,
+    runProcess: async (executable, arguments_, options) => {
+      calls.push({ executable, arguments_, options });
+      await new Promise((resolvePromise) => { release = resolvePromise; });
+      return "";
+    },
+  }).then((result) => { settled = true; return result; });
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.equal(settled, false);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], {
+    executable: "/usr/bin/docker",
+    arguments_: [
+      "compose",
+      "--file", "/opt/orivra/current/compose.yaml",
+      "--file", "/opt/orivra/current/deploy/compose.runtime.yaml",
+      "--file", "/opt/orivra/current/deploy/compose.backup.yaml",
+      "--project-name", PROJECT,
+      "run", "--rm", "--no-deps", "--pull", "never", "safe-consumer-deployer",
+    ],
+    options: { environment },
+  });
+  assert.equal(calls[0].arguments_.includes("up"), false);
+  assert.equal(calls[0].arguments_.includes("--detach"), false);
+  assert.equal(calls[0].arguments_.includes("--force-recreate"), false);
+  assert.equal(calls[0].arguments_.includes("--no-build"), false);
+  release();
+  assert.deepEqual(await pending, { status: "passed" });
+
+  const failures = [];
+  await assert.rejects(module.runSynchronousSafeConsumerDeployer({
+    environment,
+    runProcess: async (...input) => {
+      failures.push(input);
+      throw Object.assign(new Error("deployer exited 17"), { exitCode: 17 });
+    },
+  }), /deployer exited 17/);
+  assert.equal(failures.length, 1);
+
+  let sealCalls = 0;
+  await assert.rejects(module.runTimewebProductionHostCommand({
+    encodedCommand: command("safe-consumer-deployer", { images }),
+    adapters: {
+      evidence: {
+        inspectSafeConsumerPair: async () => ({ deploymentEvidence: "absent", registry: "absent" }),
+        sealStagingPair: async () => { sealCalls += 1; throw new Error("must not seal"); },
+      },
+      compose: { runExactPhase: async () => { throw new Error("deployer exited 17"); } },
+    },
+  }), /deployer exited 17/);
+  assert.equal(sealCalls, 0);
+
+  const hostSource = await readFile(scriptPath, "utf8");
+  const composeAdapter = hostSource.slice(hostSource.indexOf("compose: { async runExactPhase"), hostSource.indexOf("evidence: {"));
+  assert.match(composeAdapter, /safe-consumer-deployer[\s\S]*runSynchronousSafeConsumerDeployer\s*\(/);
+});
+
 test("owns the fixed replay-bootstrap staging directory across setup, Compose, seal and cleanup", async () => {
   const module = await feature();
   assert.equal(typeof module.runOwnedReplayBootstrapStageLifecycle, "function");

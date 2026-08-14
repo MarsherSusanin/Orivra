@@ -871,6 +871,14 @@ runtime copy is bound read-only into the non-root worker. It is not evidence and
 is removed with the run. The phases are separate so Compose does not create a
 bind source before the deployer and root seal commit it.
 
+The safe-consumer deployer is the exception to detached long-lived phase
+startup. The host runs the fixed service synchronously as
+`docker compose ... run --rm --no-deps --pull never safe-consumer-deployer`,
+awaits its one exit, and seals staging only after status zero. Do not use
+`compose up --detach` for this phase: it can return while the run-scoped stage
+is still empty. A nonzero exit is not retried and must leave canonical evidence
+and deployment PASS absent.
+
 Before the first production Docker command, the host validates
 `/opt/orivra/secrets` as a root-owned mode-0500 non-symlink directory. Every
 Compose secret source must be its exact fixed regular non-symlink mode-0400

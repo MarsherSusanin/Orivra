@@ -1,6 +1,6 @@
 # Slice 029D — Phase-ordered direct-production bootstrap
 
-Status: Corrective Author GREEN after independent Core FAIL on c737113; independent reverification pending
+Status: Post-publication deployer corrective Author GREEN; independent reverification pending; no final deployment acceptance
 
 Decision: [ADR 0045](../adr/0045-phase-ordered-direct-production-bootstrap.md)
 
@@ -32,6 +32,10 @@ acceptance or rollback authority.
   unavailable to the one-shot;
 - actual bundle manifest/run and preflight run/canonical URL are verified
   before staging; invented metadata cannot stand in for exported bytes;
+- `safe-consumer-deployer` executes exactly once in the foreground through
+  fixed `compose run --rm --no-deps --pull never` authority; status zero must
+  precede staging seal, and failure yields no retry, seal or final deployment
+  acceptance evidence;
 - the host alone owns the fixed mode-0700 UID/GID-1000 replay staging directory,
   rejects pre-existing/symlink paths and cleans only its owned path after
   success or failure;

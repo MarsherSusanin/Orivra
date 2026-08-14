@@ -39,7 +39,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 029A | Local MLP validation and candidate freeze | Complete; Core and Product PASS `fc2f6e0` / `f7cebc6`, candidate SHA-256 `8991e7e4…0cdda` |
 | 029B | Exact-digest production promotion and seven-day canary | Historical V1 retained; active effect path superseded by ADR 0044 |
 | 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Open-Meteo verifier-compatible Core/Product PASS 4f421dc / 1bbbbad; fresh publication pending; no hosted/deployed claim |
-| 029D | Phase-ordered direct-production bootstrap | Corrective Author GREEN after Core FAILs c737113/df8f3b7 and complete current-symlink/UFW corrections; independent reverification pending; 361bac3 remains obsolete undeployable images and must not be published |
+| 029D | Phase-ordered direct-production bootstrap | Post-publication deployer corrective Author GREEN: foreground one-shot precedes seal; independent reverification pending; no final deployment acceptance |
 
 ## Completed pre-infrastructure product journey
 

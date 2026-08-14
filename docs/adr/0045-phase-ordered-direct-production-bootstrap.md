@@ -1,6 +1,6 @@
 # ADR 0045: Phase-ordered direct-production bootstrap
 
-- Status: Accepted boundary; corrective Author GREEN, independent reverification pending
+- Status: Accepted boundary; post-publication deployer correction Author GREEN, independent reverification pending
 - Date: 2026-08-13
 - Refines: ADR 0044
 - Slice: [029D](../slices/029d-phase-ordered-direct-production-bootstrap.md)
@@ -64,6 +64,15 @@ One pinned-session lifecycle executes:
    console/network/reload acceptance, atomic browser evidence seal;
 10. strict host cutover observation, canonical no-replace `cutover` checkpoint
     append, and only then deployment evidence.
+
+The consumer deployment in step 3 is a foreground one-shot, not a detached
+service start. The production host invokes only the fixed
+`safe-consumer-deployer` service with
+`docker compose run --rm --no-deps --pull never`, awaits its successful exit
+exactly once, and only then reads and seals the run-scoped staging pair. A
+nonzero exit propagates without retry, seal, worker start or final deployment
+acceptance evidence.
+Other long-lived phases retain their existing detached Compose lifecycle.
 
 The phase-ordered path itself writes the initial checkpoint consumed by the
 15m/1h/24h resume state machine. After browser acceptance is sealed, the still
