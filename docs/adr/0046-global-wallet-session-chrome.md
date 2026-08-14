@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted; Slice 030A corrective Author GREEN, independent reverification pending.
+Accepted; Slice 030A terminal-focus corrective RED after second Core FAIL.
 
 ## Context
 

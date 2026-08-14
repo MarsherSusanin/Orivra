@@ -22,3 +22,11 @@ mode-0400 report at
 Two corrective RED cases reproduce the exact findings: the authenticated menu
 must have zero serious/critical axe violations, and forward/reverse Tab must
 remain inside the open sign-out modal.
+
+The corrective Core rerun rejected exact `39f0b80` / `b0bdd24`. Its mode-0400
+report at `/private/tmp/proofline-030a-verifiers/39f0b80/core-verifier.md` has
+SHA-256 `8d184e708d06d5fa540d679267fff07cae2a70b846e5fa7430452efd9b73dff1`.
+The prior ARIA owner and normal/pending/failed trap boundaries passed. Two
+terminal RED assertions now require both successful server sign-out and local
+`Forget this browser` to focus their newly rendered anonymous sign-in successor
+instead of leaving focus on the document body.

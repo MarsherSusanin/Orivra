@@ -129,7 +129,9 @@ describe("Slice 030A global wallet session chrome", () => {
     await user.click(screen.getByRole("button", { name: "Confirm sign out" }));
     await waitFor(() => expect(revokeCurrentSession).toHaveBeenCalledWith({ projectToken: TOKEN }));
     expect(stored.removeItem).toHaveBeenCalledWith("proofline:project-token");
-    expect(await within(topbar()).findByRole("button", { name: "Sign in with wallet" })).toBeVisible();
+    const successor = await within(topbar()).findByRole("button", { name: "Sign in with wallet" });
+    expect(successor).toBeVisible();
+    expect(successor).toHaveFocus();
   });
 
   it("shows restoring and retry states without mistaking them for an authenticated identity", async () => {
@@ -180,7 +182,9 @@ describe("Slice 030A global wallet session chrome", () => {
     await user.tab({ shift: true });
     expect(dialog).toContainElement(document.activeElement as HTMLElement);
     await user.click(screen.getByRole("button", { name: "Forget this browser" }));
-    expect(await within(topbar()).findByRole("button", { name: "Sign in with wallet" })).toBeVisible();
+    const successor = await within(topbar()).findByRole("button", { name: "Sign in with wallet" });
+    expect(successor).toBeVisible();
+    expect(successor).toHaveFocus();
   });
 
   it("keeps the authenticated wallet menu free of serious or critical axe violations", async () => {
