@@ -1,4 +1,5 @@
 import { CaretDown, CaretRight, FileCode, GlobeHemisphereWest } from "@phosphor-icons/react";
+import { WalletProfile } from "./WalletProfile";
 
 export function Topbar({
   title,
@@ -43,6 +44,7 @@ export function Topbar({
           </span>
         ) : null}
         <span className="attestation-type"><FileCode size={24} aria-hidden="true" />{attestationType}</span>
+        <WalletProfile />
       </div>
     </header>
   );

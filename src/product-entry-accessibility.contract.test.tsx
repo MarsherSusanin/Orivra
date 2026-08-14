@@ -25,12 +25,18 @@ afterEach(() => {
 });
 
 describe("wallet sign-in dialog escape routes", () => {
+  function topbarSignIn(): HTMLButtonElement {
+    const topbar = document.querySelector<HTMLElement>(".topbar");
+    if (!topbar) throw new Error("Topbar is unavailable");
+    return within(topbar).getByRole("button", { name: /^sign in with wallet$/i });
+  }
+
   it("closes the optional /runs wallet dialog with Escape and restores focus", async () => {
     window.history.replaceState({}, "", "/runs");
     const user = userEvent.setup();
     render(<App services={services()} />);
 
-    const opener = screen.getByRole("button", { name: /^sign in with wallet$/i });
+    const opener = topbarSignIn();
     await user.click(opener);
     expect(screen.getByRole("dialog", { name: /sign in with wallet/i })).toBeVisible();
     await user.keyboard("{Escape}");
@@ -44,7 +50,7 @@ describe("wallet sign-in dialog escape routes", () => {
     const user = userEvent.setup();
     render(<App services={services()} />);
 
-    await user.click(screen.getByRole("button", { name: /^sign in with wallet$/i }));
+    await user.click(topbarSignIn());
     const dialog = screen.getByRole("dialog", { name: /sign in with wallet/i });
     const close = within(dialog).getByRole("button", { name: /close wallet sign in/i });
     expect(close).toBeVisible();
@@ -58,7 +64,7 @@ describe("wallet sign-in dialog escape routes", () => {
     render(<App services={services()} />);
 
     expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();
-    expect(screen.getByRole("button", { name: /^sign in with wallet$/i })).toBeEnabled();
+    expect(topbarSignIn()).toBeEnabled();
     expect(screen.getByRole("link", { name: /back to runs/i })).toHaveAttribute(
       "href",
       "/app/runs",

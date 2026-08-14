@@ -125,6 +125,8 @@ Full role definitions and evidence requirements: `docs/development/roles.md`.
 - Keep route filters, Composer step and the active secondary panel in restorable
   URL state so reload, back and forward preserve the user's context.
 - Keep the dark graphite palette, cyan active state, green completed state, amber diagnostic state, thin dividers, compact developer-tool density, and code-native English UI copy.
+- Keep one persistent global SIWE indicator in the top bar. Ordinary anonymous routes show `Sign in with wallet`; authenticated routes show a locally derived identicon, shortened verified address and an accessible profile menu. Mobile keeps the identicon and menu while hiding the address. Call the identity `Verified wallet`, not `Connected wallet`, because SIWE does not imply a live provider connection.
+- Never mix browser-wallet chrome with run-scoped share or caller-supplied project-token authority. Those routes show only neutral `Shared access` or `Token access`, never restore the browser session and never open the SIWE dialog.
 - Build Web UI in `src/`. Treat an accepted generated mock as source of truth for layout, component anatomy, density, spacing, color, typography, visible content and hierarchy.
 - Before substantial visual changes, use Product Design `get-context` when the visual source is unclear or conflicts with the current goal.
 - For visual work, run the local server and inspect the browser yourself; do not hand server-start work to the user when the environment can do it.

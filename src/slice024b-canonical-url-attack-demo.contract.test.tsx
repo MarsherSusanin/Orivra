@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -31,7 +31,7 @@ function renderDemo(response: Response | (() => Promise<Response>)) {
       walletAccess={{
         services: wallet,
         storage: {
-          getItem: vi.fn(() => `project_${"a".repeat(64)}`),
+          getItem: vi.fn(() => null),
           setItem: vi.fn(),
           removeItem: vi.fn(),
         },
@@ -64,7 +64,7 @@ describe("Slice 024B /demo/canonical-url product route", () => {
     expect(`${requestUrl.pathname}${requestUrl.search}`).toBe("/api/v1/demo/canonical-url");
   });
 
-  it("never restores a wallet, sends bearer auth or preloads the full recording", async () => {
+  it("keeps wallet-provider effects lazy, sends no bearer auth and does not preload the recording", async () => {
     const fixture = renderDemo(Response.json(makeCanonicalUrlAttackDemoSummaryFixture()));
     await screen.findByRole("heading", { name: "Valid proof ≠ trusted URL" });
     expect(fixture.wallet.getAccount).not.toHaveBeenCalled();
@@ -74,7 +74,9 @@ describe("Slice 024B /demo/canonical-url product route", () => {
     const init = (fixture.fetch.mock.calls as any[][])[0][1] as RequestInit | undefined;
     expect(new Headers(init?.headers).has("authorization")).toBe(false);
     expect(String((fixture.fetch.mock.calls as any[][])[0][0])).not.toContain("/recording");
-    expect(screen.queryByText(/sign in|connect wallet/i)).not.toBeInTheDocument();
+    const topbar = document.querySelector<HTMLElement>(".topbar");
+    if (!topbar) throw new Error("Topbar is unavailable");
+    expect(within(topbar).getByRole("button", { name: "Sign in with wallet" })).toBeVisible();
   });
 
   it("offers only a user-initiated same-origin recording download", async () => {

@@ -160,7 +160,11 @@ function surfaces(overrides: Partial<RunSurfaceServices> = {}): RunSurfaceServic
 }
 
 async function openDialog(user: ReturnType<typeof userEvent.setup>) {
-  const opener = screen.getByRole("button", { name: /^sign in with wallet$/i });
+  const topbar = document.querySelector<HTMLElement>(".topbar");
+  if (!topbar) throw new Error("Topbar is unavailable");
+  const opener = within(topbar).getByRole("button", {
+    name: /^sign in with wallet$/i,
+  });
   await user.click(opener);
   const dialog = await screen.findByRole("dialog", { name: /sign in with wallet/i });
   return { opener, dialog };
@@ -233,6 +237,14 @@ describe("Slice 023C2B2 integrated Runs and deep-route sign-in", () => {
 
     const second = await openDialog(user);
     await authenticateOpenDialog(user, second.dialog);
+    expect(await within(second.dialog).findByRole("heading", { name: "Signed in" })).toBeVisible();
+    expect(second.dialog).toHaveTextContent("0x1111…1111");
+    const topbar = document.querySelector<HTMLElement>(".topbar");
+    if (!topbar) throw new Error("Topbar is unavailable");
+    expect(within(topbar).getByRole("button", {
+      name: /wallet profile.*0x1111.*1111/i,
+    })).toBeVisible();
+    await user.click(within(second.dialog).getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(listRuns).toHaveBeenCalledOnce());
     expect(listRuns).toHaveBeenCalledWith({
       projectToken: PROJECT_TOKEN,
@@ -309,7 +321,9 @@ describe("Slice 023C2B2 Composer pending authentication intent", () => {
       />,
     );
 
-    const submit = screen.getByRole("button", {
+    const composerActions = document.querySelector<HTMLElement>(".composer-actions");
+    if (!composerActions) throw new Error("Composer actions are unavailable");
+    const submit = within(composerActions).getByRole("button", {
       name: /create preflight run|sign in with wallet/i,
     });
     await user.dblClick(submit);
@@ -327,7 +341,7 @@ describe("Slice 023C2B2 Composer pending authentication intent", () => {
     expect(localStorage.getItem(DRAFT_KEY)).not.toBeNull();
     expect(createRun).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: /sign in with wallet/i }));
+    await user.click(within(composerActions).getByRole("button", { name: /sign in with wallet/i }));
     const secondDialog = await screen.findByRole("dialog", { name: /sign in with wallet/i });
     expect(analytics.events.filter(({ name }) => name === "MANIFEST_VALIDATED")).toHaveLength(1);
     expect(analytics.events.filter(({ name }) => name === "COMPOSER_STARTED")).toHaveLength(1);

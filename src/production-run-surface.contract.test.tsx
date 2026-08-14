@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -135,7 +135,9 @@ describe("session-only wallet onboarding", () => {
     render(<App services={asSurface(ports)} />);
 
     expect(screen.getByRole("heading", { name: /sign in to open run/i })).toBeVisible();
-    const opener = screen.getByRole("button", { name: /^sign in with wallet$/i });
+    const actions = document.querySelector<HTMLElement>(".entry-state-actions");
+    if (!actions) throw new Error("Run sign-in actions are unavailable");
+    const opener = within(actions).getByRole("button", { name: /^sign in with wallet$/i });
     expect(screen.getByRole("link", { name: /back to runs/i })).toHaveAttribute("href", "/app/runs");
     expect(window.location.pathname).toBe(`/app/runs/${deepRunId}`);
     expect(document.body).not.toHaveTextContent(/project token|connect project/i);

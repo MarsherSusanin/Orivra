@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -108,15 +109,16 @@ export function WalletSessionProvider({
   storage: StorageLike;
   children: ReactNode;
 }) {
-  const [runtime] = useState(() => ({
+  const runtime = useMemo(() => ({
     services,
     controller: createWalletSessionController({ services, storage }),
-  }));
+  }), [services, storage]);
   const controller = runtime.controller;
   const [snapshot, setSnapshot] = useState<WalletSessionSnapshot>(() =>
     controller.snapshot(),
   );
   const lifecycleRevision = useRef(0);
+  const activeController = useRef(controller);
   const accountAuthority = useRef<object>({});
   const accountRefreshFlight = useRef<AccountRefreshFlight | null>(null);
   const accountEvidence = useRef<AccountEvidence | null>(null);
@@ -393,9 +395,10 @@ export function WalletSessionProvider({
     runtime,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let active = true;
     const effectRevision = ++lifecycleRevision.current;
+    activeController.current = controller;
     advanceAccountAuthority();
     const operation = controller.restore();
     setSnapshot(controller.snapshot());
@@ -407,14 +410,21 @@ export function WalletSessionProvider({
       active = false;
       advanceAccountAuthority();
       queueMicrotask(() => {
-        if (lifecycleRevision.current === effectRevision) controller.close();
+        if (
+          activeController.current !== controller ||
+          lifecycleRevision.current === effectRevision
+        ) controller.close();
       });
     };
   }, [advanceAccountAuthority, controller]);
 
+  const renderedSnapshot = activeController.current === controller
+    ? snapshot
+    : controller.snapshot();
+
   const value = useMemo<WalletSessionContextValue>(
     () => ({
-      snapshot,
+      snapshot: renderedSnapshot,
       accessToken,
       listNetworks,
       createWalletChallenge,
@@ -441,7 +451,7 @@ export function WalletSessionProvider({
       restore,
       retry,
       signOut,
-      snapshot,
+      renderedSnapshot,
     ],
   );
 

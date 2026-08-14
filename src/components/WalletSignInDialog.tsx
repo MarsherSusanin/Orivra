@@ -206,6 +206,7 @@ export function WalletSignInDialog({
   clock?: { wait(milliseconds: number): Promise<void> };
 }) {
   const {
+    snapshot,
     listNetworks,
     createWalletChallenge,
     createSession,
@@ -590,7 +591,9 @@ export function WalletSignInDialog({
               <CheckCircle size={36} weight="fill" aria-hidden="true" />
               <h3>Signed in</h3>
               <p id="wallet-sign-in-description">
-                This browser session can now open your persisted Orivra runs.
+                Verified wallet <code>{snapshot.status === "authenticated"
+                  ? `${snapshot.wallet.address.slice(0, 6)}…${snapshot.wallet.address.slice(-4)}`
+                  : "available"}</code>. This browser session can now open your persisted Orivra runs.
               </p>
               <button
                 ref={primaryRef}

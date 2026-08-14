@@ -611,7 +611,7 @@ export function AccountSettings({
         <div className="settings-panel-heading">
           <div>
             <span className="section-label">WALLET IDENTITY</span>
-            <h2 id="settings-wallet-title">Connected wallet</h2>
+            <h2 id="settings-wallet-title">Verified wallet</h2>
           </div>
           <button className="entry-secondary" type="button" onClick={() => void copyWalletAddress(account.wallet.address)} aria-label="Copy wallet address">
             <Copy size={17} aria-hidden="true" />Copy

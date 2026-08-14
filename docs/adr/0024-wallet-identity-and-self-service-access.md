@@ -8,6 +8,10 @@ The separate Sites/API hosting portion is partially superseded by
 [ADR 0029](0029-digitalocean-vds-deployment.md). Exact-origin authentication,
 CORS and all remaining access-boundary decisions remain accepted.
 
+[ADR 0046](0046-global-wallet-session-chrome.md) adds the global Web chrome for
+this unchanged session authority. It does not change SIWE, bearer, expiry or
+persistence semantics.
+
 ## Context
 
 Proofline's persisted product journey requires a project bearer token, but the

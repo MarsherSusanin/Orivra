@@ -107,7 +107,7 @@ describe("Slice 023C3A Settings route and authority", () => {
     expect(await screen.findByRole("heading", { name: "Account settings" })).toBeVisible();
     const card = screen.getByRole("region", { name: "Wallet session required" });
     const opener = within(card).getByRole("button", { name: "Sign in with wallet" });
-    expect(screen.getAllByRole("button", { name: "Sign in with wallet" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Sign in with wallet" })).toHaveLength(2);
     expect(access.getAccount).not.toHaveBeenCalled();
     expect(loadProviderAdapter).not.toHaveBeenCalled();
 

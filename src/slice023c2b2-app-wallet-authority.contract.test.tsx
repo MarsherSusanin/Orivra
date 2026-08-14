@@ -128,7 +128,7 @@ afterEach(() => {
 describe("Slice 023C2B2 production wallet authority composition", () => {
   it("uses the accepted session provider/client and removes manual project-token UI and copy", () => {
     expect(appSource).toMatch(/WalletSessionProvider/);
-    expect(appSource).toMatch(/WalletSignInDialog/);
+    expect(appSource).toMatch(/WalletChromeProvider/);
     expect(appSource).toMatch(/createWalletAccessClient/);
     expect(appSource).not.toMatch(/ProjectTokenDialog/);
 

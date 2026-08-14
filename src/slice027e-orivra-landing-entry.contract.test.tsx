@@ -68,7 +68,8 @@ describe("Slice 027E Orivra landing entry", () => {
     expect(preview).toHaveTextContent("/prices/eth");
     expect(preview).toHaveTextContent("currency=USD");
     expect(fixture.fetch).toHaveBeenCalledTimes(2);
-    expect(fixture.storage.getItem).not.toHaveBeenCalled();
+    expect(fixture.storage.getItem).toHaveBeenCalledOnce();
+    expect(fixture.storage.getItem).toHaveBeenCalledWith("proofline:project-token");
     expect(fixture.loadProviderAdapter).not.toHaveBeenCalled();
     Object.values(fixture.wallet).forEach((port) => expect(port).not.toHaveBeenCalled());
   });

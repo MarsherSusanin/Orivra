@@ -371,7 +371,9 @@ describe("Slice 025C template gallery, detail and Composer authority", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /sign in with wallet/i }));
+    const composerActions = document.querySelector<HTMLElement>(".composer-actions");
+    if (!composerActions) throw new Error("Composer actions are unavailable");
+    await user.click(within(composerActions).getByRole("button", { name: /sign in with wallet/i }));
     const walletDialog = await screen.findByRole("dialog", {
       name: "Sign in with wallet",
     });

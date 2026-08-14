@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -122,7 +122,9 @@ describe("Slice 015B explicit Submit boundary", () => {
     renderSubmit({ createRun, analytics: analytics.port });
 
     expect(manifestEvents(analytics.events)).toHaveLength(0);
-    await user.click(screen.getByRole("button", { name: /sign in with wallet|create preflight run/i }));
+    const actions = document.querySelector<HTMLElement>(".composer-actions");
+    if (!actions) throw new Error("Composer actions are unavailable");
+    await user.click(within(actions).getByRole("button", { name: /sign in with wallet|create preflight run/i }));
     expect(screen.getByRole("dialog", { name: /sign in with wallet/i })).toBeVisible();
     expect(createRun).not.toHaveBeenCalled();
     expect(manifestEvents(analytics.events)).toEqual([

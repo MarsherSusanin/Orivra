@@ -232,7 +232,8 @@ describe("Slice 026 public landing", () => {
       },
     ]);
     expectNoPrivatePorts(fixture);
-    expect(fixture.storage.getItem).not.toHaveBeenCalled();
+    expect(fixture.storage.getItem).toHaveBeenCalledOnce();
+    expect(fixture.storage.getItem).toHaveBeenCalledWith("proofline:project-token");
     expect(fixture.storage.setItem).not.toHaveBeenCalled();
     expect(document.querySelector('a[href*="/recording"]')).toBeNull();
     expect(document.querySelector('a[href^="https://"]')).toBeNull();
@@ -378,7 +379,8 @@ describe("Slice 026 public landing", () => {
     expect(screen.getByRole("link", { name: "Open runs" })).toHaveAttribute("href", "/app/runs");
     expect(fixture.fetch).not.toHaveBeenCalled();
     expectNoPrivatePorts(fixture);
-    expect(fixture.storage.getItem).not.toHaveBeenCalled();
+    expect(fixture.storage.getItem).toHaveBeenCalledOnce();
+    expect(fixture.storage.getItem).toHaveBeenCalledWith("proofline:project-token");
   });
 
   it("reuses App-owned root reads across landing, templates and demo popstate navigation", async () => {

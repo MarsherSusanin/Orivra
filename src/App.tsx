@@ -1,5 +1,5 @@
 import { ArrowClockwise, ArrowRight, CheckCircle, DownloadSimple, FileMagnifyingGlass, ShieldCheck } from "@phosphor-icons/react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   createLocalProductAnalytics,
   createProductEventEmitter,
@@ -29,7 +29,6 @@ import { Sidebar } from "./components/Sidebar";
 import { SubmissionDecision } from "./components/SubmissionDecision";
 import { Topbar } from "./components/Topbar";
 import { VerificationDialog } from "./components/VerificationDialog";
-import { WalletSignInDialog } from "./components/WalletSignInDialog";
 import { AccountSettings } from "./components/AccountSettings";
 import {
   TemplateDetail,
@@ -48,6 +47,11 @@ import {
   WalletSessionProvider,
   useWalletSession,
 } from "./wallet-session-context";
+import {
+  WalletChromeProvider,
+  useWalletChrome,
+  type WalletChromeAuthority,
+} from "./wallet-chrome-context";
 import {
   createWalletAccessClient,
   type WalletAccessServices,
@@ -80,6 +84,13 @@ const UNAVAILABLE_STORAGE = {
   setItem: () => undefined,
   removeItem: () => undefined,
 };
+
+function authorityStorage(
+  authority: WalletChromeAuthority,
+  storage: StorageLike,
+): StorageLike {
+  return authority === "wallet" ? storage : UNAVAILABLE_STORAGE;
+}
 
 export type AppProps = {
   runId?: string;
@@ -177,6 +188,7 @@ function scrubShareLocation(url: URL): void {
 type ShareBootstrap = {
   attempted: boolean;
   handoffRevision?: number;
+  runId: string;
   token: string;
 };
 
@@ -191,10 +203,10 @@ let shareBootstrapRevision = 0;
 function stageShareBootstrapHandoff(
   runId: string,
   href: string,
-  result: Omit<ShareBootstrap, "handoffRevision">,
+  result: Omit<ShareBootstrap, "handoffRevision" | "runId">,
 ): ShareBootstrap {
   const revision = ++shareBootstrapRevision;
-  const staged = { ...result, handoffRevision: revision };
+  const staged = { ...result, handoffRevision: revision, runId };
   shareBootstrapHandoff = { href, revision, result: staged, runId };
   globalThis.queueMicrotask(() => {
     clearShareBootstrapHandoff(revision);
@@ -256,9 +268,9 @@ function sessionShareAuthority(): ShareBootstrap {
         token: fragmentValue,
       });
     }
-    return { attempted: false, token: storedShareToken(runId) };
+    return { attempted: false, runId, token: storedShareToken(runId) };
   }
-  return { attempted: false, token: "" };
+  return { attempted: false, runId: "", token: "" };
 }
 
 function walletApiBaseUrl(): string {
@@ -1312,22 +1324,21 @@ function ProductApp({
   onLandingDraftConsumed?(): void;
 }) {
   const wallet = useWalletSession();
-  const [walletDialogOpen, setWalletDialogOpen] = useState(false);
+  const walletChrome = useWalletChrome();
   const walletToken = wallet.accessToken() ?? "";
   const authorityToken = shareToken || props.projectToken || walletToken;
   const walletAvailable = !shareToken && !props.projectToken;
   const openWalletDialog = useCallback(() => {
-    if (walletAvailable) setWalletDialogOpen(true);
-  }, [walletAvailable]);
-  const closeWalletDialog = useCallback(() => setWalletDialogOpen(false), []);
+    if (walletAvailable) walletChrome?.openSignIn();
+  }, [walletAvailable, walletChrome]);
 
   useEffect(() => {
     if (!landingDraft || !walletAvailable || walletToken) return;
     const timeout = globalThis.setTimeout(() => {
-      if (wallet.snapshot.status === "anonymous") setWalletDialogOpen(true);
+      if (wallet.snapshot.status === "anonymous") walletChrome?.openSignIn();
     }, 0);
     return () => globalThis.clearTimeout(timeout);
-  }, [landingDraft, wallet.snapshot.status, walletAvailable, walletToken]);
+  }, [landingDraft, wallet.snapshot.status, walletAvailable, walletChrome, walletToken]);
 
   const pathname = globalThis.location?.pathname ?? "/";
   const routedRun = deepRouteRunId();
@@ -1386,58 +1397,33 @@ function ProductApp({
     </div>
   ) : productRoute;
 
-  return (
-    <>
-      {route}
-      {walletDialogOpen && walletAvailable ? (
-        <WalletSignInDialog
-          {...props.walletAccess?.dialog}
-          onClose={closeWalletDialog}
-          onAuthenticated={closeWalletDialog}
-        />
-      ) : null}
-    </>
-  );
+  return route;
 }
 
 function PrivateApp({
+  share,
+  walletAccess,
   landingDraft,
   onLandingDraftConsumed,
   ...props
 }: AppProps & {
+  share: ShareBootstrap;
+  walletAccess: NonNullable<AppProps["walletAccess"]>;
   landingDraft?: Web2JsonManifestDraftV1 | null;
   onLandingDraftConsumed?(): void;
 }) {
-  const [share] = useState<ShareBootstrap>(() =>
-    sessionShareAuthority(),
-  );
-  const [walletAccess] = useState(() => props.walletAccess ?? {
-    services: createWalletAccessClient({ baseUrl: walletApiBaseUrl() }),
-    storage: browserSessionStorage(),
-  });
-  const suppressWalletRestore = Boolean(
-    share.attempted || share.token || props.projectToken,
-  );
-
   useLayoutEffect(() => {
     clearShareBootstrapHandoff(share.handoffRevision);
     return () => clearShareBootstrapHandoff(share.handoffRevision);
   }, [share.handoffRevision]);
 
-  return (
-    <WalletSessionProvider
-      services={walletAccess.services}
-      storage={suppressWalletRestore ? UNAVAILABLE_STORAGE : walletAccess.storage}
-    >
-      <ProductApp
-        {...props}
-        walletAccess={walletAccess}
-        shareToken={share.token}
-        landingDraft={landingDraft}
-        onLandingDraftConsumed={onLandingDraftConsumed}
-      />
-    </WalletSessionProvider>
-  );
+  return <ProductApp
+    {...props}
+    walletAccess={walletAccess}
+    shareToken={share.token}
+    landingDraft={landingDraft}
+    onLandingDraftConsumed={onLandingDraftConsumed}
+  />;
 }
 
 function isPrivateProductPath(pathname: string): boolean {
@@ -1457,7 +1443,14 @@ function isPrivateProductPath(pathname: string): boolean {
   }
 }
 
-export function App(props: AppProps = {}) {
+function RoutedApp({
+  share,
+  walletAccess,
+  ...props
+}: AppProps & {
+  share: ShareBootstrap;
+  walletAccess: NonNullable<AppProps["walletAccess"]>;
+}) {
   const [pathname, setPathname] = useState(
     canonicalizeProductLocation,
   );
@@ -1489,38 +1482,77 @@ export function App(props: AppProps = {}) {
     setLandingDraft(null);
   }, []);
 
-  if (props.runId) return <PrivateApp {...props} />;
+  const currentRunId = props.runId ?? deepRouteRunId() ?? "";
+  const shareActive = Boolean(
+    currentRunId &&
+    currentRunId === share.runId &&
+    (share.attempted || share.token),
+  );
+  const activeShare: ShareBootstrap = shareActive
+    ? share
+    : { attempted: false, runId: "", token: "" };
+  const authority: WalletChromeAuthority = props.projectToken
+    ? "token"
+    : shareActive
+      ? "shared"
+      : "wallet";
 
-  if (pathname === "/") {
+  let route: ReactNode;
+  if (props.runId) {
+    route = <PrivateApp {...props} share={activeShare} walletAccess={walletAccess} />;
+  } else if (pathname === "/") {
     const location = globalThis.location;
     if (location && (location.search !== "" || location.hash !== "")) {
       globalThis.history.replaceState({}, "", "/");
     }
-    return (
+    route = (
       <PublicLanding requests={{
         catalog: catalogRequest,
         demo: canonicalDemoRequest,
       }} onContinue={continueFromLanding} />
     );
-  }
-  if (pathname === "/demo/canonical-url") {
-    return <CanonicalUrlAttackDemo requestRef={canonicalDemoRequest} />;
-  }
-  if (pathname === "/templates") {
-    return <TemplateGallery />;
-  }
-  const templateDetailRoute = /^\/templates\/([^/]+)\/?$/.exec(pathname);
-  if (templateDetailRoute) {
-    return <TemplateDetail id={templateDetailRoute[1]} />;
-  }
-  if (isPrivateProductPath(pathname)) {
-    return (
+  } else if (pathname === "/demo/canonical-url") {
+    route = <CanonicalUrlAttackDemo requestRef={canonicalDemoRequest} />;
+  } else if (pathname === "/templates") {
+    route = <TemplateGallery />;
+  } else {
+    const templateDetailRoute = /^\/templates\/([^/]+)\/?$/.exec(pathname);
+    if (templateDetailRoute) {
+      route = <TemplateDetail id={templateDetailRoute[1]} />;
+    } else if (isPrivateProductPath(pathname)) {
+      route = (
       <PrivateApp
         {...props}
+        share={activeShare}
+        walletAccess={walletAccess}
         landingDraft={landingDraft}
         onLandingDraftConsumed={consumeLandingDraft}
       />
-    );
+      );
+    } else {
+      route = <PageUnavailable />;
+    }
   }
-  return <PageUnavailable />;
+
+  return (
+    <WalletSessionProvider
+      services={walletAccess.services}
+      storage={authorityStorage(authority, walletAccess.storage)}
+    >
+      <WalletChromeProvider authority={authority} dialog={walletAccess.dialog}>
+        {route}
+      </WalletChromeProvider>
+    </WalletSessionProvider>
+  );
+}
+
+export function App(props: AppProps = {}) {
+  const [walletAccess] = useState<NonNullable<AppProps["walletAccess"]>>(() =>
+    props.walletAccess ?? {
+      services: createWalletAccessClient({ baseUrl: walletApiBaseUrl() }),
+      storage: browserSessionStorage(),
+    }
+  );
+  const [share] = useState<ShareBootstrap>(sessionShareAuthority);
+  return <RoutedApp {...props} share={share} walletAccess={walletAccess} />;
 }
