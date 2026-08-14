@@ -682,12 +682,12 @@ read-only output for both independent verifiers; do not edit the candidate tree
 or output between their reports.
 
 The current terminal candidate is complete. Core and Product independently
-PASS exact commit `9e45513` / tree `6d39b92`; candidate SHA-256 is
-`b8dc48cab19e341d9c1033ef84f265058320c3f123d25117f06dfbbdcaee6405`.
+PASS exact commit `3a43fe7` / tree `b44161d`; candidate SHA-256 is
+`f258d318d04561add4962f23e956bf32832913c49f884ef785c37da7164dfb17`.
 The mode-0400 Core report SHA-256 is
-`c07d0780ff0ff7cdcbdc92ab30808c416bf96b7f115b9165e03dc64b7b2f57af`;
+`90a4973f72b88e85e67949edf1e44e84d0a23eb7423c922b7d4ccd963c8ce4ad`;
 the Product report SHA-256 is
-`dacb9cc30e6e56b6f442d34c2df95743c75ada29c8ef6c313722fba0d676016f`.
+`1199a0466316118945edaf75936845c93e9752d7c0c4ee130c1998f3314206f1`.
 
 028B begins only from those immutable candidate bytes and the two exact report
 receipts. Its credentialed preflight requires an explicit canonical mapping
@@ -726,9 +726,9 @@ lowercase `ghcr.io/<owner>/<package>` repositories in frozen image order. The
 token file is a regular non-symlink mode-0400 file under a private operator
 root; do not paste its value into the shell, environment, Git or Codex chat.
 The evidence parent must already be mode 0700 and the output must not exist.
-The command is fixed to candidate `b8dc48ca…` and the exact Core/Product report
-hashes `c07d0780…` / `dacb9cc3…`. The immediately prior
-`4f421dc` / `c34c28a6…` authority is not accepted by the executable publisher.
+The command is fixed to candidate `f258d318…` and the exact Core/Product report
+hashes `90a4973f…` / `1199a046…`. The immediately prior
+`9e45513` / `b8dc48ca…` authority is not accepted by the executable publisher.
 It verifies all five archives before the first registry request and
 writes mode-0400 evidence only after five exact remote manifest-digest checks.
 The earlier 028B implementation received two independent PASS reports on exact

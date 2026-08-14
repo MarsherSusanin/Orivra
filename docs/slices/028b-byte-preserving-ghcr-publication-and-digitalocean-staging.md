@@ -76,11 +76,11 @@ promotion, or run a canary. 029B owns production promotion/canary after accepted
 - the five frozen 029A OCI archives pass the single-descriptor parser and exact
   manifest-digest revalidation without registry or external network access.
 
-The active publication handoff was refreshed after the final recovery harness
-verification. Exact producer `9e45513` / tree `6d39b92`, candidate
-`b8dc48ca...`, Core report `c07d0780...` and Product report `dacb9cc3...` are
+The active publication handoff was refreshed after the Slice 030A wallet-chrome
+release verification. Exact producer `3a43fe7` / tree `b44161d`, candidate
+`f258d318...`, Core report `90a4973f...` and Product report `1199a046...` are
 the only accepted authority for the next real GHCR publication. The immediately
-prior `4f421dc` / `c34c28a6...` tuple is rejected
+prior `9e45513` / `b8dc48ca...` tuple is rejected
 by the executable publisher. This refresh
 does not rebuild or mutate any of the five frozen OCI archives.
 
