@@ -878,6 +878,11 @@ awaits its one exit, and seals staging only after status zero. Do not use
 `compose up --detach` for this phase: it can return while the run-scoped stage
 is still empty. A nonzero exit is not retried and must leave canonical evidence
 and deployment PASS absent.
+The replay interpolation binder returns a frozen object. The deployer phase
+must reject any pre-existing `PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT` and
+derive a new frozen copy with the exact `/opt/orivra/deployer-staging/<runId>`
+value; assigning into the binder result is a deterministic pre-Compose failure.
+Create the final stage no-replace as UID/GID 1000 mode 0700 before the one-shot.
 
 Before the first production Docker command, the host validates
 `/opt/orivra/secrets` as a root-owned mode-0500 non-symlink directory. Every

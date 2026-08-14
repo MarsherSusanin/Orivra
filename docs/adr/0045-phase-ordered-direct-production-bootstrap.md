@@ -73,6 +73,11 @@ exactly once, and only then reads and seals the run-scoped staging pair. A
 nonzero exit propagates without retry, seal, worker start or final deployment
 acceptance evidence.
 Other long-lived phases retain their existing detached Compose lifecycle.
+The production-used phase seam rejects an ambient deployer-stage variable,
+applies the fixed replay interpolation binder, and creates a new frozen
+environment containing the exact run-scoped deployer stage. It never mutates
+the already frozen interpolation result. Stage creation is mode 0700,
+UID/GID 1000, no-follow and no-replace; a prior path cannot authorize replay.
 
 The phase-ordered path itself writes the initial checkpoint consumed by the
 15m/1h/24h resume state machine. After browser acceptance is sealed, the still

@@ -36,6 +36,9 @@ acceptance or rollback authority.
   fixed `compose run --rm --no-deps --pull never` authority; status zero must
   precede staging seal, and failure yields no retry, seal or final deployment
   acceptance evidence;
+- its production phase constructs a new immutable exact environment after the
+  fixed replay interpolation bind, rejects an ambient stage variable and
+  creates only a fresh mode-0700 UID/GID-1000 no-replace stage;
 - the host alone owns the fixed mode-0700 UID/GID-1000 replay staging directory,
   rejects pre-existing/symlink paths and cleans only its owned path after
   success or failure;

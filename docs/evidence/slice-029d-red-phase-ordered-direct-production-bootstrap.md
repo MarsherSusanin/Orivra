@@ -479,3 +479,20 @@ unchanged. The exact host-command suite is 21/21 PASS, including the causal
 pending-process, argv, single-attempt and failure-before-seal checks. This is
 local author evidence only; it performs no Docker, registry, VDS, credential
 or network effect and is not an independent or deployed-production PASS.
+
+Independent Core verification rejected exact commit
+`e298d1308a7129be350681c6042ac6bdc032dfea` / tree
+`59e46d5236f47c2696c93fa4597bb0794a5d637d`: the default adapter first received
+the frozen replay-interpolation environment and then attempted to assign the
+deployer-stage variable into it. Strict-mode JavaScript therefore threw before
+the new synchronous runner. The mode-0400 report is
+`/private/tmp/orivra-release-e29/verifiers/e298d13/core-verifier.md`, SHA-256
+`a439e921684656f866fd649887bc7667b14a5e48dd3c518c3a3d479422a12e72`.
+
+The second causal RED executes the exported production-used composition seam,
+not a separately prepared helper environment: fixed replay bind, fresh
+mode-0700 UID/GID-1000 stage descriptor, a new immutable env containing the
+exact run-scoped stage, and one awaited foreground runner. It also rejects an
+ambient stage key before preparation and proves one nonzero attempt is not
+retried or sealed. The GREEN phase no longer assigns into frozen input and
+uses no Docker, network, VDS or credential effect during author verification.

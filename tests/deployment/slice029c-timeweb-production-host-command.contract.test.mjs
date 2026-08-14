@@ -392,16 +392,24 @@ test("maps fixed database-first Compose phases without public Caddy cutover or c
 test("awaits the fixed safe-consumer deployer one-shot before sealing and never detaches or retries", async () => {
   const module = await feature();
   assert.equal(typeof module.runSynchronousSafeConsumerDeployer, "function");
-  const environment = Object.freeze({
+  assert.equal(typeof module.runProductionSafeConsumerDeployerPhase, "function");
+  const runtimeEnvironment = Object.freeze({
     PATH: "/usr/bin:/bin",
     PROOFLINE_PRODUCTION_RUN_ID: "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
-    PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT: "/opt/orivra/deployer-staging/prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
+  });
+  const stagePath = "/opt/orivra/deployer-staging/prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4";
+  const environment = Object.freeze({
+    ...runtimeEnvironment,
+    PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: "/opt/orivra/replay-bootstrap-stage",
+    PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT: stagePath,
   });
   const calls = [];
+  const preparations = [];
   let release;
   let settled = false;
-  const pending = module.runSynchronousSafeConsumerDeployer({
-    environment,
+  const pending = module.runProductionSafeConsumerDeployerPhase({
+    runtimeEnvironment,
+    prepareStage: async (input) => { preparations.push(input); return { status: "created" }; },
     runProcess: async (executable, arguments_, options) => {
       calls.push({ executable, arguments_, options });
       await new Promise((resolvePromise) => { release = resolvePromise; });
@@ -410,6 +418,11 @@ test("awaits the fixed safe-consumer deployer one-shot before sealing and never 
   }).then((result) => { settled = true; return result; });
   await new Promise((resolvePromise) => setImmediate(resolvePromise));
   assert.equal(settled, false);
+  assert.deepEqual(preparations, [{
+    path: stagePath, parent: "/opt/orivra/deployer-staging",
+    type: "directory", mode: 0o700, uid: 1000, gid: 1000,
+    noFollow: true, noReplace: true,
+  }]);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
     executable: "/usr/bin/docker",
@@ -427,18 +440,30 @@ test("awaits the fixed safe-consumer deployer one-shot before sealing and never 
   assert.equal(calls[0].arguments_.includes("--detach"), false);
   assert.equal(calls[0].arguments_.includes("--force-recreate"), false);
   assert.equal(calls[0].arguments_.includes("--no-build"), false);
+  assert.equal(Object.isFrozen(calls[0].options.environment), true);
   release();
   assert.deepEqual(await pending, { status: "passed" });
 
   const failures = [];
-  await assert.rejects(module.runSynchronousSafeConsumerDeployer({
-    environment,
+  await assert.rejects(module.runProductionSafeConsumerDeployerPhase({
+    runtimeEnvironment,
+    prepareStage: async () => ({ status: "created" }),
     runProcess: async (...input) => {
       failures.push(input);
       throw Object.assign(new Error("deployer exited 17"), { exitCode: 17 });
     },
   }), /deployer exited 17/);
   assert.equal(failures.length, 1);
+  let invalidEffects = 0;
+  await assert.rejects(module.runProductionSafeConsumerDeployerPhase({
+    runtimeEnvironment: {
+      ...runtimeEnvironment,
+      PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT: stagePath,
+    },
+    prepareStage: async () => { invalidEffects += 1; },
+    runProcess: async () => { invalidEffects += 1; },
+  }), /TIMEWEB_HOST_CONFIGURATION_INVALID/);
+  assert.equal(invalidEffects, 0);
 
   let sealCalls = 0;
   await assert.rejects(module.runTimewebProductionHostCommand({
@@ -455,7 +480,7 @@ test("awaits the fixed safe-consumer deployer one-shot before sealing and never 
 
   const hostSource = await readFile(scriptPath, "utf8");
   const composeAdapter = hostSource.slice(hostSource.indexOf("compose: { async runExactPhase"), hostSource.indexOf("evidence: {"));
-  assert.match(composeAdapter, /safe-consumer-deployer[\s\S]*runSynchronousSafeConsumerDeployer\s*\(/);
+  assert.match(composeAdapter, /safe-consumer-deployer[\s\S]*runProductionSafeConsumerDeployerPhase\s*\(/);
 });
 
 test("owns the fixed replay-bootstrap staging directory across setup, Compose, seal and cleanup", async () => {

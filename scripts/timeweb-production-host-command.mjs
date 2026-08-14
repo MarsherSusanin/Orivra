@@ -378,6 +378,63 @@ export async function runSynchronousSafeConsumerDeployer({ environment, runProce
   return Object.freeze({ status: "passed" });
 }
 
+async function prepareSafeConsumerDeployerStage({ path, parent, type, mode, uid, gid, noFollow, noReplace }) {
+  if (parent !== DEPLOYER_STAGING_ROOT || path === parent || dirname(path) !== parent ||
+    type !== "directory" || mode !== 0o700 || uid !== 1000 || gid !== 1000 ||
+    noFollow !== true || noReplace !== true) {
+    throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID", "Safe-consumer deployer stage is invalid");
+  }
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  const parentStatus = await lstat(parent);
+  if (!parentStatus.isDirectory() || parentStatus.isSymbolicLink()) {
+    throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID", "Safe-consumer deployer stage parent is invalid");
+  }
+  await chmod(parent, 0o700);
+  await mkdir(path, { mode, recursive: false });
+  await chown(path, uid, gid);
+  await chmod(path, mode);
+  const status = await lstat(path);
+  if (!status.isDirectory() || status.isSymbolicLink() || (status.mode & 0o777) !== mode ||
+    status.uid !== uid || status.gid !== gid) {
+    throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID", "Safe-consumer deployer stage metadata is invalid");
+  }
+  return Object.freeze({ status: "created" });
+}
+
+export async function runProductionSafeConsumerDeployerPhase({
+  runtimeEnvironment,
+  prepareStage = prepareSafeConsumerDeployerStage,
+  runProcess: invoke = runProcess,
+} = {}) {
+  if (!runtimeEnvironment || typeof runtimeEnvironment !== "object" || Array.isArray(runtimeEnvironment) ||
+    Object.hasOwn(runtimeEnvironment, "PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT") ||
+    typeof prepareStage !== "function" || typeof invoke !== "function") {
+    throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID", "Safe-consumer deployer phase authority is invalid");
+  }
+  const interpolationEnvironment = bindFixedReplayBootstrapComposeInterpolationEnvironment(runtimeEnvironment);
+  const runId = interpolationEnvironment.PROOFLINE_PRODUCTION_RUN_ID;
+  if (!RUN_ID.test(runId ?? "")) throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID");
+  const stage = `${DEPLOYER_STAGING_ROOT}/${runId}`;
+  const environment = Object.freeze({
+    ...interpolationEnvironment,
+    PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT: stage,
+  });
+  const preparation = await prepareStage({
+    path: stage,
+    parent: DEPLOYER_STAGING_ROOT,
+    type: "directory",
+    mode: 0o700,
+    uid: 1000,
+    gid: 1000,
+    noFollow: true,
+    noReplace: true,
+  });
+  if (preparation?.status !== "created") {
+    throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID", "Safe-consumer deployer stage was not created");
+  }
+  return runSynchronousSafeConsumerDeployer({ environment, runProcess: invoke });
+}
+
 export function createPreservedCurrentNodeArguments(path, arguments_ = []) {
   if (typeof path !== "string" || !path.startsWith(`${CURRENT_ROOT}/scripts/`) ||
     !path.endsWith(".mjs") || !Array.isArray(arguments_) ||
@@ -424,7 +481,9 @@ function defaultAdapters() {
     } },
     compose: { async runExactPhase(input) {
       let env = await loadRuntimeEnvironment(input.imageEnvironment);
-      if (input.phase === "replay-bootstrap") {
+      if (input.phase === "safe-consumer-deployer") {
+        return runProductionSafeConsumerDeployerPhase({ runtimeEnvironment: env });
+      } else if (input.phase === "replay-bootstrap") {
         env = bindOwnedReplayBootstrapComposeEnvironment({
           runtimeEnvironment: env,
           stageRoot: input.stageRoot,
@@ -433,19 +492,8 @@ function defaultAdapters() {
       } else {
         env = bindFixedReplayBootstrapComposeInterpolationEnvironment(env);
       }
-      if (input.phase === "safe-consumer-deployer") {
-        const runId = env.PROOFLINE_PRODUCTION_RUN_ID;
-        if (!RUN_ID.test(runId ?? "")) throw failure("TIMEWEB_HOST_CONFIGURATION_INVALID");
-        const stage = `${DEPLOYER_STAGING_ROOT}/${runId}`;
-        await mkdir(stage, { recursive: true, mode: 0o700 });
-        await chown(stage, 1000, 1000);
-        await chmod(stage, 0o700);
-        env.PROOFLINE_SAFE_CONSUMER_DEPLOYER_STAGE_ROOT = stage;
-      }
       if (input.phase === "start-caddy-candidate") {
         await runProcess("/usr/bin/docker", composeArguments(["config", "--quiet"]), { environment: env });
-      } else if (input.phase === "safe-consumer-deployer") {
-        await runSynchronousSafeConsumerDeployer({ environment: env });
       } else {
         await runProcess("/usr/bin/docker", composeArguments(["up", "--detach", "--no-build", "--pull", "never", "--force-recreate"], input.services), { environment: env });
       }
