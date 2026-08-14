@@ -145,6 +145,7 @@ describe("Slice 027B database login-role bootstrap", () => {
     expect(sql).toMatch(/GRANT proofline_worker TO proofline_worker_login/i);
     expect(sql).toMatch(/GRANT proofline_recording_importer TO proofline_recording_importer_login/i);
     expect(sql).toMatch(/GRANT SELECT, INSERT ON TABLE proofline_private\.run_commands TO proofline_api/i);
+    expect(sql).toMatch(/GRANT INSERT ON TABLE proofline_private\.run_commands TO proofline_worker/i);
     expect(sql).not.toMatch(/GRANT proofline_(?:api|worker|recording_importer) TO proofline_migrator_login/i);
     expect(sql).not.toMatch(/proofline_migrator\b/);
   });

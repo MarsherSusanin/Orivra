@@ -108,6 +108,7 @@ GRANT proofline_api TO proofline_api_login;
 GRANT proofline_worker TO proofline_worker_login;
 GRANT proofline_recording_importer TO proofline_recording_importer_login;
 GRANT SELECT, INSERT ON TABLE proofline_private.run_commands TO proofline_api;
+GRANT INSERT ON TABLE proofline_private.run_commands TO proofline_worker;
 `);
 }
 
