@@ -84,6 +84,31 @@ reconfigure or otherwise touch V2BOX, system DNS or the workstation's local IP
 configuration. VDS verification remains limited to the explicitly authorized
 deployment boundary and never substitutes for Mac browser acceptance.
 
+### Deadline-bound production incident restoration
+
+When production is already public and a user-visible path is broken during an
+explicit deadline window, the operator may use a bounded incident-restoration
+iteration instead of starting a new candidate freeze for every diagnosis. This
+is an operational recovery lane, not a release PASS:
+
+1. identify one causal blocker from production evidence without exposing
+   secrets;
+2. change only the smallest affected boundary and add the closest causal
+   regression test;
+3. require typecheck plus that focused test before publishing exactly one new
+   immutable image for the affected service;
+4. pin the VDS to its exact digest, preserving the prior digest and source
+   symlink as rollback authority;
+5. require `/healthz`, `/readyz`, container digest and the affected real user
+   journey from the operator Mac before continuing to the next blocker.
+
+The VDS pulls and runs the image; it does not compile the application. Browser
+verification remains Mac-only. The incident log must name every deliberately
+deferred gate. After the deadline, the resulting tree returns to its normal
+Lane B or Lane C verification, complete candidate freeze and two independent
+reports. Until that completes, do not claim a new candidate, security, PITR or
+full release PASS.
+
 ## Consequences
 
 - Small UI changes retain all affected product gates with one freeze/verifier
@@ -94,3 +119,5 @@ deployment boundary and never substitutes for Mac browser acceptance.
   only future acceptance of its exact receipts.
 - Existing Definition of Done, security invariants, coverage thresholds and
   two-verifier independence are unchanged.
+- A deadline restoration can recover the live user journey quickly while
+  leaving an explicit, non-PASS audit debt for the normal post-deadline lane.

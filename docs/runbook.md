@@ -689,6 +689,26 @@ All browser acceptance is performed on the operator Mac. Never install browser
 tooling on the VDS. Release commands and diagnostics must not inspect or change
 V2BOX, system DNS or the workstation's local IP configuration.
 
+#### Deadline production incident loop
+
+For an explicitly declared deadline incident, use the ADR 0047 restoration
+loop and stop after each observable boundary:
+
+1. capture the failing user request and the matching API/worker/database state;
+2. make one causal patch with one focused regression and `npm run typecheck`;
+3. build and publish only the affected service image from the operator build
+   environment; never run the application build toolchain on the VDS;
+4. record the prior digest/runtime file, pin the new immutable digest and
+   recreate only that service;
+5. verify `/api/healthz`, `/api/readyz`, the running image digest and the exact
+   affected journey in the Mac browser;
+6. record any remaining blocker and repeat only if it is independently causal.
+
+Do not run unrelated full matrices between these incident iterations. Also do
+not convert their focused evidence into a candidate, security, recovery or
+full-release PASS. After the deadline, run the ordinary Lane B/C matrix,
+candidate freeze and two independent verifiers over the accumulated tree.
+
 029A is the credential-free local MLP validation and freeze. Product gates and
 user testing use recorded fixtures through local Docker Compose. 029A runs with
 no credentials and no external network. The whole 022–029A range remains
