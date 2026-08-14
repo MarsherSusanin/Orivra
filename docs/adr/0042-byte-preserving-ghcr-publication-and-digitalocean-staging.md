@@ -8,12 +8,12 @@
 ## Context
 
 The current release candidate is complete on exact commit
-`3a43fe76da77985a9cecc56341a913a4e475f397` / tree
-`b44161df668d7735fb86a8b45719f2126913f2b8`. Its canonical candidate SHA-256
-is `f258d318d04561add4962f23e956bf32832913c49f884ef785c37da7164dfb17`.
+`a5e80026f23d38e40b9c354ec6488daffad87ba4` / tree
+`fae0294cc980d69e2c82a2a1cb9ea02705c95655`. Its canonical candidate SHA-256
+is `c371e812cbd07f36955efef624e7ec6de082d2fc3a323f0fbcfb835d45b266ac`.
 Core and Product independently PASS that exact tree with report SHA-256 values
-`90a4973f72b88e85e67949edf1e44e84d0a23eb7423c922b7d4ccd963c8ce4ad`
-and `1199a0466316118945edaf75936845c93e9752d7c0c4ee130c1998f3314206f1`.
+`8413f9a2839d5c232e9b3026bf65f505a0cc60545c7eeeb35ccf72529ed59280`
+and `0c65ac7e693fe3707d7f2f781bddebd34b37f182564a1b48192834b421b425bc`.
 This authorizes an
 operator to provide narrowly scoped 028B credentials, but does not itself
 publish a registry image, provision a VDS or prove hosted staging.

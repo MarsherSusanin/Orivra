@@ -656,6 +656,39 @@ workspace/build graph, Action artifact или Sites запускает соот�
 affected gates сразу, но не несвязанный repository matrix. Для MLP 022–029A
 полная матрица запускается once after все credential-free modules завершены.
 
+### Risk-classified release lanes
+
+ADR 0047 is the mandatory planning gate before a release wave:
+
+- **Lane A, UI-only:** the complete diff is limited to Web `src`, its tests and
+  directly related docs. Run typecheck, focused Web tests/coverage, build,
+  Sites, Action and black-box Mac desktop/mobile browser acceptance. Any
+  deployment-runtime/backend/schema/worker/storage/dependency change makes the
+  lane invalid. Freeze at most once and dispatch Core/Product release verifiers
+  in parallel against the same stopped tree and candidate.
+- **Lane B, deployment runtime/tools:** production scripts, Compose/Docker,
+  publisher, recovery, host commands and evidence orchestration live in a
+  separate pre-release slice. Causal composition-real RED/GREEN and deployment
+  static/integration controls pass before candidate creation. Never mix this
+  lane into a UI candidate.
+- **Lane C, backend/persistence:** API, contracts/domain semantics,
+  migrations/schema, worker/live effects, PostgreSQL, object storage and
+  WAL/PITR run the complete affected coverage plus full runbook matrix and real
+  PostgreSQL where required before the single candidate freeze.
+
+Classify scope within 10 minutes and reach a reviewable focused GREEN within 20
+minutes. At either missed checkpoint, failed gate, contradiction or scope leak,
+stop and replan; do not accumulate a serial patch/freeze/verifier chain. The
+time boxes never waive a test. After an immutable candidate and both release
+reports are accepted, an exact docs/publisher-authority refresh runs only
+syntax/typecheck, its causal publisher test, serialized static compatibility
+and Sites. It must not rebuild, rerun the full matrix, mutate archives or
+re-freeze.
+
+All browser acceptance is performed on the operator Mac. Never install browser
+tooling on the VDS. Release commands and diagnostics must not inspect or change
+V2BOX, system DNS or the workstation's local IP configuration.
+
 029A is the credential-free local MLP validation and freeze. Product gates and
 user testing use recorded fixtures through local Docker Compose. 029A runs with
 no credentials and no external network. The whole 022–029A range remains
@@ -682,12 +715,12 @@ read-only output for both independent verifiers; do not edit the candidate tree
 or output between their reports.
 
 The current terminal candidate is complete. Core and Product independently
-PASS exact commit `3a43fe7` / tree `b44161d`; candidate SHA-256 is
-`f258d318d04561add4962f23e956bf32832913c49f884ef785c37da7164dfb17`.
+PASS exact commit `a5e8002` / tree `fae0294`; candidate SHA-256 is
+`c371e812cbd07f36955efef624e7ec6de082d2fc3a323f0fbcfb835d45b266ac`.
 The mode-0400 Core report SHA-256 is
-`90a4973f72b88e85e67949edf1e44e84d0a23eb7423c922b7d4ccd963c8ce4ad`;
+`8413f9a2839d5c232e9b3026bf65f505a0cc60545c7eeeb35ccf72529ed59280`;
 the Product report SHA-256 is
-`1199a0466316118945edaf75936845c93e9752d7c0c4ee130c1998f3314206f1`.
+`0c65ac7e693fe3707d7f2f781bddebd34b37f182564a1b48192834b421b425bc`.
 
 028B begins only from those immutable candidate bytes and the two exact report
 receipts. Its credentialed preflight requires an explicit canonical mapping
@@ -726,9 +759,10 @@ lowercase `ghcr.io/<owner>/<package>` repositories in frozen image order. The
 token file is a regular non-symlink mode-0400 file under a private operator
 root; do not paste its value into the shell, environment, Git or Codex chat.
 The evidence parent must already be mode 0700 and the output must not exist.
-The command is fixed to candidate `f258d318…` and the exact Core/Product report
-hashes `90a4973f…` / `1199a046…`. The immediately prior
-`9e45513` / `b8dc48ca…` authority is not accepted by the executable publisher.
+The command is fixed to candidate `c371e812…` and the exact Core/Product report
+hashes `8413f9a2…` / `0c65ac7e…`. The immediately prior
+`3a43fe7` / `b44161d` / `f258d318…` / `90a4973f…` / `1199a046…` authority is
+not accepted by the executable publisher.
 It verifies all five archives before the first registry request and
 writes mode-0400 evidence only after five exact remote manifest-digest checks.
 The earlier 028B implementation received two independent PASS reports on exact

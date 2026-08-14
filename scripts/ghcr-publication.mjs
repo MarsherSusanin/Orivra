@@ -31,11 +31,11 @@ import {
 } from "./oci-ustar-reader.mjs";
 
 const AUTHORIZED = Object.freeze({
-  commitSha: "3a43fe76da77985a9cecc56341a913a4e475f397",
-  treeSha: "b44161df668d7735fb86a8b45719f2126913f2b8",
-  candidateSha256: "sha256:f258d318d04561add4962f23e956bf32832913c49f884ef785c37da7164dfb17",
-  coreReportSha256: "sha256:90a4973f72b88e85e67949edf1e44e84d0a23eb7423c922b7d4ccd963c8ce4ad",
-  productReportSha256: "sha256:1199a0466316118945edaf75936845c93e9752d7c0c4ee130c1998f3314206f1",
+  commitSha: "a5e80026f23d38e40b9c354ec6488daffad87ba4",
+  treeSha: "fae0294cc980d69e2c82a2a1cb9ea02705c95655",
+  candidateSha256: "sha256:c371e812cbd07f36955efef624e7ec6de082d2fc3a323f0fbcfb835d45b266ac",
+  coreReportSha256: "sha256:8413f9a2839d5c232e9b3026bf65f505a0cc60545c7eeeb35ccf72529ed59280",
+  productReportSha256: "sha256:0c65ac7e693fe3707d7f2f781bddebd34b37f182564a1b48192834b421b425bc",
 });
 const limits = Object.freeze({ maxEntries: 4_096, maxJsonBytes: 1_048_576, maxResidentBytes: 4_294_967_296 });
 

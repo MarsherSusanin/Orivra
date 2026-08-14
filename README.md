@@ -206,6 +206,24 @@ blockchain-операций.
   `70f63cb0c4fac0c7661cb734896575be07edfa70`, tree
   `88ec38335ab9630e1fd8c4d5247101bd046f06eb`.
 
+## Быстрый release-процесс
+
+[ADR 0047](docs/adr/0047-risk-classified-release-lanes.md) separates three
+risk lanes. UI-only Web `src`/tests/docs runs focused Web coverage, build,
+Sites, Action and real Mac browser acceptance; deployment-runtime tools form a
+separate composition-tested pre-release slice; backend/schema/worker/storage
+changes retain the full matrix. Scope is classified within 10 minutes and
+focused RED/GREEN within 20 minutes, otherwise the wave stops and is replanned.
+An accepted implementation is frozen once and Core/Product verify the same
+immutable candidate in parallel once.
+
+A later docs/publisher allowlist refresh binds only existing accepted
+candidate/report bytes and does not rebuild or re-freeze them. These lanes do
+not weaken coverage, Definition of Done or the two-verifier rule and do not
+claim hosted, deployed or security PASS. Browser acceptance runs on the Mac;
+release work never installs Chromium on the VDS or touches V2BOX, system DNS or
+the workstation local IP.
+
 ## Быстрый старт
 
 Требования: Node.js 22 и npm.

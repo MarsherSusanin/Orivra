@@ -139,6 +139,24 @@ uses focused TDD and targeted verification. Run the unified full matrix once
 after all credential-free 022–029A modules and before the MLP candidate freeze,
 as defined in `docs/runbook.md`.
 
+[ADR 0047](docs/adr/0047-risk-classified-release-lanes.md) classifies release
+work before edits. UI-only Web `src`/tests/docs changes use focused Web coverage,
+build, Sites, Action and real Mac browser acceptance, followed by at most one
+candidate freeze and parallel Core/Product release verification. Deployment
+runtime/tool changes are a separate pre-release slice with composition-real
+tests and never share that UI candidate. API/backend, schema/migrations,
+worker/live effects, PostgreSQL, storage and recovery changes use the full
+matrix. A docs/publisher-authority refresh after an accepted immutable
+candidate runs only its affected authority/static/Sites checks and must not
+rebuild or re-freeze the candidate.
+
+Time-box scope classification to 10 minutes and focused RED/GREEN to 20
+minutes. These are stop-and-replan checkpoints, not permission to skip a gate.
+Freeze once; run the two release verifiers in parallel once. On a blocker,
+record it and replan a bounded slice instead of serial patch waves. Browser
+acceptance is Mac-only; never install Chromium on the VDS or touch V2BOX,
+system DNS or the workstation local-IP configuration.
+
 There is no checked-in `.github/workflows` automation yet. Do not describe a
 local PASS as a hosted CI, merge-queue or deployed Coston2 PASS.
 

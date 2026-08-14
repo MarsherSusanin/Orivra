@@ -41,6 +41,14 @@ The product journey is delivered as independently frozen vertical slices:
 | 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Open-Meteo verifier-compatible Core/Product PASS 4f421dc / 1bbbbad; fresh publication pending; no hosted/deployed claim |
 | 029D | Phase-ordered direct-production bootstrap | Post-publication deployer corrective Author GREEN: foreground one-shot precedes seal; independent reverification pending; no final deployment acceptance |
 
+ADR 0047 shortens the path without weakening evidence. UI-only work uses its
+focused Web/build/Sites/Action/Mac-browser lane; deployment-runtime tools are a
+separate composition-tested pre-release slice; backend/schema/worker/storage
+changes retain the full matrix. Scope and focused GREEN have 10m/20m
+stop-and-replan checkpoints, followed by one freeze and parallel Core/Product
+verification. An accepted candidate's later publisher-authority/docs refresh
+does not rebuild or re-freeze its immutable bytes.
+
 ## Completed pre-infrastructure product journey
 
 The roadmap now delivers one coherent local and persisted journey from run
