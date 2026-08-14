@@ -23,7 +23,7 @@ function canonicalJson(value) {
 
 function validLiveRuns(value) {
   return value?.status === "persisted" && Array.isArray(value.runIds) && value.runIds.length === 2 &&
-    value.runIds[0] !== value.runIds[1] && value.runIds.every((id) => /^run_[0-9A-Z]{26}$/.test(id)) &&
+    value.runIds[0] !== value.runIds[1] && value.runIds.every((id) => /^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.test(id)) &&
     JSON.stringify(value.manifests) === JSON.stringify([OPEN_METEO, ETH_USD]);
 }
 

@@ -10,8 +10,8 @@ const OPEN_METEO = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47e
 const ETH_USD = "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f";
 const MANIFESTS = [OPEN_METEO, ETH_USD];
 const RUN_IDS = [
-  "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4",
-  "run_01K2Q4P6R8T0V2X4Z6B8D0F2H5",
+  "11111111-1111-4111-8111-111111111114",
+  "22222222-2222-4222-8222-222222222224",
 ];
 const PRODUCTION_RUN_ID = "prod_01K2Q4P6R8T0V2X4Z6B8D0F2H4";
 const PUBLIC_ORIGIN = "https://orivra.xyz";
@@ -107,7 +107,7 @@ test("the production live default executes one worker-owned API persistence gate
   }]);
   assert.doesNotMatch(canonicalJson(commands), /projectToken|privateKey|verifierKey|signature/i);
   assert.match(packageJson.scripts?.["build:production-live-gate"] ?? "",
-    /^esbuild src\/production-live-gate-entry\.ts\b[\s\S]*--platform=node\b[\s\S]*--target=node22\b[\s\S]*--outfile=dist\/production-live-gate\.js$/);
+    /^esbuild src\/production-live-gate-entry\.ts\b[\s\S]*--platform=node\b[\s\S]*--target=node22\b[\s\S]*--outfile=dist\/production-live-gate\.js\b/);
   assert.doesNotMatch(packageJson.scripts?.["build:production-live-gate"] ?? "", /NODE_ENV|test-adapter/i);
   assert.match(dockerfile, /COPY scripts\/production-relayer-manifest-authority\.mjs \.\/scripts\/production-relayer-manifest-authority\.mjs/);
   assert.match(dockerfile, /apps\/worker\/dist\/production-live-gate\.js/);

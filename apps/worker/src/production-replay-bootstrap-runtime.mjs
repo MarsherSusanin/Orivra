@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 
 const OPEN_METEO_REPLAY = "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
 const OPEN_METEO_RELAYER = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6";
-const RUN_ID = /^run_[0-9A-Z]{26}$/;
+const RUN_ID = /^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/;
 
 function failure(cause) {
   return Object.assign(new Error("PRODUCTION_REPLAY_BOOTSTRAP_INVALID: Production replay bootstrap is invalid"), {

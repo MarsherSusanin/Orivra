@@ -142,7 +142,7 @@ function requireObservation(id, observed, authority) {
     observed.archivePendingAgeSeconds > 60)) {
     throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
   }
-  if (id === "persisted-live-coston2" && (!/^run_[0-9A-Z]{26}$/.test(observed.runId ?? "") || observed.persisted !== true)) {
+  if (id === "persisted-live-coston2" && (!/^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.test(observed.runId ?? "") || observed.persisted !== true)) {
     throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
   }
   return deepFreeze(structuredClone(observed));
@@ -451,7 +451,7 @@ function requireDirectCommand(id, observed, authority) {
     throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
   }
   if (id === "persisted-live-coston2" && (!Array.isArray(observed.runIds) || observed.runIds.length !== 2 || observed.runIds[0] === observed.runIds[1] ||
-    observed.runIds.some((runId) => !/^run_[0-9A-Z]{26}$/.test(runId)) || JSON.stringify(observed.manifests) !== JSON.stringify([openMeteoRelayerSha, ethUsdRelayerSha]))) {
+    observed.runIds.some((runId) => !/^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.test(runId)) || JSON.stringify(observed.manifests) !== JSON.stringify([openMeteoRelayerSha, ethUsdRelayerSha]))) {
     throw failure("PRODUCTION_OBSERVATION_INVALID", "Production observation is invalid", { check: id });
   }
   if (id === "persisted-live-coston2") {

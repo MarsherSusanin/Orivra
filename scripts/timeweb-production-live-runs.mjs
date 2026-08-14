@@ -5,7 +5,7 @@ import { validateTimewebProductionSecretInventory } from "./timeweb-production-s
 
 const OPEN_METEO = "sha256:1fb914f985c85333292f1d4a278010ff7e94d3459b95974f8d47eb70d0f7cfe6";
 const ETH_USD = "sha256:eaed1554eb215de798f3acc0a3936b469529595e563630e7cb1ae5defbd57f9f";
-const RUN = /^run_[0-9A-Z]{26}$/;
+const RUN = /^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/;
 
 function failure(cause) {
   return Object.assign(new Error("TIMEWEB_PRODUCTION_LIVE_RUNS_INVALID: Production live runs are invalid"), {

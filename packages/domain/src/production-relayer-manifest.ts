@@ -132,7 +132,7 @@ export function verifyProductionRelayerReplayAlias(input: Record<string, any>) {
       ) ||
       input.run?.stage !== "completed" || input.run?.proofVerified !== true ||
       input.run?.manifestSha256 !== input.relayerManifestSha256 ||
-      !/^run_[0-9A-Z]{26}$/.test(input.run?.runId ?? "") ||
+      !/^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.test(input.run?.runId ?? "") ||
       canonicalJson(input.run?.request) !== canonicalJson(relayer.request) ||
       canonicalJson(input.run?.consumer) !== canonicalJson(relayer.consumer) ||
       input.rawRelayerBundle?.runId !== input.run.runId ||

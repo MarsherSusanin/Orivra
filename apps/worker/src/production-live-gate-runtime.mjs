@@ -1,4 +1,4 @@
-const RUN_ID = /^run_[0-9A-Z]{26}$/;
+const RUN_ID = /^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/;
 const PRODUCTION_RUN_ID = /^prod_[0-9A-Z]{26}$/;
 const MANIFEST_SHA = /^sha256:[a-f0-9]{64}$/;
 

@@ -11,7 +11,7 @@ export { SafeConsumerRegistryV1Schema, canonicalSerializeSafeConsumerRegistry, c
 const Sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const TimestampSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
 const OperatorIdSchema = z.string().regex(/^operator_[0-9A-Z]{26}$/);
-const RunIdSchema = z.string().regex(/^(?:prod|run)_[0-9A-Z]{26}$/);
+const RunIdSchema = z.string().regex(/^(?:(?:prod|run)_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/);
 const PassedSchema = z.object({ status: z.literal("passed") }).strict();
 const ProducerSchema = z.object({
   commitSha: z.string().regex(/^[a-f0-9]{40}$/),

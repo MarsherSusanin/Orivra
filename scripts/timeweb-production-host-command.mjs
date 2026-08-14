@@ -156,7 +156,7 @@ function parseCanonicalRunBoundJson(bytes, { kind, maximum }) {
   if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > maximum) throw new Error("evidence size");
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   const value = JSON.parse(text);
-  if (text !== canonicalJson(value) || value?.runId === undefined || !/^run_[0-9A-Z]{26}$/.test(value.runId)) {
+  if (text !== canonicalJson(value) || value?.runId === undefined || !/^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.test(value.runId)) {
     throw new Error("evidence identity");
   }
   if (kind === "bundle" && (!SHA256.test(value.checksum ?? "") || value.checksum !== digest(Buffer.from(canonicalJson(Object.fromEntries(Object.entries(value).filter(([key]) => key !== "checksum"))), "utf8")))) {
@@ -944,7 +944,7 @@ export async function runTimewebProductionHostCommand({ encodedCommand, environm
         }));
         const bundle = parseCanonicalRunBoundJson(files[0].bytes, { kind: "bundle", maximum: PROOF_BUNDLE_MAX });
         const report = parseCanonicalRunBoundJson(files[1].bytes, { kind: "report", maximum: PREFLIGHT_REPORT_MAX });
-        requireObservation(bundle.runId === report.runId && /^run_[0-9A-Z]{26}$/.test(bundle.runId));
+        requireObservation(bundle.runId === report.runId && /^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.test(bundle.runId));
         bootstrapResult = { id, status: "passed", chainId: 114, sourceRunId: bundle.runId, sourceStage: "completed",
           sourceLiveManifestSha256: OPEN_METEO_RELAYER, replayManifestSha256: "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898",
           bundleSha256: digest(files[0].bytes), reportSha256: digest(files[1].bytes) };
@@ -1028,7 +1028,7 @@ export async function runTimewebProductionHostCommand({ encodedCommand, environm
   if (id === "persisted-live-coston2") {
     requirePayload(payload, []); const value = await adapters.observe.persistedLiveCoston2();
     requireObservation(value?.status === "passed" && value.chainId === 114 && value.persisted === true && value.runIds?.length === 2 &&
-      value.runIds.every((runId) => /^run_[0-9A-Z]{26}$/.test(runId)) && value.runIds[0] !== value.runIds[1] &&
+      value.runIds.every((runId) => /^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.test(runId)) && value.runIds[0] !== value.runIds[1] &&
       JSON.stringify(value.manifests) === JSON.stringify([
         OPEN_METEO_RELAYER,
         ETH_USD_RELAYER,

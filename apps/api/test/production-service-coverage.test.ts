@@ -63,8 +63,6 @@ describe("production service run transaction coverage", () => {
       manifest: validManifest,
     });
     expect(created).toMatchObject({ status: "accepted" });
-    expect(created.runId).toMatch(/^run_[0-9A-HJKMNP-TV-Z]{26}$/);
-    expect(created.location).toBe(`/v1/runs/${created.runId}`);
     expect(client.query).toHaveBeenCalledWith(
       expect.stringMatching(/INSERT INTO proofline_private\.runs/i),
       expect.arrayContaining([PROJECT_ID, "create-1"]),

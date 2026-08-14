@@ -118,18 +118,6 @@ function fingerprint(value: unknown): Buffer {
     .digest();
 }
 
-const RUN_ID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-function createProductionRunId(): string {
-  let value = BigInt(`0x${randomBytes(16).toString("hex")}`);
-  let suffix = "";
-  for (let index = 0; index < 26; index += 1) {
-    suffix = RUN_ID_ALPHABET[Number(value & 31n)] + suffix;
-    value >>= 5n;
-  }
-  return `run_${suffix}`;
-}
-
 function requireRunId(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) {
     throw Object.assign(new Error("Run id is required"), { status: 400 });
@@ -807,7 +795,7 @@ export function createProductionProoflineService(input: {
           }
         }
 
-        const runId = createProductionRunId();
+        const runId = randomUUID();
         const event: RunEventV1 = RunEventV1Schema.parse({
           version: "1",
           runId,

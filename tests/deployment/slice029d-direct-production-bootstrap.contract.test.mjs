@@ -178,9 +178,9 @@ test("replay bootstrap is production-only, bounded and cannot import a test adap
 test("replay bootstrap uses only the live worker plus persisted API path and exports the same run-bound pair", async () => {
   const module = await workerBootstrapRuntime();
   const calls = [];
-  const runId = "run_01K2Q4P6R8T0V2X4Z6B8D0F2H4";
-  const bundleBytes = Buffer.from('{"kind":"proof-bundle-v1","runId":"run_01K2Q4P6R8T0V2X4Z6B8D0F2H4"}', "utf8");
-  const reportBytes = Buffer.from('{"kind":"preflight-report-v1","runId":"run_01K2Q4P6R8T0V2X4Z6B8D0F2H4"}', "utf8");
+  const runId = "11111111-1111-4111-8111-111111111114";
+  const bundleBytes = Buffer.from('{"kind":"proof-bundle-v1","runId":"11111111-1111-4111-8111-111111111114"}', "utf8");
+  const reportBytes = Buffer.from('{"kind":"preflight-report-v1","runId":"11111111-1111-4111-8111-111111111114"}', "utf8");
   const result = await module.runProductionReplayBootstrap({
     chainId: 114,
     relayerManifestSha256: OPEN_RELAYER,
