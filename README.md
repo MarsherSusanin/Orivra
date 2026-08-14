@@ -17,7 +17,7 @@
   <p>
     <a href="https://orivra.xyz">Website</a> ·
     <a href="https://orivra.xyz/demo/canonical-url">Canonical URL attack demo</a> ·
-    <a href="https://github.com/users/MarsherSusanin/projects/2">Public backlog</a> ·
+    <a href="https://github.com/users/MarsherSusanin/projects/2/views/2">Product roadmap</a> ·
     <a href="ARCHITECTURE.md">Architecture</a> ·
     <a href="CONTRIBUTING.md">Contributing</a> ·
     <a href="SECURITY.md">Security</a>
