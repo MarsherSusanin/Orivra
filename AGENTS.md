@@ -1,194 +1,146 @@
-# Proofline agent policy
+# Orivra agent policy
 
-## Purpose
+## Purpose and sources of truth
 
-Proofline proves whether a Coston2 Web2Json consumer trusts the intended URL,
-not merely a valid proof. It turns one `Web2JsonManifestV1` into persisted
-consumer evidence, safe Solidity and a reproducible integration package.
+Orivra proves whether a Coston2 Web2Json consumer trusts the intended URL,
+not merely whether a proof is valid. One strict `Web2JsonManifestV1` becomes
+persisted lifecycle evidence, Consumer Lab diagnostics, safe Solidity and a
+checksummed integration package.
 
-Canonical docs: `README.md`, `ARCHITECTURE.md`, `docs/runbook.md`, `docs/development/roles.md`, and `docs/adr/README.md`.
+Use this file as the policy gateway. Detailed truth lives in:
 
-## Development protocol
+- product and contributor entry point: `README.md`;
+- module boundaries and invariants: `ARCHITECTURE.md`;
+- local, production, rollback and incident operations: `docs/runbook.md`;
+- expensive decisions: `docs/adr/README.md`;
+- representative implementation patterns: `docs/examples/README.md`;
+- author/verifier separation: `docs/development/roles.md`.
 
-- Work in small vertical slices: architect → RED contracts/tests → GREEN core → GREEN surfaces → refactor → code verification → product integration verification.
-- One writer owns the shared tree during a wave. Read-only audits may run in parallel.
-- Freeze intentional RED tests before implementation. Do not weaken public contracts to reach GREEN.
-- A production author cannot be either verifier; the two verifiers must be different agents.
-- Both verifiers inspect one recorded tree hash. Any production change invalidates both passes.
-- Add or update an ADR before changing package boundaries, persistence semantics, trust boundaries, or the release path.
+## Work cycle
 
-Full role definitions and evidence requirements: `docs/development/roles.md`.
+1. Inspect the nearest contract, implementation, tests and ADR before editing.
+2. Classify the change using ADR 0047: UI-only, deployment tooling,
+   backend/persistence, authority-only refresh, or an explicitly approved
+   production incident restoration.
+3. Freeze the closest causal RED test, implement the smallest vertical GREEN
+   slice, then refactor without weakening the contract.
+4. Run the affected commands below and read their complete output.
+5. Verify user-facing behavior through the real surface that changed.
+6. Update the canonical docs when commands, boundaries or operations change.
 
-## Architecture boundaries
+One writer MUST own the shared tree during a wave. A production author MUST
+NOT act as either release verifier; two independent verifiers inspect one exact
+commit/tree. Any production edit invalidates both reports.
 
-- Keep `packages/contracts` and `packages/domain` pure and deterministic.
-- Keep FDC network behavior behind `packages/fdc-coston2` ports/adapters.
-- API owns authentication, idempotent commands and PostgreSQL composition; it never receives user or relayer private keys.
-- Worker is the only owner of the relayer key and external live effects.
-- Web, CLI and Action consume public contracts and the persisted API path; do not add a direct live-worker release gate.
-- The local `@proofline/mcp` stdio adapter uses only the persisted API path with
-  existing `kind: "cli"` project tokens. It exposes bounded replay, evidence and
-  Consumer Lab operations; wallet, relayer, private-key, RPC and live-submission
-  effects are outside its tool boundary. MCP is built from a user checkout and
-  is never installed on the production VDS.
-- Run events are append-only. Preserve ordering, terminal immutability, idempotency and byte-identical replay.
-- Production adapters fail closed. Test adapters must not be importable or callable outside `NODE_ENV=test`.
+## Canonical commands
+
+Start with:
+
+```bash
+npm run typecheck
+npm test -- --run <nearest-test-file>
+```
+
+Use the affected gate, not an invented substitute:
+
+| Boundary | Required commands |
+| --- | --- |
+| Contracts/domain | `npm run test:core:coverage` |
+| API/adapters/CLI/Action | affected tests, `npm run test:coverage:backend` when applicable |
+| Worker | affected tests, `npm run test:coverage:worker` |
+| Web UI | `npm run test:coverage:web -- --maxWorkers=1`, `npm run build`, `npm run test:sites`, `npm run test:action:artifact` |
+| MCP | focused MCP tests, `npm run build:mcp` |
+| Deployment tools | focused composition tests, `npm run test:docker:static` |
+| PostgreSQL | `PROOFLINE_TESTCONTAINERS=1 npm run test:postgres -- --maxWorkers=1` |
+| Open-source metadata | `npm run check:open-source` |
+
+A skipped Testcontainers suite is not a PostgreSQL PASS. There is no checked-in
+`.github/workflows` automation; local commands MUST NOT be described as hosted
+CI or merge-queue evidence.
+
+## Architectural boundaries
+
+- `packages/contracts` and `packages/domain` MUST remain pure and deterministic.
+- Coston2 network behavior MUST stay behind `packages/fdc-coston2` ports.
+- `apps/api` owns authentication, idempotent commands and PostgreSQL
+  composition; it MUST NOT receive user or relayer private keys.
+- `apps/worker` is the only owner of relayer credentials and external live
+  effects. It MUST claim persisted commands and append outcomes.
+- Web, CLI, Action and MCP MUST use public contracts and the persisted API path;
+  they MUST NOT implement a second lifecycle.
+- `@proofline/mcp` is a local stdio replay/evidence connector using existing
+  `kind: "cli"` project tokens. It MUST NOT expose wallet, relayer, private-key,
+  arbitrary HTTP, RPC or live-submission tools and is never installed on VDS.
+- Run events are append-only. Preserve sequence, terminal immutability,
+  idempotency and byte-identical replay.
+- Production adapters fail closed. Test adapters MUST NOT be importable or
+  callable outside `NODE_ENV=test`.
+- Add or update an ADR before changing package boundaries, persistence,
+  authorization, storage, deployment topology or release authority.
 
 ## Security invariants
 
-- Never commit, log, serialize, echo or publish tokens, verifier keys, private keys or raw secrets.
-- Preserve 256-bit opaque tokens, keyed digests, read-only run-scoped share access, and project-token mutation authorization.
-- Preserve SSRF controls: HTTPS GET only, port 443, no redirects, pinned validated DNS, private/link-local/metadata denial, timeout and 1 MB cap.
-- Preserve relayer limits: chain `114`, registry-resolved `FdcHub.requestAttestation`, stored request hash, exact fee quote/caps, quota, balance floor and final-effect authorization.
+- MUST NOT commit, log, serialize, echo or publish tokens, private keys,
+  verifier keys, database URLs or raw secrets.
+- Preserve opaque token digests, read-only share access, project-token mutation
+  authority and browser-wallet/session separation.
+- Preserve SSRF controls: HTTPS GET, port 443, no redirects, pinned validated
+  DNS, private/link-local/metadata denial, timeout and 1 MB cap.
+- Preserve relayer limits: chain `114`, registry-resolved `FdcHub`, stored
+  request hash, exact fee quote/cap, quota, balance floor and final-effect
+  authorization.
+- Credentials pasted into chat or a terminal are exposed and MUST be rotated.
+  Never copy Swift credentials into the runtime.
 
-## Deployment boundary
+## Product and visual contract
 
-- [ADR 0029](docs/adr/0029-digitalocean-vds-deployment.md) selects one
-  DigitalOcean Droplet/VDS with Docker Compose. Caddy is the only public ingress
-  and routes Web plus same-origin `/api` to the API; API, worker and PostgreSQL
-  remain on private Compose networks.
-- Public application ingress is limited to 80/443. SSH is restricted to an
-  explicit administrator allowlist or VPN. PostgreSQL 5432 is internal only and
-  not exposed; API/worker host ports and the Docker socket are never public or
-  mounted into application containers.
-- Sites is a compatibility package, not the selected production host. Keep its
-  accepted artifacts and tests until a separate deprecation slice, and add the
-  Docker/Caddy routing gate rather than weakening Sites routing contracts.
-- 028A locally builds and exports verified OCI archives. Its frozen manifest
-  stores distinct per-image `archiveSha256`, `imageManifestDigest`, platform and
-  repository/reference fields without registry credentials, registry access,
-  external network or push. The exact ordered Linux/amd64 inventory is Caddy,
-  Web, API, worker and the custom PostgreSQL-recovery image; MinIO and upstream
-  bases remain build/QA inputs. The command builds each image once from a clean
-  private commit snapshot, accepts only a caller-supplied use-time verified
-  private WAL-G context, and atomically publishes a canonical manifest plus a
-  non-circular checksum receipt. Migration is a one-shot
-  checksummed job under a PostgreSQL advisory lock before app startup;
-  `/healthz`, `/readyz`, schema verification, worker heartbeat and the
-  persistent PostgreSQL volume remain separate acceptance evidence.
-- Database recovery requires off-host WAL plus base backup PITR and a
-  credential-free MinIO restore drill. ADR 0044's direct pilot uses exact
-  Timeweb S3 endpoint `https://s3.twcstorage.ru`, region `ru-1`, bucket
-  `orivra-backet`, path-style mode and explicitly shared pilot authority;
-  MinIO remains QA-only. A Droplet backup is secondary host recovery, not
-  database restore evidence.
-- Do not request or use DNS, SSH, DigitalOcean, GHCR pull, Spaces or live
-  Coston2 credentials before credential-free 022–029A, the unified full matrix
-  and two independent PASS reports for one tree hash. Do not claim hosted or
-  deployed evidence before 028B actually runs.
-- 029A is the credential-free local MLP validation and freeze. Product gates and
-  user testing use recorded fixtures through local Docker Compose. 029A runs
-  with no credentials and no external network; all 022–029A remains
-  credential-free.
-- 028B is credentialed and starts only after the unified matrix and two PASS
-  reports. It verifies exact frozen OCI archive bytes against `archiveSha256`
-  before publication, then performs byte-preserving load/copy/push to GHCR with
-  no rebuild. The remote image digest matches only
-  `imageManifestDigest`; never compare the remote digest with `archiveSha256`.
-  An archive or manifest-digest mismatch aborts before staging pull.
-- Historical 029B is the credentialed production promotion and canary contract
-  that runs only after 028B. ADR 0044 moves active V2 effect authority to the
-  direct-production 029C pilot without changing that credential gate.
-- Publication/deployment evidence is separate, immutable and append-only. It
-  contains `frozenReleaseManifestSha256`; it does not mutate frozen release manifest,
-  candidate tree or image bytes. The VDS pulls only a verified remote digest
-  bound by that publication evidence, using a read-only GHCR pull credential.
-  ADR 0044 active V2 is a direct-production pilot after GHCR publication: it
-  does not fabricate or require staging evidence and cannot treat historical
-  V1 records as effect authority.
-- Direct-pilot acceptance uses strict typed preflights, deterministic
-  Open-Meteo then ETH/USD safe-consumer deployment, an exact canonical worker
-  registry, explicit Caddy cutover and append-only trusted-clock checkpoints
-  at cutover/15m/1h/24h. Terminal PASS before 86400 seconds is forbidden.
-- ADR 0045 makes the first start phase-aware: backup, replay and hosted-browser
-  evidence are absent no-replace outputs, not static preflight inputs. Private
-  database/API and consumer seal precede first Timeweb backup/WAL/PITR; one
-  bounded worker-image replay-bootstrap one-shot seals canonical replay before
-  the ordinary worker; public browser acceptance follows explicit cutover and
-  remains rollback-bound. Compose has nine service definitions without adding
-  a ninth long-lived service.
-- Public replay manifests and the safe-consumer registry retain their exact
-  replay SHAs. Production live effects use separate canonical relayer-mode
-  SHAs and may resolve those replay-keyed consumers only through a pure strict
-  alias proving submission is the sole manifest difference and generated
-  consumer bytes/hashes are identical. Cross-source aliasing fails before RPC.
-- Application rollback may select only a prior schema-compatible verified
-  remote digest from immutable publication/deployment evidence bound to its
-  `frozenReleaseManifestSha256`. The frozen manifest supplies schema metadata,
-  never pull authority. Missing, mismatched, unpublished or unverified evidence
-  blocks rollback; database repair remains forward or new-volume restore.
+- Preserve the Run Cockpit hierarchy from
+  `proofline-run-cockpit-reference.png`: navigation, compact top bar, six-stage
+  timeline, diagnostics rail, dominant action and evidence strip.
+- `Proof available` MUST precede Consumer Lab. A verified proof with no
+  consumer evidence is `Consumer · Ready`, not `In progress`; selecting it MUST
+  route, scroll and focus the `Verify consumer` action. Completed consumer
+  evidence remains addressable by URL.
+- Vulnerable diagnostics and generated safe Solidity are separate facts.
+  Never claim `safe to integrate` without persisted canonical-safe evidence.
+- Route filters, Composer state, active run stage and panels MUST survive reload,
+  back and forward.
+- Ordinary routes use the global SIWE session. Share/project-token routes show
+  only `Shared access` or `Token access` and MUST NOT restore wallet chrome.
+- Browser acceptance runs on the operator Mac. Never install Chromium on VDS
+  or touch V2BOX, system DNS or the workstation local-IP configuration.
 
-## Visual contract
+## Production and release boundary
 
-- The accepted source is `proofline-run-cockpit-reference.png`.
-- Preserve the Run Cockpit hierarchy: fixed navigation rail, compact top bar,
-  central attestation timeline, right diagnostics rail, one dominant action and
-  bottom evidence strip.
-- Preserve the flow `Proof available` → `Verify consumer` → evidence-backed
-  invariant result → safe consumer generation → `Open integration package`.
-- Show `Proof available`, consumer verification and bundle export only after the persisted proof stage is `completed`; earlier states surface the current stage without implying proof readiness.
-- Keep route filters, Composer step and the active secondary panel in restorable
-  URL state so reload, back and forward preserve the user's context.
-- Composer must consume the global wallet session: never repeat a sign-in action
-  beside a verified profile. Keep `Browse templates` visible at Source and offer
-  `Run this template again` from completed project-owned runs using the exact
-  persisted manifest with a fresh request identity.
-- Keep every Run Cockpit lifecycle stage addressable through restorable URL state;
-  completed preflight evidence remains directly reviewable while recovery is active.
-- Keep the dark graphite palette, cyan active state, green completed state, amber diagnostic state, thin dividers, compact developer-tool density, and code-native English UI copy.
-- Keep one persistent global SIWE indicator in the top bar. Ordinary anonymous routes show `Sign in with wallet`; authenticated routes show a locally derived identicon, shortened verified address and an accessible profile menu. Mobile keeps the identicon and menu while hiding the address. Call the identity `Verified wallet`, not `Connected wallet`, because SIWE does not imply a live provider connection.
-- Never mix browser-wallet chrome with run-scoped share or caller-supplied project-token authority. Those routes show only neutral `Shared access` or `Token access`, never restore the browser session and never open the SIWE dialog.
-- Build Web UI in `src/`. Treat an accepted generated mock as source of truth for layout, component anatomy, density, spacing, color, typography, visible content and hierarchy.
-- Before substantial visual changes, use Product Design `get-context` when the visual source is unclear or conflicts with the current goal.
-- For visual work, run the local server and inspect the browser yourself; do not hand server-start work to the user when the environment can do it.
-- Record durable product-specific design decisions in this file.
+Production is one DigitalOcean VDS using Docker Compose. Caddy is the only
+public ingress on 80/443; PostgreSQL, API and worker remain private. Timeweb S3
+is the active backup store; MinIO is QA-only. Exact current state, image digests
+and rollback commands belong only in `docs/runbook.md`.
 
-## Validation
+Normal release authority requires one clean candidate and independent Core and
+Product PASS reports for the same tree. VDS MUST pull immutable GHCR digests;
+it MUST NOT build application images. Publication/deployment evidence remains
+separate and append-only.
 
-Start with `npm run typecheck` and the narrowest affected tests. Each module
-uses focused TDD and targeted verification. Run the unified full matrix once
-after all credential-free 022–029A modules and before the MLP candidate freeze,
-as defined in `docs/runbook.md`.
+ADR 0047 permits a deadline incident restoration only after explicit operator
+approval. It may publish and pin the smallest affected service image after the
+focused gate, MUST preserve the prior digest, and MUST verify container digest,
+`/api/healthz`, `/api/readyz` and the affected Mac-browser journey. It is not a
+release, security, PITR or candidate PASS; deferred normal gates remain debt.
 
-[ADR 0047](docs/adr/0047-risk-classified-release-lanes.md) classifies release
-work before edits. UI-only Web `src`/tests/docs changes use focused Web coverage,
-build, Sites, Action and real Mac browser acceptance, followed by at most one
-candidate freeze and parallel Core/Product release verification. Deployment
-runtime/tool changes are a separate pre-release slice with composition-real
-tests and never share that UI candidate. API/backend, schema/migrations,
-worker/live effects, PostgreSQL, storage and recovery changes use the full
-matrix. A docs/publisher-authority refresh after an accepted immutable
-candidate runs only its affected authority/static/Sites checks and must not
-rebuild or re-freeze the candidate.
-
-Time-box scope classification to 10 minutes and focused RED/GREEN to 20
-minutes. These are stop-and-replan checkpoints, not permission to skip a gate.
-Freeze once; run the two release verifiers in parallel once. On a blocker,
-record it and replan a bounded slice instead of serial patch waves. Browser
-acceptance is Mac-only; never install Chromium on the VDS or touch V2BOX,
-system DNS or the workstation local-IP configuration.
-
-There is no checked-in `.github/workflows` automation yet. Do not describe a
-local PASS as a hosted CI, merge-queue or deployed Coston2 PASS.
-
-Coverage gates:
-
-- contracts/domain/codegen: 100% statements and branches;
-- API/adapters/CLI/Action: at least 90% lines and 85% branches;
-- React: at least 85% lines and 80% branches plus browser acceptance.
-
-For real PostgreSQL evidence use `PROOFLINE_TESTCONTAINERS=1 npm run test:postgres -- --maxWorkers=1`. A skipped Testcontainers suite is not a PASS.
-
-Keep `.openai/hosting.json`, `worker/index.js`, `scripts/prepare-sites-build.mjs`, and `tests/sites-worker.test.mjs` intact unless the slice explicitly changes Sites behavior. Before Sites compatibility handoff run `npm run build` and `npm run test:sites`; require `dist/client/index.html`, `dist/server/index.js`, and `dist/.openai/hosting.json`.
+Sites is compatibility-only. Unless the slice explicitly changes Sites, keep
+`.openai/hosting.json`, `worker/index.js`,
+`scripts/prepare-sites-build.mjs` and `tests/sites-worker.test.mjs` intact.
 
 ## Definition of Done
 
-- Requested behavior and frozen contracts agree; no public contract was weakened.
-- Typecheck, affected tests and affected coverage gates PASS.
-- Before the unified MLP candidate freeze, the complete runbook matrix and real
-  Testcontainers PostgreSQL PASS; skipped integration cases are not evidence.
-- A Web change has black-box desktop/mobile, keyboard, axe, console/network and
+- Requested behavior, public contracts and persisted evidence agree.
+- Relevant tests, coverage, typecheck and build gates pass.
+- Web changes include desktop/mobile, keyboard, axe, console/network and
   reload/back-forward evidence.
-- A release candidate has two independent PASS reports for one exact tree hash.
-- Commands, boundaries, operations and reference examples changed by the slice
-  are updated in the canonical documentation.
+- Operational changes include exact before/after identity and a tested rollback
+  boundary.
+- Normal release candidates have two independent PASS reports for one tree;
+  incident restorations are explicitly labeled non-PASS.
+- Commands, architecture, operations and reference examples changed by the
+  slice are updated in the canonical documentation.
