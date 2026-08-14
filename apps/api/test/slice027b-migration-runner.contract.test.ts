@@ -206,7 +206,7 @@ describe("Slice 027B migration history and runner orchestration", () => {
     };
     await expect(module.runVerifiedMigrations({ pool: { connect: vi.fn(async () => client) }, plan: plan() }))
       .resolves.toEqual({ fromVersion: 10, toVersion: 10 });
-    expect(calls.join("\n")).toMatch(/GRANT INSERT ON TABLE proofline_private\.run_commands TO proofline_api/i);
+    expect(calls.join("\n")).toMatch(/GRANT SELECT, INSERT ON TABLE proofline_private\.run_commands TO proofline_api/i);
   });
 
   it("rolls back, unlocks and releases on an apply failure without a target-success log", async () => {

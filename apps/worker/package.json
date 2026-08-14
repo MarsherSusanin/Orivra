@@ -2,6 +2,7 @@
   "name": "@proofline/worker",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/worker.js",
   "scripts": {

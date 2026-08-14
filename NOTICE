@@ -1,0 +1,11 @@
+Orivra
+Copyright 2026 Orivra contributors
+
+Orivra first-party source is licensed under the Apache License, Version 2.0,
+except for Solidity files that explicitly carry the SPDX identifier MIT. Those
+files remain available under the MIT License in LICENSES/MIT.txt.
+
+Third-party software and data retain their respective licenses and attribution
+notices. See THIRD_PARTY_NOTICES.md for the dependency inventory. The Orivra
+license does not grant rights to third-party trademarks, including Flare,
+GitHub, LayerZero, or Model Context Protocol project marks.
