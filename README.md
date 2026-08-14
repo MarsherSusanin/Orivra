@@ -17,6 +17,7 @@
   <p>
     <a href="https://orivra.xyz">Website</a> ·
     <a href="https://orivra.xyz/demo/canonical-url">Canonical URL attack demo</a> ·
+    <a href="https://github.com/users/MarsherSusanin/projects/2">Public backlog</a> ·
     <a href="ARCHITECTURE.md">Architecture</a> ·
     <a href="CONTRIBUTING.md">Contributing</a> ·
     <a href="SECURITY.md">Security</a>
@@ -241,8 +242,10 @@ open-source-readiness checks, but their success is not a security audit.
 ## Contributing
 
 Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening
-a pull request. Changes must preserve the persisted evidence and authorization
-boundaries rather than replacing them with test-only shortcuts.
+a pull request. The date-free [Orivra Public Backlog](https://github.com/users/MarsherSusanin/projects/2)
+contains contribution-ready product and engineering work. Changes must preserve
+the persisted evidence and authorization boundaries rather than replacing them
+with test-only shortcuts.
 
 ## License
 

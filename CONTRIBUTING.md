@@ -20,8 +20,11 @@ API state honestly rather than substituting fixtures.
 
 ## Making a change
 
-1. Open an issue for substantial product, persistence, package-boundary, or
-   trust-boundary changes.
+1. Select an existing item from the
+   [Orivra Public Backlog](https://github.com/users/MarsherSusanin/projects/2)
+   or open an issue for substantial product, persistence, package-boundary, or
+   trust-boundary changes. Backlog priority describes impact, not a delivery
+   date or commitment.
 2. Keep the change focused and add or update an ADR when it changes public
    contracts, persistence semantics, trust boundaries, or the release path.
 3. Add a failing contract or behavior test before implementation when fixing a
@@ -74,4 +77,5 @@ project/share tokens, production host secrets, or real credentials in fixtures.
 Use obviously synthetic bounded values in tests.
 
 Do not open a public issue for a suspected vulnerability. Follow
-`SECURITY.md` instead.
+`SECURITY.md` instead. Public issues must not contain credentials, private host
+access details, or exploit reproductions.

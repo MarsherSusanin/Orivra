@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Orivra Public Backlog
+    url: https://github.com/users/MarsherSusanin/projects/2
+    about: Browse date-free product and engineering work before opening a new issue.
+  - name: Report a security vulnerability privately
+    url: https://github.com/MarsherSusanin/Orivra/security/advisories/new
+    about: Do not disclose vulnerabilities, credentials, host access details, or exploits publicly.

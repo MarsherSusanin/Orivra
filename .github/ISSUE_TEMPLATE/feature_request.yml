@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose a public product or engineering outcome for the date-free backlog.
+title: "feature: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the Orivra Public Backlog before opening a new request. Issues describe intended outcomes, not delivery dates or commitments.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Which user or contributor problem is not solved today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable success without prescribing an unsafe shortcut.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List concrete, testable behaviors.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Trust and compatibility boundaries
+      description: Identify affected evidence, authorization, privacy, network, persistence, or compatibility constraints.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: What should this work explicitly not authorize or claim?
+    validations:
+      required: true
+  - type: checkboxes
+    id: public
+    attributes:
+      label: Public issue check
+      options:
+        - label: This request contains no credentials, private host details, vulnerability reproduction, or personal data.
+          required: true

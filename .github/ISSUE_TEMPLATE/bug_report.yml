@@ -1,0 +1,69 @@
+name: Bug report
+description: Report reproducible incorrect behavior without sensitive data.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Orivra. Do not include credentials, project or share tokens, wallet signatures, private host details, or vulnerability reproductions. Security reports belong in a private advisory.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What happened, and what user or contributor workflow was affected?
+      placeholder: Describe the visible failure and its impact.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Give the smallest deterministic sequence using synthetic or redacted values.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence
+      description: Include version, route, browser/runtime, checksums, or logs only after removing secrets and personal data.
+    validations:
+      required: true
+  - type: dropdown
+    id: boundary
+    attributes:
+      label: Affected boundary
+      options:
+        - Web product UX
+        - Consumer diagnostics or generated Solidity
+        - Flare / FDC integration
+        - Wallet or authentication
+        - API or persistence
+        - Worker or live effects
+        - MCP / CLI / Action
+        - Deployment, backup, or recovery
+        - Documentation or contributor tooling
+        - Unknown
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, tokens, wallet signatures, private host details, and personal data.
+          required: true
+        - label: This is not a vulnerability disclosure. If it is, I will use a private GitHub Security Advisory instead.
+          required: true

@@ -15,6 +15,7 @@ Use this file as the policy gateway. Detailed truth lives in:
 - expensive decisions: `docs/adr/README.md`;
 - representative implementation patterns: `docs/examples/README.md`;
 - author/verifier separation: `docs/development/roles.md`.
+- public, date-free work selection: `https://github.com/users/MarsherSusanin/projects/2`.
 
 ## Work cycle
 

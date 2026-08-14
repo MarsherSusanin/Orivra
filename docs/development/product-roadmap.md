@@ -1,5 +1,11 @@
 # Orivra product roadmap
 
+> [!IMPORTANT]
+> This file is a historical slice and release-evidence record. It is not the
+> current product plan and carries no delivery dates or commitments. Current
+> product and engineering work lives in the public
+> [Orivra Public Backlog](https://github.com/users/MarsherSusanin/projects/2).
+
 The product journey is delivered as independently frozen vertical slices:
 
 `Runs → Manifest → Preflight → Submission → Lifecycle → Consumer Lab → Evidence handoff`
