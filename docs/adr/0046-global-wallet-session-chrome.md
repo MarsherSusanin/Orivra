@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted; Slice 030A Settings-composition corrective RED after Product FAIL.
+Accepted; Slice 030A Settings-composition corrective Author GREEN, reverification pending.
 
 ## Context
 

@@ -97,6 +97,10 @@ function SignOutDialog({ onClose }: { onClose(): void }) {
   }, [pending]);
 
   useEffect(() => {
+    if (failed) cancelRef.current?.focus();
+  }, [failed]);
+
+  useEffect(() => {
     if (snapshot.status === "anonymous") onClose();
   }, [onClose, snapshot.status]);
 

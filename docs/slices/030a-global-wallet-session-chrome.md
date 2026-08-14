@@ -1,6 +1,6 @@
 # Slice 030A — Global wallet session chrome
 
-Status: Settings-composition corrective RED after Product FAIL
+Status: Settings-composition corrective Author GREEN; reverification pending
 
 Decision: [ADR 0046](../adr/0046-global-wallet-session-chrome.md)
 

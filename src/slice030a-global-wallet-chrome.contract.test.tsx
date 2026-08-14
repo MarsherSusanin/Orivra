@@ -184,7 +184,7 @@ describe("Slice 030A global wallet session chrome", () => {
     expect(dialog).toContainElement(document.activeElement as HTMLElement);
     await user.tab({ shift: true });
     expect(dialog).toContainElement(document.activeElement as HTMLElement);
-    await user.click(screen.getByRole("button", { name: "Forget this browser" }));
+    await user.click(within(dialog).getByRole("button", { name: "Forget this browser" }));
     const successor = await within(topbar()).findByRole("button", { name: "Sign in with wallet" });
     expect(successor).toBeVisible();
     expect(successor).toHaveFocus();
