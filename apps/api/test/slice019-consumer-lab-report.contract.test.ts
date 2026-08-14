@@ -45,6 +45,41 @@ describe("Slice 019 persisted Consumer Lab report", () => {
     expect(report.safeConsumer.diff).toContain("+contract ProoflineSafeWeb2JsonConsumer");
     expect(report.checks.map((check: { invariant: string }) => check.invariant)).toEqual(["scheme", "host", "path", "query"]);
 
+    const diagnostic = JSON.parse(evidence.toString()).diagnostics[0];
+    const reorderedDiagnostic = {
+      remediation: diagnostic.remediation,
+      evidence: {
+        requestUrl: diagnostic.evidence.requestUrl,
+        missingChecks: diagnostic.evidence.missingChecks,
+        consumer: diagnostic.evidence.consumer,
+      },
+      summary: diagnostic.summary,
+      confidence: diagnostic.confidence,
+      severity: diagnostic.severity,
+      code: diagnostic.code,
+      version: diagnostic.version,
+    };
+    await expect(production({
+      ...row,
+      consumer_event: {
+        ...row.consumer_event,
+        payload: { passed: false, diagnostics: [reorderedDiagnostic] },
+      },
+    }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID }))
+      .resolves.toMatchObject({ verdict: { state: "needs-fixes", missingChecks: 4 } });
+
+    await expect(production({
+      ...row,
+      consumer_event: {
+        ...row.consumer_event,
+        payload: {
+          passed: false,
+          diagnostics: [{ ...reorderedDiagnostic, remediation: "Different remediation." }],
+        },
+      },
+    }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID }))
+      .rejects.toMatchObject({ status: 500, code: "CONSUMER_LAB_INVALID" });
+
     await expect(production({ ...row, safe_sha256: Buffer.alloc(32) }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID }))
       .rejects.toMatchObject({ status: 500, code: "CONSUMER_LAB_INVALID" });
     await expect(production({ ...row, safe_metadata: { compiler: "solc-0.8.36", compileStatus: "passed", compiledSourceSha256: `sha256:${"0".repeat(64)}` } }).getConsumerLabReport({ runId: RUN_ID, projectId: PROJECT_ID }))

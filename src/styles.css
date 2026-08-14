@@ -2950,6 +2950,10 @@ a {
   color: var(--green);
 }
 
+.address-field.consumer-identity-vulnerable svg {
+  color: var(--amber);
+}
+
 .address-field input {
   min-width: 0;
   flex: 1;
@@ -3169,6 +3173,36 @@ a {
 .consumer-artifact-actions { flex-direction: row; flex-wrap: wrap; }
 .consumer-artifact-actions button,
 .consumer-artifact-actions a { padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--cyan); background: transparent; text-decoration: none; cursor: pointer; }
+
+.consumer-report-recovery {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 13px;
+  color: var(--muted);
+  border: 1px solid rgba(244, 186, 8, 0.42);
+  border-radius: var(--radius-sm);
+  background: rgba(244, 186, 8, 0.055);
+}
+
+.consumer-report-recovery strong {
+  color: var(--amber);
+}
+
+.consumer-report-recovery span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.consumer-report-recovery button {
+  padding: 9px 12px;
+  color: var(--cyan);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
 
 .integration-dialog {
   width: min(790px, 100%);

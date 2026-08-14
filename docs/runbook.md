@@ -709,6 +709,16 @@ not convert their focused evidence into a candidate, security, recovery or
 full-release PASS. After the deadline, run the ordinary Lane B/C matrix,
 candidate freeze and two independent verifiers over the accumulated tree.
 
+Current Consumer Lab restoration: production exposed
+`CONSUMER_LAB_INVALID` after safe-consumer codegen because canonical artifact
+diagnostics and PostgreSQL `jsonb` diagnostics were compared with
+order-sensitive `JSON.stringify`. The bounded repair uses canonical semantic
+equality, preserves value/checksum/lifecycle fail-closed controls, and keeps a
+successfully generated artifact visible when report loading fails. Only the
+API and Web images may change in the incident rollout. The full Lane C matrix,
+candidate freeze and two independent reports remain explicitly deferred until
+after the deadline; this restoration is not a release or security PASS.
+
 029A is the credential-free local MLP validation and freeze. Product gates and
 user testing use recorded fixtures through local Docker Compose. 029A runs with
 no credentials and no external network. The whole 022–029A range remains

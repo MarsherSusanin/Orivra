@@ -16,6 +16,7 @@ import {
   type RunEventV1,
 } from "@proofline/contracts";
 import {
+  canonicalJson,
   canonicalSerializeProofBundle,
   canonicalSerializePreflightReport,
   createEvidenceReceipt,
@@ -1371,8 +1372,13 @@ export function createProductionProoflineService(input: {
         if (proofEvent.runId !== runId || consumerEvent.runId !== runId || proofEvent.sequence >= consumerEvent.sequence) {
           throw new Error("Consumer Lab lifecycle evidence does not belong to this ordered run");
         }
-        const terminalDiagnostics = consumerEvent.payload.diagnostics;
-        if (consumerEvent.payload.passed !== passed || JSON.stringify(terminalDiagnostics) !== JSON.stringify(diagnostics)) {
+        const terminalDiagnostics = DiagnosticV1Schema.array().parse(
+          consumerEvent.payload.diagnostics,
+        );
+        if (
+          consumerEvent.payload.passed !== passed ||
+          canonicalJson(terminalDiagnostics) !== canonicalJson(diagnostics)
+        ) {
           throw new Error("Consumer artifact does not match terminal event");
         }
         const identity = evidence.consumer === "canonical-safe"

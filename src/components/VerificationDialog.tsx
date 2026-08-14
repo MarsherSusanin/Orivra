@@ -46,6 +46,8 @@ export function VerificationDialog({
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<GeneratedConsumer | null>(null);
   const [report, setReport] = useState<ConsumerLabReportV1 | null>(null);
+  const [reportError, setReportError] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
   const [artifactVerified, setArtifactVerified] = useState(false);
 
   useLayoutEffect(() => {
@@ -150,20 +152,41 @@ export function VerificationDialog({
   const generateConsumer = async () => {
     setGenerating(true);
     setError("");
+    setReportError(false);
     try {
       const consumer = await services.generateConsumer(context);
       setGenerated(consumer);
-      if (services.getConsumerLabReport) {
-        setReport(await services.getConsumerLabReport(context));
-      }
       onProductEvent?.({
         name: "SAFE_CODEGEN_GENERATED",
         metadata: { target: "solidity" },
       });
+      if (services.getConsumerLabReport) {
+        setReportLoading(true);
+        try {
+          setReport(await services.getConsumerLabReport(context));
+        } catch {
+          setReportError(true);
+        } finally {
+          setReportLoading(false);
+        }
+      }
     } catch (cause) {
       setError(safeError(cause));
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const retryConsumerLabReport = async () => {
+    if (!services.getConsumerLabReport) return;
+    setReportLoading(true);
+    setReportError(false);
+    try {
+      setReport(await services.getConsumerLabReport(context));
+    } catch {
+      setReportError(true);
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -202,10 +225,10 @@ export function VerificationDialog({
           <button ref={closeRef} className="close-button" type="button" onClick={onClose} aria-label="Close consumer verification"><X size={22} aria-hidden="true" /></button>
         </header>
         <div className="dialog-body">
-          <div className="address-field" aria-label="Consumer identity">
-            <ShieldCheck size={20} aria-hidden="true" />
+          <div className="address-field consumer-identity-vulnerable" aria-label="Consumer identity">
+            <Warning size={20} aria-hidden="true" />
             <strong>Canonical vulnerable consumer</strong>
-            <span>Coston2</span>
+            <span>Diagnostic fixture · Coston2</span>
           </div>
           {status === "idle" ? (
             <div className="dialog-intro">
@@ -250,7 +273,8 @@ export function VerificationDialog({
               ) : report ? (
                 <div className="consumer-lab-report">
                   <div className="consumer-lab-statement">
-                    <strong>{report.statement}</strong>
+                    <strong>Tested consumer: {report.verdict.state === "safe-to-integrate" ? "passed" : "needs fixes"}</strong>
+                    <span>{report.statement}</span>
                     <span>{report.verdict.state === "safe-to-integrate"
                       ? "Safe to integrate"
                       : `Still missing ${report.verdict.missingChecks} ${report.verdict.missingChecks === 1 ? "check" : "checks"}`}</span>
@@ -267,7 +291,8 @@ export function VerificationDialog({
                     ))}
                   </ul>
                   <div className="generated-code">
-                    <span><Check size={17} weight="bold" aria-hidden="true" />{report.safeConsumer.contractName} · {report.safeConsumer.compileStatus} · {report.safeConsumer.sha256}</span>
+                    <span><Check size={17} weight="bold" aria-hidden="true" />Generated replacement: {artifactVerified ? "verified" : "compiled"}</span>
+                    <code>{report.safeConsumer.contractName} · {report.safeConsumer.compilerVersion} · {report.safeConsumer.sha256}</code>
                     <pre><code>{report.safeConsumer.diff}</code></pre>
                     <div className="consumer-artifact-actions">
                       <button type="button" onClick={() => void navigator.clipboard?.writeText(report.safeConsumer.source)}>Copy Solidity</button>
@@ -280,7 +305,19 @@ export function VerificationDialog({
                   </div>
                 </div>
               ) : (
-                <div className="generated-code"><span><Check size={17} weight="bold" aria-hidden="true" />Safe consumer generated</span><code>{generated.source}</code></div>
+                <div className="generated-code">
+                  <span><Check size={17} weight="bold" aria-hidden="true" />Safe consumer generated</span>
+                  <code>{generated.source}</code>
+                  {reportError ? (
+                    <div className="consumer-report-recovery" role="alert">
+                      <strong>Consumer Lab report unavailable</strong>
+                      <span>The generated artifact is preserved. Retry loads only the persisted report.</span>
+                      <button type="button" disabled={reportLoading} onClick={() => void retryConsumerLabReport()}>
+                        {reportLoading ? "Loading report…" : "Retry report"}
+                      </button>
+                    </div>
+                  ) : reportLoading ? <span role="status">Loading persisted report…</span> : null}
+                </div>
               )}
             </div>
           ) : null}

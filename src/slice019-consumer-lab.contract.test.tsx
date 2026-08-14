@@ -52,4 +52,67 @@ describe("Slice 019 Consumer Lab surface", () => {
     expect(await screen.findByText("Still missing 1 check")).toBeVisible();
     expect(screen.queryByText("Still missing 1 checks")).not.toBeInTheDocument();
   });
+
+  it("keeps generated Solidity and retries only the persisted report", async () => {
+    const user = userEvent.setup();
+    const sourceDigest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(consumerLabReport.safeConsumer.source),
+    );
+    const sourceSha256 = [...new Uint8Array(sourceDigest)]
+      .map((value) => value.toString(16).padStart(2, "0"))
+      .join("");
+    const persistedReport = {
+      ...consumerLabReport,
+      safeConsumer: {
+        ...consumerLabReport.safeConsumer,
+        sha256: `sha256:${sourceSha256}`,
+      },
+    };
+    const generateConsumer = vi.fn().mockResolvedValue({
+      source: persistedReport.safeConsumer.source,
+    });
+    const getConsumerLabReport = vi.fn()
+      .mockRejectedValueOnce(new Error("Orivra API 500: Request could not be completed"))
+      .mockResolvedValueOnce(persistedReport);
+    const onOpenIntegration = vi.fn();
+    const services = {
+      verifyConsumer: vi.fn().mockResolvedValue({
+        summary: "Consumer needs 4 fixes",
+        code: "MISSING_CONSUMER_HOST_INVARIANT",
+        checks: [{ label: "Source host invariant", status: "failed" }],
+      }),
+      generateConsumer,
+      getConsumerLabReport,
+      exportBundle: vi.fn(),
+      replayBundle: vi.fn(),
+    };
+
+    render(
+      <VerificationDialog
+        context={{ runId: consumerLabReport.runId, projectToken: `project_${"a".repeat(64)}` }}
+        services={services}
+        onClose={vi.fn()}
+        onOpenIntegration={onOpenIntegration}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /run verification/i }));
+    await user.click(await screen.findByRole("button", { name: /generate safe consumer/i }));
+
+    expect(await screen.findByText("Safe consumer generated")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("Consumer Lab report unavailable");
+    expect(screen.getByRole("button", { name: /retry report/i })).toBeVisible();
+    expect(screen.queryByText(/Orivra API 500/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /retry report/i }));
+    expect(await screen.findByText("Tested consumer: needs fixes")).toBeVisible();
+    expect(screen.getByText("Generated replacement: compiled")).toBeVisible();
+    expect(generateConsumer).toHaveBeenCalledOnce();
+    expect(getConsumerLabReport).toHaveBeenCalledTimes(2);
+
+    await user.click(screen.getByRole("button", { name: /verify generated consumer/i }));
+    expect(await screen.findByText("Generated replacement: verified")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /open integration package/i }));
+    expect(onOpenIntegration).toHaveBeenCalledOnce();
+  });
 });

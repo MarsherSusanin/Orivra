@@ -23,7 +23,16 @@ bytes or checksum mismatch. Copy and Download use those exact bytes; Web never
 regenerates Solidity. `Safe to integrate` requires all four enforced checks and
 successful compiler evidence.
 
+Diagnostics persisted as canonical artifact bytes and as PostgreSQL `jsonb`
+are cross-bound with canonical semantic equality. Object-key order is not
+authority, while array order and every validated diagnostic value remain exact.
+The vulnerable-consumer verdict and the generated safe artifact are separate
+facts: code generation or local artifact verification never fabricates a
+passing canonical-safe run.
+
 ## Consequences
 
-No migration is required. Contracts/domain coverage, ownership/share checks,
-checksum mutation, Solidity compilation and browser acceptance are release gates.
+No migration is required. A report-read failure after successful codegen keeps
+the generated artifact visible and retryable without repeating codegen or the
+consumer effect. Contracts/domain coverage, ownership/share checks, checksum
+mutation, Solidity compilation and browser acceptance are release gates.
