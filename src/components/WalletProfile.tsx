@@ -191,6 +191,7 @@ function WalletProfileSession({
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const anonymousRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -206,8 +207,10 @@ function WalletProfileSession({
   }, [authenticatedAddress]);
 
   useEffect(() => {
-    if (wallet.snapshot.status === "anonymous") setConfirmingSignOut(false);
-  }, [wallet.snapshot.status]);
+    if (wallet.snapshot.status !== "anonymous" || !confirmingSignOut) return;
+    setConfirmingSignOut(false);
+    queueMicrotask(() => anonymousRef.current?.focus());
+  }, [confirmingSignOut, wallet.snapshot.status]);
 
   useEffect(() => {
     if (chrome.authority !== "wallet") {
@@ -248,7 +251,7 @@ function WalletProfileSession({
     return <button className="wallet-session-retry" type="button" onClick={() => void wallet.retry()}><WarningCircle size={17} aria-hidden="true" />Retry session</button>;
   }
   if (wallet.snapshot.status !== "authenticated" && !signOutInProgress) {
-    return <button className="wallet-signin-trigger" type="button" onClick={chrome.openSignIn}><Wallet size={18} aria-hidden="true" />Sign in with wallet</button>;
+    return <button ref={anonymousRef} className="wallet-signin-trigger" type="button" onClick={chrome.openSignIn}><Wallet size={18} aria-hidden="true" />Sign in with wallet</button>;
   }
 
   const address = authenticatedAddress || verifiedAddressRef.current;
