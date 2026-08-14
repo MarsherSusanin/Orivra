@@ -39,7 +39,7 @@ The product journey is delivered as independently frozen vertical slices:
 | 029A | Local MLP validation and candidate freeze | Complete; Core and Product PASS `fc2f6e0` / `f7cebc6`, candidate SHA-256 `8991e7e4…0cdda` |
 | 029B | Exact-digest production promotion and seven-day canary | Historical V1 retained; active effect path superseded by ADR 0044 |
 | 029C | Timeweb direct-production pilot and trusted-clock 24h acceptance | Open-Meteo verifier-compatible Core/Product PASS 4f421dc / 1bbbbad; fresh publication pending; no hosted/deployed claim |
-| 029D | Phase-ordered direct-production bootstrap | Post-publication deployer corrective Author GREEN: foreground one-shot precedes seal; independent reverification pending; no final deployment acceptance |
+| 029D | Phase-ordered direct-production bootstrap | Complete in frozen candidate `a5e8002` / `fae0294`; Core/Product release PASS reports `8413f9a2…` / `0c65ac7e…`; publisher authority refreshed, real publication/direct-production acceptance pending; no hosted/deployed/security claim |
 
 ADR 0047 shortens the path without weakening evidence. UI-only work uses its
 focused Web/build/Sites/Action/Mac-browser lane; deployment-runtime tools are a

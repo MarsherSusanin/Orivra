@@ -160,8 +160,9 @@ blockchain-операций.
   A bounded official-verifier probe rejected the old Open-Meteo `round` JQ
   filter and accepted the exact no-`round` replacement. The production-author
   GREEN binds canonical SHA `26a1b91f…c898` through catalog, registry,
-  deployment and replay authority; exact-tree Core/Product
-  verification is pending and no hosted or production PASS is claimed.
+  deployment and replay authority. That correction is included in the current
+  frozen terminal candidate and its completed exact-tree Core/Product release
+  verification; this is not a hosted, deployed or security PASS.
   Explicit Caddy cutover and its canonical checkpoint precede deployment evidence; trusted-clock
   cutover/15m/1h/24h checkpoints are resumable and cannot terminal-PASS early.
   ADR 0045 freezes a corrective first-start order: backup, replay and browser
@@ -169,9 +170,10 @@ blockchain-операций.
   replay-bootstrap one-shot precedes the ordinary worker, while real browser
   acceptance follows public cutover. Exact `361bac3` images are therefore
   obsolete/undeployable and must not be published.
-  The author implementation is now GREEN on the full local matrix; a fresh
-  immutable freeze and two independent exact-tree PASS reports remain the only
-  blockers before publication and direct production launch.
+  The implementation was frozen once in the current immutable candidate and
+  received two independent exact-tree release PASS reports. The executable
+  publisher authority now binds those receipts; real publication of the new
+  candidate and direct production launch remain pending.
   Public replay template SHAs remain stable; live production uses exact
   relayer SHAs `1fb914f9…f7cfe6` and `eaed1554…57f9f`, accepted only through an
   exact request/consumer/consumer-byte alias back to the replay-keyed registry
@@ -186,8 +188,9 @@ blockchain-операций.
   only run-scoped staging that root seals, and terminal promotion resumes
   idempotently. Browser PASS must come from a canonical
   acceptance artifact, and active backup evidence fixes Timeweb bucket
-  `orivra-backet` while historical Spaces parsing stays separate. Exact commit
-  and two fresh verifier reports remain required; no hosted or production PASS exists.
+  `orivra-backet` while historical Spaces parsing stays separate. This
+  historical rejection is superseded by the current accepted candidate; no
+  hosted or production PASS exists.
 - Action PR-mode герметично воспроизводит переданный canonical bundle без сети;
   готовый workflow и default fixture в репозитории не поставляются.
 - Canonical URL attack recording contract and trusted local compiler/EVM
@@ -202,9 +205,15 @@ blockchain-операций.
 - В репозитории пока нет `.github/workflows`, production deployment или
   настроенного merge queue. Поэтому deployed live Coston2 PASS ещё не получен и
   не заменяется симулятором.
-- Последний независимо проверенный product candidate: commit
-  `70f63cb0c4fac0c7661cb734896575be07edfa70`, tree
-  `88ec38335ab9630e1fd8c4d5247101bd046f06eb`.
+- Текущий независимо проверенный terminal candidate: commit
+  `a5e80026f23d38e40b9c354ec6488daffad87ba4`, tree
+  `fae0294cc980d69e2c82a2a1cb9ea02705c95655`, candidate SHA-256
+  `c371e812cbd07f36955efef624e7ec6de082d2fc3a323f0fbcfb835d45b266ac`.
+  Core/Product release report SHA-256:
+  `8413f9a2839d5c232e9b3026bf65f505a0cc60545c7eeeb35ccf72529ed59280` /
+  `0c65ac7e693fe3707d7f2f781bddebd34b37f182564a1b48192834b421b425bc`.
+  Publisher allowlist refresh is current; real publication of this tuple is
+  pending. This is not hosted, deployed or security evidence.
 
 ## Быстрый release-процесс
 
