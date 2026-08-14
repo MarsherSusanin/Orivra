@@ -494,6 +494,10 @@ function defaultAdapters() {
       }
       if (input.phase === "start-caddy-candidate") {
         await runProcess("/usr/bin/docker", composeArguments(["config", "--quiet"]), { environment: env });
+      } else if (input.phase === "replay-bootstrap") {
+        await runProcess("/usr/bin/docker", composeArguments([
+          "run", "--rm", "--no-deps", "--pull", "never",
+        ], input.services), { environment: env });
       } else {
         await runProcess("/usr/bin/docker", composeArguments(["up", "--detach", "--no-build", "--pull", "never", "--force-recreate"], input.services), { environment: env });
       }

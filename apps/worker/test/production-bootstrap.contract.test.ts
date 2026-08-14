@@ -1,6 +1,8 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import {
   testReplayEvidence,
   testWorkerAuthoritySlices,
@@ -22,6 +24,15 @@ async function loadBootstrap(): Promise<Required<BootstrapModule>> {
 }
 
 describe("Slice 004 production worker bootstrap", () => {
+  it("builds production entrypoints with Node-compatible external CommonJS dependencies", async () => {
+    const packageJson = JSON.parse(await readFile(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"));
+    for (const script of ["build:production-replay-bootstrap", "build:production-live-gate"]) {
+      expect(packageJson.scripts[script]).toContain("createRequire");
+      expect(packageJson.scripts[script]).toContain("--external:pg");
+      expect(packageJson.scripts[script]).toContain("--external:solc");
+    }
+  });
+
   it("composes only persisted pipeline dependencies without execution credentials", async () => {
     const { createProductionWorker } = await loadBootstrap();
     const pipelinePorts = { kind: "live" };

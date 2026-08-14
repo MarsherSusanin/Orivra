@@ -586,6 +586,7 @@ test("binds the owned replay stage into the real Compose environment without amb
   assert.match(composeAdapter, /bindOwnedReplayBootstrapComposeEnvironment\s*\(/);
   assert.match(composeAdapter, /bindFixedReplayBootstrapComposeInterpolationEnvironment\s*\(/);
   assert.match(composeAdapter, /stageRoot/);
+  assert.match(composeAdapter, /input\.phase\s*===\s*["']replay-bootstrap["'][\s\S]*?["']run["']\s*,\s*["']--rm["']\s*,\s*["']--no-deps["']\s*,\s*["']--pull["']\s*,\s*["']never["']/);
   assert.match(composeSource, /source:\s*\$\{PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:\?PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT is required\}/);
   assert.doesNotMatch(composeSource, /PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT:-/);
   assert.doesNotMatch(operatorSource, /void\s+PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT/);

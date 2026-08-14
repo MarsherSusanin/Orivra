@@ -191,6 +191,24 @@ describe("Slice 027B migration history and runner orchestration", () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 
+  it("repairs exact application grants even when the checksummed schema is already current", async () => {
+    const module = await runnerModule();
+    const calls: string[] = [];
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        calls.push(sql);
+        if (/to_regclass/i.test(sql)) return { rowCount: 1, rows: [{ schema_migrations: "proofline_private.schema_migrations", migration_checksums: "proofline_private.migration_checksums" }] };
+        if (/JOIN proofline_private\.migration_checksums/i.test(sql)) return { rowCount: 10, rows: history().checksums };
+        if (/SELECT version FROM proofline_private\.schema_migrations/i.test(sql)) return { rowCount: 10, rows: history().versions.map((version) => ({ version })) };
+        return { rowCount: 0, rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    await expect(module.runVerifiedMigrations({ pool: { connect: vi.fn(async () => client) }, plan: plan() }))
+      .resolves.toEqual({ fromVersion: 10, toVersion: 10 });
+    expect(calls.join("\n")).toMatch(/GRANT INSERT ON TABLE proofline_private\.run_commands TO proofline_api/i);
+  });
+
   it("rolls back, unlocks and releases on an apply failure without a target-success log", async () => {
     const module = await runnerModule();
     expect(module.runVerifiedMigrations).toBeTypeOf("function");

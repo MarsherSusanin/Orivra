@@ -370,6 +370,7 @@ export async function runVerifiedMigrations(input: {
     const state = verifyMigrationHistory(input.plan, history);
     if (state.kind === "current") {
       verifyMigrationTarget(input.plan, history);
+      await grantApplicationRoleMemberships(client);
       result = { fromVersion: state.fromVersion, toVersion: PROOFLINE_SCHEMA_VERSION };
     } else {
       await client.query("BEGIN");
