@@ -101,7 +101,7 @@ DELETE FROM proofline_private.deployment_worker_heartbeats AS heartbeat
 USING expired
 WHERE heartbeat.deployment_id = expired.deployment_id
   AND heartbeat.worker_instance_id = expired.worker_instance_id
-`, exactValues(identity));
+`, exactValues(identity).slice(0, 2));
         await client.query("COMMIT");
         transactionOpen = false;
       } catch {

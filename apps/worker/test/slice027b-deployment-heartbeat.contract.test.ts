@@ -57,10 +57,10 @@ describe("Slice 027B persisted production worker deployment heartbeat", () => {
   it("refreshes and performs one bounded seven-day cleanup transaction excluding itself", async () => {
     const module = await optionalApiModule("deployment-heartbeat");
     expect(module.createPostgresDeploymentHeartbeatStore).toBeTypeOf("function");
-    const calls: string[] = [];
+    const calls: Array<{ sql: string; values?: readonly unknown[] }> = [];
     const client = {
-      query: vi.fn(async (sql: string) => {
-        calls.push(sql);
+      query: vi.fn(async (sql: string, values?: readonly unknown[]) => {
+        calls.push({ sql, values });
         return { rowCount: /UPDATE/i.test(sql) ? 1 : 0, rows: [] };
       }),
       release: vi.fn(),
@@ -73,15 +73,17 @@ describe("Slice 027B persisted production worker deployment heartbeat", () => {
       releaseTreeSha: TREE,
       workerInstanceId: INSTANCE,
     });
-    const sql = calls.join("\n");
-    expect(calls.some((value) => /^\s*BEGIN/i.test(value))).toBe(true);
+    const sql = calls.map((value) => value.sql).join("\n");
+    expect(calls.some((value) => /^\s*BEGIN/i.test(value.sql))).toBe(true);
     expect(sql).toMatch(/UPDATE proofline_private\.deployment_worker_heartbeats/i);
     expect(sql).toMatch(/last_heartbeat_at\s*=\s*date_trunc\(\s*'milliseconds'\s*,\s*clock_timestamp\(\)\s*\)/i);
     expect(sql).toMatch(/interval\s+'7 days'/i);
     expect(sql).toMatch(/FOR UPDATE SKIP LOCKED/i);
     expect(sql).toMatch(/LIMIT\s+100/i);
     expect(sql).toMatch(/worker_instance_id\s*<>|NOT\s*\([^)]*worker_instance_id/i);
-    expect(calls.some((value) => /^\s*COMMIT/i.test(value))).toBe(true);
+    const cleanup = calls.find((value) => /WITH expired/i.test(value.sql));
+    expect(cleanup?.values).toEqual([DEPLOYMENT_ID, INSTANCE]);
+    expect(calls.some((value) => /^\s*COMMIT/i.test(value.sql))).toBe(true);
     expect(client.release).toHaveBeenCalledOnce();
   });
 
