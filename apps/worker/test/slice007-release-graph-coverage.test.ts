@@ -81,6 +81,61 @@ function replayBundle(input?: {
   });
 }
 
+function replayBundleWithRecovery() {
+  const source = replayBundle();
+  const sourceCommandId = "source-round-observation";
+  const waiting = {
+    version: "1" as const,
+    runId: source.runId,
+    sequence: 0,
+    commandId: sourceCommandId,
+    occurredAt: OCCURRED_AT,
+    type: "STAGE_WAITING" as const,
+    payload: {
+      version: "1" as const,
+      state: "waiting" as const,
+      stage: "round" as const,
+      attempt: 1,
+      retryAfter: OCCURRED_AT,
+      resumeFrom: "transaction-receipt" as const,
+      preservedEvidence: ["preflight", "transaction"] as const,
+      updatedAt: OCCURRED_AT,
+      error: {
+        version: "1" as const,
+        category: "not-finalized" as const,
+        code: "REQUEST_RECEIPT_PENDING",
+        message: "Worker command failed",
+        retryable: true,
+        evidence: {},
+      },
+      retrySafety: "observe-only" as const,
+    },
+  };
+  const resumed = {
+    version: "1" as const,
+    runId: source.runId,
+    sequence: 0,
+    commandId: sourceCommandId,
+    occurredAt: OCCURRED_AT,
+    type: "RUN_RESUMED" as const,
+    payload: {
+      stage: "round" as const,
+      attempt: 2,
+      resumeFrom: "transaction-receipt" as const,
+      preservedEvidence: ["preflight", "transaction"] as const,
+    },
+  };
+  const events = source.events
+    .flatMap((event) =>
+      event.type === "ROUND_FINALIZED"
+        ? [waiting, resumed, { ...event, commandId: sourceCommandId }]
+        : [event],
+    )
+    .map((event, index) => ({ ...event, sequence: index + 1 }));
+  const { checksum: _checksum, ...content } = source;
+  return createProofBundle({ ...content, events });
+}
+
 function targetCreated(manifest: any) {
   return {
     version: "1" as const,
@@ -163,6 +218,49 @@ function replayHarness(serialized: string, manifest = replayBundle().manifest) {
 }
 
 describe("Slice 007 replay command graph coverage", () => {
+  it("preserves source command groups while rekeying a recovery-bearing replay journal", async () => {
+    const source = replayBundleWithRecovery();
+    const fixture = replayHarness(
+      canonicalSerializeProofBundle(source),
+      source.manifest,
+    );
+    const preflight = await fixture.handlers.RUN_PREFLIGHT(
+      command("RUN_PREFLIGHT"),
+    );
+    fixture.state.events = appendRunEvents(
+      fixture.state.events,
+      preflight.events,
+    );
+    fixture.state.artifacts.push(...preflight.artifacts);
+
+    const applied = await fixture.handlers.APPLY_REPLAY_EVIDENCE(
+      command("APPLY_REPLAY_EVIDENCE"),
+    );
+    const recoveryGroup = applied.events.filter((event: any) =>
+      ["STAGE_WAITING", "RUN_RESUMED", "ROUND_FINALIZED"].includes(
+        event.type,
+      ),
+    );
+
+    expect(recoveryGroup.map((event: any) => event.commandId)).toEqual([
+      recoveryGroup[0].commandId,
+      recoveryGroup[0].commandId,
+      recoveryGroup[0].commandId,
+    ]);
+    expect(recoveryGroup[0].commandId).toMatch(
+      /^command_apply_replay_evidence:replay:\d+:stage_waiting$/,
+    );
+    expect(recoveryGroup[0].commandId).not.toContain(
+      "source-round-observation",
+    );
+    expect(() =>
+      appendRunEvents(fixture.state.events, applied.events),
+    ).not.toThrow();
+    expect(
+      projectRun(appendRunEvents(fixture.state.events, applied.events)),
+    ).toMatchObject({ terminal: true });
+  });
+
   it("hydrates one terminal replay source, rewrites its journal, and builds a bundle", async () => {
     const source = replayBundle();
     const serialized = canonicalSerializeProofBundle(source);

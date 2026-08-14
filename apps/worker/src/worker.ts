@@ -14,6 +14,7 @@ import {
   type Web2JsonManifestV1,
 } from "@proofline/contracts";
 import {
+  appendRunEvents,
   canonicalSerializeProofBundle,
   canonicalSerializePreflightReport,
   canonicalizeManifestUrl,
@@ -1480,20 +1481,37 @@ export function createProductionCommandHandlers(input: {
       if (remaining.at(-1)?.type !== "CONSUMER_VERIFIED") {
         throw new Error("Replay evidence command graph is not terminal");
       }
+      const targetCommandIds = new Map<string, string>();
+      let targetCommandOrdinal = 0;
       const events = remaining.map(
-        (item, index) =>
-          ({
+        (item, index) => {
+          let targetCommandId = targetCommandIds.get(item.commandId);
+          if (targetCommandId === undefined) {
+            targetCommandOrdinal += 1;
+            targetCommandId = replayEffectCommandId(
+              command.id,
+              item.type,
+              targetCommandOrdinal,
+            );
+            targetCommandIds.set(item.commandId, targetCommandId);
+          }
+          return {
             ...item,
             runId: context.runId,
             sequence: context.events.length + index + 1,
-            commandId: replayEffectCommandId(
-              command.id,
-              item.type,
-              index + 1,
-            ),
+            commandId: targetCommandId,
             occurredAt: input.clock.now(),
-          }) as RunEventV1,
+          } as RunEventV1;
+        },
       );
+      try {
+        appendRunEvents(context.events, events);
+      } catch {
+        throw preflightBoundaryError(
+          "REPLAY_EVIDENCE_INVALID",
+          "Recorded replay event graph is invalid",
+        );
+      }
       const safeSource = generateSafeWeb2JsonConsumer(context.manifest, {
         contractName: "ProoflineSafeWeb2JsonConsumer",
       });
