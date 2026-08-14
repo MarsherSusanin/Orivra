@@ -306,12 +306,14 @@ test("leases only the submitted bootstrap run and never a foreign queued command
   mismatched.activateRun(activeRunId);
   await assert.rejects(mismatched.claimNextCommand(), /PRODUCTION_REPLAY_BOOTSTRAP_RUN_SCOPE_INVALID/);
 
-  const [bootstrapSource, entrySource] = await Promise.all([
+  const [bootstrapSource, entrySource, postgresSource] = await Promise.all([
     readFile(resolve(root, "apps/worker/src/production-replay-bootstrap-worker.ts"), "utf8"),
     readFile(resolve(root, "apps/worker/src/production-replay-bootstrap.ts"), "utf8"),
+    readFile(resolve(root, "apps/api/src/postgres.ts"), "utf8"),
   ]);
   assert.match(bootstrapSource, /createRunScopedReplayBootstrapRepository\s*\(/);
   assert.match(entrySource, /activateRun\s*\(\s*submittedRunId\s*\)/);
+  assert.match(postgresSource, /claimNextCommandForRun[\s\S]*\[0-9a-f\]\{8\}-/);
 });
 
 test("copies the freshly built replay bootstrap entry into the final worker image", async () => {

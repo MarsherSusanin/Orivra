@@ -1008,7 +1008,7 @@ export function createPostgresCommandRepository(input: {
     },
 
     async claimNextCommandForRun(runId: string) {
-      if (!/^run_[0-9A-Z]{26}$/.test(runId)) {
+      if (!/^(?:run_[0-9A-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.test(runId)) {
         throw new Error("Run-scoped command lease is invalid");
       }
       return this.claimNextCommand(runId);
