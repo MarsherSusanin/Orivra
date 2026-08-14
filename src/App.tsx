@@ -647,9 +647,13 @@ function RunCockpit({
   );
   const showsPreflightWorkbench = effectiveRunStep === "preflight";
   const showsSubmissionDecision = effectiveRunStep === "submission";
+  const showsActionableConsumer = effectiveRunStep === "consumer" &&
+    hydratedRun?.stages.consumer === "active" &&
+    isProjectAccess;
   const reviewedPersistedStage = effectiveRunStep &&
     effectiveRunStep !== "preflight" &&
-    effectiveRunStep !== "submission"
+    effectiveRunStep !== "submission" &&
+    !showsActionableConsumer
       ? effectiveRunStep
       : null;
   const needsPreflightReport = showsPreflightWorkbench || showsSubmissionDecision;
@@ -665,6 +669,13 @@ function RunCockpit({
     globalThis.addEventListener("popstate", restoreRouteState);
     return () => globalThis.removeEventListener("popstate", restoreRouteState);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!showsActionableConsumer || verificationOpen) return;
+    const action = verifyTrigger.current;
+    action?.focus({ preventScroll: true });
+    action?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [showsActionableConsumer, verificationOpen]);
 
   useEffect(() => {
     if (!shouldHydrate || !servicePort.hydrateRun) return;
@@ -1063,6 +1074,9 @@ function RunCockpit({
   const activeStageLabel = sentenceCase(activeStage.stage);
   const viewedStageLabel = sentenceCase(viewedStage.stage);
   const waitingCopy = pendingActionCopy(viewedStage.stage, viewedStage.state);
+  const consumerActionReady = activeStage.stage === "consumer" &&
+    activeStage.state === "active" &&
+    isProjectAccess;
   const timelineStageHrefs = Object.fromEntries(
     RUN_STAGE_ORDER.map((stage) => {
       const step: RunJourneyStep = stage === "request" &&
@@ -1203,8 +1217,16 @@ function RunCockpit({
               <div className="next-action-content">
                 {proofAvailable ? (
                   <>
-                    <h2 id="next-action-title">{handoffReady ? "Evidence is ready." : "Proof is ready."}</h2>
-                    <p>{handoffReady ? "Take the verified receipt and integration artifacts into your repository." : "Verify your consumer contract before consuming the attestation."}</p>
+                    <h2 id="next-action-title">{handoffReady
+                      ? "Evidence is ready."
+                      : consumerActionReady
+                        ? "Consumer verification is ready."
+                        : "Proof is ready."}</h2>
+                    <p>{handoffReady
+                      ? "Take the verified receipt and integration artifacts into your repository."
+                      : consumerActionReady
+                        ? "Start Consumer Lab to persist URL-invariant diagnostics for this verified proof."
+                        : "Verify your consumer contract before consuming the attestation."}</p>
                     {handoffReady ? (
                       <button ref={integrationTrigger} className="verify-button" type="button" onClick={openIntegration}>Open integration package<ArrowRight size={28} weight="bold" aria-hidden="true" /></button>
                     ) : isProjectAccess ? (

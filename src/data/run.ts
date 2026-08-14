@@ -49,7 +49,9 @@ export function timelineFromProjection(
         : state === "failed"
           ? "Failed"
         : state === "active"
-            ? "In progress"
+            ? key === "consumer"
+              ? "Ready"
+              : "In progress"
             : "Pending";
     return {
       key,

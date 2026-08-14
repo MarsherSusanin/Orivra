@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { HydratedRunView, RunSurfaceServices } from "./services/run-surface";
@@ -75,7 +75,6 @@ describe("Run Cockpit lifecycle content routing", () => {
     ["round", "Voting round was finalized.", /1425302/, /Coston2/],
     ["proof", "Proof is available.", /Web2Json/, /Coston2/],
     ["verify", "Proof verification passed.", /Verified/, /14:58:37/],
-    ["consumer", "Consumer is in progress.", /In progress/, /Persisting consumer evidence/],
   ])(
     "renders persisted %s content instead of the generic next action",
     async (step, heading, firstEvidence, secondEvidence) => {
@@ -95,8 +94,20 @@ describe("Run Cockpit lifecycle content routing", () => {
   it("keeps the actionable Consumer Lab entry on the current active stage", async () => {
     renderStage();
 
-    expect(await screen.findByRole("heading", { name: "Proof is ready." })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Consumer verification is ready." })).toBeVisible();
     expect(screen.getByRole("button", { name: /^verify consumer/i })).toBeEnabled();
+  });
+
+  it("routes the active Consumer stage to its actionable area instead of nonexistent persisted evidence", async () => {
+    renderStage("consumer");
+
+    expect(await screen.findByRole("heading", { name: "Consumer verification is ready." })).toBeVisible();
+    const action = screen.getByRole("button", { name: /^verify consumer/i });
+    expect(action).toBeEnabled();
+    await waitFor(() => expect(action).toHaveFocus());
+    expect(screen.getByRole("link", { name: /open consumer stage · ready/i }))
+      .toHaveAttribute("aria-current", "step");
+    expect(screen.queryByRole("heading", { name: "Consumer is in progress." })).not.toBeInTheDocument();
   });
 
   it("keeps the verification action on the actual pending Verify stage", async () => {
