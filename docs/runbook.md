@@ -635,6 +635,10 @@ and the live verifier rejects it. A verifier `401` means the installed key is
 not accepted; validate the currently documented Flare public testnet key or a
 separately issued key before creating another persisted run. Never print the
 installed verifier-key bytes during this probe.
+The production safe fetcher disables HTTPS connection pooling for these five
+samples. If the source is reachable but preflight records a pinned-address
+mismatch, verify that the deployed worker creates a fresh connection per DNS
+pin; do not weaken or remove the remote-address equality check.
 
 Все пять опций обязательны ровно один раз, run ID должны различаться, а run/release/output значения проходят bounded грамматику до любого I/O. Packaged CLI всегда подключает concrete `packages/fdc-coston2` runtime: команда читает ровно два persisted bundle не более 2 200 000 UTF-8 bytes и 64 Merkle nodes каждый, перекомпилирует exact checked-in Solidity через pinned canonical standard JSON, выполняет три вызова в fresh Cancun `@ethereumjs/vm`, затем независимо повторяет runtime verification до atomic rename. Raw calldata/results не дублируются в recording: runtime выводит и сверяет их transcript hashes. Ошибка source read всегда возвращает code `CANONICAL_SOURCE_READ_FAILED` и сообщение `Canonical URL attack source read failed` без OS code, path, filename и stack. Любая read/compile/EVM/verify ошибка оставляет destination неизменённым; fixture/replay fallback и wallet/relayer effect отсутствуют.
 

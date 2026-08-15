@@ -132,6 +132,11 @@ function httpsDispatch(input: {
       input.url,
       {
         method: "GET",
+        // A pooled socket can have been opened for the same hostname against a
+        // different public DNS answer. Reusing it would make the peer-address
+        // check compare today's pin with yesterday's connection. A pinned SSRF
+        // request must therefore own one fresh connection.
+        agent: false,
         signal: input.signal,
         servername: input.url.hostname,
         lookup: (_hostname, options, callback) => {

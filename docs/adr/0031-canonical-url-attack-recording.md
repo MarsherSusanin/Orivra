@@ -253,6 +253,10 @@ accepts only the exact
 manifest authority. The repository owner, repository name, commit segment,
 artifact path and corresponding consumer authority are one cross-bound input;
 the release identity cannot be copied independently from an unrelated URL.
+Each of the five SSRF-bounded samples owns a fresh HTTPS connection. A pooled
+socket established for another valid DNS answer must never be reused for a
+new pin; the connected peer must still equal that sample's selected public
+address.
 
 The checked-in canonical safe consumer is therefore bound to HTTPS,
 `api.open-meteo.com`, `/v1/forecast`, and the six template query values. The

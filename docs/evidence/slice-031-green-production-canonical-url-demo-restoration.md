@@ -63,6 +63,14 @@ reused. Corrective tests require the exact jsDelivr host, repository, commit
 and artifact path and explicitly reject GitHub Raw before source/compiler/EVM
 effects.
 
+The next real jsDelivr run exposed a separate production transport boundary:
+Node reused a pooled TLS socket opened for a different public CDN answer, so
+the strict peer-address equality check correctly rejected it. The corrective
+worker adapter keeps the pin and SNI checks unchanged but sets `agent: false`
+for each bounded sample. A no-effect diagnostic in the production worker
+network changed from `Connected address does not match the pinned DNS answer`
+to an accepted exact preflight.
+
 ## Corrective verifier wave
 
 The first frozen candidate `ff4d21ab4c4fe74dea7e48b599134fd0a966f8fa`
