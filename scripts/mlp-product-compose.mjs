@@ -188,6 +188,8 @@ async function createEnvironment(temporaryDirectory) {
     PROOFLINE_PUBLIC_ORIGIN: publicOrigin,
     PROOFLINE_DEPLOYMENT_ID: `deployment_${randomBytes(32).toString("hex")}`,
     PROOFLINE_RELEASE_TREE_SHA: git.stdout.trim(),
+    PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256:
+      `sha256:${"d".repeat(64)}`,
     PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE: paths.postgresAdminDatabase,
     PROOFLINE_API_DATABASE_URL_FILE: paths.apiDatabase,
     PROOFLINE_MIGRATOR_DATABASE_URL_FILE: paths.migratorDatabase,

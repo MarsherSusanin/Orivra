@@ -8,11 +8,7 @@ import {
   RELEASE_COMMIT_SHA,
   RELEASE_TREE_SHA,
 } from "../../contracts/test/slice024a-canonical-url-attack.fixtures";
-import {
-  VALID_ABI_SIGNATURE,
-  makeBundleInput,
-  makeRunEvents,
-} from "../../contracts/test/fixtures";
+import { makeBundleInput, makeRunEvents } from "../../contracts/test/fixtures";
 import {
   decodeAbiParameters,
   encodeAbiParameters,
@@ -25,12 +21,14 @@ import {
 } from "viem";
 
 export const NEAR_MAX_TRANSFORMED_PAYLOAD_BYTES = 1_048_000;
-export const NEAR_MAX_RESPONSE_BYTES = 1_049_056;
-export const NEAR_MAX_CALLDATA_BYTES = 1_049_188;
+export const NEAR_MAX_RESPONSE_BYTES = 1_049_280;
+export const NEAR_MAX_CALLDATA_BYTES = 1_049_412;
 export const BYTES_ABI_SIGNATURE = JSON.stringify({
   name: "value",
   type: "bytes",
 });
+export const OPEN_METEO_ABI_SIGNATURE =
+  '{"components":[{"internalType":"int256","name":"temperatureTenthsCelsius","type":"int256"},{"internalType":"string","name":"observedAt","type":"string"}],"name":"data","type":"tuple"}';
 
 function proofParameters(): { proof: AbiParameter; data: AbiParameter } {
   const verifier = (fdcVerificationAbi as Abi).find(
@@ -47,32 +45,57 @@ function proofParameters(): { proof: AbiParameter; data: AbiParameter } {
 
 function makeAbiValidPersistedBundle(
   role: "attack" | "control",
-  options: { payloadBytes?: number; merkleProofEntries?: number } = {},
+  options: {
+    payloadBytes?: number;
+    merkleProofEntries?: number;
+    controlRequestPath?: string;
+  } = {},
 ) {
   const base = makeBundleInput();
   const runId = `run_024_runtime_${role}`;
-  const host = role === "attack" ? "attacker.example" : "api.example.com";
+  const host =
+    role === "attack" ? "raw.githubusercontent.com" : "api.open-meteo.com";
   const mode = role === "attack" ? "wallet" : "relayer";
   const votingRound = role === "attack" ? 61_024 : 61_025;
   const transactionHash = `0x${role === "attack" ? "3" : "4"}${"0".repeat(63)}`;
   const abiSignature =
     options.payloadBytes === undefined
-      ? VALID_ABI_SIGNATURE
+      ? OPEN_METEO_ABI_SIGNATURE
       : BYTES_ABI_SIGNATURE;
   const manifest = {
     ...base.manifest,
     request: {
       ...base.manifest.request,
-      url: `https://${host}/prices/eth?source=primary`,
-      query: { currency: "USD", window: "1h" },
-      jq: ".value",
+      url:
+        role === "attack"
+          ? `https://${host}/MarsherSusanin/Orivra/${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`
+          : `https://${host}${options.controlRequestPath ?? "/v1/forecast"}`,
+      query: {
+        current: "temperature_2m",
+        forecast_days: "1",
+        latitude: "52.52",
+        longitude: "13.41",
+        temperature_unit: "celsius",
+        timezone: "UTC",
+      },
+      jq: ".current | {temperatureTenthsCelsius: (.temperature_2m * 10), observedAt: .time}",
       abiSignature,
     },
     consumer: {
       expectedScheme: "https" as const,
       expectedHost: host,
-      expectedPathPrefix: "/prices/",
-      expectedQuery: { currency: "USD", source: "primary", window: "1h" },
+      expectedPathPrefix:
+        role === "attack"
+          ? `/MarsherSusanin/Orivra/${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`
+          : "/v1/forecast",
+      expectedQuery: {
+        current: "temperature_2m",
+        forecast_days: "1",
+        latitude: "52.52",
+        longitude: "13.41",
+        temperature_unit: "celsius",
+        timezone: "UTC",
+      },
     },
     submission: { ...base.manifest.submission, mode },
   };
@@ -80,8 +103,11 @@ function makeAbiValidPersistedBundle(
   const encodedValue =
     options.payloadBytes === undefined
       ? encodeAbiParameters(
-          [JSON.parse(VALID_ABI_SIGNATURE) as AbiParameter],
-          [{ value: role === "attack" ? 1_000_000n : 1_000_001n }],
+          [JSON.parse(OPEN_METEO_ABI_SIGNATURE) as AbiParameter],
+          [{
+            temperatureTenthsCelsius: role === "attack" ? 215n : 216n,
+            observedAt: "2026-08-15T05:00",
+          }],
         )
       : encodeAbiParameters(
           [JSON.parse(BYTES_ABI_SIGNATURE) as AbiParameter],
@@ -143,7 +169,11 @@ function makeAbiValidPersistedBundle(
 }
 
 export function makeAbiValidPersistedBundlePair(
-  options: { payloadBytes?: number; merkleProofEntries?: number } = {},
+  options: {
+    payloadBytes?: number;
+    merkleProofEntries?: number;
+    controlRequestPath?: string;
+  } = {},
 ) {
   return {
     attack: makeAbiValidPersistedBundle("attack", options),
@@ -152,7 +182,11 @@ export function makeAbiValidPersistedBundlePair(
 }
 
 export function makeRuntimeInput(
-  options: { payloadBytes?: number; merkleProofEntries?: number } = {},
+  options: {
+    payloadBytes?: number;
+    merkleProofEntries?: number;
+    controlRequestPath?: string;
+  } = {},
 ) {
   return runtimeInputForPair(makeAbiValidPersistedBundlePair(options));
 }

@@ -137,10 +137,10 @@ test("the host exposure contract permits only HTTP(S) and restricted SSH", async
     /(?:no|never|must not|do not expose)[\s\S]{0,160}Docker socket/i,
   ]);
   requirePatterns(agents, "AGENTS.md", [
-    /ADR\s*0029|0029-digitalocean-vds-deployment/i,
-    /80\/443|ports? 80 and 443/i,
-    /SSH[\s\S]{0,120}(?:restricted|allowlist|VPN)/i,
-    /5432[\s\S]{0,160}(?:not exposed|private|internal only)/i,
+    /docs\/runbook\.md/i,
+    /Production and release boundary/i,
+    /Caddy[\s\S]{0,120}public ingress/i,
+    /VDS[\s\S]{0,160}(?:MUST NOT|must not)[\s\S]{0,80}build/i,
   ]);
 });
 
@@ -178,7 +178,7 @@ test("database recovery uses off-host WAL and base backups, with a local MinIO r
       /WAL/i,
       /base backup/i,
       /PITR|point[- ]in[- ]time recovery/i,
-      /private[\s\S]{0,140}S3[- ]compatible[\s\S]{0,140}(?:Spaces|DigitalOcean)/i,
+      /(?:private[\s\S]{0,140}S3[- ]compatible[\s\S]{0,140}(?:Spaces|DigitalOcean)|Timeweb[\s\S]{0,140}S3)/i,
       /MinIO[\s\S]{0,160}restore drill/i,
       /Droplet backup[\s\S]{0,180}(?:not|does not)[\s\S]{0,120}(?:database|PITR)/i,
     ]);
@@ -270,7 +270,6 @@ test("029A is the satisfiable credential-free local MLP freeze and 029B owns cre
     "roadmap",
     "runbook",
     "roles",
-    "agents",
   ]);
 
   for (const [key, label] of [
@@ -278,7 +277,6 @@ test("029A is the satisfiable credential-free local MLP freeze and 029B owns cre
     ["roadmap", "product roadmap"],
     ["runbook", "runbook"],
     ["roles", "development roles"],
-    ["agents", "AGENTS.md"],
   ]) {
     requireCredentialFree029A(documents[key], label);
     assert.match(
@@ -287,6 +285,14 @@ test("029A is the satisfiable credential-free local MLP freeze and 029B owns cre
       `${label} must keep every credential authorization bound to the now-defined 022–029A range`,
     );
   }
+
+  const agents = await read(files.agents);
+  requirePatterns(agents, "AGENTS.md policy gateway", [
+    /docs\/runbook\.md/i,
+    /docs\/development\/roles\.md/i,
+    /Normal release authority[\s\S]{0,180}independent Core and\s+Product PASS/i,
+    /one exact[\s\S]{0,80}(?:commit|tree)|same tree/i,
+  ]);
 });
 
 test("028A creates verified local OCI archives and a frozen digest manifest without registry access", async () => {

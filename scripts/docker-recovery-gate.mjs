@@ -420,6 +420,8 @@ async function environmentFor(directory, producerIdentity, sourceRoot) {
     PROOFLINE_PUBLIC_ORIGIN: "https://127.0.0.1",
     PROOFLINE_DEPLOYMENT_ID: `deployment_${randomBytes(32).toString("hex")}`,
     PROOFLINE_RELEASE_TREE_SHA: producerIdentity.treeSha,
+    PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256:
+      `sha256:${"d".repeat(64)}`,
     PROOFLINE_RELAYER_GLOBAL_FEE_CAP_WEI: "20000000000000000",
     PROOFLINE_RELAYER_BALANCE_FLOOR_WEI: "1000",
     PROOFLINE_RELAYER_DAILY_PROJECT_QUOTA: "4",

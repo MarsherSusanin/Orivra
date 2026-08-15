@@ -366,7 +366,7 @@ function responseShape(
   const shape =
     descriptor.type === "tuple" && "components" in descriptor
       ? Object.fromEntries(
-          (descriptor.components ?? []).map((component) => [
+          descriptor.components.map((component) => [
             component.name,
             component.type,
           ]),

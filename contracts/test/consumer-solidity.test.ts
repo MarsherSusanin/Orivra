@@ -69,7 +69,7 @@ describe("canonical Web2Json consumer pair", () => {
   it("keeps the vulnerable consumer intentionally proof-only for diagnostic acceptance", () => {
     expect(vulnerable).toContain("verifyWeb2Json");
     expect(vulnerable).not.toMatch(
-      /requireScheme|requireHost|requirePathPrefix|requireQueryValue/,
+      /requireScheme|requireHost|requirePath(?:Prefix)?|requireQueryValue/,
     );
   });
 
@@ -77,7 +77,7 @@ describe("canonical Web2Json consumer pair", () => {
     const checks = [
       safe.indexOf("requireScheme"),
       safe.indexOf("requireHost"),
-      safe.indexOf("requirePathPrefix"),
+      safe.indexOf("requirePath"),
       safe.indexOf("requireQueryValue"),
     ];
     const verification = safe.indexOf("verifyWeb2Json");

@@ -512,6 +512,34 @@ corrupt selection returns the same no-store
 fallback is permitted. These are executable local surfaces; an absent selector
 or missing/corrupt selected row deliberately preserves the same honest 503.
 
+Production restoration installs the recording outside Git at an absolute path
+under `/opt/orivra/evidence`. Before import it must be a root-owned, root-group
+regular file with mode `0400`; compute its SHA-256 without printing its bytes and
+place the exact `sha256:<hex>` value in the private `runtime.env` as
+`PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256`. Then run, from the exact
+release checkout:
+
+```bash
+npm run production:demo:import -- \
+  --recording /opt/orivra/evidence/canonical-url-attack.recording.json \
+  --sha256 sha256:<exact-recording-byte-sha256>
+```
+
+The operator command rejects symlinks, other directories, wrong ownership or
+mode, oversized bytes, digest/selector mismatch and nonzero importer exit before
+reporting success. It starts one foreground `db-role-bootstrap` container with
+the dedicated importer entrypoint and never logs database authority or
+recording bytes. Re-import is idempotent only for byte- and metadata-identical
+evidence.
+
+After a successful import, recreate only `api` with its new exact published
+digest and the same selector. Preserve the prior API digest and runtime file for
+rollback. Do not delete the append-only row during rollback: an older API or a
+runtime without the selector ignores it. Verify both public demo routes,
+representation ETags, exact recording download SHA, `/healthz`, `/readyz`, and
+that worker/Caddy/Web/PostgreSQL digests did not change. There is no
+synthetic/latest-row fallback.
+
 ## 5. Worker
 
 Сборка и запуск:

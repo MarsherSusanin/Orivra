@@ -170,6 +170,13 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
     });
   });
 
+  it("rejects an Open-Meteo descendant path instead of treating the exact demo path as a prefix", async () => {
+    const runtime = createRuntime();
+    await expect(runtime.recordCanonicalUrlAttack(makeRuntimeInput({
+      controlRequestPath: "/v1/forecast/other",
+    }))).rejects.toThrow(/control|safe|EVM|revert/i);
+  });
+
   it("recompiles and reexecutes before returning runtime-verified import authority", async () => {
     const runtime = createRuntime();
     const serialized = await runtime.recordCanonicalUrlAttack(makeRuntimeInput());
@@ -251,10 +258,10 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
       expect(attackCalldataBytes).toBe(NEAR_MAX_CALLDATA_BYTES);
       expect(attackCalldata).toHaveLength(2 * NEAR_MAX_CALLDATA_BYTES + 2);
       expect(attackResponseBytes - NEAR_MAX_TRANSFORMED_PAYLOAD_BYTES).toBe(
-        1_056,
+        1_280,
       );
       expect(attackCalldataBytes - NEAR_MAX_TRANSFORMED_PAYLOAD_BYTES).toBe(
-        1_188,
+        1_412,
       );
 
       const input = runtimeInputForPair(pair);

@@ -13,6 +13,25 @@ test("production Compose passes one exact canonical demo selector to the API", a
   assert.match(source, /PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256:\s*\$\{PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256:\?/);
 });
 
+test("production runtime rejects a missing or malformed canonical demo selector before effects", async () => {
+  const host = await import(new URL("../../scripts/timeweb-production-host-command.mjs", import.meta.url).href);
+  assert.equal(typeof host.validateCanonicalUrlDemoSelectorEnvironment, "function");
+  assert.equal(
+    host.validateCanonicalUrlDemoSelectorEnvironment({
+      PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256: selector,
+    }).PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256,
+    selector,
+  );
+  for (const value of [undefined, "", "sha256:ABC", `sha256:${"a".repeat(63)}`]) {
+    assert.throws(
+      () => host.validateCanonicalUrlDemoSelectorEnvironment({
+        PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256: value,
+      }),
+      (error) => error?.code === "TIMEWEB_HOST_CONFIGURATION_INVALID",
+    );
+  }
+});
+
 test("operator reads one root-owned mode-0400 recording with O_NOFOLLOW and exact SHA", async () => {
   const operator = await import(operatorModule.href).catch(() => ({}));
   assert.equal(typeof operator.inspectProductionCanonicalUrlDemoRecording, "function");
@@ -36,6 +55,35 @@ test("operator reads one root-owned mode-0400 recording with O_NOFOLLOW and exac
   assert.equal(result.recordingSha256, result.expectedSha256);
 });
 
+test("operator rejects symlinks, wrong ownership or mode, and oversized recordings before Docker", async () => {
+  const operator = await import(operatorModule.href);
+  const bytes = Buffer.from("x");
+  const expectedSha256 = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  const invalidMetadata = [
+    { isFile: () => false, mode: 0o100400, uid: 0, gid: 0, size: 1 },
+    { isFile: () => true, mode: 0o100600, uid: 0, gid: 0, size: 1 },
+    { isFile: () => true, mode: 0o100400, uid: 1000, gid: 0, size: 1 },
+    { isFile: () => true, mode: 0o100400, uid: 0, gid: 1000, size: 1 },
+    { isFile: () => true, mode: 0o100400, uid: 0, gid: 0, size: 6 * 1_024 * 1_024 + 1 },
+  ];
+  for (const metadata of invalidMetadata) {
+    await assert.rejects(operator.inspectProductionCanonicalUrlDemoRecording({
+      recordingPath,
+      expectedSha256,
+      openFile: async () => ({
+        stat: async () => metadata,
+        readFile: async () => bytes,
+        close: async () => undefined,
+      }),
+    }), /metadata|invalid/i);
+  }
+  await assert.rejects(operator.inspectProductionCanonicalUrlDemoRecording({
+    recordingPath,
+    expectedSha256,
+    openFile: async () => { throw Object.assign(new Error("symlink"), { code: "ELOOP" }); },
+  }), /invalid/i);
+});
+
 test("operator runs exactly one isolated dedicated-role importer and binds the selector", async () => {
   const operator = await import(operatorModule.href).catch(() => ({}));
   assert.equal(typeof operator.runProductionCanonicalUrlDemoImport, "function");
@@ -45,7 +93,6 @@ test("operator runs exactly one isolated dedicated-role importer and binds the s
     expectedSha256: selector,
     runtimeEnvironment: {
       PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256: selector,
-      PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: "/opt/orivra/replay-bootstrap-stage",
     },
     inspectRecording: async () => ({ recordingPath, recordingSha256: selector, expectedSha256: selector }),
     invoke: async (executable, arguments_, options) => {
@@ -78,7 +125,6 @@ test("operator fails before Docker for wrong path, metadata, digest or selector"
         runtimeEnvironment: {
           PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256:
             mutation === "selector" ? `sha256:${"b".repeat(64)}` : selector,
-          PROOFLINE_REPLAY_BOOTSTRAP_STAGE_ROOT: "/opt/orivra/replay-bootstrap-stage",
         },
         inspectRecording: async ({ recordingPath: path }) => {
           if (mutation === "path" || mutation === "metadata") throw new Error("invalid recording");
@@ -90,6 +136,24 @@ test("operator fails before Docker for wrong path, metadata, digest or selector"
     );
     assert.equal(effects, 0);
   }
+});
+
+test("a nonzero importer is one failed foreground attempt with no synthetic success", async () => {
+  const operator = await import(operatorModule.href);
+  let effects = 0;
+  await assert.rejects(operator.runProductionCanonicalUrlDemoImport({
+    recordingPath,
+    expectedSha256: selector,
+    runtimeEnvironment: {
+      PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256: selector,
+    },
+    inspectRecording: async () => ({ recordingPath, recordingSha256: selector, expectedSha256: selector }),
+    invoke: async () => {
+      effects += 1;
+      throw new Error("docker exit 17");
+    },
+  }), /docker exit 17/);
+  assert.equal(effects, 1);
 });
 
 test("operator is exposed as one production command and never logs recording bytes or secrets", async () => {
