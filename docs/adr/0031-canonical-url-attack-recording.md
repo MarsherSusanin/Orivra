@@ -244,6 +244,12 @@ Only source authority changes: the control is
 `https://api.open-meteo.com/v1/forecast`; the attack is a deterministic JSON
 asset below `examples/canonical-url-attack/` served by
 `raw.githubusercontent.com` at one exact public repository commit.
+The production recorder derives that attack URL from `release.commitSha` and
+accepts only the exact
+`https://raw.githubusercontent.com/MarsherSusanin/Orivra/<commit>/examples/canonical-url-attack/attack-response.json`
+manifest authority. The repository owner, repository name, commit segment,
+artifact path and corresponding consumer authority are one cross-bound input;
+the release identity cannot be copied independently from an unrelated URL.
 
 The checked-in canonical safe consumer is therefore bound to HTTPS,
 `api.open-meteo.com`, `/v1/forecast`, and the six template query values. The

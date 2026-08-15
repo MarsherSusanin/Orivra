@@ -91,6 +91,11 @@ const SAFE_ADDRESS = createAddressFromString(
 const HOST_MISMATCH_SELECTOR = "0xb828610a";
 const SOLC_VERSION = "0.8.36";
 const VM_VERSION = "10.1.2";
+const ATTACK_SOURCE_ORIGIN = "https://raw.githubusercontent.com";
+const ATTACK_SOURCE_REPOSITORY_PATH = "/MarsherSusanin/Orivra";
+const ATTACK_SOURCE_ARTIFACT_PATH =
+  "/examples/canonical-url-attack/attack-response.json";
+const CONTROL_SOURCE_URL = "https://api.open-meteo.com/v1/forecast";
 export const CANONICAL_URL_ATTACK_SOURCE_READ_ERROR_CODE =
   "CANONICAL_SOURCE_READ_FAILED";
 export const CANONICAL_URL_ATTACK_SOURCE_READ_ERROR_MESSAGE =
@@ -161,6 +166,39 @@ function assertRuntime(condition: boolean, message: string): asserts condition {
   if (!condition) {
     throw new Error(`Canonical URL attack runtime ${message}`);
   }
+}
+
+function assertProductionDemoAuthority(
+  input: CanonicalUrlAttackRuntimeInput,
+  attackBundle: ProofBundleV1,
+  controlBundle: ProofBundleV1,
+): void {
+  assertRuntime(
+    /^[a-f0-9]{40}$/.test(input.release.commitSha),
+    "release commit identity is malformed",
+  );
+  const expectedAttackPath =
+    `${ATTACK_SOURCE_REPOSITORY_PATH}/${input.release.commitSha}` +
+    ATTACK_SOURCE_ARTIFACT_PATH;
+  const expectedAttackUrl = ATTACK_SOURCE_ORIGIN + expectedAttackPath;
+  assertRuntime(
+    attackBundle.manifest.request.url === expectedAttackUrl &&
+      attackBundle.manifest.consumer.expectedScheme === "https" &&
+      attackBundle.manifest.consumer.expectedHost ===
+        "raw.githubusercontent.com" &&
+      attackBundle.manifest.consumer.expectedPathPrefix ===
+        expectedAttackPath &&
+      attackBundle.manifest.submission.mode === "wallet",
+    "attack source provenance does not match the recorded release commit",
+  );
+  assertRuntime(
+    controlBundle.manifest.request.url === CONTROL_SOURCE_URL &&
+      controlBundle.manifest.consumer.expectedScheme === "https" &&
+      controlBundle.manifest.consumer.expectedHost === "api.open-meteo.com" &&
+      controlBundle.manifest.consumer.expectedPathPrefix === "/v1/forecast" &&
+      controlBundle.manifest.submission.mode === "relayer",
+    "control source provenance does not match the canonical Open-Meteo authority",
+  );
 }
 
 function sha256(value: string | Uint8Array): string {
@@ -518,6 +556,7 @@ async function buildRecording(
     input.attackRunId !== input.controlRunId,
     "requires different persisted live runs",
   );
+  assertProductionDemoAuthority(input, attackBundle, controlBundle);
   const attackData = decodePersistedProof(attackBundle);
   const controlData = decodePersistedProof(controlBundle);
   const attackProofSha256 = hexSha256(attackBundle.proof.response as Hex);

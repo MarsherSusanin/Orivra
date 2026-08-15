@@ -49,6 +49,8 @@ function makeAbiValidPersistedBundle(
     payloadBytes?: number;
     merkleProofEntries?: number;
     controlRequestPath?: string;
+    attackCommitSha?: string;
+    attackSourceUrl?: string;
   } = {},
 ) {
   const base = makeBundleInput();
@@ -68,7 +70,8 @@ function makeAbiValidPersistedBundle(
       ...base.manifest.request,
       url:
         role === "attack"
-          ? `https://${host}/MarsherSusanin/Orivra/${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`
+          ? options.attackSourceUrl ??
+            `https://${host}/MarsherSusanin/Orivra/${options.attackCommitSha ?? "a".repeat(40)}/examples/canonical-url-attack/attack-response.json`
           : `https://${host}${options.controlRequestPath ?? "/v1/forecast"}`,
       query: {
         current: "temperature_2m",
@@ -83,10 +86,16 @@ function makeAbiValidPersistedBundle(
     },
     consumer: {
       expectedScheme: "https" as const,
-      expectedHost: host,
+      expectedHost:
+        role === "attack" && options.attackSourceUrl !== undefined
+          ? new URL(options.attackSourceUrl).hostname
+          : host,
       expectedPathPrefix:
         role === "attack"
-          ? `/MarsherSusanin/Orivra/${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`
+          ? new URL(
+              options.attackSourceUrl ??
+                `https://${host}/MarsherSusanin/Orivra/${options.attackCommitSha ?? "a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
+            ).pathname
           : "/v1/forecast",
       expectedQuery: {
         current: "temperature_2m",
@@ -173,6 +182,8 @@ export function makeAbiValidPersistedBundlePair(
     payloadBytes?: number;
     merkleProofEntries?: number;
     controlRequestPath?: string;
+    attackCommitSha?: string;
+    attackSourceUrl?: string;
   } = {},
 ) {
   return {
@@ -186,6 +197,8 @@ export function makeRuntimeInput(
     payloadBytes?: number;
     merkleProofEntries?: number;
     controlRequestPath?: string;
+    attackCommitSha?: string;
+    attackSourceUrl?: string;
   } = {},
 ) {
   return runtimeInputForPair(makeAbiValidPersistedBundlePair(options));

@@ -10,6 +10,9 @@ Status: author GREEN; live Coston2 recording and production deployment pending
   commit-pinned `raw.githubusercontent.com` request.
 - Recording runtime tests use identical Open-Meteo query, JQ and ABI authority
   for the different-host attack and control.
+- The production recorder derives the only accepted raw GitHub attack path
+  from the recording's lowercase release commit. A different commit, host,
+  repository or artifact path fails before compiler, EVM or import authority.
 - Production Compose requires one exact recording SHA selector for API.
 - Production runtime parsing rejects a missing, malformed or overridden
   selector before any Compose or Docker effect.
@@ -22,17 +25,17 @@ Status: author GREEN; live Coston2 recording and production deployment pending
 ## Author verification
 
 - `npm run typecheck` — PASS.
-- Focused FDC runtime/restoration — 15 files and 205 tests PASS; affected
+- Focused FDC runtime/restoration — 15 files and 209 tests PASS; affected
   canonical recording runtime is 100% statements, branches, functions and
   lines.
 - Contracts/domain coverage — 59 files and 667 tests PASS at 100% statements,
   branches, functions and lines.
-- Backend coverage — 124 files and 1,238 tests PASS; aggregate 91.78% lines and
-  86.92% branches. The five PostgreSQL files are intentionally disabled in
+- Backend coverage — 124 files and 1,243 tests PASS; aggregate 91.81% lines and
+  86.99% branches. The five PostgreSQL files are intentionally disabled in
   that coverage invocation and were run separately with real Testcontainers.
 - Real `PROOFLINE_TESTCONTAINERS=1` PostgreSQL — 22 files and 163 tests PASS,
   zero skips.
-- Full application matrix — 271 files and 2,606 tests PASS. Its 43 conditional
+- Full application matrix — 271 files and 2,610 tests PASS. Its 43 conditional
   skips are the same PostgreSQL cases proven by the separate zero-skip gate.
 - Serialized deployment static — 311/311 PASS, including symlink,
   owner/mode, oversized-file and nonzero-importer negative controls.
@@ -43,3 +46,15 @@ performed by these author checks. This file is not a release, deployment or
 security PASS. The exact attack commit/run and recording SHA remain deliberately
 unset until a clean verified tree is published and the user confirms the one
 Coston2 wallet transaction.
+
+## Corrective verifier wave
+
+The first frozen candidate `ff4d21ab4c4fe74dea7e48b599134fd0a966f8fa`
+was rejected by Product verification because its release identity and attack
+URL were independently valid but not cross-bound. The sealed mode-0400 report
+is `/private/tmp/proofline-slice031-verifiers/ff4d21a/product-verifier.md`
+(SHA-256
+`ed019f7e0577d8793bbaf6d0c1bc33a18959d75939050a07f0835b2d041046e0`).
+The corrective tests reproduce a different release commit and unrelated
+host/repository/artifact paths as internally valid persisted bundles, and the
+production runtime now rejects all four before reading checked-in sources.
