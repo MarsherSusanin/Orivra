@@ -91,8 +91,8 @@ const SAFE_ADDRESS = createAddressFromString(
 const HOST_MISMATCH_SELECTOR = "0xb828610a";
 const SOLC_VERSION = "0.8.36";
 const VM_VERSION = "10.1.2";
-const ATTACK_SOURCE_ORIGIN = "https://raw.githubusercontent.com";
-const ATTACK_SOURCE_REPOSITORY_PATH = "/MarsherSusanin/Orivra";
+const ATTACK_SOURCE_ORIGIN = "https://cdn.jsdelivr.net";
+const ATTACK_SOURCE_REPOSITORY_PATH = "/gh/MarsherSusanin/Orivra@";
 const ATTACK_SOURCE_ARTIFACT_PATH =
   "/examples/canonical-url-attack/attack-response.json";
 const CONTROL_SOURCE_URL = "https://api.open-meteo.com/v1/forecast";
@@ -178,14 +178,14 @@ function assertProductionDemoAuthority(
     "release commit identity is malformed",
   );
   const expectedAttackPath =
-    `${ATTACK_SOURCE_REPOSITORY_PATH}/${input.release.commitSha}` +
+    `${ATTACK_SOURCE_REPOSITORY_PATH}${input.release.commitSha}` +
     ATTACK_SOURCE_ARTIFACT_PATH;
   const expectedAttackUrl = ATTACK_SOURCE_ORIGIN + expectedAttackPath;
   assertRuntime(
     attackBundle.manifest.request.url === expectedAttackUrl &&
       attackBundle.manifest.consumer.expectedScheme === "https" &&
       attackBundle.manifest.consumer.expectedHost ===
-        "raw.githubusercontent.com" &&
+        "cdn.jsdelivr.net" &&
       attackBundle.manifest.consumer.expectedPathPrefix ===
         expectedAttackPath &&
       attackBundle.manifest.submission.mode === "wallet",

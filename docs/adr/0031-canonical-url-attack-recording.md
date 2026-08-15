@@ -243,10 +243,13 @@ the exact Open-Meteo method, six query values, JQ transform and ABI descriptor.
 Only source authority changes: the control is
 `https://api.open-meteo.com/v1/forecast`; the attack is a deterministic JSON
 asset below `examples/canonical-url-attack/` served by
-`raw.githubusercontent.com` at one exact public repository commit.
+`cdn.jsdelivr.net` from one exact public repository commit. The immutable
+jsDelivr GitHub endpoint is required because the live Flare Web2Json verifier
+requires an `application/json` response; GitHub Raw serves these bytes as
+`text/plain` and is therefore not a valid live demonstration source.
 The production recorder derives that attack URL from `release.commitSha` and
 accepts only the exact
-`https://raw.githubusercontent.com/MarsherSusanin/Orivra/<commit>/examples/canonical-url-attack/attack-response.json`
+`https://cdn.jsdelivr.net/gh/MarsherSusanin/Orivra@<commit>/examples/canonical-url-attack/attack-response.json`
 manifest authority. The repository owner, repository name, commit segment,
 artifact path and corresponding consumer authority are one cross-bound input;
 the release identity cannot be copied independently from an unrelated URL.

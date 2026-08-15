@@ -56,7 +56,7 @@ function makeAbiValidPersistedBundle(
   const base = makeBundleInput();
   const runId = `run_024_runtime_${role}`;
   const host =
-    role === "attack" ? "raw.githubusercontent.com" : "api.open-meteo.com";
+    role === "attack" ? "cdn.jsdelivr.net" : "api.open-meteo.com";
   const mode = role === "attack" ? "wallet" : "relayer";
   const votingRound = role === "attack" ? 61_024 : 61_025;
   const transactionHash = `0x${role === "attack" ? "3" : "4"}${"0".repeat(63)}`;
@@ -71,7 +71,7 @@ function makeAbiValidPersistedBundle(
       url:
         role === "attack"
           ? options.attackSourceUrl ??
-            `https://${host}/MarsherSusanin/Orivra/${options.attackCommitSha ?? "a".repeat(40)}/examples/canonical-url-attack/attack-response.json`
+            `https://${host}/gh/MarsherSusanin/Orivra@${options.attackCommitSha ?? "a".repeat(40)}/examples/canonical-url-attack/attack-response.json`
           : `https://${host}${options.controlRequestPath ?? "/v1/forecast"}`,
       query: {
         current: "temperature_2m",
@@ -94,7 +94,7 @@ function makeAbiValidPersistedBundle(
         role === "attack"
           ? new URL(
               options.attackSourceUrl ??
-                `https://${host}/MarsherSusanin/Orivra/${options.attackCommitSha ?? "a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
+                `https://${host}/gh/MarsherSusanin/Orivra@${options.attackCommitSha ?? "a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
             ).pathname
           : "/v1/forecast",
       expectedQuery: {

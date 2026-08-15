@@ -177,7 +177,7 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
     }))).rejects.toThrow(/control|safe|EVM|revert/i);
   });
 
-  it("rejects an attack source whose immutable raw GitHub revision is not the recorded release commit", async () => {
+  it("rejects an attack source whose immutable GitHub CDN revision is not the recorded release commit", async () => {
     let sourceReads = 0;
     const runtime = fdc.createProductionCanonicalUrlAttackRuntime({
       readCheckedInSource: async () => {
@@ -195,15 +195,19 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
   it.each([
     [
       "unrelated host",
-      `https://example.com/MarsherSusanin/Orivra/${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
+      `https://example.com/gh/MarsherSusanin/Orivra@${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
     ],
     [
       "unrelated repository path",
-      `https://raw.githubusercontent.com/other/Orivra/${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
+      `https://cdn.jsdelivr.net/gh/other/Orivra@${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
     ],
     [
       "unrelated artifact path",
-      `https://raw.githubusercontent.com/MarsherSusanin/Orivra/${"a".repeat(40)}/examples/canonical-url-attack/other.json`,
+      `https://cdn.jsdelivr.net/gh/MarsherSusanin/Orivra@${"a".repeat(40)}/examples/canonical-url-attack/other.json`,
+    ],
+    [
+      "raw GitHub content-type-incompatible origin",
+      `https://raw.githubusercontent.com/MarsherSusanin/Orivra/${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
     ],
   ])("rejects an attack source with an %s", async (_name, attackSourceUrl) => {
     const runtime = createRuntime();

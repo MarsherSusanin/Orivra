@@ -7,10 +7,11 @@ Status: author GREEN; live Coston2 recording and production deployment pending
 - The canonical safe Solidity consumer now binds the exact Open-Meteo host,
   path and six template query values.
 - The attack response is deterministic checked-in JSON suitable for a
-  commit-pinned `raw.githubusercontent.com` request.
+  commit-pinned GitHub-backed jsDelivr request with an
+  `application/json` response.
 - Recording runtime tests use identical Open-Meteo query, JQ and ABI authority
   for the different-host attack and control.
-- The production recorder derives the only accepted raw GitHub attack path
+- The production recorder derives the only accepted jsDelivr GitHub path
   from the recording's lowercase release commit. A different commit, host,
   repository or artifact path fails before compiler, EVM or import authority.
 - Production Compose requires one exact recording SHA selector for API.
@@ -46,6 +47,21 @@ performed by these author checks. This file is not a release, deployment or
 security PASS. The exact attack commit/run and recording SHA remain deliberately
 unset until a clean verified tree is published and the user confirms the one
 Coston2 wallet transaction.
+
+## Live preflight compatibility correction
+
+The first real wallet run
+`536dab30-f719-46f1-ba8b-4d09b445e794` created no Coston2 effect. Its eight
+preflight attempts exhausted with the bounded `FDC_TRANSPORT` classification.
+A production-side bounded probe established two independent causes: the
+installed verifier key returned HTTP 401, while the documented public testnet
+key reached the verifier and exposed `INVALID RESPONSE CONTENT TYPE` for
+GitHub Raw. The same exact checked-in bytes served through commit-pinned
+jsDelivr returned `Content-Type: application/json` and verifier status
+`VALID`. The terminal run remains append-only incident evidence and is not
+reused. Corrective tests require the exact jsDelivr host, repository, commit
+and artifact path and explicitly reject GitHub Raw before source/compiler/EVM
+effects.
 
 ## Corrective verifier wave
 
