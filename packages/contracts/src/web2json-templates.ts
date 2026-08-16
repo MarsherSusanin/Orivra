@@ -16,7 +16,7 @@ const TemplateManifestV1Schema = z.lazy(() => Web2JsonManifestV1Schema);
 export const Web2JsonTemplateProvenanceV1Schema = z
   .object({
     kind: z.literal("proofline-builtin"),
-    catalogRevision: z.literal(1),
+    catalogRevision: TemplateRevisionV1Schema,
     templateId: TemplateIdV1Schema,
     templateRevision: TemplateRevisionV1Schema,
     manifestSha256: TemplateManifestSha256V1Schema,
@@ -34,7 +34,7 @@ export const Web2JsonTemplateSummaryV1Schema = z
     title: z.string().trim().min(1).max(80),
     summary: z.string().trim().min(1).max(240),
     provider: z.string().trim().min(1).max(80),
-    category: z.enum(["finance", "weather"]),
+    category: z.enum(["finance", "reference", "weather"]),
     featured: z.boolean(),
     manifestSha256: TemplateManifestSha256V1Schema,
     detailPath: z.string().max(78),
@@ -58,7 +58,7 @@ export const Web2JsonTemplateCatalogV1Schema = z
   .object({
     version: VersionV1Schema,
     kind: z.literal("web2json-template-catalog"),
-    catalogRevision: z.literal(1),
+    catalogRevision: TemplateRevisionV1Schema,
     templates: z.array(Web2JsonTemplateSummaryV1Schema).min(1).max(64),
   })
   .strict()
@@ -76,6 +76,18 @@ export const Web2JsonTemplateCatalogV1Schema = z
         code: "custom",
         path: ["templates"],
         message: "The catalog must have one featured first template",
+      });
+    }
+    const expectedOrder = [...value.templates].sort((left, right) => {
+      if (left.featured !== right.featured) return left.featured ? -1 : 1;
+      if (left.id === right.id) return 0;
+      return left.id < right.id ? -1 : 1;
+    });
+    if (expectedOrder.some(({ id }, index) => value.templates[index]?.id !== id)) {
+      context.addIssue({
+        code: "custom",
+        path: ["templates"],
+        message: "Templates must be ordered by featured state then canonical ID",
       });
     }
   });

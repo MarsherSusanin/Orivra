@@ -100,6 +100,31 @@ describe("Slice 025A public template contracts", () => {
     expect(schema.parse(summary)).toEqual(summary);
   });
 
+  it("accepts additive reference templates and positive catalog revisions", () => {
+    const summarySchema = requireSchema(schemas.Web2JsonTemplateSummaryV1Schema);
+    const provenanceSchema = requireSchema(schemas.Web2JsonTemplateProvenanceV1Schema);
+    if (!summarySchema || !provenanceSchema) return;
+    const reference = {
+      ...summary,
+      id: "swapi-c3po",
+      title: "SWAPI C-3PO profile",
+      provider: "SWAPI",
+      category: "reference",
+      featured: false,
+      detailPath: "/v1/templates/swapi-c3po",
+    };
+    expect(summarySchema.parse(reference)).toEqual(reference);
+    expect(provenanceSchema.parse({
+      ...provenance,
+      catalogRevision: 2,
+      templateId: reference.id,
+    })).toEqual({
+      ...provenance,
+      catalogRevision: 2,
+      templateId: reference.id,
+    });
+  });
+
   it.each([
     ["extra fields", { ...summary, responseBody: "{}" }],
     ["uppercase ID", { ...summary, id: "Open-Meteo" }],
@@ -161,6 +186,36 @@ describe("Slice 025A public template contracts", () => {
     const schema = requireSchema(schemas.Web2JsonTemplateCatalogV1Schema);
     if (!schema) return;
     expect(schema.safeParse({ version: "1", kind: "web2json-template-catalog", catalogRevision: 1, templates }).success).toBe(false);
+  });
+
+  it("rejects non-featured templates outside canonical ID order", () => {
+    const schema = requireSchema(schemas.Web2JsonTemplateCatalogV1Schema);
+    if (!schema) return;
+    const later = { ...summary, id: "swapi-c3po", detailPath: "/v1/templates/swapi-c3po", featured: false };
+    const earlier = { ...summary, id: "eth-usd", detailPath: "/v1/templates/eth-usd", featured: false };
+    expect(schema.safeParse({
+      version: "1",
+      kind: "web2json-template-catalog",
+      catalogRevision: 2,
+      templates: [summary, later, earlier],
+    }).success).toBe(false);
+  });
+
+  it("rejects duplicate non-featured IDs while exercising equality ordering", () => {
+    const schema = requireSchema(schemas.Web2JsonTemplateCatalogV1Schema);
+    if (!schema) return;
+    const duplicate = {
+      ...summary,
+      id: "eth-usd",
+      detailPath: "/v1/templates/eth-usd",
+      featured: false,
+    };
+    expect(schema.safeParse({
+      version: "1",
+      kind: "web2json-template-catalog",
+      catalogRevision: 2,
+      templates: [summary, duplicate, { ...duplicate }],
+    }).success).toBe(false);
   });
 
   it("rejects oversized public representations rather than arbitrary metadata", () => {

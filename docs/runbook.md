@@ -650,7 +650,14 @@ Public discovery is limited to exact no-query reads:
 GET /v1/templates
 GET /v1/templates/open-meteo-current-weather
 GET /v1/templates/eth-usd
+GET /v1/templates/jsonplaceholder-todo-1
+GET /v1/templates/swapi-c3po
 ```
+
+Catalog revision `2` keeps the Open-Meteo and Coinbase revision-`1` bytes and
+catalog-revision-`1` provenance unchanged, then adds replay-only
+JSONPlaceholder and SWAPI reference templates. The featured template is first;
+all remaining IDs are ordered canonically.
 
 The catalog is compiled into the pure domain package. Do not provision a table,
 Redis cache, source proxy or dynamic registry for it. A detail is usable only
@@ -661,7 +668,8 @@ the canonical response bytes and are distinct from the embedded manifest hash.
 Web uses only same-origin `/api/v1/templates*`. During gallery, detail,
 selection, replacement and reload/back-forward verification, reject any
 browser request, preconnect, prefetch, image, active source link or service
-worker request to `api.open-meteo.com` or `api.coinbase.com`. Template selection
+worker request to `api.open-meteo.com`, `api.coinbase.com`,
+`jsonplaceholder.typicode.com` or `swapi.info`. Template selection
 does not fetch a source response; that remains an authenticated persisted
 preflight effect. A saved valid Composer draft must survive until the user
 confirms replacement, and cancellation must preserve its exact local bytes.

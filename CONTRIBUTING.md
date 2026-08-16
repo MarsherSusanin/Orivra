@@ -38,6 +38,10 @@ API state honestly rather than substituting fixtures.
 Do not weaken a public contract, replace persisted evidence with a fixture, or
 introduce a direct browser-to-worker/live-effect path to make a test pass.
 
+Built-in Web2Json template proposals must also satisfy the deterministic
+[template contribution and review criteria](docs/templates.md). A public API
+example is not eligible merely because it works once in a browser.
+
 ## Required checks
 
 Run the smallest affected tests while developing, then run the contributor

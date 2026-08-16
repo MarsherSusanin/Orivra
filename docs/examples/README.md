@@ -11,6 +11,7 @@
 | Restart-safe command execution | `apps/worker/src/worker.ts` и worker recovery tests |
 | Production Coston2 composition | `apps/worker/src/live-runtime.ts` |
 | SSRF-safe Web2Json fetch | `packages/fdc-coston2/src/safe-http.ts` и `packages/fdc-coston2/test/safe-http.test.ts` |
+| Immutable built-in template | `packages/domain/src/web2json-template-catalog.ts`, `packages/domain/test/issue008-expanded-template-catalog.contract.test.ts` and `docs/templates.md` |
 | Consumer diagnostics и safe codegen | `packages/domain/src/diagnostics.ts`, `packages/domain/src/codegen.ts` и Solidity tests |
 | Persisted Consumer Lab и exact safe artifact | `apps/api/test/slice019-consumer-lab-report.contract.test.ts` и `src/slice019-consumer-lab.contract.test.tsx` |
 | Consumer `Ready` route, focus and action ownership | `src/slice030b-run-stage-content-routing.contract.test.tsx` |

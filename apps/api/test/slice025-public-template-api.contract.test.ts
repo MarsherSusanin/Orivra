@@ -4,7 +4,9 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { canonicalJson } from "@proofline/domain";
 import {
+  jsonPlaceholderTodoTemplateDetail,
   openMeteoTemplateDetail,
+  swapiC3poTemplateDetail,
   templateCatalog,
 } from "../../../test/slice025-template-fixtures";
 import { createProoflineApi } from "../src/app";
@@ -60,6 +62,8 @@ describe("Slice 025B anonymous static template API", () => {
   it.each([
     ["catalog", "/v1/templates", templateCatalog],
     ["detail", "/v1/templates/open-meteo-current-weather", openMeteoTemplateDetail],
+    ["JSONPlaceholder detail", "/v1/templates/jsonplaceholder-todo-1", jsonPlaceholderTodoTemplateDetail],
+    ["SWAPI detail", "/v1/templates/swapi-c3po", swapiC3poTemplateDetail],
   ] as const)("serves canonical %s bytes before bearer parsing", async (_name, path, value) => {
     const fixture = harness();
     const response = await fixture.api.fetch(request(path, {
