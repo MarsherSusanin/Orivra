@@ -512,6 +512,34 @@ corrupt selection returns the same no-store
 fallback is permitted. These are executable local surfaces; an absent selector
 or missing/corrupt selected row deliberately preserves the same honest 503.
 
+Production restoration installs the recording outside Git at an absolute path
+under `/opt/orivra/evidence`. Before import it must be a root-owned, root-group
+regular file with mode `0400`; compute its SHA-256 without printing its bytes and
+place the exact `sha256:<hex>` value in the private `runtime.env` as
+`PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256`. Then run, from the exact
+release checkout:
+
+```bash
+npm run production:demo:import -- \
+  --recording /opt/orivra/evidence/canonical-url-attack.recording.json \
+  --sha256 sha256:<exact-recording-byte-sha256>
+```
+
+The operator command rejects symlinks, other directories, wrong ownership or
+mode, oversized bytes, digest/selector mismatch and nonzero importer exit before
+reporting success. It starts one foreground `db-role-bootstrap` container with
+the dedicated importer entrypoint and never logs database authority or
+recording bytes. Re-import is idempotent only for byte- and metadata-identical
+evidence.
+
+After a successful import, recreate only `api` with its new exact published
+digest and the same selector. Preserve the prior API digest and runtime file for
+rollback. Do not delete the append-only row during rollback: an older API or a
+runtime without the selector ignores it. Verify both public demo routes,
+representation ETags, exact recording download SHA, `/healthz`, `/readyz`, and
+that worker/Caddy/Web/PostgreSQL digests did not change. There is no
+synthetic/latest-row fallback.
+
 ## 5. Worker
 
 Сборка и запуск:
@@ -596,6 +624,21 @@ proofline demo record --attack-run <persisted-live-run-id> \
   --control-run <persisted-live-run-id> --commit <40-hex-commit> \
   --tree <40-hex-tree> --out <recording-path>
 ```
+
+The live attack manifest must use the immutable GitHub-backed jsDelivr URL
+`https://cdn.jsdelivr.net/gh/MarsherSusanin/Orivra@<commit>/examples/canonical-url-attack/attack-response.json`.
+Before creating a wallet run, verify that the exact response is HTTPS 200,
+has no redirect, is below 1 MiB, has `Content-Type: application/json`, and that
+the official Flare Web2Json `prepareRequest` accepts it. Do not substitute
+`raw.githubusercontent.com`: it returns the same JSON bytes as `text/plain`
+and the live verifier rejects it. A verifier `401` means the installed key is
+not accepted; validate the currently documented Flare public testnet key or a
+separately issued key before creating another persisted run. Never print the
+installed verifier-key bytes during this probe.
+The production safe fetcher disables HTTPS connection pooling for these five
+samples. If the source is reachable but preflight records a pinned-address
+mismatch, verify that the deployed worker creates a fresh connection per DNS
+pin; do not weaken or remove the remote-address equality check.
 
 Все пять опций обязательны ровно один раз, run ID должны различаться, а run/release/output значения проходят bounded грамматику до любого I/O. Packaged CLI всегда подключает concrete `packages/fdc-coston2` runtime: команда читает ровно два persisted bundle не более 2 200 000 UTF-8 bytes и 64 Merkle nodes каждый, перекомпилирует exact checked-in Solidity через pinned canonical standard JSON, выполняет три вызова в fresh Cancun `@ethereumjs/vm`, затем независимо повторяет runtime verification до atomic rename. Raw calldata/results не дублируются в recording: runtime выводит и сверяет их transcript hashes. Ошибка source read всегда возвращает code `CANONICAL_SOURCE_READ_FAILED` и сообщение `Canonical URL attack source read failed` без OS code, path, filename и stack. Любая read/compile/EVM/verify ошибка оставляет destination неизменённым; fixture/replay fallback и wallet/relayer effect отсутствуют.
 

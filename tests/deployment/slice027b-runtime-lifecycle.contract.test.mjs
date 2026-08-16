@@ -28,6 +28,7 @@ const environment = {
   PROOFLINE_PUBLIC_ORIGIN: "https://proofline.example",
   PROOFLINE_DEPLOYMENT_ID: `deployment_${"b".repeat(64)}`,
   PROOFLINE_RELEASE_TREE_SHA: "c".repeat(40),
+  PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256: `sha256:${"d".repeat(64)}`,
   PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE: "/tmp/postgres-admin-database-url",
   PROOFLINE_MIGRATOR_DATABASE_URL_FILE: "/tmp/migrator-database-url",
   PROOFLINE_API_DATABASE_URL_FILE: "/tmp/api-database-url",

@@ -3,6 +3,7 @@ import { importCanonicalUrlAttackRecording } from "./canonical-url-attack-import
 import { verifyDeploymentSchema } from "./deployment-lifecycle";
 import { resolveDeploymentEnvironment } from "./deployment-secrets";
 import { parseExactApplicationDatabaseUrl } from "./deployment-database-url";
+import { isolateRecordingImporterEnvironment } from "./recording-importer-environment";
 
 function recordingArgument(argv: readonly string[]): string {
   if (
@@ -22,7 +23,7 @@ let pool: Pool | undefined;
 try {
   const environment = await resolveDeploymentEnvironment(
     "recording-importer",
-    process.env,
+    isolateRecordingImporterEnvironment(process.env),
   );
   const databaseUrl = parseExactApplicationDatabaseUrl(
     environment.DATABASE_URL ?? "",

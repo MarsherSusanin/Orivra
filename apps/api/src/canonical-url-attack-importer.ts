@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,7 +50,10 @@ async function readCanonicalRecording(path: string): Promise<{
   bytes: Buffer;
   serialized: string;
 }> {
-  const handle = await open(path, "r");
+  const handle = await open(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
   try {
     const metadata = await handle.stat();
     if (

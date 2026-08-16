@@ -22,10 +22,10 @@ The source Web2Json response is capped at 1 MiB, but `proof.response` is hex in
 canonical JSON and can approach twice the source byte count. The rejected
 implementation then duplicated the same proof tuple three more times as raw
 consumer calldata and duplicated both accepted results. For a 1,048,000-byte
-transformed payload, the official ABI response is 1,049,056 bytes and consumer
-calldata is 1,049,188 bytes. Their hex strings are respectively 2,098,114 and
-2,098,378 characters. Two response strings plus three calldata strings alone
-therefore require 10,491,362 characters before compiler, source, bytecode,
+transformed payload, the official ABI response is 1,049,280 bytes and consumer
+calldata is 1,049,412 bytes. Their hex strings are respectively 2,098,562 and
+2,098,826 characters. Two response strings plus three calldata strings alone
+therefore require 10,493,602 characters before compiler, source, bytecode,
 result or JSON framing evidence. No 6 MiB envelope can represent that design.
 
 ## Decision
@@ -234,6 +234,36 @@ domain parse/checksum/self-consistency cannot authorize import. A later public
 surface consumes only that runtime-verified persisted recording or renders an
 explicit unavailable state. No browser performs source, Coston2 or compiler
 I/O.
+
+### Production Open-Meteo demonstration
+
+The production recording uses the existing terminal Open-Meteo run as its
+control and one separately wallet-authorized attack run. Both manifests retain
+the exact Open-Meteo method, six query values, JQ transform and ABI descriptor.
+Only source authority changes: the control is
+`https://api.open-meteo.com/v1/forecast`; the attack is a deterministic JSON
+asset below `examples/canonical-url-attack/` served by
+`cdn.jsdelivr.net` from one exact public repository commit. The immutable
+jsDelivr GitHub endpoint is required because the live Flare Web2Json verifier
+requires an `application/json` response; GitHub Raw serves these bytes as
+`text/plain` and is therefore not a valid live demonstration source.
+The production recorder derives that attack URL from `release.commitSha` and
+accepts only the exact
+`https://cdn.jsdelivr.net/gh/MarsherSusanin/Orivra@<commit>/examples/canonical-url-attack/attack-response.json`
+manifest authority. The repository owner, repository name, commit segment,
+artifact path and corresponding consumer authority are one cross-bound input;
+the release identity cannot be copied independently from an unrelated URL.
+Each of the five SSRF-bounded samples owns a fresh HTTPS connection. A pooled
+socket established for another valid DNS answer must never be reused for a
+new pin; the connected peer must still equal that sample's selected public
+address.
+
+The checked-in canonical safe consumer is therefore bound to HTTPS,
+`api.open-meteo.com`, `/v1/forecast`, and the six template query values. The
+different-host attack can still produce a valid persisted Web2Json proof, but
+the deterministic EVM replay must reject it with `HostMismatch()`. No generated
+fixture, mutable branch URL, `latest` row, or browser-derived authority may
+replace either persisted bundle.
 
 ## Consequences
 

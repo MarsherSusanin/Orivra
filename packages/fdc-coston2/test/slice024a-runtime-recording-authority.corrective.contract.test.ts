@@ -170,6 +170,52 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
     });
   });
 
+  it("rejects an Open-Meteo descendant path instead of treating the exact demo path as a prefix", async () => {
+    const runtime = createRuntime();
+    await expect(runtime.recordCanonicalUrlAttack(makeRuntimeInput({
+      controlRequestPath: "/v1/forecast/other",
+    }))).rejects.toThrow(/control|safe|EVM|revert/i);
+  });
+
+  it("rejects an attack source whose immutable GitHub CDN revision is not the recorded release commit", async () => {
+    let sourceReads = 0;
+    const runtime = fdc.createProductionCanonicalUrlAttackRuntime({
+      readCheckedInSource: async () => {
+        sourceReads += 1;
+        throw new Error("must not read sources");
+      },
+      now: () => "2026-08-09T12:00:00.000Z",
+    });
+    await expect(runtime.recordCanonicalUrlAttack(makeRuntimeInput({
+      attackCommitSha: "c".repeat(40),
+    }))).rejects.toThrow(/attack source|release commit|provenance/i);
+    expect(sourceReads).toBe(0);
+  });
+
+  it.each([
+    [
+      "unrelated host",
+      `https://example.com/gh/MarsherSusanin/Orivra@${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
+    ],
+    [
+      "unrelated repository path",
+      `https://cdn.jsdelivr.net/gh/other/Orivra@${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
+    ],
+    [
+      "unrelated artifact path",
+      `https://cdn.jsdelivr.net/gh/MarsherSusanin/Orivra@${"a".repeat(40)}/examples/canonical-url-attack/other.json`,
+    ],
+    [
+      "raw GitHub content-type-incompatible origin",
+      `https://raw.githubusercontent.com/MarsherSusanin/Orivra/${"a".repeat(40)}/examples/canonical-url-attack/attack-response.json`,
+    ],
+  ])("rejects an attack source with an %s", async (_name, attackSourceUrl) => {
+    const runtime = createRuntime();
+    await expect(runtime.recordCanonicalUrlAttack(makeRuntimeInput({
+      attackSourceUrl,
+    }))).rejects.toThrow(/attack source|provenance/i);
+  });
+
   it("recompiles and reexecutes before returning runtime-verified import authority", async () => {
     const runtime = createRuntime();
     const serialized = await runtime.recordCanonicalUrlAttack(makeRuntimeInput());
@@ -251,10 +297,10 @@ describe("Slice 024A trusted compiler/EVM recording authority", () => {
       expect(attackCalldataBytes).toBe(NEAR_MAX_CALLDATA_BYTES);
       expect(attackCalldata).toHaveLength(2 * NEAR_MAX_CALLDATA_BYTES + 2);
       expect(attackResponseBytes - NEAR_MAX_TRANSFORMED_PAYLOAD_BYTES).toBe(
-        1_056,
+        1_280,
       );
       expect(attackCalldataBytes - NEAR_MAX_TRANSFORMED_PAYLOAD_BYTES).toBe(
-        1_188,
+        1_412,
       );
 
       const input = runtimeInputForPair(pair);

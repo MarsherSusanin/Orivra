@@ -343,6 +343,16 @@ async function runProcess(executable, arguments_, { input, environment = {}, max
   });
 }
 
+export function validateCanonicalUrlDemoSelectorEnvironment(environment) {
+  if (!SHA256.test(environment?.PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256 ?? "")) {
+    throw failure(
+      "TIMEWEB_HOST_CONFIGURATION_INVALID",
+      "Canonical URL demo selector is invalid",
+    );
+  }
+  return environment;
+}
+
 async function loadRuntimeEnvironment(extra = {}) {
   const text = (await readPrivateAuthorityFile("/opt/orivra/runtime.env", { maximumBytes: 64 * 1024 })).toString("utf8");
   const result = {};
@@ -355,8 +365,10 @@ async function loadRuntimeEnvironment(extra = {}) {
     result[line.slice(0, index)] = line.slice(index + 1);
   }
   await validateTimewebProductionSecretInventory({ environment: result });
-  return { ...result, ...extra };
+  return validateCanonicalUrlDemoSelectorEnvironment({ ...result, ...extra });
 }
+
+export const loadTimewebProductionRuntimeEnvironment = loadRuntimeEnvironment;
 
 function composeArguments(action, services = []) {
   const args = ["compose"];

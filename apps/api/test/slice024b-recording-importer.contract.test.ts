@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { isolateRecordingImporterEnvironment } from "../src/recording-importer-environment";
 import {
   RECORDING_BYTES,
   RECORDING_SHA256,
@@ -214,6 +215,7 @@ describe("Slice 024B one-shot trusted recording importer", () => {
   it("uses one bounded file handle and no HTTP, directory scan, token or default recording path", async () => {
     const source = await readFile(new URL("../src/canonical-url-attack-importer.ts", import.meta.url), "utf8").catch(() => "");
     expect(source).toMatch(/\bopen\s*\(/);
+    expect(source).toMatch(/O_NOFOLLOW/);
     expect(source).toMatch(/\.readFile\s*\(/);
     expect(source).toMatch(/\.close\s*\(/);
     expect(source).toContain(
@@ -222,5 +224,26 @@ describe("Slice 024B one-shot trusted recording importer", () => {
     expect(source).toMatch(/pg_advisory_xact_lock\s*\(\s*hashtextextended/i);
     expect(source).not.toMatch(/\bfetch\s*\(|https?:\/\/|readdir|glob|PROOFLINE_PROJECT_TOKEN|Authorization/i);
     expect(source).not.toMatch(/recordingPath\s*\?\?|default.*recording/i);
+  });
+
+  it("isolates the importer database role from bootstrap and ambient credentials", () => {
+    const dedicated = isolateRecordingImporterEnvironment({
+      PROOFLINE_RECORDING_IMPORTER_DATABASE_URL_FILE:
+        "/run/secrets/recording_importer_database_url",
+      DATABASE_URL: "postgresql://ambient.example.invalid/admin",
+      DATABASE_URL_FILE: "/run/secrets/bootstrap_database_url",
+      PROOFLINE_PROJECT_TOKEN: "must-not-cross-the-boundary",
+    });
+    expect(dedicated).toEqual({
+      DATABASE_URL_FILE: "/run/secrets/recording_importer_database_url",
+    });
+    expect(Object.isFrozen(dedicated)).toBe(true);
+
+    expect(isolateRecordingImporterEnvironment({
+      DATABASE_URL: "postgresql://localhost/proofline",
+    })).toEqual({
+      DATABASE_URL: "postgresql://localhost/proofline",
+      DATABASE_URL_FILE: undefined,
+    });
   });
 });

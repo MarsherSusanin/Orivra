@@ -57,6 +57,7 @@
     "test:action:artifact": "vitest run tests/action-artifact-sync.contract.test.ts --reporter=verbose",
     "compose:production": "node scripts/compose-production.mjs",
     "production:canary:resume": "node scripts/resume-production-canary.mjs --state-root /var/lib/orivra/production-canary",
+    "production:demo:import": "node scripts/import-production-canonical-url-demo.mjs",
     "production:backup:daily": "node scripts/run-timeweb-daily-backup.mjs"
   },
   "dependencies": {

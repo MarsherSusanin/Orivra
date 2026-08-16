@@ -620,7 +620,7 @@ test("keeps protected Sites bytes unchanged and permits only the frozen 029D bro
     bin: { "playwright-core": "cli.js" },
     engines: { node: ">=20" },
   });
-  assert.equal(sha256(lockBytes), "2d45697a041b8bbc4c91b76c645cf5749a0f8e9293741c9a980ece95dc204896");
+  assert.equal(sha256(lockBytes), "6f0b1c8b074f54ea3d686a956c1a99e6f8cc3328d78746370c6248d97da4ecdb");
 });
 
 test("documents that 027B and 027C gates cannot be fabricated by the 027A smoke", async () => {

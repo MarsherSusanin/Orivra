@@ -6,6 +6,7 @@ pragma solidity ^0.8.25;
 library ProoflineUrlInvariant {
     error SchemeMismatch();
     error HostMismatch();
+    error PathMismatch();
     error PathPrefixMismatch();
     error QueryValueMismatch();
 
@@ -52,6 +53,25 @@ library ProoflineUrlInvariant {
             url[boundary] != "?" &&
             url[boundary] != "#"
         ) revert PathPrefixMismatch();
+    }
+
+    function requirePath(string memory requestUrl, string memory expectedPath) internal pure {
+        bytes memory url = bytes(requestUrl);
+        bytes memory path = bytes(expectedPath);
+        uint256 start = _authorityStart(url);
+        while (start < url.length && url[start] != "/" && url[start] != "?" && url[start] != "#") {
+            unchecked { ++start; }
+        }
+        uint256 end = start;
+        while (end < url.length && url[end] != "?" && url[end] != "#") {
+            unchecked { ++end; }
+        }
+        if (
+            path.length == 0 ||
+            path[0] != "/" ||
+            end - start != path.length ||
+            !_equalsAt(url, start, path)
+        ) revert PathMismatch();
     }
 
     function requireQueryValue(

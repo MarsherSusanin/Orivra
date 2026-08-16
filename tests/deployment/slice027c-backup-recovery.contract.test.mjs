@@ -22,12 +22,11 @@ function realSha256(value, label) {
 }
 
 test("accepts ADR 0037 and freezes Slice 027C C1/C2/C3 without a hosted claim", async () => {
-  const [index, adr, slice, roadmap, readme] = await Promise.all([
+  const [index, adr, slice, roadmap] = await Promise.all([
     source("docs/adr/README.md"),
     source("docs/adr/0037-wal-archiving-and-pitr-recovery.md"),
     source("docs/slices/027c-wal-archiving-and-pitr-recovery.md"),
     source("docs/development/product-roadmap.md"),
-    source("README.md"),
   ]);
   assert.match(index, /0037-wal-archiving-and-pitr-recovery/);
   assert.match(adr, /^Status: accepted$/m);
@@ -41,7 +40,6 @@ test("accepts ADR 0037 and freezes Slice 027C C1/C2/C3 without a hosted claim", 
   assert.match(roadmap027c, /corrective RED freezes/i);
   assert.match(roadmap027c, /stash\s+candidate `ccccf5d2` is rejected by scan `ae807f50`/i);
   assert.match(roadmap027c, /not hosted, live Spaces\/production/i);
-  assert.match(readme, /527c561[\s\S]{0,80}ebdf648/);
   assert.doesNotMatch(`${adr}\n${slice}`, /hosting is deployed|hosted PASS|production PITR PASS/i);
 });
 

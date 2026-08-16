@@ -175,6 +175,8 @@ async function prepareTemporaryDirectory(temporaryDirectory) {
       PROOFLINE_PUBLIC_ORIGIN,
       PROOFLINE_DEPLOYMENT_ID: `deployment_${"a".repeat(64)}`,
       PROOFLINE_RELEASE_TREE_SHA: "b".repeat(40),
+      PROOFLINE_CANONICAL_URL_ATTACK_RECORDING_SHA256:
+        `sha256:${"d".repeat(64)}`,
       PROOFLINE_POSTGRES_ADMIN_DATABASE_URL_FILE: secretPaths.postgresAdminDatabase,
       PROOFLINE_API_DATABASE_URL_FILE: secretPaths.apiDatabase,
       PROOFLINE_API_TOKEN_DIGEST_KEY_FILE: secretPaths.apiDigest,

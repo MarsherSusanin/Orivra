@@ -218,6 +218,25 @@ Sites remains compatibility-only. Its generic SPA fallback must serve
 `/demo/canonical-url` while `/api/*` and writes remain fail closed. No Caddy port
 or public service boundary changes in 024B.
 
+### Production import and exact selector
+
+The production runtime makes the otherwise optional selector mandatory for the
+API service. An operator installs one previously runtime-verified recording as
+a root-owned, root-group regular mode-`0400` file below `/opt/orivra/evidence`
+and invokes the bounded `production:demo:import` command with its exact byte
+SHA-256. The command opens the file with `O_NOFOLLOW`, enforces the 6 MiB cap,
+checks metadata and digest before Docker, and runs exactly one foreground
+`db-role-bootstrap` container with the importer entrypoint. The importer sees
+only the dedicated recording-importer database URL file, not bootstrap or
+administrator database authority.
+
+Import happens before recreating the API with the same selector. Only the API
+image and its immutable digest change for this restoration; Web, worker, Caddy
+and PostgreSQL images remain pinned. Rollback restores the previous API digest
+and runtime file. The append-only recording row is retained and ignored by an
+API without that selector. Production never selects the most recent row and
+never synthesizes a recording when the selected row is absent or invalid.
+
 ## Consequences
 
 - A public demo can be enabled only by an exact digest selected from immutable,
