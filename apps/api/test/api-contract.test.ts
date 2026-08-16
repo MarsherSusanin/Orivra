@@ -63,6 +63,8 @@ function createHarness() {
     verifyConsumer: vi.fn().mockResolvedValue({ accepted: true }),
     generateConsumer: vi.fn().mockResolvedValue({ artifactId: "artifact_safe" }),
     getConsumerLabReport: vi.fn().mockResolvedValue({ version: "1", runId }),
+    getDeployedConsumerVerification: vi.fn().mockResolvedValue({ version: "1", runId, status: "verified" }),
+    verifyDeployedConsumer: vi.fn().mockResolvedValue({ version: "1", runId, commandId: "command_1", status: "pending" }),
     getBundle: vi.fn().mockResolvedValue({ version: "1", runId, checksum: `sha256:${"a".repeat(64)}` }),
     replay: vi.fn().mockResolvedValue({ runId: "run_replay", byteIdentical: true }),
     createShare: vi.fn().mockResolvedValue({
@@ -87,6 +89,26 @@ function createHarness() {
 }
 
 describe("Proofline v1 API routing", () => {
+  it("routes strict read-only deployed-consumer verification without accepting caller RPC authority", async () => {
+    const { api, service } = createHarness();
+    const address = "0x1111111111111111111111111111111111111111";
+    const accepted = await api.fetch(jsonRequest(`/v1/runs/${runId}/deployed-consumer-verifications`, {
+      method: "POST",
+      idempotencyKey: "verify-deployed-consumer",
+      body: { version: "1", chainId: 114, address },
+    }));
+    expect(accepted.status).toBe(202);
+    expect(service.verifyDeployedConsumer).toHaveBeenCalledWith(expect.objectContaining({ address, chainId: 114 }));
+    const rejected = await api.fetch(jsonRequest(`/v1/runs/${runId}/deployed-consumer-verifications`, {
+      method: "POST",
+      idempotencyKey: "verify-deployed-consumer-2",
+      body: { version: "1", chainId: 114, address, rpcUrl: "https://attacker.invalid" },
+    }));
+    expect(rejected.status).toBe(400);
+    const read = await api.fetch(jsonRequest(`/v1/runs/${runId}/deployed-consumer-verification`));
+    expect(read.status).toBe(200);
+  });
+
   it("serves Consumer Lab evidence to project and run-scoped share readers", async () => {
     const { api, service } = createHarness();
     for (const token of [projectToken, shareToken]) {

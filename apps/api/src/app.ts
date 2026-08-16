@@ -1,6 +1,7 @@
 import {
   CANONICAL_URL_ATTACK_RECORDING_MAX_UTF8_BYTES,
   CanonicalUrlAttackDemoSummaryV1Schema,
+  DeployedConsumerVerificationRequestV1Schema,
   NetworkCapabilitiesV1Schema,
   SubmissionRequestV1Schema,
   Web2JsonManifestV1Schema,
@@ -108,6 +109,7 @@ const ConsumerArtifactBodySchema = z
       .optional(),
   })
   .strict();
+const DeployedConsumerVerificationBodySchema = DeployedConsumerVerificationRequestV1Schema;
 const ShareBodySchema = z
   .object({ expiresAt: z.string().datetime({ offset: true }).optional() })
   .strict();
@@ -625,6 +627,7 @@ function isSharedRead(request: Request, pathname: string): boolean {
       /^\/v1\/runs\/[^/]+\/events$/.test(pathname) ||
       /^\/v1\/runs\/[^/]+\/preflight$/.test(pathname) ||
       /^\/v1\/runs\/[^/]+\/consumer-lab$/.test(pathname) ||
+      /^\/v1\/runs\/[^/]+\/deployed-consumer-verification$/.test(pathname) ||
       /^\/v1\/runs\/[^/]+\/receipt$/.test(pathname) ||
       /^\/v1\/runs\/[^/]+\/bundle$/.test(pathname))
   );
@@ -645,6 +648,9 @@ function commandBodySchema(
   }
   if (/^\/v1\/runs\/[^/]+\/consumer-verifications$/.test(pathname)) {
     return ConsumerVerificationBodySchema;
+  }
+  if (/^\/v1\/runs\/[^/]+\/deployed-consumer-verifications$/.test(pathname)) {
+    return DeployedConsumerVerificationBodySchema;
   }
   if (/^\/v1\/runs\/[^/]+\/artifacts\/consumer$/.test(pathname)) {
     return ConsumerArtifactBodySchema;
@@ -1088,6 +1094,12 @@ export function createProoflineApi(input: {
         }
         if (
           request.method === "GET" &&
+          /^\/v1\/runs\/[^/]+\/deployed-consumer-verification$/.test(url.pathname)
+        ) {
+          return json(await input.service.getDeployedConsumerVerification(context));
+        }
+        if (
+          request.method === "GET" &&
           /^\/v1\/runs\/[^/]+\/receipt$/.test(url.pathname)
         ) {
           return json(await input.service.getEvidenceReceipt(context));
@@ -1120,6 +1132,12 @@ export function createProoflineApi(input: {
           /^\/v1\/runs\/[^/]+\/consumer-verifications$/.test(url.pathname)
         ) {
           return json(await input.service.verifyConsumer(context), 202);
+        }
+        if (
+          request.method === "POST" &&
+          /^\/v1\/runs\/[^/]+\/deployed-consumer-verifications$/.test(url.pathname)
+        ) {
+          return json(await input.service.verifyDeployedConsumer(context), 202);
         }
         if (
           request.method === "POST" &&

@@ -137,6 +137,10 @@ Important boundaries:
 - `apps/api` owns authentication, idempotent commands, and PostgreSQL
   composition.
 - `apps/worker` owns restart-safe external effects and the relayer boundary.
+- After Consumer Lab, the worker can optionally compare a directly deployed
+  Coston2 consumer's runtime bytecode with the exact generated artifact. This
+  is a read-only, block-bound observation; proxies, ownership and security
+  audits are deliberately outside the claim.
 - Web, CLI, Action, and MCP use public contracts and the persisted API path.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) and the

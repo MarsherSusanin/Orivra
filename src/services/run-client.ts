@@ -1,5 +1,7 @@
 import type {
   ConsumerLabReportV1,
+  DeployedConsumerEvidenceV1,
+  DeployedConsumerVerificationAcceptedV1,
   CreateRunResultV1,
   EvidenceReceiptV1,
   NetworkCapabilityV1,
@@ -12,6 +14,8 @@ import type {
 } from "../../packages/contracts/src";
 import {
   ConsumerLabReportV1Schema,
+  DeployedConsumerEvidenceV1Schema,
+  DeployedConsumerVerificationAcceptedV1Schema,
   CreateRunResultV1Schema,
   EvidenceReceiptV1Schema,
   NETWORK_CAPABILITIES_V1,
@@ -442,6 +446,18 @@ export function createRunClient(input: {
       return parsed.data;
     },
 
+    async getDeployedConsumerVerification(runId: string): Promise<DeployedConsumerEvidenceV1> {
+      const result = await request<unknown>(`/runs/${encodeURIComponent(runId)}/deployed-consumer-verification`);
+      const parsed = DeployedConsumerEvidenceV1Schema.safeParse(result);
+      if (!parsed.success || parsed.data.runId !== runId) {
+        throw new ProoflineClientError("Orivra returned invalid deployed consumer evidence", {
+          status: 502,
+          code: "DEPLOYED_CONSUMER_EVIDENCE_INVALID",
+        });
+      }
+      return parsed.data;
+    },
+
     async getEvidenceReceipt(runId: string): Promise<EvidenceReceiptV1> {
       const result = await request<unknown>(`/runs/${encodeURIComponent(runId)}/receipt`);
       const parsed = EvidenceReceiptV1Schema.safeParse(result);
@@ -539,6 +555,29 @@ export function createRunClient(input: {
           idempotencyKey,
         },
       );
+    },
+
+    async verifyDeployedConsumer(
+      runId: string,
+      address: string,
+      idempotencyKey: string,
+    ): Promise<DeployedConsumerVerificationAcceptedV1> {
+      const result = await request<unknown>(
+        `/runs/${encodeURIComponent(runId)}/deployed-consumer-verifications`,
+        {
+          method: "POST",
+          body: { version: "1", chainId: 114, address },
+          idempotencyKey,
+        },
+      );
+      const parsed = DeployedConsumerVerificationAcceptedV1Schema.safeParse(result);
+      if (!parsed.success || parsed.data.runId !== runId) {
+        throw new ProoflineClientError("Orivra returned invalid deployed consumer acceptance", {
+          status: 502,
+          code: "DEPLOYED_CONSUMER_ACCEPTANCE_INVALID",
+        });
+      }
+      return parsed.data;
     },
 
     generateConsumer(runId: string, idempotencyKey: string) {

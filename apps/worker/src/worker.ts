@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   Coston2Web2JsonManifestV1Schema,
   DiagnosticV1Schema,
+  DeployedConsumerVerificationRequestV1Schema,
   isCanonicalUint256Decimal,
   NormalizedFdcErrorSchema,
   PreflightReportV1Schema,
@@ -24,6 +25,7 @@ import {
   replayProofBundle,
 } from "@proofline/domain";
 import { compileGeneratedConsumer } from "./solidity-compiler";
+import { classifyDeployedConsumerObservation } from "./deployed-consumer-verifier";
 import {
   calculateVotingRoundId,
   deriveWeb2JsonPreflightTrustBlockers,
@@ -498,6 +500,14 @@ export interface ProductionPipelinePorts {
     passed: boolean;
     diagnostics: DiagnosticV1[];
     requestUrl?: string;
+  }>;
+  observeDeployedConsumer?(input: {
+    address: string;
+  }): Promise<{
+    chainId: number;
+    registryAddress: string;
+    blockNumber: string;
+    runtimeBytecode: string;
   }>;
 }
 
@@ -2070,6 +2080,53 @@ export function createProductionCommandHandlers(input: {
           },
         ],
         nextCommands: [child(context, "BUILD_PROOF_BUNDLE")],
+      };
+    },
+
+    async VERIFY_DEPLOYED_CONSUMER(command) {
+      const context = await load(command);
+      if (!hasEvent(context, "CONSUMER_VERIFIED") || !projectRun(context.events).terminal) {
+        throw Object.assign(new Error("Deployed consumer verification requires terminal Consumer Lab evidence"), {
+          category: "configuration",
+          code: "DEPLOYED_CONSUMER_NOT_READY",
+          retryable: false,
+        });
+      }
+      const request = DeployedConsumerVerificationRequestV1Schema.parse(command.payload);
+      const safe = [...context.artifacts].reverse().find((item) => item.kind === "safe-consumer");
+      if (!safe) throw new Error("Persisted safe consumer source is required");
+      const source = decoder.decode(artifactBytes(safe));
+      const compilation = compileGeneratedConsumer(source);
+      if (
+        safe.metadata?.compiler !== compilation.compiler ||
+        safe.metadata?.compileStatus !== "passed" ||
+        safe.metadata?.compiledSourceSha256 !== compilation.compiledSourceSha256
+      ) {
+        throw new Error("Persisted safe consumer compiler evidence does not match canonical source");
+      }
+      const preflight = preflightEvidence(context);
+      if (!input.ports.observeDeployedConsumer) throw new Error("Deployed consumer RPC observer is unavailable");
+      const observation = await input.ports.observeDeployedConsumer({ address: request.address });
+      const evidence = classifyDeployedConsumerObservation({
+        runId: context.runId,
+        commandId: command.id,
+        chainId: observation.chainId,
+        address: request.address,
+        observedAt: input.clock.now(),
+        blockNumber: observation.blockNumber,
+        registryAddress: observation.registryAddress,
+        expectedRegistryAddress: preflight.network.registryAddress,
+        observedRuntimeBytecode: observation.runtimeBytecode,
+        expectedRuntimeBytecode: compilation.runtimeBytecode,
+        sourceSha256: compilation.compiledSourceSha256,
+        compilerVersion: compilation.compiler,
+      });
+      return {
+        artifacts: [artifact(context.runId, "deployed-consumer-evidence-v1", evidence, {
+          version: "1",
+          address: request.address.toLowerCase(),
+        })],
+        nextCommands: [],
       };
     },
 

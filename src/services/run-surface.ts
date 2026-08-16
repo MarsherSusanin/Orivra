@@ -10,6 +10,7 @@ import {
   Web2JsonManifestV1Schema,
   type CreateRunResultV1,
   type ConsumerLabReportV1,
+  type DeployedConsumerEvidenceV1,
   type EvidenceReceiptV1,
   type PreflightReportV1,
   type RunRecoveryV1,
@@ -115,6 +116,8 @@ export interface RunSurfaceServices {
   createRun?(context: CreateRunContext): Promise<CreateRunResultV1>;
   getPreflightReport?(context: RunServiceContext): Promise<PreflightReportV1>;
   getConsumerLabReport?(context: RunServiceContext): Promise<ConsumerLabReportV1>;
+  getDeployedConsumerVerification?(context: RunServiceContext): Promise<DeployedConsumerEvidenceV1>;
+  verifyDeployedConsumer?(context: RunServiceContext & { address: string }): Promise<DeployedConsumerEvidenceV1>;
   getEvidenceReceipt?(context: RunServiceContext): Promise<EvidenceReceiptV1>;
   createShare?(context: CreateShareContext): Promise<ShareLinkV1>;
   confirmSubmission?(context: ConfirmSubmissionContext): Promise<
@@ -539,6 +542,30 @@ export function createLiveSurfaceServices(input: {
     async getConsumerLabReport(context) {
       assertReadContext(context);
       return client.getConsumerLabReport(context.runId);
+    },
+
+    async getDeployedConsumerVerification(context) {
+      assertReadContext(context);
+      return client.getDeployedConsumerVerification(context.runId);
+    },
+
+    async verifyDeployedConsumer(context) {
+      assertContext(context);
+      const accepted = await client.verifyDeployedConsumer(
+        context.runId,
+        context.address,
+        commandKey("verify-deployed-consumer"),
+      );
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        try {
+          const evidence = await client.getDeployedConsumerVerification(context.runId);
+          if (evidence.commandId === accepted.commandId) return evidence;
+        } catch (cause) {
+          if (!(cause instanceof Error) || !("code" in cause) || (cause as { code?: unknown }).code !== "DEPLOYED_CONSUMER_VERIFICATION_PENDING") throw cause;
+        }
+        await delay(500);
+      }
+      throw new Error("Deployed consumer verification is still pending");
     },
 
     async getEvidenceReceipt(context) {

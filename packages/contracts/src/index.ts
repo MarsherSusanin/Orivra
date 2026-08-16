@@ -17,6 +17,17 @@ import {
   isValidWeb2JsonAbiSignature,
 } from "./web2json-validation";
 
+export {
+  DeployedConsumerEvidenceV1Schema,
+  DeployedConsumerVerificationAcceptedV1Schema,
+  DeployedConsumerVerificationRequestV1Schema,
+} from "./deployed-consumer";
+export type {
+  DeployedConsumerEvidenceV1,
+  DeployedConsumerVerificationAcceptedV1,
+  DeployedConsumerVerificationRequestV1,
+} from "./deployed-consumer";
+
 const NonEmptyIdSchema = z.string().trim().min(1);
 const HexBytesSchema = z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/);
 const Bytes32Schema = z.string().regex(/^0x[0-9a-fA-F]{64}$/);

@@ -434,6 +434,25 @@ export function createLiveCoston2PipelinePorts(input: LivePipelineFactoryInput) 
     ) as PipelineContracts;
 
   return {
+    async observeDeployedConsumer(value: { address: string }) {
+      const address = getAddress(value.address);
+      const blockNumber = (await publicClient.getBlockNumber()) as bigint;
+      const [chainId, runtimeBytecode] = await Promise.all([
+        publicClient.getChainId(),
+        publicClient.getBytecode({ address, blockNumber }),
+      ]);
+      const code = runtimeBytecode ?? "0x";
+      if (code.length > 2 + 2 * 1_048_576) {
+        throw createFdcError("schema-invalid", "DEPLOYED_CONSUMER_CODE_OVERSIZED", "Observed consumer bytecode exceeds the bounded response size", false, {});
+      }
+      return {
+        chainId,
+        registryAddress: runtimeConfig.registryAddress,
+        blockNumber: blockNumber.toString(),
+        runtimeBytecode: code,
+      };
+    },
+
     async preflight({
       manifest,
       runId,
