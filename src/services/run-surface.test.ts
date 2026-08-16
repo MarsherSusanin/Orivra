@@ -33,6 +33,48 @@ afterEach(() => {
 });
 
 describe("live run surface verification orchestration", () => {
+  it("ignores stale deployed-consumer evidence until the accepted command completes", async () => {
+    vi.useFakeTimers();
+    const evidence = (commandId: string) => ({
+      version: "1",
+      runId: "run_1",
+      commandId,
+      chainId: 114,
+      address: `0x${"1".repeat(40)}`,
+      status: "verified",
+      observedAt: "2026-08-16T00:00:00.000Z",
+      blockNumber: "123",
+      registryAddress: `0x${"2".repeat(40)}`,
+      codeSizeBytes: 32,
+      observedRuntimeBytecodeSha256: `sha256:${"a".repeat(64)}`,
+      expectedRuntimeBytecodeSha256: `sha256:${"a".repeat(64)}`,
+      sourceSha256: `sha256:${"b".repeat(64)}`,
+      compilerVersion: "solc-0.8.36",
+      diagnostics: [],
+    });
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response({
+        version: "1",
+        runId: "run_1",
+        commandId: "command_current",
+        status: "pending",
+      }, 202))
+      .mockResolvedValueOnce(response(evidence("command_previous")))
+      .mockResolvedValueOnce(response(evidence("command_current")));
+
+    const pending = live(fetch).verifyDeployedConsumer?.({
+      ...context,
+      address: `0x${"1".repeat(40)}`,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(pending).resolves.toEqual(evidence("command_current"));
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it("returns an immediate service result without polling", async () => {
     const accepted = {
       summary: "Consumer invariants verified",

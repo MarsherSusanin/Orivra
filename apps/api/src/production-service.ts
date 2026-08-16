@@ -4,6 +4,9 @@ import {
   NETWORK_CAPABILITIES_V1,
   ConsumerLabReportV1Schema,
   DiagnosticV1Schema,
+  DeployedConsumerEvidenceV1Schema,
+  DeployedConsumerVerificationAcceptedV1Schema,
+  DeployedConsumerVerificationRequestV1Schema,
   PreflightReportV1Schema,
   RunEventV1Schema,
   RunListPageV1Schema,
@@ -460,7 +463,18 @@ export function createProductionProoflineService(input: {
         commandId: String(existing.id ?? ""),
       };
     }
-    assertMutableProjection(owned.projection);
+    const auxiliary = kind === "VERIFY_DEPLOYED_CONSUMER";
+    if (auxiliary) {
+      const projection = owned.projection as { terminal?: unknown; stages?: { consumer?: unknown } };
+      if (projection.terminal !== true || projection.stages?.consumer !== "completed") {
+        throw Object.assign(new Error("Deployed consumer verification requires completed Consumer Lab evidence"), {
+          status: 409,
+          code: "DEPLOYED_CONSUMER_NOT_READY",
+        });
+      }
+    } else {
+      assertMutableProjection(owned.projection);
+    }
     if (expectedMode) assertCompletedPreflight(owned.projection);
 
     if (expectedMode) {
@@ -1298,6 +1312,63 @@ export function createProductionProoflineService(input: {
       return enqueue(context, "VERIFY_CONSUMER", {
         consumer: context.consumer,
       });
+    },
+
+    async verifyDeployedConsumer(context: Record<string, unknown>) {
+      const request = DeployedConsumerVerificationRequestV1Schema.parse({
+        version: context.version,
+        chainId: context.chainId,
+        address: context.address,
+      });
+      const accepted = await enqueue(context, "VERIFY_DEPLOYED_CONSUMER", request);
+      return DeployedConsumerVerificationAcceptedV1Schema.parse({
+        version: "1",
+        runId: accepted.runId,
+        commandId: accepted.commandId,
+        status: "pending",
+      });
+    },
+
+    async getDeployedConsumerVerification(context: Record<string, unknown>) {
+      const runId = requireRunId(context.runId);
+      const result = await input.pool.query(
+        `SELECT artifact.canonical_bytes, artifact.sha256
+         FROM proofline_private.runs AS run
+         LEFT JOIN LATERAL (
+           SELECT canonical_bytes, sha256
+           FROM proofline_private.run_artifacts
+           WHERE run_id = run.id AND kind = 'deployed-consumer-evidence-v1'
+           ORDER BY created_at DESC, id DESC LIMIT 1
+         ) AS artifact ON true
+         WHERE run.id = $1 AND run.project_id = $2`,
+        [runId, context.projectId],
+      );
+      if (!result.rowCount) throw Object.assign(new Error("Run not found"), { status: 404 });
+      const row = result.rows[0];
+      if (!(row.canonical_bytes instanceof Uint8Array) || !(row.sha256 instanceof Uint8Array)) {
+        throw Object.assign(new Error("Deployed consumer verification is pending"), {
+          status: 409,
+          code: "DEPLOYED_CONSUMER_VERIFICATION_PENDING",
+        });
+      }
+      const bytes = Buffer.from(row.canonical_bytes);
+      const digest = createHash("sha256").update(bytes).digest();
+      if (!digest.equals(Buffer.from(row.sha256))) {
+        throw Object.assign(new Error("Persisted deployed consumer evidence is invalid"), {
+          status: 500,
+          code: "DEPLOYED_CONSUMER_EVIDENCE_INVALID",
+        });
+      }
+      try {
+        const evidence = DeployedConsumerEvidenceV1Schema.parse(JSON.parse(bytes.toString("utf8")));
+        if (evidence.runId !== runId) throw new Error("run mismatch");
+        return evidence;
+      } catch {
+        throw Object.assign(new Error("Persisted deployed consumer evidence is invalid"), {
+          status: 500,
+          code: "DEPLOYED_CONSUMER_EVIDENCE_INVALID",
+        });
+      }
     },
 
     async generateConsumer(context: Record<string, unknown>) {

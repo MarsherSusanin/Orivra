@@ -3173,6 +3173,12 @@ a {
 .consumer-artifact-actions { flex-direction: row; flex-wrap: wrap; }
 .consumer-artifact-actions button,
 .consumer-artifact-actions a { padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--cyan); background: transparent; text-decoration: none; cursor: pointer; }
+.deployed-consumer-verification { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
+.deployed-consumer-verification input { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--bg-deep); font: inherit; }
+.deployed-consumer-verification button { justify-self: start; padding: 10px 14px; border: 1px solid var(--cyan); border-radius: 6px; color: var(--cyan); background: transparent; font: inherit; cursor: pointer; }
+.deployed-consumer-verification button:disabled { opacity: .55; cursor: not-allowed; }
+.deployed-consumer-result { display: grid; gap: 6px; padding: 12px; border-left: 3px solid var(--amber); background: color-mix(in srgb, var(--amber) 7%, transparent); }
+.deployed-consumer-result.is-verified { border-color: var(--green); background: color-mix(in srgb, var(--green) 7%, transparent); }
 
 .consumer-report-recovery {
   display: flex;

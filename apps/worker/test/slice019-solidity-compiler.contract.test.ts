@@ -11,7 +11,12 @@ describe("Slice 019 generated consumer compile evidence", () => {
       compiler: "solc-0.8.36",
       compileStatus: "passed",
       compiledSourceSha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+      runtimeBytecode: expect.stringMatching(/^0x[0-9a-f]+$/),
+      runtimeBytecodeSha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
     });
     expect(() => compileGeneratedConsumer(`${source}\nthis is not solidity`)).toThrow(/compilation/i);
+    expect(() => compileGeneratedConsumer(
+      source.replace("./ProoflineUrlInvariant.sol", "./UnsupportedAuthority.sol"),
+    )).toThrow(/compilation/i);
   });
 });

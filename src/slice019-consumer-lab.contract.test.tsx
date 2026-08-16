@@ -115,4 +115,68 @@ describe("Slice 019 Consumer Lab surface", () => {
     await user.click(screen.getByRole("button", { name: /open integration package/i }));
     expect(onOpenIntegration).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ["verified", "Deployed consumer verified"],
+    ["mismatched", "Deployed bytecode mismatched"],
+    ["unavailable", "Deployed code unavailable"],
+    ["proxy-unsupported", "Proxy verification unsupported"],
+  ] as const)("renders the honest %s deployed-bytecode result without a wallet effect", async (status, label) => {
+    const user = userEvent.setup();
+    const address = "0x1111111111111111111111111111111111111111";
+    const digest = `sha256:${"a".repeat(64)}`;
+    const evidence = {
+      version: "1" as const,
+      runId: consumerLabReport.runId,
+      commandId: `verify-${status}`,
+      chainId: 114 as const,
+      address,
+      status,
+      observedAt: "2026-08-16T00:00:00.000Z",
+      blockNumber: "1426000",
+      registryAddress: "0x2222222222222222222222222222222222222222",
+      codeSizeBytes: status === "unavailable" ? 0 : 5,
+      observedRuntimeBytecodeSha256: status === "unavailable" ? null : digest,
+      expectedRuntimeBytecodeSha256: digest,
+      sourceSha256: `sha256:${"b".repeat(64)}`,
+      compilerVersion: "solc-0.8.36" as const,
+      diagnostics: status === "verified" ? [] : [{
+        version: "1" as const,
+        code: "DEPLOYED_CONSUMER_NOT_VERIFIED",
+        severity: "warning" as const,
+        confidence: "high" as const,
+        summary: "The observed deployment does not match the canonical runtime.",
+        evidence: {},
+        remediation: "Review the deployment before integration.",
+      }],
+    };
+    const verifyDeployedConsumer = vi.fn().mockResolvedValue(evidence);
+    const services = {
+      verifyConsumer: vi.fn(),
+      generateConsumer: vi.fn(),
+      getConsumerLabReport: vi.fn().mockResolvedValue(consumerLabReport),
+      verifyDeployedConsumer,
+      exportBundle: vi.fn(),
+      replayBundle: vi.fn(),
+    };
+
+    render(
+      <VerificationDialog
+        context={{ runId: consumerLabReport.runId, projectToken: `project_${"a".repeat(64)}` }}
+        services={services}
+        onClose={vi.fn()}
+        resumePersisted
+      />,
+    );
+
+    const input = await screen.findByRole("textbox", { name: /contract address/i });
+    expect(screen.getByText(/read-only bytecode verification at chain 114/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: /verify deployed bytecode/i })).toBeDisabled();
+    await user.type(input, address);
+    await user.click(screen.getByRole("button", { name: /verify deployed bytecode/i }));
+
+    expect(await screen.findByText(label)).toBeVisible();
+    expect(verifyDeployedConsumer).toHaveBeenCalledWith(expect.objectContaining({ address }));
+    expect(document.body).not.toHaveTextContent(/connect wallet|sign transaction|rpc url/i);
+  });
 });

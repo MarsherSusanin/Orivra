@@ -288,4 +288,58 @@ describe("Slice 018 PostgreSQL recovery journal", () => {
     ]);
     expect(fixture.client.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
   });
+
+  it("reclaims deployed-consumer observations without mutating terminal run evidence", async () => {
+    const fixture = repositoryWith(async (text) => {
+      if (text === POSTGRES_QUERIES.claimNextCommand) return result([{
+        id: COMMAND,
+        project_id: PROJECT,
+        run_id: RUN_ID,
+        kind: "VERIFY_DEPLOYED_CONSUMER",
+        attempts: 2,
+        payload: { version: "1", chainId: 114, address: "0x1111111111111111111111111111111111111111" },
+        last_error: null,
+      }], 1);
+      return result([], 1);
+    });
+
+    await expect(fixture.repository.claimNextCommand()).resolves.toMatchObject({
+      command: { id: COMMAND, kind: "VERIFY_DEPLOYED_CONSUMER", attempts: 2 },
+    });
+    const statements = fixture.client.query.mock.calls.map(([text]) => String(text));
+    expect(statements).not.toContain(POSTGRES_QUERIES.loadEvents);
+    expect(statements).not.toContain(POSTGRES_QUERIES.insertEvent);
+    expect(statements).not.toContain(POSTGRES_QUERIES.updateProjection);
+    expect(statements.at(-1)).toBe("COMMIT");
+  });
+
+  it("retries or exhausts deployed-consumer observations without failing or cancelling the terminal run", async () => {
+    const fixture = repositoryWith(async (text) => {
+      if (text === POSTGRES_QUERIES.retryCommand) return result([{
+        id: COMMAND,
+        run_id: RUN_ID,
+        kind: "VERIFY_DEPLOYED_CONSUMER",
+        attempts: 3,
+        available_at: new Date(RETRY_AT),
+      }], 1);
+      return result([], 1);
+    });
+
+    await fixture.repository.retryCommand(COMMAND, CLAIM, {
+      category: "transport",
+      code: "COSTON2_RPC_UNAVAILABLE",
+      message: "Read-only observation failed",
+      retryable: false,
+      terminal: true,
+      evidence: {},
+    });
+
+    const statements = fixture.client.query.mock.calls.map(([text]) => String(text));
+    expect(statements).not.toContain(POSTGRES_QUERIES.loadEvents);
+    expect(statements).not.toContain(POSTGRES_QUERIES.lockRun);
+    expect(statements).not.toContain(POSTGRES_QUERIES.insertEvent);
+    expect(statements).not.toContain(POSTGRES_QUERIES.updateProjection);
+    expect(statements.some((text) => /SET status = 'cancelled'/i.test(text))).toBe(false);
+    expect(statements.at(-1)).toBe("COMMIT");
+  });
 });

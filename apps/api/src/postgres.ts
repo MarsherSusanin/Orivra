@@ -124,6 +124,8 @@ export const POSTGRES_QUERIES = {
   `,
 } as const;
 
+const AUXILIARY_COMMAND_KINDS = new Set(["VERIFY_DEPLOYED_CONSUMER"]);
+
 interface QueryResult {
   rowCount: number | null;
   rows: Array<Record<string, unknown>>;
@@ -902,7 +904,7 @@ export function createPostgresCommandRepository(input: {
           return null;
         }
         const attempts = Number(row.attempts);
-        if (attempts > 1) {
+        if (attempts > 1 && !AUXILIARY_COMMAND_KINDS.has(String(row.kind))) {
           const prior = await client.query(POSTGRES_QUERIES.loadEvents, [
             String(row.run_id),
           ]);
@@ -1114,7 +1116,9 @@ export function createPostgresCommandRepository(input: {
         const runId = result.rows[0]?.run_id;
         const retryAttempt = Number(result.rows[0]?.attempts);
         const retryAvailableAt = new Date(String(result.rows[0]?.available_at));
+        const auxiliary = AUXILIARY_COMMAND_KINDS.has(String(result.rows[0]?.kind));
         if (
+          !auxiliary &&
           failure.retryable === true &&
           typeof runId === "string" &&
           Number.isInteger(retryAttempt) &&
@@ -1161,7 +1165,7 @@ export function createPostgresCommandRepository(input: {
             }),
           );
         }
-        if (failure.terminal === true && typeof runId === "string") {
+        if (!auxiliary && failure.terminal === true && typeof runId === "string") {
           const locked = await client.query(POSTGRES_QUERIES.lockRun, [runId]);
           if (locked.rowCount !== 1) {
             throw new Error("Terminal failure run is missing");

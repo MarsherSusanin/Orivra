@@ -570,6 +570,24 @@ npm run start --workspace apps/worker
 | `PROOFLINE_VERIFIER_URL` | Strict HTTPS root, default official Coston2 verifier |
 | `PROOFLINE_COSTON2_RPC_URL` | Strict HTTPS/443, path allowed, default official Coston2 RPC |
 | `PROOFLINE_COSTON2_DA_URL` | Strict HTTPS root, default official Coston2 DA |
+
+### Read-only deployed consumer verification
+
+The Consumer Lab `Verify deployed bytecode` action reuses the worker's fixed
+`PROOFLINE_COSTON2_RPC_URL`; there is no per-request RPC setting and no new
+secret. The request accepts only chain 114 and a contract address. The worker
+records the exact observation block and compares the returned runtime bytes to
+the runtime reproduced from the persisted safe Solidity using pinned
+`solc-0.8.36` settings.
+
+This command is post-terminal and auxiliary: retry, timeout, missing code, or a
+bytecode mismatch must not change the run projection or its six lifecycle
+stages. A successful response means direct runtime-byte equality at the
+recorded block only. `proxy-unsupported` requires a direct deployment or a
+future explicit proxy model; operators must not manually relabel it verified.
+Inspect the latest append-only `deployed-consumer-evidence-v1` artifact when
+diagnosing the UI. Never paste an alternate RPC URL or private key into the
+request, logs, or browser.
 | `PROOFLINE_RECEIPT_POLL_TIMEOUT_MS` | default `25000`, maximum `30000` |
 | `PROOFLINE_DA_TIMEOUT_MS` | default `15000`, maximum `30000` |
 | `PROOFLINE_WORKER_DB_POOL_SIZE` | default `4`, range `1..32` |

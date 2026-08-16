@@ -1,6 +1,6 @@
 import { Check, Code, ShieldCheck, SpinnerGap, Warning, X } from "@phosphor-icons/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ConsumerLabReportV1 } from "../../packages/contracts/src";
+import type { ConsumerLabReportV1, DeployedConsumerEvidenceV1 } from "../../packages/contracts/src";
 import type {
   ConsumerVerificationResult,
   GeneratedConsumer,
@@ -49,6 +49,10 @@ export function VerificationDialog({
   const [reportError, setReportError] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [artifactVerified, setArtifactVerified] = useState(false);
+  const [deployedAddress, setDeployedAddress] = useState("");
+  const [deployedEvidence, setDeployedEvidence] = useState<DeployedConsumerEvidenceV1 | null>(null);
+  const [deployedLoading, setDeployedLoading] = useState(false);
+  const [deployedError, setDeployedError] = useState("");
 
   useLayoutEffect(() => {
     closeRef.current?.focus();
@@ -210,6 +214,19 @@ export function VerificationDialog({
     }
   };
 
+  const verifyDeployedConsumer = async () => {
+    if (!services.verifyDeployedConsumer) return;
+    setDeployedLoading(true);
+    setDeployedError("");
+    try {
+      setDeployedEvidence(await services.verifyDeployedConsumer({ ...context, address: deployedAddress }));
+    } catch (cause) {
+      setDeployedError(safeError(cause));
+    } finally {
+      setDeployedLoading(false);
+    }
+  };
+
   return (
     <div className="dialog-backdrop" role="presentation">
       <section
@@ -301,6 +318,37 @@ export function VerificationDialog({
                     </div>
                     {artifactVerified && onOpenIntegration ? (
                       <button className="dialog-primary" type="button" onClick={onOpenIntegration}>Open integration package<Code size={20} aria-hidden="true" /></button>
+                    ) : null}
+                    {artifactVerified && services.verifyDeployedConsumer ? (
+                      <div className="deployed-consumer-verification">
+                        <strong>Verify a deployed Coston2 consumer</strong>
+                        <span>Read-only bytecode verification at chain 114. No wallet transaction is requested.</span>
+                        <label htmlFor="deployed-consumer-address">Contract address</label>
+                        <input
+                          id="deployed-consumer-address"
+                          value={deployedAddress}
+                          onChange={(event) => setDeployedAddress(event.target.value)}
+                          placeholder="0x…"
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                        <button
+                          type="button"
+                          disabled={deployedLoading || !/^0x[0-9a-fA-F]{40}$/.test(deployedAddress)}
+                          onClick={() => void verifyDeployedConsumer()}
+                        >{deployedLoading ? "Observing Coston2…" : "Verify deployed bytecode"}</button>
+                        {deployedError ? <span role="alert">{deployedError}</span> : null}
+                        {deployedEvidence ? (
+                          <div role="status" className={`deployed-consumer-result is-${deployedEvidence.status}`}>
+                            <strong>{deployedEvidence.status === "verified" ? "Deployed consumer verified" :
+                              deployedEvidence.status === "mismatched" ? "Deployed bytecode mismatched" :
+                                deployedEvidence.status === "proxy-unsupported" ? "Proxy verification unsupported" :
+                                  "Deployed code unavailable"}</strong>
+                            <span>Block {deployedEvidence.blockNumber} · {deployedEvidence.address}</span>
+                            <code>{deployedEvidence.observedRuntimeBytecodeSha256 ?? "No bytecode"}</code>
+                          </div>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 </div>

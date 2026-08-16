@@ -90,6 +90,15 @@ worker/live-adapter entries. Persisted run/proof/bundle/transaction schemas и
 8. Evidence Receipt и Integration Package связывают exact bundle, manifest,
    Consumer Lab result и safe Solidity для read-only handoff.
 
+After canonical safe Solidity has been persisted, an optional post-terminal
+`VERIFY_DEPLOYED_CONSUMER` command can verify a direct Coston2 deployment. The
+API accepts only chain 114 plus the address. The worker recompiles the exact
+persisted source with pinned production settings, reads bytecode at one block
+through the fixed operator RPC, and appends command-bound observation evidence.
+It does not mutate the six-stage run journal. `verified`, `mismatched`,
+`unavailable`, and `proxy-unsupported` are distinct evidence states; none is a
+security-audit or ownership claim. See ADR 0050.
+
 Все runtime-адреса FDC contracts, кроме известной точки registry, разрешаются через registry snapshot и попадают в evidence.
 
 ## Trust boundaries
