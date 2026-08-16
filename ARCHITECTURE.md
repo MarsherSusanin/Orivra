@@ -46,7 +46,9 @@ flowchart LR
 Web2Json определяется отдельным `NetworkCapabilityV1`. Публичный
 `GET /v1/networks` возвращает канонические wallet/explorer metadata без
 аутентификации и без upstream I/O: Coston2 имеет статус `enabled`, Flare —
-`upstream-unsupported`.
+`upstream-unsupported`. ADR 0051 freezes the separately observed Flare chain,
+RPC and registry identity without treating deployed FDC contracts as evidence
+that the upstream Web2Json attestation type is available on Mainnet.
 
 Manifest может сохранить обе известные identity, чтобы поверхность честно
 объяснила недоступность. API после project authentication и strict body

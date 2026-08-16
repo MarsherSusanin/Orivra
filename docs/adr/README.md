@@ -53,5 +53,6 @@ ADR фиксирует архитектурное решение, которое
 | [0048](0048-replay-command-group-identity.md) | Replay rekeys source command groups, not individual events, so persisted recovery relationships remain valid without trusting source command identifiers |
 | [0049](0049-local-stdio-mcp-agent-connector.md) | Local stdio MCP exposes bounded replay/evidence/Consumer Lab tools through existing CLI project-token authority without wallet or relayer effects |
 | [0050](0050-read-only-deployed-consumer-verification.md) | Post-terminal auxiliary verification compares direct Coston2 runtime bytecode with the exact reproduced safe-consumer artifact without wallet, relayer or lifecycle effects |
+| [0051](0051-flare-mainnet-web2json-upstream-capability.md) | Flare Mainnet RPC and registry are independently observed, while official Web2Json availability remains fail-closed as upstream-unsupported |
 
 Если решение заменено, исходный ADR остаётся в истории со статусом superseded и ссылкой на новый документ. Не переписывайте принятую историю под текущее состояние.

@@ -167,6 +167,11 @@ export const NETWORK_CAPABILITIES_V1: NetworkCapabilitiesV1 =
   });
 
 export {
+  FLARE_MAINNET_WEB2JSON_ASSESSMENT_V1,
+  FlareMainnetWeb2JsonAssessmentV1Schema,
+  type FlareMainnetWeb2JsonAssessmentV1,
+} from "./flare-mainnet-capability";
+export {
   AccountTokenCreateRequestV1Schema,
   AccountTokenCreatedV1Schema,
   AccountTokenRevokedV1Schema,

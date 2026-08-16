@@ -92,8 +92,10 @@ for the full local composition.
 ## Flare and Coston2 integration path
 
 The current live capability is Coston2, chain ID `114`. Flare mainnet is a known
-network identity but remains fail-closed as `upstream-unsupported` until a
-separate live capability is implemented.
+network identity but remains fail-closed as `upstream-unsupported`: the
+[official FDC overview](https://dev.flare.network/fdc/overview) currently lists
+Web2Json only for Coston and Coston2. The immutable Mainnet RPC/registry
+assessment is documented in [ADR 0051](docs/adr/0051-flare-mainnet-web2json-upstream-capability.md).
 
 ```mermaid
 flowchart LR
