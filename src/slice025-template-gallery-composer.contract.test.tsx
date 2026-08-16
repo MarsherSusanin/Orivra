@@ -6,8 +6,10 @@ import { validComposerDraft } from "../packages/contracts/test/fixtures";
 import {
   ethUsdManifest,
   ethUsdTemplateDetail,
+  jsonPlaceholderTodoTemplateDetail,
   openMeteoManifest,
   openMeteoTemplateDetail,
+  swapiC3poTemplateDetail,
   templateCatalog,
 } from "../test/slice025-template-fixtures";
 import { App } from "./App";
@@ -58,6 +60,12 @@ function fetchRouter(overrides: Record<string, Response> = {}) {
     if (url.pathname === "/api/v1/templates/eth-usd") {
       return Response.json(ethUsdTemplateDetail);
     }
+    if (url.pathname === "/api/v1/templates/jsonplaceholder-todo-1") {
+      return Response.json(jsonPlaceholderTodoTemplateDetail);
+    }
+    if (url.pathname === "/api/v1/templates/swapi-c3po") {
+      return Response.json(swapiC3poTemplateDetail);
+    }
     throw new Error(`Unexpected browser request ${url.pathname}`);
   });
 }
@@ -88,6 +96,8 @@ function expectOnlyTemplateApiRequests(fetch: ReturnType<typeof fetchRouter>): v
     expect(url.pathname.startsWith("/api/v1/templates")).toBe(true);
     expect(url.hostname).not.toBe("api.open-meteo.com");
     expect(url.hostname).not.toBe("api.coinbase.com");
+    expect(url.hostname).not.toBe("jsonplaceholder.typicode.com");
+    expect(url.hostname).not.toBe("swapi.info");
     expect(new Headers(init?.headers).has("authorization")).toBe(false);
   }
 }
@@ -126,6 +136,9 @@ describe("Slice 025C template gallery, detail and Composer authority", () => {
       "href",
       "/app/runs/new?step=source",
     );
+    expect(screen.getByRole("region", { name: "JSONPlaceholder todo" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "SWAPI C-3PO profile" })).toBeVisible();
+    expect(screen.getAllByRole("link", { name: "Use template" })).toHaveLength(4);
     expect(fixture.fetch).toHaveBeenCalledOnce();
     expectOnlyTemplateApiRequests(fixture.fetch);
     expect(fixture.wallet.listNetworks).not.toHaveBeenCalled();

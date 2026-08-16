@@ -8,7 +8,7 @@ import { canonicalJson } from "../src/canonical-json";
 type Catalog = {
   version: "1";
   kind: "web2json-template-catalog";
-  catalogRevision: 1;
+  catalogRevision: number;
   templates: Array<Record<string, unknown>>;
 };
 
@@ -73,11 +73,13 @@ describe("Slice 025A static template catalog and resolver", () => {
     expect(catalog).toMatchObject({
       version: "1",
       kind: "web2json-template-catalog",
-      catalogRevision: 1,
+      catalogRevision: 2,
     });
     expect(catalog.templates.map(({ id, revision, featured }) => ({ id, revision, featured }))).toEqual([
       { id: "open-meteo-current-weather", revision: 1, featured: true },
       { id: "eth-usd", revision: 1, featured: false },
+      { id: "jsonplaceholder-todo-1", revision: 1, featured: false },
+      { id: "swapi-c3po", revision: 1, featured: false },
     ]);
   });
 

@@ -77,7 +77,15 @@ describe("Orivra MCP protocol surface", () => {
 
     const templates = await client.callTool({ name: "list_templates", arguments: {} });
     expect(templates.isError).not.toBe(true);
-    expect(templates.structuredContent).toMatchObject({ status: "success" });
+    expect(templates.structuredContent).toMatchObject({
+      status: "success",
+      templates: [
+        { id: "open-meteo-current-weather", revision: 1 },
+        { id: "eth-usd", revision: 1 },
+        { id: "jsonplaceholder-todo-1", revision: 1 },
+        { id: "swapi-c3po", revision: 1 },
+      ],
+    });
     expect(JSON.stringify(templates.structuredContent)).not.toContain(detail.manifestCanonicalJson);
 
     const loaded = await client.callTool({

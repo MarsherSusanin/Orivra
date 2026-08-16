@@ -8,11 +8,6 @@ import { Web2JsonManifestV1Schema } from "@proofline/contracts/manifest";
 import { canonicalJson } from "./canonical-json";
 import { sha256Hex } from "./sha256";
 
-const OPEN_METEO_MANIFEST_SHA256 =
-  "sha256:26a1b91f8fc63056f2d464b81b1ee452dfd30bd01cd4433ee5e33410c651c898";
-const ETH_USD_MANIFEST_SHA256 =
-  "sha256:7aed4a243cb1cdc23a4faf2cbd687c3effb97805cb4f0ca44a666b385cd2b2db";
-
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -81,18 +76,61 @@ const ethUsdManifest = {
   submission: { mode: "replay", feeCapWei: "20000000000000000" },
 };
 
+const jsonPlaceholderTodoManifest = {
+  version: "1",
+  attestationType: "Web2Json",
+  network: "coston2",
+  request: {
+    method: "GET",
+    url: "https://jsonplaceholder.typicode.com/todos/1",
+    query: {},
+    jq: ". | {userId: .userId, id: .id, title: .title, completed: .completed}",
+    abiSignature:
+      '{"components":[{"internalType":"uint256","name":"userId","type":"uint256"},{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"title","type":"string"},{"internalType":"bool","name":"completed","type":"bool"}],"name":"data","type":"tuple"}',
+  },
+  consumer: {
+    expectedScheme: "https",
+    expectedHost: "jsonplaceholder.typicode.com",
+    expectedPathPrefix: "/todos/1",
+    expectedQuery: {},
+  },
+  submission: { mode: "replay", feeCapWei: "20000000000000000" },
+};
+
+const swapiC3poManifest = {
+  version: "1",
+  attestationType: "Web2Json",
+  network: "coston2",
+  request: {
+    method: "GET",
+    url: "https://swapi.info/api/people/3",
+    query: {},
+    jq: ". | {name: .name, height: .height, mass: .mass, numberOfFilms: (.films | length)}",
+    abiSignature:
+      '{"components":[{"internalType":"string","name":"name","type":"string"},{"internalType":"string","name":"height","type":"string"},{"internalType":"string","name":"mass","type":"string"},{"internalType":"uint256","name":"numberOfFilms","type":"uint256"}],"name":"data","type":"tuple"}',
+  },
+  consumer: {
+    expectedScheme: "https",
+    expectedHost: "swapi.info",
+    expectedPathPrefix: "/api/people/3",
+    expectedQuery: {},
+  },
+  submission: { mode: "replay", feeCapWei: "20000000000000000" },
+};
+
 function createDetail(input: {
-  id: "open-meteo-current-weather" | "eth-usd";
+  id: "open-meteo-current-weather" | "eth-usd" | "jsonplaceholder-todo-1" | "swapi-c3po";
   title: string;
   summary: string;
   provider: string;
-  category: "finance" | "weather";
+  category: "finance" | "reference" | "weather";
   featured: boolean;
-  manifestSha256: string;
+  catalogRevision: number;
   manifest: unknown;
 }): Web2JsonTemplateDetailV1 {
   const manifest = Web2JsonManifestV1Schema.parse(input.manifest);
   const manifestCanonicalJson = canonicalJson(manifest);
+  const digest = manifestSha256(manifestCanonicalJson);
   return Web2JsonTemplateDetailV1Schema.parse({
     version: "1",
     kind: "web2json-template-detail",
@@ -104,17 +142,17 @@ function createDetail(input: {
       provider: input.provider,
       category: input.category,
       featured: input.featured,
-      manifestSha256: input.manifestSha256,
+      manifestSha256: digest,
       detailPath: `/v1/templates/${input.id}`,
     },
     manifest,
     manifestCanonicalJson,
     provenance: {
       kind: "proofline-builtin",
-      catalogRevision: 1,
+      catalogRevision: input.catalogRevision,
       templateId: input.id,
       templateRevision: 1,
-      manifestSha256: input.manifestSha256,
+      manifestSha256: digest,
     },
   });
 }
@@ -126,7 +164,7 @@ const openMeteoDetail = createDetail({
   provider: "Open-Meteo",
   category: "weather",
   featured: true,
-  manifestSha256: OPEN_METEO_MANIFEST_SHA256,
+  catalogRevision: 1,
   manifest: openMeteoManifest,
 });
 
@@ -137,19 +175,48 @@ const ethUsdDetail = createDetail({
   provider: "Coinbase",
   category: "finance",
   featured: false,
-  manifestSha256: ETH_USD_MANIFEST_SHA256,
+  catalogRevision: 1,
   manifest: ethUsdManifest,
+});
+
+const jsonPlaceholderTodoDetail = createDetail({
+  id: "jsonplaceholder-todo-1",
+  title: "JSONPlaceholder todo",
+  summary: "Verify the canonical first todo returned by JSONPlaceholder.",
+  provider: "JSONPlaceholder",
+  category: "reference",
+  featured: false,
+  catalogRevision: 2,
+  manifest: jsonPlaceholderTodoManifest,
+});
+
+const swapiC3poDetail = createDetail({
+  id: "swapi-c3po",
+  title: "SWAPI C-3PO profile",
+  summary: "Verify C-3PO's stable public character record from SWAPI.",
+  provider: "SWAPI",
+  category: "reference",
+  featured: false,
+  catalogRevision: 2,
+  manifest: swapiC3poManifest,
 });
 
 const catalog = deepFreeze(Web2JsonTemplateCatalogV1Schema.parse({
   version: "1",
   kind: "web2json-template-catalog",
-  catalogRevision: 1,
-  templates: [openMeteoDetail.template, ethUsdDetail.template],
+  catalogRevision: 2,
+  templates: [
+    openMeteoDetail.template,
+    ethUsdDetail.template,
+    jsonPlaceholderTodoDetail.template,
+    swapiC3poDetail.template,
+  ],
 }));
 const details = new Map<string, Web2JsonTemplateDetailV1>([
   [openMeteoDetail.template.id, deepFreeze(openMeteoDetail)],
   [ethUsdDetail.template.id, deepFreeze(ethUsdDetail)],
+  [jsonPlaceholderTodoDetail.template.id, deepFreeze(jsonPlaceholderTodoDetail)],
+  [swapiC3poDetail.template.id, deepFreeze(swapiC3poDetail)],
 ]);
 
 export function getWeb2JsonTemplateCatalog(): Web2JsonTemplateCatalogV1 {

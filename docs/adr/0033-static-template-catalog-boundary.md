@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted and implemented by the Slice 025 production-author candidate.
-Independent Core and Product verification is pending.
+Accepted. Slice 025 introduced the boundary; Issue #8 expands the catalog
+without changing the contract version or either existing template revision.
 
 ## Context
 
@@ -23,11 +23,24 @@ only run authority.
 ## Decision
 
 Proofline owns one versioned, statically compiled catalog in the pure domain
-package. Catalog revision `1` contains exactly two immutable template revisions:
+package. Catalog revision `1` introduced exactly two immutable template revisions:
 
 - featured/default `open-meteo-current-weather`, revision `1`;
 - existing `eth-usd`, revision `1`, preserving the exact Slice 015 Coinbase
   manifest and the established `/runs/new?template=eth-usd` deep link.
+
+Catalog revision `2` retains those bytes and provenance unchanged and adds two
+replay-only reference examples:
+
+- `jsonplaceholder-todo-1`, revision `1`, exact HTTPS GET
+  `https://jsonplaceholder.typicode.com/todos/1`;
+- `swapi-c3po`, revision `1`, exact HTTPS GET
+  `https://swapi.info/api/people/3`.
+
+The catalog contains one featured template first, followed by all remaining
+templates in lowercase ID order. A detail's provenance records the catalog
+revision that introduced that immutable template revision, so catalog revision
+`2` does not rewrite the revision-`1` provenance of Open-Meteo or Coinbase.
 
 Template IDs are lowercase slugs of 1–64 characters and revisions are positive
 safe integers. `eth-usd` remains the canonical ID. Slice 025 adds no alias,
@@ -72,13 +85,13 @@ No token, request authorization or response body is recorded by this decision.
 The public contracts are strict and bounded:
 
 - a summary identifies ID, revision, title, summary, provider, the closed
-  `finance | weather` category, featured state, manifest SHA-256 and exact
+  `finance | reference | weather` category, featured state, manifest SHA-256 and exact
   detail path;
 - the catalog is an ordered page with featured/default
-  `open-meteo-current-weather` first and `eth-usd` second;
+  `open-meteo-current-weather` first and remaining IDs in canonical order;
 - detail contains the matching summary as `template`, strict
   `Web2JsonManifestV1`, its exact canonical JSON and provenance exactly
-  `{kind: "proofline-builtin", catalogRevision: 1, templateId,
+  `{kind: "proofline-builtin", catalogRevision, templateId,
   templateRevision, manifestSha256}`;
 - the strict detail returned by pure resolution contains the reparsed manifest
   and exact canonical JSON; it is also the API detail representation.
@@ -176,3 +189,9 @@ new ADR.
 
 No PostgreSQL migration, Redis dependency, source response, credential, live
 Coston2 effect, Docker/deployment behavior or hosted evidence is added.
+
+Built-in additions must satisfy [the template contribution criteria](../templates.md):
+public HTTPS on port 443, no authentication or redirects, response size within
+1 MiB, five stable bounded samples, exact manifest digest, official verifier
+`prepareRequest` acceptance, and an explicit terms/licensing review. Failing
+any criterion keeps the proposal outside the built-in catalog.
